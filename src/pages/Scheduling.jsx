@@ -31,7 +31,7 @@ export function AppointmentForm({ role, store, prefill={}, ignoreId=null, onSave
     const r=validateAppointment(form,state,ignoreId)
     setResult(r); setStep('validated')
     if (!r.valid) { toast('The requested slot is not valid. Choose an alternative or correct the request.','warning'); return }
-    const record={ id:ignoreId||uid('a'), ...form, duration:r.duration, status:'Confirmed', source:role==='patient'?'Patient Portal':'Front Desk' }
+    const branchId=state.branches.find(b=>b.name===form.branch)?.id||null;const existing=ignoreId?state.appointments.find(a=>a.id===ignoreId):null;const appointmentNo=existing?.appointmentNo||`APT-${form.date.slice(0,4)}-${String(state.appointments.length+1).padStart(4,'0')}`;const record={ id:ignoreId||uid('a'), appointmentNo, branchId, scheduledStart:`${form.date}T${form.start}`, ...form, duration:r.duration, status:'Confirmed', source:role==='patient'?'Patient Portal':'Front Desk' }
     if (ignoreId) setters.setAppointments(xs=>xs.map(a=>a.id===ignoreId?record:a))
     else setters.setAppointments(xs=>[...xs,record])
     const name=patientName(form.patientId,state.patients)
@@ -91,6 +91,7 @@ export function AppointmentsPage({ role, store }) {
     <PageHeader title={role==='patient'?'My Appointments':'Appointment Management'} text="Create, confirm, reschedule, cancel, and track appointment status while preserving Smart Scheduling validation." modules={[6,7]}/>
     <Card title="Appointment calendar" actions={role==='staff'?<Button onClick={()=>setNewOpen(true)}>New Appointment</Button>:null}>
       <Table rows={visible} columns={[
+        {key:'appointmentNo',label:'Appointment no.',render:a=>a.appointmentNo||a.id},
         {key:'date',label:'Date & Time',render:a=><div><b>{dateLabel(a.date)}</b><small className="block-muted">{displayTime(a.start)}–{displayTime(addMinutes(a.start,a.duration))}</small></div>},
         ...(role!=='patient'?[{key:'patient',label:'Patient',render:a=>patientName(a.patientId,state.patients)}]:[]),
         {key:'service',label:'Service'},{key:'branch',label:'Branch'},{key:'dentist',label:'Dentist',render:a=>dentistName(a.dentistId,state.dentists)},

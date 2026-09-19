@@ -7,6 +7,13 @@
 
 This folder contains the **final frontend-only React prototype** for the documented 25-module system. It is intentionally designed to show the professor/client what the finished system would look and feel like **before backend, database, authentication server, external APIs, or infrastructure are added**.
 
+
+## ERD alignment revision
+
+This version was revised against the supplied master ERD. In particular, **Users & Access** now uses username, email, role, branch and account-status fields; Dentist/Staff accounts automatically synchronize into **Dentist & Staff Management** through a linked `user_id`; branch codes/cities, patient codes, appointment numbers and Module 23 workflow-rule/event terminology were also aligned.
+
+See `ERD_ALIGNMENT.md` for the complete mapping and the ERD fields/tables that still need to be extended before backend implementation.
+
 ## What is included
 
 - Four main role experiences: **Patient, Staff, Dentist, Owner/Admin**

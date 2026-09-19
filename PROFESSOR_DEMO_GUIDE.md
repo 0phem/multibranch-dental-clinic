@@ -38,10 +38,10 @@ This sequence is designed to demonstrate the system as one connected BPA solutio
 
 1. **Executive Dashboard** — exceptions first, cross-branch comparison, HMO and revenue summary.
 2. **Branches** — operating hours/services/status reference.
-3. **Staff & Dentists** — profile/branch/shift/availability and assignment conflict validation.
+3. **Staff & Dentists** — profiles are synchronized from Users & Access through `user_id`; edit license/specialization/branch/shift and show separate Active vs Available states.
 4. **Capacity & Workload** — management-level branch pressure.
 5. **Analytics & Reports** — cross-process KPI view and CSV export.
-6. **Users & Access** — role/branch permission profiles and account status.
+6. **Users & Access** — create the actual clinic account using ERD-aligned username/email/role/branch/status fields; Dentist/Staff roles automatically create the linked Module 3 profile.
 7. **HMO Overview** — read-only management oversight; no fake owner approval button.
 8. **Automation Control** — event/condition/action rules and central success/failure feed.
 9. **Engagement PE** — show M24/M25 only after the core modules and call them proposed enhancements.

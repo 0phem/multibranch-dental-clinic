@@ -2,9 +2,9 @@
 
 | Module | Documented process | Main UI location | User experience represented |
 |---|---|---|---|
-| M1 | User, Role & Access Management | Owner/Admin → Users & Access | Account creation, role/branch scope, permission profiles, activate/deactivate status |
+| M1 | User, Role & Access Management | Owner/Admin → Users & Access | ERD-aligned account creation (username, email, role_name, branch_id, account_status), permission profiles, activate/deactivate status, M1→M3 personnel-profile synchronization |
 | M2 | Multi-Branch Clinic Management | Owner/Admin → Branches | Branch profile, hours, services, status, capacity threshold, publish/sync concept |
-| M3 | Dentist & Staff Management | Owner/Admin → Staff & Dentists | Create profile, specialization/role, branch, shift, conflict check, availability |
+| M3 | Dentist & Staff Management | Owner/Admin → Staff & Dentists | Linked STAFF_PROFILES records synchronized from M1 accounts; staff type, license no., specialization, branch/shift, Active account state and Available operational state |
 | M4 | Patient Records Management | Staff/Dentist → Patient Records | Create/find record, demographics, HMO, visit history, documents, role-aware clinical fields |
 | M5 | Treatment & Clinical Workflow Management | Dentist → Treatment | Complaint/history context, plan, assistant, status, notes, completion, downstream triggers |
 | M6 | Core Appointment Booking & Schedule Management | Patient → Book/My Appointments; Staff → Appointments | Book, confirm, reschedule, cancel, status and slot release/reserve behavior |

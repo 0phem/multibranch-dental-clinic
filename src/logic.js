@@ -41,9 +41,9 @@ export const dateLabel = date => {
 
 export function statusTone(value='') {
   const s=String(value).toLowerCase()
-  if (['paid','approved','confirmed','authorized','active','open','success','delivered','verified'].some(x=>s===x)) return 'success'
+  if (['paid','approved','confirmed','authorized','active','available','open','success','delivered','verified'].some(x=>s===x)) return 'success'
   if (['pending','waiting','scheduled','draft','called','treatment ready'].some(x=>s.includes(x))) return 'warning'
-  if (['cancel','failed','missing','rejected','overload','no-show','inactive','escalat'].some(x=>s.includes(x))) return 'danger'
+  if (['cancel','failed','missing','rejected','overload','no-show','inactive','unavailable','conflict','escalat'].some(x=>s.includes(x))) return 'danger'
   if (['complete','closed','responded','returned'].some(x=>s.includes(x))) return 'info'
   return 'neutral'
 }

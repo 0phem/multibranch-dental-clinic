@@ -19,26 +19,26 @@ function usePersist(key, initial) {
 }
 
 export function ClinicProvider({ children }) {
-  const [branches,setBranches]=usePersist('dentalops-v2-branches',INITIAL_BRANCHES)
-  const [dentists,setDentists]=usePersist('dentalops-v2-dentists',INITIAL_DENTISTS)
-  const [staff,setStaff]=usePersist('dentalops-v2-staff',INITIAL_STAFF)
-  const [patients,setPatients]=usePersist('dentalops-v2-patients',INITIAL_PATIENTS)
-  const [appointments,setAppointments]=usePersist('dentalops-v2-appointments',INITIAL_APPOINTMENTS)
-  const [queue,setQueue]=usePersist('dentalops-v2-queue',INITIAL_QUEUE)
-  const [treatments,setTreatments]=usePersist('dentalops-v2-treatments',INITIAL_TREATMENTS)
-  const [invoices,setInvoices]=usePersist('dentalops-v2-invoices',INITIAL_INVOICES)
-  const [hmo,setHmo]=usePersist('dentalops-v2-hmo',INITIAL_HMO)
-  const [inquiries,setInquiries]=usePersist('dentalops-v2-inquiries',INITIAL_INQUIRIES)
-  const [conversations,setConversations]=usePersist('dentalops-v2-conversations',INITIAL_CONVERSATIONS)
-  const [notifications,setNotifications]=usePersist('dentalops-v2-notifications',INITIAL_NOTIFICATIONS)
-  const [prescriptions,setPrescriptions]=usePersist('dentalops-v2-prescriptions',INITIAL_PRESCRIPTIONS)
-  const [followups,setFollowups]=usePersist('dentalops-v2-followups',INITIAL_FOLLOWUPS)
-  const [users,setUsers]=usePersist('dentalops-v2-users',INITIAL_USERS)
-  const [automations,setAutomations]=usePersist('dentalops-v2-automations',INITIAL_AUTOMATIONS)
-  const [workflowLog,setWorkflowLog]=usePersist('dentalops-v2-workflow-log',INITIAL_WORKFLOW_LOG)
-  const [campaigns,setCampaigns]=usePersist('dentalops-v2-campaigns',INITIAL_CAMPAIGNS)
-  const [loyalty,setLoyalty]=usePersist('dentalops-v2-loyalty',INITIAL_LOYALTY)
-  const [audit,setAudit]=usePersist('dentalops-v2-audit',INITIAL_AUDIT)
+  const [branches,setBranches]=usePersist('dentalops-v3-branches',INITIAL_BRANCHES)
+  const [dentists,setDentists]=usePersist('dentalops-v3-dentists',INITIAL_DENTISTS)
+  const [staff,setStaff]=usePersist('dentalops-v3-staff',INITIAL_STAFF)
+  const [patients,setPatients]=usePersist('dentalops-v3-patients',INITIAL_PATIENTS)
+  const [appointments,setAppointments]=usePersist('dentalops-v3-appointments',INITIAL_APPOINTMENTS)
+  const [queue,setQueue]=usePersist('dentalops-v3-queue',INITIAL_QUEUE)
+  const [treatments,setTreatments]=usePersist('dentalops-v3-treatments',INITIAL_TREATMENTS)
+  const [invoices,setInvoices]=usePersist('dentalops-v3-invoices',INITIAL_INVOICES)
+  const [hmo,setHmo]=usePersist('dentalops-v3-hmo',INITIAL_HMO)
+  const [inquiries,setInquiries]=usePersist('dentalops-v3-inquiries',INITIAL_INQUIRIES)
+  const [conversations,setConversations]=usePersist('dentalops-v3-conversations',INITIAL_CONVERSATIONS)
+  const [notifications,setNotifications]=usePersist('dentalops-v3-notifications',INITIAL_NOTIFICATIONS)
+  const [prescriptions,setPrescriptions]=usePersist('dentalops-v3-prescriptions',INITIAL_PRESCRIPTIONS)
+  const [followups,setFollowups]=usePersist('dentalops-v3-followups',INITIAL_FOLLOWUPS)
+  const [users,setUsers]=usePersist('dentalops-v3-users',INITIAL_USERS)
+  const [automations,setAutomations]=usePersist('dentalops-v3-automations',INITIAL_AUTOMATIONS)
+  const [workflowLog,setWorkflowLog]=usePersist('dentalops-v3-workflow-log',INITIAL_WORKFLOW_LOG)
+  const [campaigns,setCampaigns]=usePersist('dentalops-v3-campaigns',INITIAL_CAMPAIGNS)
+  const [loyalty,setLoyalty]=usePersist('dentalops-v3-loyalty',INITIAL_LOYALTY)
+  const [audit,setAudit]=usePersist('dentalops-v3-audit',INITIAL_AUDIT)
   const [toasts,setToasts]=useState([])
 
   const state={branches,dentists,staff,patients,appointments,queue,treatments,invoices,hmo,inquiries,conversations,notifications,prescriptions,followups,users,automations,workflowLog,campaigns,loyalty,audit}
@@ -57,7 +57,7 @@ export function ClinicProvider({ children }) {
     setNotifications(xs=>[{id:uid('n'),patientId,type,channel,text,status:'Delivered',createdAt:nowLabel(),read:false},...xs])
   }
   const resetDemo=()=>{
-    Object.keys(localStorage).filter(k=>k.startsWith('dentalops-v2-')).forEach(k=>localStorage.removeItem(k))
+    Object.keys(localStorage).filter(k=>k.startsWith('dentalops-v3-')).forEach(k=>localStorage.removeItem(k))
     window.location.reload()
   }
 

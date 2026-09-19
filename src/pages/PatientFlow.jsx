@@ -13,7 +13,12 @@ export function CheckInPage({ store }) {
 
   const createQueue=(patientId,branch,dentistId,appointmentId=null)=>{
     const now='10:08'
-    const entry={id:uid('q'),appointmentId,patientId,branch,dentistId,checkedIn:now,status:'Waiting',priority:'Normal',position:99,calledAt:null,readyAt:null,completedAt:null,skipCount:0}
+    const existingForDentist=state.queue.filter(q=>q.branch===branch&&q.dentistId===dentistId)
+    const entry={
+      id:uid('qe'),queueId:`DQ-${dentistId}-${TODAY}`,checkInId:uid('ci'),queueNumber:existingForDentist.length+1,
+      appointmentId,patientId,branch,dentistId,checkedIn:now,status:'Waiting',currentState:'Waiting',
+      priority:'Normal',position:99,calledAt:null,readyAt:null,completedAt:null,skipCount:0
+    }
     setters.setQueue(xs=>recalcQueue([...xs,entry]))
     if (appointmentId) setters.setAppointments(xs=>xs.map(a=>a.id===appointmentId?{...a,status:'Checked In'}:a))
     notify(patientId,'Check-In Confirmation',`You are checked in at ${branch}. Your live queue position will update automatically.`)
@@ -76,7 +81,7 @@ export function QueuePage({ role, activeBranch, store }) {
     const target=state.queue.find(q=>q.id===id); if(!target)return
     const now='10:08'
     const patch=status==='Called'?{calledAt:now}:status==='Treatment Ready'?{readyAt:now}:status==='Completed'?{completedAt:now}:{}
-    setters.setQueue(xs=>recalcQueue(xs.map(q=>q.id===id?{...q,status,...patch,...extra}:q)))
+    setters.setQueue(xs=>recalcQueue(xs.map(q=>q.id===id?{...q,status,currentState:status,...patch,...extra}:q)))
     notify(target.patientId,'Queue Update',`Your queue status is now ${status}.`)
     workflow('M9',`Queue status changed to ${status}`,`${patientName(target.patientId,state.patients)} • ${target.branch}`)
     log(role==='dentist'?ROLE_INFO.dentist.name:ROLE_INFO.staff.name,`Changed queue status to ${status}`,'M9')
@@ -97,7 +102,8 @@ export function QueuePage({ role, activeBranch, store }) {
     <Card title="Live queue" subtitle="Priority and checked-in order determine positions inside each dentist queue." className="top-gap">
       <Table rows={visible} columns={[
         {key:'position',label:'Pos.',render:q=>active(q)?`#${q.position}`:'—'},
-        {key:'patient',label:'Patient',render:q=><div><b>{patientName(q.patientId,state.patients)}</b><small className="block-muted">{q.priority} priority</small></div>},
+        {key:'queueNumber',label:'Queue no.',render:q=>q.queueNumber||q.position||'—'},
+        {key:'patient',label:'Patient',render:q=><div><b>{patientName(q.patientId,state.patients)}</b><small className="block-muted">{q.priority} priority • {q.checkInId||'check-in linked'}</small></div>},
         {key:'branch',label:'Branch'},{key:'dentist',label:'Dentist',render:q=>dentistName(q.dentistId,state.dentists)},
         {key:'checkedIn',label:'Checked in',render:q=>displayTime(q.checkedIn)},
         {key:'wait',label:'Est. wait',render:q=>`${queueWaitEstimate(q,state.queue,state.appointments,state.treatments,state.dentists)} min`},
