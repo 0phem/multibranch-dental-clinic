@@ -1,39 +1,41 @@
-import React, { useMemo, useState } from 'react'
-import { ROLE_INFO, TODAY } from '../data.js'
-import { Button, Card, Field, Modal, Notice, PageHeader, Status, Table, Tabs, Timeline } from '../components.jsx'
-import { dateLabel, dentistName, displayTime, patientName, peso, uid } from '../logic.js'
+import React, { useState } from 'react'
+import { ROLE_INFO } from '../data.js'
+import { Button, Card, Field, Modal, Notice, PageHeader, Status, Table } from '../components.jsx'
+import { dateLabel, displayTime, patientName, peso, uid } from '../logic.js'
 
-import { inScope, sessionForRole } from '../contracts.js'
+import { visibleInvoices, validInvoice } from '../phase2.js'
+import { sessionForRole } from '../contracts.js'
+
+function InvoiceCharges({invoice,state}) {
+  return <>{(Array.isArray(invoice.items)?invoice.items.filter(Boolean):[]).map((item,index)=><p key={item.id||index}><b>{state.services.find(s=>s.id===item.serviceId)?.name||item.name||'Unknown procedure'}</b> • {item.quantity||1} × {peso.format(item.unitFee??item.amount)} = {peso.format(item.amount)}</p>)}<p>Subtotal: {peso.format(invoice.subtotal??invoice.total)}</p><p><b>Total: {peso.format(invoice.total)}</b></p></>
+}
 
 export function BillingPage({ role, store }) {
-  const { state, actions, toast, log }=store
-  const pid=ROLE_INFO.patient.patientId
+  const { state, actions, toast }=store
   const session=store.session||sessionForRole(role,state)
-  const visible=state.invoices.filter(i=>inScope(i,session)&&(role!=='patient'||i.status!=='Draft')).sort((a,b)=>b.visitDate.localeCompare(a.visitDate))
-  const [pay,setPay]=useState(null)
-  const issue=i=>{
-    const result=actions.issueInvoice(i.id); if(!result.ok)return toast(result.message,'warning')
-    log(ROLE_INFO.staff.name,`Reviewed and issued invoice ${i.invoiceNo||i.id}`,'M11');toast('Draft invoice reviewed and issued to the patient.','success')
+  const visible=visibleInvoices(state,session)
+  const [reviewId,setReviewId]=useState(null),[payId,setPayId]=useState(null),[amount,setAmount]=useState('')
+  const review=visible.find(i=>i.id===reviewId),pay=visible.find(i=>i.id===payId)
+  const reviewInvoice=i=>{
+    const result=actions.reviewInvoice(i.id)
+    if(!result.ok)return toast(result.message,'warning')
+    setReviewId(i.id)
   }
-  const postPayment=(method)=>{
-    if(!pay)return
-    const result=actions.postPayment(pay.id,method); if(!result.ok)return toast(result.message,'warning')
-    log(ROLE_INFO.staff.name,`Posted ${method} payment and generated receipt ${result.receipt}`,'M11')
-    toast(method==='Card'?'Frontend card-payment success simulated. PayMongo/server verification is required in backend.':'Cash payment posted and receipt generated.','success');setPay(null)
+  const issue=()=>{
+    const result=actions.issueInvoice(reviewId)
+    if(!result.ok)return toast(result.message,'warning')
+    setReviewId(null);toast('Invoice issued.','success')
+  }
+  const postPayment=method=>{
+    const result=actions.postPayment(payId,method,amount)
+    if(!result.ok)return toast(result.message,'warning')
+    setPayId(null);toast(method==='Cash'?'Cash payment recorded; receipt available.':'Simulated electronic payment recorded; demo receipt available.','success')
   }
   return <>
-    <PageHeader title={role==='patient'?'Receipts & Payments':'Billing & Payments'} text={role==='patient'?'Your issued bills, payment state, and official/digital receipt records. Draft clinic bills are not shown until staff review.':'Completed treatment automatically creates the draft invoice. Staff reviews the prepared charges, then records Cash or Card payment; staff does not normally recreate treatment charges.'} modules={[11,23]}/>
-    {role==='staff'&&<Card title="Automated billing handoff"><Notice tone="success" title="Treatment-driven billing">When the dentist completes treatment, the system prepares one draft invoice from the completed service or procedure and the configured fee. Staff reviews exceptions; normal charges are not retyped.</Notice></Card>}
-    <Card className={role==='staff'?'top-gap':''} title={role==='patient'?'My transactions':'Transactions'}>
-      <Table rows={visible} columns={[
-        {key:'date',label:'Visit date',render:i=>dateLabel(i.visitDate)},...(role==='staff'?[{key:'patient',label:'Patient',render:i=>patientName(i.patientId,state.patients)}]:[]),
-        {key:'invoice',label:'Invoice',render:i=>i.invoiceNo||i.id},
-        {key:'items',label:'Charges',render:i=><div>{i.items.map((x,idx)=><div key={idx}><b>{x.name}</b><small className="block-muted">{peso.format(x.amount)}</small></div>)}</div>},
-        {key:'branch',label:'Branch'},{key:'total',label:'Total',render:i=><b>{peso.format(i.total)}</b>},{key:'status',label:'Status',render:i=><Status>{i.status}</Status>},{key:'method',label:'Payment method'},
-        {key:'receipt',label:'Receipt',render:i=>i.receipt||'—'},...(role==='staff'?[{key:'action',label:'Action',render:i=><div className="row-actions">{i.status==='Draft'&&<Button size="sm" onClick={()=>issue(i)}>Review & Issue</Button>}{['Open','Pending'].includes(i.status)&&<Button size="sm" onClick={()=>setPay(i)}>Record Payment</Button>}</div>}]:[])
-      ]}/>
-    </Card>
-    <Modal open={!!pay} onClose={()=>setPay(null)} title="Record payment" subtitle={pay?`${patientName(pay.patientId,state.patients)} • ${peso.format(pay.total)}`:''}><Notice tone="info">Cash is recorded by clinic staff. Card is a frontend simulation only; backend implementation must verify the PayMongo/payment-provider result server-side before marking the invoice paid.</Notice><div className="payment-options"><Button onClick={()=>postPayment('Cash')}>Cash</Button><Button onClick={()=>postPayment('Card')}>Card • PayMongo later</Button></div></Modal>
+    <PageHeader title={role==='patient'?'Receipts & Payments':'Billing & Payments'} text="Itemized charges from completed treatment. Staff reviews the invoice before issuance and records full payment."/>
+    <Card title={role==='patient'?'My transactions':'Transactions'}>{!visible.length&&<Notice>No invoices available.</Notice>}{visible.map(i=><div className="clinical-history" key={i.id}><div><b>{i.invoiceNo||i.id} • {patientName(i.patientId,state.patients)}</b><p>{dateLabel(i.visitDate)} • {i.branch}</p><InvoiceCharges invoice={i} state={state}/><p>Payment: {i.paymentStatus} • {i.method}</p>{i.receipt&&<p>Receipt: {i.receipt}{i.payment?.simulation?' • Simulated electronic payment':''}<small className="block-muted">{i.paidAt} {i.payment&&`• Payment ${i.payment.id}`}</small></p>}</div><div><Status>{i.status}</Status>{role==='staff'&&!validInvoice(state,i)&&i.status!=='Paid'&&<Notice>Historical charges need clinic review; completed procedure links are unavailable.</Notice>}{role==='staff'&&validInvoice(state,i)&&<div className="row-actions">{['Draft','Review'].includes(i.status)&&<Button size="sm" onClick={()=>reviewInvoice(i)}>Review Invoice</Button>}{i.status==='Issued'&&<Button size="sm" onClick={()=>{setPayId(i.id);setAmount(String(i.total))}}>Record Payment</Button>}</div>}</div></div>)}</Card>
+    <Modal open={!!review} onClose={()=>setReviewId(null)} title="Review Invoice">{review&&<><p>{patientName(review.patientId,state.patients)} • {review.branch} • {dateLabel(review.visitDate)}</p><p>Treatment: {state.treatments.find(t=>t.id===review.treatmentId)?.procedure}</p><Status>{review.status}</Status><InvoiceCharges invoice={review} state={state}/><Button onClick={issue}>Issue Invoice</Button></>}</Modal>
+    <Modal open={!!pay} onClose={()=>setPayId(null)} title="Record payment">{pay&&<><p>{pay.invoiceNo} • {patientName(pay.patientId,state.patients)} • {peso.format(pay.total)}</p><Notice>Cash is recorded by clinic staff. Card / Electronic is a simulation; no money is transferred.</Notice><Field label="Full payment amount" required><input type="number" min="0.01" step="0.01" value={amount} onChange={e=>setAmount(e.target.value)}/></Field><div className="payment-options"><Button onClick={()=>postPayment('Cash')}>Record Cash</Button><Button onClick={()=>postPayment('Electronic')}>Simulate Card / Electronic</Button></div></>}</Modal>
   </>
 }
 

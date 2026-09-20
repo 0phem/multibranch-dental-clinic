@@ -3,8 +3,9 @@ import { ROLE_INFO } from '../data.js'
 import { Button, Card, Icon, MetricRow, Notice, PageHeader, Progress, StatCard, Status } from '../components.jsx'
 import { branchCapacity, dateLabel, dentistName, displayTime, nextAppointment, patientName, peso, queueWaitEstimate } from '../logic.js'
 
+import { prescriptionTasks } from '../phase2.js'
 import { clinicDate } from '../clock.js'
-import { encounterContext, isTodayQueue, isActiveQueue } from '../contracts.js'
+import { encounterContext, isTodayQueue, isActiveQueue, sessionForRole } from '../contracts.js'
 
 export function DashboardPage({ role, activeBranch, setPage, store }) {
   const { state }=store
@@ -39,6 +40,8 @@ function PatientDashboard({ setPage, state, session }) {
 
     <div className="grid-2 patient-dashboard-grid">
       <Card title="Your care" subtitle="What needs your attention next">
+        {state.treatments.filter(t=>t.patientId===pid&&t.status==='Completed').map(t=><div className="clinical-history" key={t.id}><div><b>{dateLabel(t.date)} • {t.procedure}</b><p>{(Array.isArray(t.procedures)?t.procedures.filter(Boolean):[]).map(p=>state.services.find(s=>s.id===p.serviceId)?.name).filter(Boolean).join(', ')}</p><small>{dentistName(t.dentistId,state.dentists)}</small></div><Status>Completed</Status></div>)}
+        <Button variant="ghost" onClick={()=>setPage('prescriptions')}>View authorized prescriptions</Button>
         <div className="care-list">
           <div className="care-row"><span className="care-icon"><Icon name="followup" size={18}/></span><div><b>{openFollowups?`${openFollowups} follow-up${openFollowups>1?'s':''} to schedule`:'No pending follow-ups'}</b><small>{openFollowups?'Your dentist recommended a return visit.':'Your follow-up care is up to date.'}</small></div>{openFollowups>0&&<button onClick={()=>setPage('followups')}>Review</button>}</div>
           <div className="care-row"><span className="care-icon"><Icon name="receipt" size={18}/></span><div><b>Receipts & payments</b><small>View your clinic transactions and digital receipts.</small></div><button onClick={()=>setPage('billing')}>Open</button></div>
@@ -89,7 +92,7 @@ function DentistDashboard({ setPage, state, session }) {
   const today=state.appointments.filter(a=>a.date===clinicDate()&&a.dentistId===did&&a.status!=='Cancelled').sort((a,b)=>a.start.localeCompare(b.start))
   const ownQueue=state.queue.filter(q=>q.dentistId===did&&isTodayQueue(q)&&isActiveQueue(q)&&q.status!=='Temporarily Away').sort((a,b)=>(a.position||99)-(b.position||99))
   const activeTreatment=state.treatments.find(t=>t.dentistId===did&&t.date===clinicDate()&&t.status==='In Treatment')
-  const pendingRx=state.treatments.filter(t=>t.dentistId===did&&t.status==='Completed'&&t.prescriptionRequired&&!state.prescriptions.some(rx=>rx.treatmentId===t.id)).length
+  const pendingRx=prescriptionTasks(state,session||sessionForRole('dentist',state)).length
   const follow=state.followups.filter(f=>f.dentistId===did&&f.status==='Open').length
   const next=ownQueue[0]
   return <>

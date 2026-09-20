@@ -1,4 +1,5 @@
-import { clinicNow } from './clock.js'
+import { phase2Actions, procedureLines, linkedTreatment, money, validInvoice } from './phase2.js'
+import { clinicNow, validDate } from './clock.js'
 import { encounterContext, inScope, isActiveQueue, isTodayQueue, TERMINAL } from './contracts.js'
 import { recalcQueue, uid, validateAppointment } from './logic.js'
 
@@ -35,7 +36,8 @@ export function createWorkflowActions({getState,commit,getSession,clock=clinicNo
   const canOperate=(session,record)=>['staff','owner'].includes(session.role)&&inScope(record,session)
   const queueRecord=(state,id)=>state.queue.find(q=>q.id===id)
   const closeFollowup=(state,appointmentId,status)=>{
-    state.followups=state.followups.map(f=>f.appointmentId===appointmentId?{...f,status,appointmentId:status==='Open'?null:appointmentId}:f)
+    const appointment=state.appointments.find(a=>a.id===appointmentId)
+    state.followups=state.followups.map(f=>f.appointmentId===appointmentId&&appointment&&f.patientId===appointment.patientId&&(!f.branchId||f.branchId===appointment.branchId)&&(!f.dentistId||f.dentistId===appointment.dentistId)?{...f,status,appointmentId:status==='Open'?null:appointmentId}:f)
   }
 
   const saveAppointment=run(({state,session,now,event,notify},form,options={})=>{
@@ -46,9 +48,15 @@ export function createWorkflowActions({getState,commit,getSession,clock=clinicNo
     if(existing&&(!['Pending','Confirmed'].includes(existing.status)||state.checkIns.some(c=>c.appointmentId===existing.id)))return fail('An admitted or closed appointment cannot be rescheduled.')
     const request={...form,patientId:session.role==='patient'?session.patientId:form.patientId}
     if(!inScope(request,session))return fail('Choose your assigned branch and patient scope.')
-    const followup=options.followupId?state.followups.find(f=>f.id===options.followupId):null
+    const followup=state.followups.find(f=>options.followupId?f.id===options.followupId:existing&&f.appointmentId===existing.id)
     if(options.followupId&&(!followup||!inScope(followup,session)||followup.patientId!==request.patientId||followup.dentistId!==request.dentistId))return fail('Follow-up context does not match this booking.')
-    if(followup?.appointmentId)return {ok:true,unchanged:true,record:state.appointments.find(a=>a.id===followup.appointmentId)}
+    if(followup&&(!linkedTreatment(state,followup)||(linkedTreatment(state,followup).status!=='Completed'||linkedTreatment(state,followup).followupRequired!==true)||followup.branchId!==request.branchId||followup.patientId!==request.patientId||followup.dentistId!==request.dentistId||!['Open','Scheduled'].includes(followup.status)))return fail('Follow-up relationship needs review.')
+    if(followup?.appointmentId){
+      const linked=state.appointments.find(a=>a.id===followup.appointmentId)
+      if(!linked||['patientId','dentistId','branchId'].some(k=>linked[k]!==followup[k])||TERMINAL.includes(linked.status)||existing&&existing.id!==linked.id)return fail('Follow-up appointment relationship needs review.')
+      if(!existing)return {ok:true,unchanged:true,record:linked}
+    }
+    if(existing&&followup&&followup.appointmentId!==existing.id)return fail('Follow-up cannot be attached to an unrelated appointment.')
     const retry=options.commandId&&state.appointments.find(a=>a.commandId===options.commandId)
     if(retry&&!existing)return {ok:true,unchanged:true,record:retry}
     const result=validateAppointment(request,state,existing?.id,now)
@@ -163,35 +171,50 @@ export function createWorkflowActions({getState,commit,getSession,clock=clinicNo
     if(session.role!=='dentist')return fail('Only the assigned dentist may document treatment.')
     const entry=queueRecord(state,input.queueEntryId)
     if(!entry||!inScope(entry,session)||!isTodayQueue(entry,now.date))return fail('Open your exact encounter from today’s queue.')
+    const dentist=state.dentists.find(d=>d.id===entry.dentistId)
+    if(!dentist||dentist.userId!==session.userId||!dentist.branchIds?.includes(entry.branchId))return fail('The assigned Dentist profile is unavailable for this encounter.')
+    const appointment=entry.appointmentId?state.appointments.find(a=>a.id===entry.appointmentId):null
+    if(!state.patients.some(p=>p.id===entry.patientId)||!state.branches.some(b=>b.id===entry.branchId)||entry.appointmentId&&(!appointment||['patientId','dentistId','branchId'].some(k=>appointment[k]!==entry[k])||appointment.date!==entry.clinicDate||appointment.queueEntryId&&appointment.queueEntryId!==entry.id))return fail('Encounter relationships are missing or inconsistent.')
     const current=entry.treatmentId?state.treatments.find(t=>t.id===entry.treatmentId):state.treatments.find(t=>t.queueEntryId===entry.id)
     if(entry.treatmentId&&!current)return fail('The linked treatment record is missing; review this encounter before continuing.')
     if(input.id&&input.id!==current?.id)return fail('Treatment ID does not match this encounter.')
     if(current&&((current.queueEntryId&&current.queueEntryId!==entry.id)||['patientId','dentistId','branchId','appointmentId'].some(key=>current[key]!=null&&current[key]!==entry[key])))return fail('The linked treatment belongs to another encounter. Review the record linkage.')
     for(const key of ['patientId','appointmentId','dentistId','branchId'])if(input[key]!=null&&input[key]!==entry[key])return fail('Treatment context does not match the queue entry.')
+    if(appointment&&(appointment.treatmentId&&appointment.treatmentId!==current?.id||['Cancelled','No-show'].includes(appointment.status)))return fail('The appointment does not match the active treatment.')
     if(current?.status==='Completed')return status==='Completed'?{ok:true,unchanged:true,record:current}:fail('Completed treatment cannot be reopened here.')
     if(!['Called','Treatment Ready','In Treatment'].includes(entry.status))return fail('Call this patient before starting treatment.')
     if(!['In Treatment','Completed'].includes(status))return fail('Invalid treatment status.')
     if(state.treatments.some(t=>t.dentistId===entry.dentistId&&t.status==='In Treatment'&&t.date===entry.clinicDate&&t.id!==current?.id))return fail('Complete the current treatment before starting another encounter.')
     if(status==='Completed'&&current?.status!=='In Treatment')return fail('Start treatment before completing this encounter.')
-    const serviceId=input.serviceId||current?.serviceId||entry.serviceId
+    const serviceId=input.procedures?.[0]?.serviceId||input.serviceId||current?.serviceId||entry.serviceId
     const service=state.services.find(s=>s.id===serviceId&&s.status==='Active')
     const branchService=state.branchServices.find(bs=>bs.branchId===entry.branchId&&bs.serviceId===serviceId&&bs.active!==false)
     if(!service||!branchService||!state.dentistServiceAssignments.some(a=>a.dentistId===entry.dentistId&&a.serviceId===serviceId&&a.isAuthorized!==false))return fail('Select an authorized performed service for this branch.')
     if(status==='Completed'&&!clean(input.procedure??current?.procedure))return fail('Document the performed procedure before completing treatment.')
+    const treatmentId=current?.id||uid('t')
+    const performed=procedureLines(state,entry,treatmentId,input,current)
+    if(!performed.ok)return performed
+    if(status==='Completed'&&!performed.lines.length)return fail('Confirm at least one performed procedure.')
+    for(const key of ['prescriptionRequired','followupRequired'])if(input[key]!==undefined&&typeof input[key]!=='boolean')return fail('Clinical requirements must be explicit Dentist choices.')
+    if(input.followupDate&&(!validDate(input.followupDate)||input.followupDate<now.date))return fail('Choose a valid recommended follow-up date.')
     const fields=['complaint','plan','procedure','notes','assistant','assistantStaffId','followupRequired','prescriptionRequired','followupDate','followupInterval','followupReason']
     const clinical=Object.fromEntries(fields.filter(k=>input[k]!==undefined).map(k=>[k,input[k]]))
-    if(current&&current.status===status&&current.serviceId===serviceId&&Object.entries(clinical).every(([k,v])=>current[k]===v))return {ok:true,unchanged:true,record:current}
-    const record={...current,...clinical,id:current?.id||uid('t'),queueEntryId:entry.id,patientId:entry.patientId,appointmentId:entry.appointmentId||null,dentistId:entry.dentistId,branchId:entry.branchId,requestedServiceId:entry.serviceId,serviceId,date:entry.clinicDate,status,startedAt:current?.startedAt||now.timestamp,completedAt:status==='Completed'?now.timestamp:null,revision:(current?.revision||0)+1}
+    if(current&&current.status===status&&current.serviceId===serviceId&&JSON.stringify(current.procedures||[])===JSON.stringify(performed.lines)&&Object.entries(clinical).every(([k,v])=>current[k]===v))return {ok:true,unchanged:true,record:current}
+    const record={...current,...clinical,id:treatmentId,procedures:performed.lines,queueEntryId:entry.id,patientId:entry.patientId,appointmentId:entry.appointmentId||null,dentistId:entry.dentistId,branchId:entry.branchId,requestedServiceId:entry.serviceId,serviceId,date:entry.clinicDate,status,startedAt:current?.startedAt||now.timestamp,completedAt:status==='Completed'?now.timestamp:null,revision:(current?.revision||0)+1}
     state.treatments=replace(state.treatments,record)
     state.queue=recalcQueue(state.queue.map(q=>q.id===entry.id?{...durable(q),treatmentId:record.id,status,currentState:status,treatmentStartedAt:record.startedAt,completedAt:record.completedAt}:q))
     state.appointments=state.appointments.map(a=>a.id===entry.appointmentId?{...durable(a),status,treatmentId:record.id}:a)
     state.checkIns=state.checkIns.map(c=>c.id===entry.checkInId?{...c,status}:c)
     if(status==='Completed'){
       state.patients=state.patients.map(p=>p.id===record.patientId?{...p,dentalHistory:`${p.dentalHistory||''} ${record.procedure} • ${record.date}.`.trim()}:p)
-      if(!state.invoices.some(i=>i.treatmentId===record.id)){
-        const amount=Number(branchService.feeOverride??service.baseFee)
-        if(!Number.isFinite(amount)||amount<0)return fail('The performed service needs a valid configured fee.')
-        const invoice={id:uid('inv'),invoiceNo:`INV-${now.date.slice(0,4)}-${String(state.invoices.length+1).padStart(4,'0')}`,treatmentId:record.id,queueEntryId:entry.id,patientId:record.patientId,branchId:record.branchId,visitDate:record.date,items:[{serviceId,treatmentId:record.id,name:service.name,description:record.procedure,amount}],total:amount,netAmount:amount,status:'Draft',paymentStatus:'Unpaid',method:'—',receipt:null,createdBy:'System'}
+      const existingInvoice=state.invoices.find(i=>i.treatmentId===record.id)
+      if(existingInvoice&&!validInvoice(state,existingInvoice))return fail('An existing invoice has inconsistent treatment links.')
+      if(state.followups.some(f=>f.treatmentId===record.id&&!linkedTreatment(state,f))||state.prescriptions.some(r=>r.treatmentId===record.id&&!linkedTreatment(state,r)))return fail('An existing clinical handoff has inconsistent treatment links.')
+      if(!existingInvoice){
+        const invoiceId=uid('inv')
+        const items=record.procedures.map(p=>({id:`${invoiceId}-${p.id}`,invoiceId,procedureId:p.id,treatmentId:record.id,serviceId:p.serviceId,quantity:p.quantity,unitFee:p.unitFee,amount:p.amount}))
+        const amount=money(items.reduce((sum,p)=>sum+p.amount,0))
+        const invoice={id:invoiceId,invoiceNo:`INV-${now.date.slice(0,4)}-${String(state.invoices.length+1).padStart(4,'0')}`,treatmentId:record.id,queueEntryId:entry.id,appointmentId:entry.appointmentId||null,patientId:record.patientId,branchId:record.branchId,visitDate:record.date,items,subtotal:amount,total:amount,netAmount:amount,status:'Draft',paymentStatus:'Unpaid',method:'—',receipt:null,createdBy:'System'}
         state.invoices=[invoice,...state.invoices]
         event(`invoice:${record.id}`,'M5→M11','billing.draft.prepared',invoice.invoiceNo,record.patientId,record.branchId)
       }
@@ -230,5 +253,5 @@ export function createWorkflowActions({getState,commit,getSession,clock=clinicNo
     event(`patient:${record.id}`,'M4','patient.record.created',record.patientCode,record.id,preferredBranchId)
     return {ok:true,record:patientProjection(record,personRecord)}
   })
-  return {saveAppointment,cancelAppointment,checkInAppointment,admitWalkIn,updateQueue,saveTreatment,completeTreatment:(input,status='Completed')=>saveTreatment(input,status),createPatientRecord}
+  return {...phase2Actions(run),saveAppointment,cancelAppointment,checkInAppointment,admitWalkIn,updateQueue,saveTreatment,completeTreatment:(input,status='Completed')=>saveTreatment(input,status),createPatientRecord}
 }

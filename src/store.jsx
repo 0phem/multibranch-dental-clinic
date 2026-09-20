@@ -8,7 +8,7 @@ import {
 } from './data.js'
 import { uid, nowLabel } from './logic.js'
 import { clinicNow, rebaseDemoRecords } from './clock.js'
-import { normalizeClinicState, sessionForRole, patientInScope, inScope, persistableCollection } from './contracts.js'
+import { normalizeClinicState, sessionForRole, patientInScope, persistableCollection } from './contracts.js'
 import { createWorkflowActions } from './workflow.js'
 
 const ClinicContext=createContext(null)
@@ -207,26 +207,6 @@ export function ClinicProvider({ children }) {
     return {ok:true,status:next}
   }
 
-  const issueInvoice=invoiceId=>{
-    const inv=stateRef.current.invoices.find(i=>i.id===invoiceId); if(!inv) return {ok:false,message:'Invoice not found.'}
-    if(!['staff','owner'].includes(sessionRef.current?.role)||!inScope(inv,sessionRef.current))return {ok:false,message:'Invoice is outside your scope.'}
-    setInvoices(xs=>xs.map(i=>i.id===invoiceId?{...i,status:'Open',paymentStatus:'Unpaid',issuedAt:nowLabel()}:i))
-    notify(inv.patientId,'Bill Available',`Your clinic bill ${inv.invoiceNo||inv.id} is ready for payment.`)
-    workflow('M11','Draft invoice reviewed and issued',inv.invoiceNo||inv.id,'Success','billing.invoice.issued')
-    return {ok:true}
-  }
-
-  const postPayment=(invoiceId,method)=>{
-    const inv=stateRef.current.invoices.find(i=>i.id===invoiceId); if(!inv) return {ok:false,message:'Invoice not found.'}
-    if(!['staff','owner'].includes(sessionRef.current?.role)||!inScope(inv,sessionRef.current))return {ok:false,message:'Invoice is outside your scope.'}
-    if(!['Cash','Card'].includes(method)) return {ok:false,message:'Use Cash or Card for this workflow.'}
-    const receipt=`OR-${TODAY.replaceAll('-','')}-${String(Date.now()).slice(-5)}`
-    setInvoices(xs=>xs.map(i=>i.id===invoiceId?{...i,status:'Paid',paymentStatus:'Paid',method,paidAt:nowLabel(),receipt}:i))
-    notify(inv.patientId,'Receipt Available',`Payment received for ${inv.invoiceNo||inv.id}. Receipt ${receipt} is now available.`)
-    workflow('M11→M18','Payment validated → receipt generated',`${receipt} • ${method}`,'Success','billing.payment.completed')
-    return {ok:true,receipt}
-  }
-
   const createHmoCase=form=>{
     const patient=projectedPatients.find(p=>p.id===form.patientId); if(!patient) return {ok:false,message:'Select a patient.'}
     const provider=form.provider||patient.hmo
@@ -283,7 +263,7 @@ export function ClinicProvider({ children }) {
     return {ok:true}
   }
 
-  const actions={updatePatientRecord,createUserAccount,toggleUserStatus,issueInvoice,postPayment,createHmoCase,markHmoRequirementReceived,submitHmoCase,followUpHmo,escalateHmo,recordHmoOutcome}
+  const actions={updatePatientRecord,createUserAccount,toggleUserStatus,createHmoCase,markHmoRequirementReceived,submitHmoCase,followUpHmo,escalateHmo,recordHmoOutcome}
 
   Object.assign(actions,createWorkflowActions({
     getState:()=>stateRef.current,

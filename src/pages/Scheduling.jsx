@@ -42,6 +42,7 @@ export function AppointmentForm({ role, store, prefill={}, ignoreId=null, onSave
       const d=state.dentists.find(x=>x.branchIds.includes(next.branchId)&&x.available&&allowed.has(x.id))
       next.dentistId=d?.id||''
     }
+    if(followupId){next.patientId=prefill.patientId;next.branchId=prefill.branchId;next.dentistId=prefill.dentistId}
     setForm(next); setResult(null)
   }
   const validate=()=>{const r=validateAppointment(form,state,ignoreId); setResult(r); return r}
@@ -60,10 +61,10 @@ export function AppointmentForm({ role, store, prefill={}, ignoreId=null, onSave
   const availableDentists=state.dentists.filter(d=>d.branchIds.includes(form.branchId)&&d.available&&allowedDentistIds.has(d.id))
   return <div className="booking-layout">
     <form className="form-grid" onSubmit={e=>{e.preventDefault();save()}}>
-      {role!=='patient'&&<Field label="Patient" required><select value={form.patientId} onChange={e=>update('patientId',e.target.value)}>{state.patients.filter(p=>patientInScope(p,state,session)).map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></Field>}
-      <Field label="Branch" required><select value={form.branchId} onChange={e=>update('branchId',e.target.value)}>{state.branches.filter(b=>b.status==='Open'&&(session.role!=='staff'||b.id===session.branchId)).map(b=><option key={b.id} value={b.id}>{b.name} • {b.status}</option>)}</select></Field>
+      {role!=='patient'&&<Field label="Patient" required><select disabled={!!followupId} value={form.patientId} onChange={e=>update('patientId',e.target.value)}>{state.patients.filter(p=>patientInScope(p,state,session)).map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></Field>}
+      <Field label="Branch" required><select disabled={!!followupId} value={form.branchId} onChange={e=>update('branchId',e.target.value)}>{state.branches.filter(b=>b.status==='Open'&&(session.role!=='staff'||b.id===session.branchId)).map(b=><option key={b.id} value={b.id}>{b.name} • {b.status}</option>)}</select></Field>
       <Field label="Service" required><select value={form.serviceId} onChange={e=>update('serviceId',e.target.value)}>{availableServices.map(s=><option key={s.id} value={s.id}>{s.name} • {s.duration} min</option>)}</select></Field>
-      <Field label="Dentist" required><select value={form.dentistId} onChange={e=>update('dentistId',e.target.value)}>{availableDentists.map(d=><option key={d.id} value={d.id}>{d.name} • {d.specialty}</option>)}</select></Field>
+      <Field label="Dentist" required><select disabled={!!followupId} value={form.dentistId} onChange={e=>update('dentistId',e.target.value)}>{availableDentists.map(d=><option key={d.id} value={d.id}>{d.name} • {d.specialty}</option>)}</select></Field>
       <Field label="Date" required><input type="date" value={form.date} min={clinicDate()} onChange={e=>update('date',e.target.value)}/></Field>
       <Field label="Start time" required><input type="time" value={form.start} onChange={e=>update('start',e.target.value)}/></Field>
       <Field label="Expected duration"><input value={`${form.duration} minutes`} disabled/></Field>
