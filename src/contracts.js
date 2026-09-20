@@ -1,3 +1,4 @@
+import { normalizePhase3 } from './phase3-contracts.js'
 import { INITIAL_BRANCHES, ROLE_INFO } from './data.js'
 import { clinicDate } from './clock.js'
 
@@ -37,11 +38,13 @@ export function encounterContext(entry) {
 export function persistableCollection(key, rows) {
   const identity=['name','firstName','middleName','lastName','email','phone','dob','sex','address']
   const omitted={
-    appointments:['branch','service'],queue:['branch'],treatments:['branch'],invoices:['branch'],
+    hmo:['branch','provider','pendingHours','missing','eligibility'],conversations:['unreadBy','assignedTo','assignedRole'],inquiries:['assigned'],appointments:['branch','service'],queue:['branch'],treatments:['branch'],invoices:['branch'],
     patients:[...identity,'preferredBranch'],dentists:[...identity,'branches','assistant'],
     staff:[...identity,'branch'],users:identity,
   }[key]||[]
   return rows.map(row=>Object.fromEntries(Object.entries(row).filter(([field])=>{
+    if(['assignedTo','assignedRole','assigned'].includes(field)&&!row.assignedUserId)return true
+    if(field==='provider'&&!row.providerId)return true
     if(field==='branch'&&!row.branchId)return true
     if(field==='preferredBranch'&&!row.preferredBranchId)return true
     if(field==='branches'&&!row.branchIds?.length)return true
@@ -81,11 +84,12 @@ export function normalizeClinicState(state) {
   })
   const checkIns=[...(state.checkIns||[])]
   for (const q of queue) if(q.checkInId&&!checkIns.some(c=>c.id===q.checkInId)) checkIns.push({id:q.checkInId,queueEntryId:q.id,appointmentId:q.appointmentId||null,patientId:q.patientId,dentistId:q.dentistId,branchId:q.branchId,serviceId:q.serviceId,clinicDate:q.clinicDate,arrivedAt:q.arrivedAt||(q.clinicDate?`${q.clinicDate}T${q.checkedIn}:00+08:00`:null),status:TERMINAL.includes(q.status)?q.status:'Checked In',legacy:true})
-  return {...state,appointments,queue,checkIns,treatments:treatments.map(t=>({...t,queueEntryId:t.queueEntryId||queue.find(q=>q.treatmentId===t.id)?.id||null})),
+  const normalized={...state,appointments,queue,checkIns,treatments:treatments.map(t=>({...t,queueEntryId:t.queueEntryId||queue.find(q=>q.treatmentId===t.id)?.id||null})),
     invoices:state.invoices.map(withBranch),
     followups:state.followups.map(f=>({...f,branchId:f.branchId||treatments.find(t=>t.id===f.treatmentId)?.branchId||appointments.find(a=>a.id===f.appointmentId)?.branchId||null})),
     patients:state.patients.map(p=>{const preferredBranchId=p.preferredBranchId||branchIdFor({branch:p.preferredBranch},branches);return {...identity(p),preferredBranchId,preferredBranch:branches.find(b=>b.id===preferredBranchId)?.name||'Unknown branch'}}),
     dentists:state.dentists.map(d=>{const branchIds=d.branchIds||(d.branches||[]).map(branch=>branchIdFor({branch},branches)).filter(Boolean);return {...d,branchIds,branches:branchIds.map(id=>branches.find(b=>b.id===id)?.name||'Unknown branch')}}),
     staff:state.staff.map(s=>{const projected=withBranch(s);return {...projected,branch:!projected.branchId&&(s.branch==='All Branches'||state.users.find(u=>u.id===s.userId)?.branch==='All Branches')?'All Branches':projected.branch}}),
   }
+  return {...normalized,...normalizePhase3(normalized)}
 }

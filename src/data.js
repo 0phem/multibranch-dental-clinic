@@ -41,7 +41,7 @@ export const ROLE_INFO = {
 export const NAV = {
   patient: [
     ['dashboard','Home'], ['book','Book Appointment'], ['appointments','Appointments'], ['queue','Live Queue'],
-    ['messages','Messages'], ['billing','Receipts & Payments'], ['prescriptions','Prescriptions'], ['followups','Follow-Up Care'], ['loyalty','Rewards • PE']
+    ['hmo','HMO Coverage'], ['messages','Messages'], ['billing','Receipts & Payments'], ['prescriptions','Prescriptions'], ['followups','Follow-Up Care'], ['loyalty','Rewards • PE']
   ],
   staff: [
     ['dashboard','Operations'], ['appointments','Appointments'], ['checkin','Check-In'], ['queue','Live Queue'], ['capacity','Capacity'],
@@ -161,9 +161,9 @@ export const INITIAL_INVOICES = [
 ]
 
 export const INITIAL_HMO = [
-  { id:'h1', patientId:'p1', provider:'MediCare Plus', memberId:'MC-10082', treatment:'Oral Prophylaxis', branch:'Branch A', eligibility:'Verified', documents:['ID','HMO Card','Treatment Request'], missing:[], status:'Pending', submittedAt:'2026-09-18 10:15', pendingHours:22, reference:'HMO-2026-0918-01', followUpCount:1, lastContact:'2026-09-19 08:10', providerOutcome:null },
-  { id:'h2', patientId:'p2', provider:'HealthFirst', memberId:'HF-22015', treatment:'Composite Restoration', branch:'Branch B', eligibility:'Verified', documents:['HMO Card'], missing:['Valid ID','Dentist treatment request'], status:'Missing Requirements', submittedAt:null, pendingHours:0, reference:null, followUpCount:0, lastContact:null, providerOutcome:null },
-  { id:'h3', patientId:'p4', provider:'MediCare Plus', memberId:'MC-88912', treatment:'Follow-Up', branch:'Branch C', eligibility:'Verified', documents:['ID','HMO Card','Treatment Request'], missing:[], status:'Approved', submittedAt:'2026-09-17 14:30', pendingHours:0, reference:'HMO-2026-0917-04', followUpCount:0, lastContact:'2026-09-18 09:00', providerOutcome:'Approved' },
+  { id:'h1', branchId:'b1', providerId:'hmo-medicare', patientId:'p1', provider:'MediCare Plus', memberId:'MC-10082', treatment:'Oral Prophylaxis', branch:'Branch A', eligibility:'Verified', documents:['ID','HMO Card','Treatment Request'], missing:[], status:'Pending', submittedAt:'2026-09-18 10:15', pendingHours:22, reference:'HMO-2026-0918-01', followUpCount:1, lastContact:'2026-09-19 08:10', providerOutcome:null },
+  { id:'h2', branchId:'b2', providerId:'hmo-healthfirst', patientId:'p2', provider:'HealthFirst', memberId:'HF-22015', treatment:'Composite Restoration', branch:'Branch B', eligibility:'Verified', documents:['HMO Card'], missing:['Valid ID','Dentist treatment request'], status:'Missing Requirements', submittedAt:null, pendingHours:0, reference:null, followUpCount:0, lastContact:null, providerOutcome:null },
+  { id:'h3', branchId:'b3', providerId:'hmo-medicare', patientId:'p4', provider:'MediCare Plus', memberId:'MC-88912', treatment:'Follow-Up', branch:'Branch C', eligibility:'Verified', documents:['ID','HMO Card','Treatment Request'], missing:[], status:'Approved', submittedAt:'2026-09-17 14:30', pendingHours:0, reference:'HMO-2026-0917-04', followUpCount:0, lastContact:'2026-09-18 09:00', providerOutcome:'Approved' },
 ]
 
 export const INITIAL_INQUIRIES = [
@@ -172,11 +172,11 @@ export const INITIAL_INQUIRIES = [
 ]
 
 export const INITIAL_CONVERSATIONS = [
-  { id:'c1', patientId:'p1', context:'Appointment a1', assignedTo:'Alyssa Cruz', assignedRole:'Receptionist', status:'Open', unreadBy:['staff'], messages:[
+  { id:'c1', patientId:'p1', branchId:'b1', assignedUserId:'u2', participantUserIds:['u12','u2'], unreadUserIds:['u2'], context:'Appointment a1', assignedTo:'Alyssa Cruz', assignedRole:'Receptionist', status:'Open', unreadBy:['staff'], messages:[
     { id:'cm1', sender:'patient', text:'Can I move my appointment if needed?', at:'2026-09-19 07:55' },
     { id:'cm2', sender:'staff', text:'Yes. We can validate another available slot before confirming the change.', at:'2026-09-19 08:06' },
   ]},
-  { id:'c2', patientId:'p2', context:'Clinical clarification', assignedTo:'Dr. Miguel Reyes', assignedRole:'Dentist', status:'Open', unreadBy:['dentist'], messages:[
+  { id:'c2', patientId:'p2', branchId:'b1', assignedUserId:'u3', participantUserIds:['u3'], unreadUserIds:['u3'], context:'Clinical clarification', assignedTo:'Dr. Miguel Reyes', assignedRole:'Dentist', status:'Open', unreadBy:['dentist'], messages:[
     { id:'cm3', sender:'patient', text:'The tooth is still sensitive to cold. Is that expected?', at:'2026-09-18 19:20' },
   ]},
 ]

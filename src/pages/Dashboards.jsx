@@ -3,6 +3,7 @@ import { ROLE_INFO } from '../data.js'
 import { Button, Card, Icon, MetricRow, Notice, PageHeader, Progress, StatCard, Status } from '../components.jsx'
 import { branchCapacity, dateLabel, dentistName, displayTime, nextAppointment, patientName, peso, queueWaitEstimate } from '../logic.js'
 
+import { visibleNotifications, visibleConversations, pendingHours } from '../phase3-contracts.js'
 import { prescriptionTasks } from '../phase2.js'
 import { clinicDate } from '../clock.js'
 import { encounterContext, isTodayQueue, isActiveQueue, sessionForRole } from '../contracts.js'
@@ -22,9 +23,10 @@ function PatientDashboard({ setPage, state, session }) {
   const q=state.queue.find(x=>x.patientId===pid&&isTodayQueue(x)&&isActiveQueue(x))
   const wait=q?queueWaitEstimate(q,state.queue,state.appointments,state.treatments,state.dentists):0
   const openFollowups=state.followups.filter(f=>f.patientId===pid&&f.status==='Open').length
-  const unread=state.notifications.filter(n=>n.patientId===pid&&!n.read).length + state.conversations.filter(c=>c.patientId===pid&&c.unreadBy?.includes('patient')).length
+  const participant=session||sessionForRole('patient',state)
+  const unread=visibleConversations(state,participant).filter(c=>c.unreadUserIds.includes(participant.userId)).length
   const dentist=next?dentistName(next.dentistId,state.dentists):'—'
-  const recent=state.notifications.filter(n=>n.patientId===pid).slice(0,4)
+  const recent=visibleNotifications(state,participant).slice(0,4)
   return <>
     <section className={`patient-home-hero ${q?'queue-active':''}`}>
       <div className="patient-hero-copy"><span className="hero-eyebrow">Good afternoon, {firstName}</span>{q?<><h1>You’re checked in.</h1><p>We’ll keep this page updated while you wait. {q.status==='Temporarily Away'?'Your place is paused while you are away.':<>You’re currently <strong>#{q.position}</strong> in line.</>}</p><div className="hero-actions"><Button onClick={()=>setPage('queue')} icon="queue">View live queue</Button><Button variant="soft" onClick={()=>setPage('messages')} icon="message">Message clinic</Button></div></>:next?<><h1>Your next visit is coming up.</h1><p>{dateLabel(next.date)} at {displayTime(next.start)} with {dentist}.</p><div className="hero-actions"><Button onClick={()=>setPage('appointments')} icon="calendar">View appointment</Button><Button variant="soft" onClick={()=>setPage('book')} icon="plusCalendar">Book another visit</Button></div></>:<><h1>Ready for your next dental visit?</h1><p>Choose a branch, service and schedule in a few simple steps.</p><div className="hero-actions"><Button onClick={()=>setPage('book')} icon="plusCalendar">Book an appointment</Button></div></>}</div>
@@ -54,13 +56,13 @@ function PatientDashboard({ setPage, state, session }) {
   </>
 }
 
-function StaffDashboard({ activeBranch, setPage, state }) {
+function StaffDashboard({ activeBranch, setPage, state, session }) {
   const branchFilter=x=>activeBranch==='All Branches'||x.branch===activeBranch
   const todays=state.appointments.filter(a=>a.date===clinicDate()&&a.status!=='Cancelled'&&branchFilter(a)).sort((a,b)=>a.start.localeCompare(b.start))
   const waiting=state.queue.filter(q=>q.status==='Waiting'&&isTodayQueue(q)&&branchFilter(q))
-  const pendingHmo=state.hmo.filter(h=>['Pending','Missing Requirements','Returned','Escalated'].includes(h.status)&&branchFilter(h))
-  const openInquiries=state.inquiries.filter(i=>i.status==='Open')
-  const overdueHmo=state.hmo.filter(h=>h.status==='Pending'&&h.pendingHours>=12&&branchFilter(h))
+  const pendingHmo=state.hmo.filter(h=>['Pending','Missing Requirements','Ready for Submission','Returned','Escalated'].includes(h.status)&&branchFilter(h))
+  const openInquiries=state.inquiries.filter(i=>i.status==='Open'&&i.assignedUserId===(session?.userId||ROLE_INFO.staff.userId)&&i.branchId===(session?.branchId||ROLE_INFO.staff.branchId))
+  const overdueHmo=state.hmo.filter(h=>['Pending','Escalated'].includes(h.status)&&pendingHours(h,state.clock)>=12&&branchFilter(h))
   const branch=state.branches.find(b=>b.name===activeBranch)
   return <>
     <PageHeader kicker="Front desk workspace" title="Today’s clinic operations" text={`Keep arrivals, queues, appointments and patient requests moving smoothly${branch?` at ${branch.name}`:''}.`} aside={<Button onClick={()=>setPage('checkin')} icon="checkin">Check in patient</Button>}/>
@@ -116,14 +118,14 @@ function OwnerDashboard({ activeBranch, setPage, state }) {
   const appointments=state.appointments.filter(a=>a.date===clinicDate()&&a.status!=='Cancelled'&&(activeBranch==='All Branches'||a.branch===activeBranch))
   const pendingHmo=state.hmo.filter(h=>['Pending','Escalated'].includes(h.status)&&(activeBranch==='All Branches'||h.branch===activeBranch))
   const revenue=state.invoices.filter(i=>i.status==='Paid'&&(activeBranch==='All Branches'||i.branch===activeBranch)).reduce((s,i)=>s+i.total,0)
-  const exceptions=[...branchData.filter(c=>c.overloaded).map(c=>({title:`${c.branch} capacity exception`,detail:`${c.workload}% workload • ~${c.estimate} min wait`})),...pendingHmo.filter(h=>h.pendingHours>=12).map(h=>({title:'HMO follow-up threshold reached',detail:`${patientName(h.patientId,state.patients)} • ${h.provider} • ${h.pendingHours}h pending`}))]
+  const exceptions=[...branchData.filter(c=>c.overloaded).map(c=>({title:`${c.branch} capacity exception`,detail:`${c.workload}% workload • ~${c.estimate} min wait`})),...pendingHmo.filter(h=>pendingHours(h,state.clock)>=12).map(h=>({title:'HMO follow-up threshold reached',detail:`${patientName(h.patientId,state.patients)} • ${h.provider} • ${pendingHours(h,state.clock).toFixed(1)}h pending`}))]
   const maxLoad=Math.max(100,...branchData.map(x=>x.workload))
   return <>
     <PageHeader kicker="Owner overview" title="Executive dashboard" text="A focused view of clinic performance, exceptions and branch health." aside={<span className="context-chip"><Icon name="building" size={14}/>{activeBranch}</span>}/>
     <div className="stats-grid">
       <StatCard label="Appointments today" value={appointments.length} hint="Across visible branches" icon={<Icon name="calendar" size={18}/>}/>
       <StatCard label="Waiting patients" value={branchData.reduce((s,c)=>s+c.waiting,0)} hint="Live patient flow" tone="blue" icon={<Icon name="queue" size={18}/>}/>
-      <StatCard label="HMO pending" value={pendingHmo.length} hint={`${pendingHmo.filter(h=>h.pendingHours>=12).length} beyond threshold`} tone="amber" icon={<Icon name="shield" size={18}/>}/>
+      <StatCard label="HMO pending" value={pendingHmo.length} hint={`${pendingHmo.filter(h=>pendingHours(h,state.clock)>=12).length} beyond threshold`} tone="amber" icon={<Icon name="shield" size={18}/>}/>
       <StatCard label="Paid revenue" value={peso.format(revenue)} hint="Recorded demo transactions" tone="purple" icon={<Icon name="wallet" size={18}/>}/>
     </div>
     <div className="owner-dashboard-grid">

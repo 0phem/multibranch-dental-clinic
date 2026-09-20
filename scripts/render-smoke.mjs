@@ -6,7 +6,7 @@ import React from 'react'
 import { renderToString } from 'react-dom/server'
 
 const require=createRequire(import.meta.url)
-const files=['store.jsx','layout.jsx','clock.js','contracts.js','workflow.js','phase2.js','pages/Dashboards.jsx','pages/Scheduling.jsx','pages/PatientFlow.jsx','pages/Clinical.jsx','pages/FinanceCommunication.jsx','pages/Admin.jsx','data.js']
+const files=['store.jsx','layout.jsx','clock.js','contracts.js','workflow.js','phase2.js','phase3-contracts.js','orchestration.js','pages/Dashboards.jsx','pages/Scheduling.jsx','pages/PatientFlow.jsx','pages/Clinical.jsx','pages/FinanceCommunication.jsx','pages/Admin.jsx','data.js']
 const result=await build({stdin:{contents:files.map(file=>`export * from './src/${file}';`).join('\n'),resolveDir:process.cwd()},bundle:true,write:false,platform:'node',format:'esm',plugins:[{name:'shared-react',setup(b){b.onResolve({filter:/^react$/},()=>({path:pathToFileURL(require.resolve('react')).href,external:true}))}}]})
 const m=await import('data:text/javascript;base64,'+Buffer.from(result.outputFiles[0].text).toString('base64'))
 m.setClockSource(()=>new Date('2026-09-19T02:08:00Z'))
@@ -90,6 +90,52 @@ assert.equal(followBooking.ok,true,followBooking.message)
 assert.ok(render('followups','patient').includes('Scheduled'))
 console.log('PASS: Phase 2 procedures, prescription draft privacy/authorization, patient care, invoice review/issue/payment/receipt and follow-up scheduling')
 
+// Phase 3 operational flows: no real provider, delivery, or server transport.
+const hmoCase=state.hmo.find(h=>h.treatmentId===completed.record.id)
+assert.ok(hmoCase)
+assert.ok(render('hmo','patient').includes('My HMO Coverage'))
+assert.ok(render('hmo','patient').includes('Record Document Metadata'))
+for(const requirement of hmoCase.requirements)assert.equal(actions.provideHmoRequirement(hmoCase.id,requirement.ruleId,{fileName:'clinic-document.pdf'}).ok,true)
+assert.equal(actions.submitHmoCase(hmoCase.id,{commandId:'smoke-submit',method:'Portal',note:'Internal submission note'}).ok,true)
+m.setClockSource(()=>new Date('2026-09-19T15:08:00Z'))
+assert.equal(actions.evaluateHmoTimers().ok,true)
+const followContact={commandId:'smoke-contact',submissionCycle:1,method:'Phone',note:'Internal contact history',nextAction:'Await provider'}
+assert.equal(actions.followUpHmo(hmoCase.id,followContact).ok,true)
+assert.equal(actions.escalateHmo(hmoCase.id).ok,true)
+assert.ok(render('hmo','staff',{hmoCaseId:hmoCase.id}).includes('Record Provider Response'))
+assert.ok(!render('hmo','patient',{hmoCaseId:hmoCase.id}).includes('Internal contact history'))
+assert.ok(!render('hmo','patient',{hmoCaseId:hmoCase.id}).includes('Record Provider Response'))
+assert.equal(actions.recordHmoOutcome(hmoCase.id,{caseId:hmoCase.id,commandId:'smoke-return',submissionCycle:1,outcome:'Returned',method:'Email',note:'Internal correction request',requirementIds:['valid-id']}).ok,true)
+assert.equal(actions.provideHmoRequirement(hmoCase.id,'valid-id',{fileName:'corrected.pdf'}).ok,true)
+assert.equal(actions.submitHmoCase(hmoCase.id,{commandId:'smoke-resubmit',method:'Portal',note:'Internal resubmission'}).ok,true)
+assert.equal(actions.recordHmoOutcome(hmoCase.id,{caseId:hmoCase.id,commandId:'smoke-approve',submissionCycle:2,outcome:'Approved',method:'Email',note:'Internal recorded outcome'}).ok,true)
+assert.ok(render('hmo','patient',{hmoCaseId:hmoCase.id}).includes('Provider Approved'))
+const ownNotification=state.notifications.find(n=>n.recipientUserId==='u12'&&n.entityId===hmoCase.id)
+session=m.sessionForRole('patient',state)
+const dest=m.notificationDestination(state,session,ownNotification)
+assert.equal(dest.context.hmoCaseId,hmoCase.id)
+assert.equal(actions.markNotificationRead(ownNotification.id).ok,true)
+const renderPanel=role=>renderToString(React.createElement(m.NotificationPanel,{role,store:{...store,session:m.sessionForRole(role,state)},setPage:()=>{},onClose:()=>{}}))
+assert.ok(renderPanel('patient').includes('View all'))
+assert.ok(!renderPanel('dentist').includes('Invoice review needed'))
+session=m.sessionForRole('staff',state)
+const conversation=state.conversations.find(c=>c.id==='c1')
+assert.ok(m.visibleConversations(state,session).some(c=>c.id===conversation.id))
+assert.equal(actions.replyToConversation(conversation.id,'Phase Three clinic reply','smoke-reply').ok,true)
+assert.ok(render('messages','patient',{conversationId:conversation.id}).includes('Phase Three clinic reply'))
+assert.ok(!render('messages','dentist',{conversationId:conversation.id}).includes('Phase Three clinic reply'))
+session=m.sessionForRole('patient',state)
+assert.equal(actions.markConversationRead(conversation.id).ok,true)
+assert.ok(!state.conversations.find(c=>c.id===conversation.id).unreadUserIds.includes('u12'))
+session=m.sessionForRole('staff',state)
+assert.equal(actions.submitHmoCase(hmoCase.id,{commandId:'invalid-final-state'}).ok,false)
+assert.ok(render('automation','owner').includes('hmo.submit'))
+const beforeRender=JSON.stringify(state)
+for(let repeat=0;repeat<2;repeat++){render('hmo','staff');render('hmo','patient');renderPanel('patient');render('messages','dentist');render('automation','owner')}
+assert.equal(JSON.stringify(state),beforeRender)
+m.setClockSource(()=>new Date('2026-09-19T02:08:00Z'))
+console.log('PASS: Phase 3 HMO correction/resubmission/escalation, Patient privacy, notification navigation/read scope, participant messages, monitor failures, render purity')
+
 // Exercise ClinicProvider's synchronous snapshot with commands issued before any render.
 providerStore.setSession('staff')
 const quick=providerStore.actions.saveAppointment({patientId:'p1',branchId:'b1',dentistId:'d1',serviceId:'svc1',date:'2026-09-19',start:'16:00'},{commandId:'provider-double'})
@@ -100,7 +146,7 @@ console.log('PASS: immediate repeated command integration')
 
 // Reload persisted ID-only records, including an old record missing branch entirely.
 const persisted=new Map()
-for(const key of ['persons','patients','appointments','queue','treatments','invoices','followups','prescriptions','dentists','staff','checkIns']){
+for(const key of ['persons','patients','appointments','queue','treatments','invoices','followups','prescriptions','hmo','notifications','conversations','inquiries','dentists','staff','checkIns']){
   const storageKey=key==='checkIns'?'check-ins':key
   persisted.set(`dentalops-v4-${storageKey}`,JSON.stringify(m.persistableCollection(key,state[key])))
 }
@@ -115,5 +161,7 @@ render('dashboard','owner')
 assert.equal(store.state.appointments.find(a=>a.id===booking.record.id).branchId,'b1')
 assert.ok(render('billing','patient').includes(payment.receipt))
 assert.ok(render('prescriptions','patient').includes('Phase Two medication'))
+assert.ok(render('hmo','patient',{hmoCaseId:hmoCase.id}).includes('Provider Approved'))
+assert.ok(render('messages','patient',{conversationId:conversation.id}).includes('Phase Three clinic reply'))
 delete globalThis.localStorage
 console.log('PASS: persisted ID-only records reload and render across appointments, queue, schedule, chart, dashboards')

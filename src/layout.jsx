@@ -1,5 +1,7 @@
 import React from 'react'
 import { NAV, ROLE_INFO } from './data.js'
+import { visibleNotifications, notificationDestination } from './phase3-contracts.js'
+import { sessionForRole } from './contracts.js'
 import { Button, Icon, Status } from './components.jsx'
 
 const NAV_ICONS={
@@ -9,7 +11,7 @@ const NAV_ICONS={
 }
 
 const GROUPS={
-  patient:[['Overview',['dashboard']],['Your care',['book','appointments','queue','prescriptions','followups']],['Communication',['messages','billing','loyalty']]],
+  patient:[['Overview',['dashboard']],['Your care',['book','appointments','queue','prescriptions','followups','hmo']],['Communication',['messages','billing','loyalty']]],
   staff:[['Today',['dashboard','appointments','checkin','queue','capacity']],['Patients & finance',['patients','billing','hmo']],['Communication',['inquiries','messages','followups','engagement']]],
   dentist:[['Today',['dashboard','schedule','queue']],['Clinical',['patients','treatment','prescriptions','followups']],['Communication',['messages']]],
   owner:[['Overview',['dashboard','analytics']],['Operations',['branches','team','capacity','hmo']],['Administration',['users','automation','engagement']]],
@@ -58,19 +60,18 @@ export function Login({ onLogin }) {
   </div>
 }
 
-function NotificationPanel({role,store,onClose}){
-  const {state,setters}=store
-  const pid=ROLE_INFO.patient.patientId
-  const items=role==='patient'?state.notifications.filter(n=>n.patientId===pid):state.notifications
-  const visible=items.slice(0,8)
-  const markAll=()=>{
-    if(role==='patient') setters.setNotifications(xs=>xs.map(n=>n.patientId===pid?{...n,read:true}:n))
-    else setters.setNotifications(xs=>xs.map(n=>({...n,read:true})))
-  }
+export function NotificationPanel({role,store,onClose,setPage}){
+  const {state,actions,toast}=store
+  const session=store.session||sessionForRole(role,state)
+  const items=visibleNotifications(state,session)
+  const [all,setAll]=React.useState(false)
+  const visible=all?items:items.slice(0,8)
+  const mark=id=>{const result=actions.markNotificationRead(id);if(!result.ok)toast(result.message,'warning');return result.ok}
+  const open=n=>{const destination=notificationDestination(state,session,n);if(destination&&mark(n.id)){setPage(destination.page,destination.context);onClose()}}
   return <div className="notification-popover">
-    <div className="notification-popover-head"><div><span>Notifications</span><small>Operational updates and reminders</small></div><button className="icon-btn" onClick={onClose}><Icon name="x" size={17}/></button></div>
-    <div className="notification-toolbar"><button onClick={markAll}>Mark all as read</button></div>
-    <div className="notification-scroll">{visible.length?visible.map(n=><div className={`notification-row ${n.read?'':'unread'}`} key={n.id}><span className="notification-dot"/><div><b>{n.type}</b><p>{n.text}</p><small>{n.createdAt} • {n.channel}</small></div></div>):<div className="notification-empty">You're all caught up.</div>}</div>
+    <div className="notification-popover-head"><div><span>Notifications</span><small>Operational updates and reminders</small></div><button className="icon-btn" aria-label="Close notifications" onClick={onClose}><Icon name="x" size={17}/></button></div>
+    <div className="notification-toolbar"><button onClick={()=>actions.markAllNotificationsRead()}>Mark my notifications read</button><button onClick={()=>setAll(v=>!v)}>{all?'Recent only':`View all (${items.length})`}</button></div>
+    <div className="notification-scroll">{visible.length?visible.map(n=><div className={`notification-row ${n.read?'':'unread'}`} key={n.id}><span className="notification-dot"/><div><b>{n.title}</b><p>{n.body}</p><small>{n.createdAt} • {n.legacy?'Historical demo record':n.channel}</small><div className="row-actions">{!n.read&&<button onClick={()=>mark(n.id)}>Mark read</button>}{notificationDestination(state,session,n)&&<button onClick={()=>open(n)}>View update</button>}</div></div></div>):<div className="notification-empty">You're all caught up.</div>}</div>
   </div>
 }
 
@@ -99,8 +100,8 @@ export function Shell({ role, page, setPage, onLogout, activeBranch, setActiveBr
   const info=ROLE_INFO[role]
   const [mobileOpen,setMobileOpen]=React.useState(false)
   const [notificationsOpen,setNotificationsOpen]=React.useState(false)
-  const pid=ROLE_INFO.patient.patientId
-  const unread=role==='patient'?store.state.notifications.filter(n=>n.patientId===pid&&!n.read).length:store.state.notifications.filter(n=>!n.read).length
+  const session=store.session||sessionForRole(role,store.state)
+  const unread=visibleNotifications(store.state,session).filter(n=>!n.read).length
   const groups=navGroups(role)
   const mobilePatientNav=[['dashboard','Home'],['appointments','Visits'],['book','Book'],['queue','Queue'],['messages','Messages']]
   const selectPage=key=>{setPage(key);setMobileOpen(false)}
@@ -111,12 +112,12 @@ export function Shell({ role, page, setPage, onLogout, activeBranch, setActiveBr
       <nav className="main-nav">{groups.map(([title,items])=><div className="nav-group" key={title}><span className="nav-group-label">{title}</span>{items.map(([key,label])=><button key={key} className={page===key?'active':''} onClick={()=>selectPage(key)}><Icon name={NAV_ICONS[key]||'home'} size={18}/><span>{label}</span>{page===key&&<i/>}</button>)}</div>)}</nav>
       <div className="sidebar-footer"><button onClick={resetDemo}><Icon name="settings" size={16}/>Reset demo data</button><button onClick={onLogout}><Icon name="logout" size={16}/>Log out</button></div>
     </aside>
-    {mobileOpen&&<div className="mobile-scrim" onClick={()=>setMobileOpen(false)}/>} 
+    {mobileOpen&&<div className="mobile-scrim" onClick={()=>setMobileOpen(false)}/>}
     <main className="main-shell">
       <header className="topbar">
         <div className="topbar-left"><button className="mobile-menu icon-btn" onClick={()=>setMobileOpen(true)}><Icon name="menu" size={21}/></button><div className="topbar-context"><span className="system-live"><i/> Live demo workspace</span>{role==='owner'&&<label className="branch-scope"><span>Branch</span><select value={activeBranch} onChange={e=>setActiveBranch(e.target.value)}><option>All Branches</option>{store.state.branches.map(b=><option key={b.id}>{b.name}</option>)}</select></label>}{(role==='staff'||role==='dentist')&&<div className="branch-lock"><small>Assigned branch</small><b>{activeBranch}</b></div>}</div></div>
-        <div className="top-actions"><button className="top-icon-btn" onClick={()=>setNotificationsOpen(v=>!v)} aria-label="Notifications"><Icon name="bell" size={19}/>{unread>0&&<span className="notification-count">{Math.min(unread,9)}</span>}</button><div className="top-user"><span>{info.name.split(' ').map(x=>x[0]).filter(Boolean).slice(0,2).join('')}</span><div><b>{info.name}</b><small>{info.subtitle}</small></div><Icon name="chevron" size={14}/></div></div>
-        {notificationsOpen&&<NotificationPanel role={role} store={store} onClose={()=>setNotificationsOpen(false)}/>} 
+        <div className="top-actions"><button className="top-icon-btn" onClick={()=>setNotificationsOpen(v=>!v)} aria-label="Notifications"><Icon name="bell" size={19}/>{unread>0&&<span className="notification-count">{unread>99?'99+':unread}</span>}</button><div className="top-user"><span>{info.name.split(' ').map(x=>x[0]).filter(Boolean).slice(0,2).join('')}</span><div><b>{info.name}</b><small>{info.subtitle}</small></div><Icon name="chevron" size={14}/></div></div>
+        {notificationsOpen&&<NotificationPanel role={role} store={store} setPage={setPage} onClose={()=>setNotificationsOpen(false)}/>}
       </header>
       <div className="content">{children}</div>
     </main>

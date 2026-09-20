@@ -4,6 +4,7 @@ import { Button, Card, Field, Modal, Notice, PageHeader, Status, Table, Tabs } f
 import { dateLabel, dentistName, displayTime, patientName } from '../logic.js'
 import { AppointmentForm } from './Scheduling.jsx'
 
+import { visibleHmo, HMO_PROVIDERS } from '../phase3-contracts.js'
 import { visiblePrescriptions, prescriptionTasks, linkedTreatment } from '../phase2.js'
 import { inScope, isTodayQueue, patientInScope, sessionForRole } from '../contracts.js'
 
@@ -132,6 +133,7 @@ export function TreatmentPage({ store, context, setPage }) {
         <p>Queue #{queueEntry.queueNumber} • {queueEntry.branch} • <Status>{queueEntry.status}</Status></p>
         <Button size="sm" variant="ghost" onClick={()=>setPage('patients',{...context,patientId:selected})}>Open Chart</Button>
         <div className="patient-summary"><b>{patientName(selected,state.patients)}</b><p>{state.services.find(s=>s.id===queueEntry.serviceId)?.name||'Unknown requested service'} • {queueEntry.branch} • {dentist?.name}</p><p>Allergies: {state.patients.find(p=>p.id===selected)?.allergies}</p><p>History: {state.patients.find(p=>p.id===selected)?.dentalHistory}</p></div>
+        {visibleHmo(state,session).filter(h=>current?.id&&h.treatmentId===current.id||h.appointmentId&&h.appointmentId===queueEntry.appointmentId).map(h=><p key={h.id}>HMO: {HMO_PROVIDERS.find(p=>p.id===h.providerId)?.name} • {h.status} • Provider decisions are external.</p>)}
         <Notice tone="info">The system does not diagnose, prescribe, or choose treatment. It only loads known context and automates downstream handoffs after the dentist’s decisions.</Notice>
       </Card>
       <Card title="Clinical documentation">{closed&&<Notice tone="success">This encounter is complete and its clinical record is read-only.</Notice>}<fieldset disabled={closed} style={{border:0,padding:0,margin:0,minWidth:0}}><div className="form-grid one-col">

@@ -4,11 +4,12 @@ import {
   INITIAL_BRANCHES, INITIAL_DENTISTS, INITIAL_STAFF, INITIAL_PATIENTS, INITIAL_APPOINTMENTS, INITIAL_QUEUE,
   INITIAL_TREATMENTS, INITIAL_INVOICES, INITIAL_HMO, INITIAL_INQUIRIES, INITIAL_CONVERSATIONS,
   INITIAL_NOTIFICATIONS, INITIAL_PRESCRIPTIONS, INITIAL_FOLLOWUPS, INITIAL_USERS, INITIAL_AUTOMATIONS,
-  INITIAL_WORKFLOW_LOG, INITIAL_CAMPAIGNS, INITIAL_LOYALTY, INITIAL_AUDIT, ROLE_INFO, TODAY
+  INITIAL_WORKFLOW_LOG, INITIAL_CAMPAIGNS, INITIAL_LOYALTY, INITIAL_AUDIT, ROLE_INFO
 } from './data.js'
 import { uid, nowLabel } from './logic.js'
 import { clinicNow, rebaseDemoRecords } from './clock.js'
 import { normalizeClinicState, sessionForRole, patientInScope, persistableCollection } from './contracts.js'
+import { HMO_PROVIDERS } from './phase3-contracts.js'
 import { createWorkflowActions } from './workflow.js'
 
 const ClinicContext=createContext(null)
@@ -16,7 +17,7 @@ const STORAGE_PREFIX='dentalops-v4-'
 
 function usePersist(key, initial) {
   const [value,setValue]=useState(()=>{
-    const seed=['appointments','queue','treatments','invoices','followups','prescriptions'].includes(key)?rebaseDemoRecords(initial):initial
+    const seed=['appointments','queue','treatments','invoices','followups','prescriptions','hmo','notifications','conversations','inquiries'].includes(key)?rebaseDemoRecords(initial):initial
     try { const saved=localStorage.getItem(`${STORAGE_PREFIX}${key}`); const parsed=saved?JSON.parse(saved):null; return Array.isArray(parsed)?parsed:seed }
     catch { return seed }
   })
@@ -57,9 +58,10 @@ export function ClinicProvider({ children }) {
   const [session,setSessionState]=useState(null)
   const sessionRef=useRef(null)
   const stateRef=useRef(null)
+  const actionsRef=useRef(null)
   const [clock,setClock]=useState(clinicNow)
-  useEffect(()=>{const timer=setInterval(()=>setClock(clinicNow()),15000);return ()=>clearInterval(timer)},[])
-  const setSession=role=>{const next=role?sessionForRole(role,stateRef.current):null;sessionRef.current=next;setSessionState(next);return next}
+  useEffect(()=>{const timer=setInterval(()=>{setClock(clinicNow());if(sessionRef.current?.role==='staff'){actionsRef.current?.evaluateHmoTimers();actionsRef.current?.evaluateOperationalReminders()}},15000);return ()=>clearInterval(timer)},[])
+  const setSession=role=>{const next=role?sessionForRole(role,stateRef.current):null;sessionRef.current=next;setSessionState(next);if(next?.role==='staff'){actionsRef.current?.evaluateHmoTimers();actionsRef.current?.evaluateOperationalReminders()}return next}
 
 
   const personById=id=>persons.find(p=>p.id===id)
@@ -120,6 +122,10 @@ export function ClinicProvider({ children }) {
     setDentists(persistableCollection('dentists',migrate(dentists,state.dentists,['branchIds'])))
     setStaff(persistableCollection('staff',migrate(staff,state.staff,['branchId'])))
     setCheckIns(state.checkIns)
+    setHmo(persistableCollection('hmo',state.hmo))
+    setConversations(persistableCollection('conversations',state.conversations))
+    setNotifications(state.notifications)
+    setInquiries(persistableCollection('inquiries',state.inquiries))
   },[])
   const setters={
     setPersons,setServices,setBranchServices,setDentistServiceAssignments,setBranches,setDentists,setStaff,setPatients,
@@ -134,12 +140,8 @@ export function ClinicProvider({ children }) {
     setAudit(xs=>[{id:uid('aud'),at:nowLabel(),actor,action,module},...xs].slice(0,150))
   }
   const workflow=(module,event,result,status='Success',eventType=null)=>{
-    setWorkflowLog(xs=>[{id:uid('log'),at:nowLabel(),module,event,eventType:eventType||event,result,status},...xs].slice(0,150))
+    setWorkflowLog(xs=>[{id:uid('log'),at:nowLabel(),module,event,eventType:eventType||event,result,status},...xs])
   }
-  const notify=(patientId,type,text,channel='In-App')=>{
-    setNotifications(xs=>[{id:uid('n'),patientId,type,channel,text,status:'Delivered',createdAt:nowLabel(),read:false},...xs])
-  }
-
   const updatePatientRecord=(patientId,{person:personPatch={},patient:patientPatch={}})=>{
     const raw=patients.find(p=>p.id===patientId)
     if(!raw) return {ok:false,message:'Patient record not found.'}
@@ -155,6 +157,7 @@ export function ClinicProvider({ children }) {
     }
     personPatch=Object.fromEntries(Object.entries(personPatch).filter(([key])=>personKeys.includes(key)))
     patientPatch=Object.fromEntries(Object.entries(patientPatch).filter(([key])=>patientKeys.includes(key)))
+    if(patientPatch.hmo!==undefined)patientPatch.hmoProviderId=HMO_PROVIDERS.find(h=>h.name===patientPatch.hmo)?.id||null
     setPersons(xs=>xs.map(p=>p.id===raw.personId?{...p,...personPatch}:p))
     setPatients(xs=>xs.map(p=>p.id===patientId?{...p,...patientPatch}:p))
     workflow('M4','Patient record updated',patientId,'Success','patient.record.updated')
@@ -207,63 +210,7 @@ export function ClinicProvider({ children }) {
     return {ok:true,status:next}
   }
 
-  const createHmoCase=form=>{
-    const patient=projectedPatients.find(p=>p.id===form.patientId); if(!patient) return {ok:false,message:'Select a patient.'}
-    const provider=form.provider||patient.hmo
-    const memberId=form.memberId||patient.hmoMember
-    if(!provider||provider==='None'||!memberId||memberId==='—') return {ok:false,message:'The patient does not have usable HMO provider/member information.'}
-    const required=['HMO Card','Valid ID','Dentist treatment request']
-    const present=form.documents||['HMO Card']
-    const missing=required.filter(x=>!present.includes(x))
-    const h={id:uid('h'),patientId:patient.id,provider,memberId,treatment:form.treatment||'Requested dental treatment',serviceId:form.serviceId||null,branch:form.branch||patient.preferredBranch,eligibility:'Provider Verification Required',documents:present,missing,status:missing.length?'Missing Requirements':'Ready for Submission',submittedAt:null,pendingHours:0,reference:null,followUpCount:0,lastContact:null,providerOutcome:null,escalationStatus:'Not Escalated'}
-    setHmo(xs=>[h,...xs])
-    if(missing.length) notify(patient.id,'HMO Requirements Needed',`${missing.length} HMO requirement${missing.length>1?'s are':' is'} missing: ${missing.join(', ')}.`)
-    workflow('M12','HMO case created and local completeness checked',`${patient.name} • ${missing.length} missing`,'Success','hmo.case.created')
-    return {ok:true,record:h}
-  }
-
-  const markHmoRequirementReceived=(caseId,requirement)=>{
-    const h=hmo.find(x=>x.id===caseId); if(!h) return {ok:false,message:'HMO case not found.'}
-    const missing=h.missing.filter(x=>x!==requirement)
-    setHmo(xs=>xs.map(x=>x.id===caseId?{...x,documents:[...new Set([...(x.documents||[]),requirement])],missing,status:missing.length?'Missing Requirements':'Ready for Submission'}:x))
-    workflow('M12','HMO requirement received',`${h.id} • ${requirement}`,'Success','hmo.requirement.received')
-    return {ok:true}
-  }
-
-  const submitHmoCase=caseId=>{
-    const h=hmo.find(x=>x.id===caseId); if(!h) return {ok:false,message:'HMO case not found.'}
-    if(h.missing?.length) return {ok:false,message:'Missing HMO requirements must be completed before submission.'}
-    const ref=h.reference||`HMO-${TODAY.slice(0,4)}-${String(Date.now()).slice(-6)}`
-    setHmo(xs=>xs.map(x=>x.id===caseId?{...x,status:'Pending',submittedAt:nowLabel(),pendingHours:0,reference:ref,eligibility:'Awaiting Provider Response'}:x))
-    notify(h.patientId,'HMO Submitted',`Your HMO request ${ref} has been submitted to ${h.provider}.`)
-    workflow('M13','HMO request submitted',`${ref} • provider response pending`,'Success','hmo.request.submitted')
-    return {ok:true,reference:ref}
-  }
-
-  const followUpHmo=caseId=>{
-    const h=hmo.find(x=>x.id===caseId); if(!h) return {ok:false,message:'HMO case not found.'}
-    setHmo(xs=>xs.map(x=>x.id===caseId?{...x,followUpCount:(x.followUpCount||0)+1,lastContact:nowLabel(),escalationStatus:x.escalationStatus||'Follow-Up Required'}:x))
-    workflow('M14','HMO follow-up contact recorded',h.reference||h.id,'Success','hmo.followup.recorded')
-    return {ok:true}
-  }
-
-  const escalateHmo=caseId=>{
-    const h=hmo.find(x=>x.id===caseId); if(!h) return {ok:false,message:'HMO case not found.'}
-    setHmo(xs=>xs.map(x=>x.id===caseId?{...x,status:'Escalated',escalationStatus:'Escalated',lastContact:nowLabel()}:x))
-    notify(h.patientId,'HMO Escalation Update',`Your HMO case requires additional clinic follow-up with ${h.provider}.`)
-    workflow('M14','Unresolved HMO case escalated',h.reference||h.id,'Success','hmo.case.escalated')
-    return {ok:true}
-  }
-
-  const recordHmoOutcome=(caseId,outcome)=>{
-    const h=hmo.find(x=>x.id===caseId); if(!h) return {ok:false,message:'HMO case not found.'}
-    setHmo(xs=>xs.map(x=>x.id===caseId?{...x,status:outcome,providerOutcome:outcome,pendingHours:0,lastContact:nowLabel(),eligibility:outcome==='Approved'?'Provider Approved':outcome==='Rejected'?'Provider Rejected':outcome==='Returned'?'Provider Returned':x.eligibility,escalationStatus:'Resolved'}:x))
-    notify(h.patientId,'HMO Status Update',`Your HMO provider response is ${outcome}.`)
-    workflow('M13',`Provider response recorded: ${outcome}`,h.reference||h.id,'Success','hmo.provider.response')
-    return {ok:true}
-  }
-
-  const actions={updatePatientRecord,createUserAccount,toggleUserStatus,createHmoCase,markHmoRequirementReceived,submitHmoCase,followUpHmo,escalateHmo,recordHmoOutcome}
+  const actions={updatePatientRecord,createUserAccount,toggleUserStatus}
 
   Object.assign(actions,createWorkflowActions({
     getState:()=>stateRef.current,
@@ -275,12 +222,14 @@ export function ClinicProvider({ children }) {
     },
   }))
 
+  actionsRef.current=actions
+
   const resetDemo=()=>{
     Object.keys(localStorage).filter(k=>k.startsWith(STORAGE_PREFIX)).forEach(k=>localStorage.removeItem(k))
     window.location.reload()
   }
 
-  const value=useMemo(()=>({state,setters,actions,toast,log,workflow,notify,resetDemo,toasts,session,setSession}),[persons,services,branchServices,dentistServiceAssignments,branches,dentists,staff,patients,appointments,queue,treatments,invoices,hmo,inquiries,conversations,notifications,prescriptions,followups,users,automations,workflowLog,campaigns,loyalty,audit,toasts,checkIns,session,clock])
+  const value=useMemo(()=>({state,setters,actions,toast,log,workflow,resetDemo,toasts,session,setSession}),[persons,services,branchServices,dentistServiceAssignments,branches,dentists,staff,patients,appointments,queue,treatments,invoices,hmo,inquiries,conversations,notifications,prescriptions,followups,users,automations,workflowLog,campaigns,loyalty,audit,toasts,checkIns,session,clock])
   return <ClinicContext.Provider value={value}>{children}</ClinicContext.Provider>
 }
 

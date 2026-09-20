@@ -1,3 +1,5 @@
+import { pendingHours } from '../phase3-contracts.js'
+import { automationSnapshot } from '../orchestration.js'
 import React, { useMemo, useState } from 'react'
 import { MODULES, ROLE_INFO, TODAY } from '../data.js'
 import { Button, Card, Field, Modal, Notice, PageHeader, Progress, StatCard, Status, Table, Tabs } from '../components.jsx'
@@ -178,7 +180,7 @@ export function AnalyticsPage({ activeBranch, store }) {
     <div className="cards-3">{metrics.map(m=><Card key={m.name} title={m.name}><div className="analytics-value">{m.value}</div><p className="muted-copy">{m.note}</p><span className="module-inline">{m.module}</span></Card>)}</div>
     <div className="grid-2 top-gap">
       <Card title="Branch workload report"><div className="branch-bars">{state.branches.filter(b=>activeBranch==='All Branches'||b.name===activeBranch).map(b=>{const c=branchCapacity(b.name,state);return <div key={b.id}><div className="bar-label"><span>{b.name}</span><b>{c.workload}%</b></div><Progress value={c.workload} threshold={c.threshold}/><small>{c.waiting} waiting • {c.booked} booked • ~{c.estimate} min wait</small></div>})}</div></Card>
-      <Card title="Report actions" subtitle="Report exports"><div className="action-stack"><Button onClick={()=>makeCsv('dentalops-branch-capacity.csv',exportRows)}>Export Branch Capacity CSV</Button><Button variant="ghost" onClick={()=>makeCsv('dentalops-hmo-report.csv',hmo.map(x=>({Patient:patientName(x.patientId,state.patients),Provider:x.provider,Branch:x.branch,Status:x.status,PendingHours:x.pendingHours,Reference:x.reference||''})))}>Export HMO CSV</Button><Notice tone="info">Reports are prepared from operational records and can be filtered by branch and reporting period.</Notice></div></Card>
+      <Card title="Report actions" subtitle="Report exports"><div className="action-stack"><Button onClick={()=>makeCsv('dentalops-branch-capacity.csv',exportRows)}>Export Branch Capacity CSV</Button><Button variant="ghost" onClick={()=>makeCsv('dentalops-hmo-report.csv',hmo.map(x=>({Patient:patientName(x.patientId,state.patients),Provider:x.provider,Branch:x.branch,Status:x.status,PendingHours:pendingHours(x,state.clock),Reference:x.reference||''})))}>Export HMO CSV</Button><Notice tone="info">Reports are prepared from operational records and can be filtered by branch and reporting period.</Notice></div></Card>
     </div>
   </>
 }
@@ -253,29 +255,33 @@ export function UsersPage({ store }) {
 
 export function AutomationPage({ store }) {
   const { state }=store
-  const success=state.workflowLog.filter(x=>x.status==='Success').length
-  const failed=state.workflowLog.filter(x=>x.status==='Failed').length
+  const monitor=automationSnapshot(state)
+  if(store.session&&store.session.role!=='owner')return <Notice>Automation monitoring is available to Owner/Admin.</Notice>
+  const success=monitor.success
+  const failed=monitor.failed.length
   const rate=state.workflowLog.length?Math.round((success/state.workflowLog.length)*100):100
   return <>
-    <PageHeader kicker="System orchestration" title="Automation monitor" text="Monitor workflow health, failed handoffs and recent cross-module actions. Core automation rules are protected from routine owner changes."/>
+    <PageHeader kicker="System orchestration" title="Automation monitor" text="Monitor recorded frontend actions, failures, and warnings. Rules are read-only. No server workers, external delivery, or background scheduler are connected."/>
     <div className="stats-grid">
       <StatCard label="Automation health" value={`${rate}%`} hint="Successful recorded actions"/>
       <StatCard label="Active rules" value={state.automations.filter(r=>r.enabled).length} hint="Approved workflow rules" tone="blue"/>
-      <StatCard label="Failed actions" value={failed} hint="Requires review or retry" tone="amber"/>
+      <StatCard label="Failed actions" value={failed} hint="Recorded failed attempts" tone="amber"/>
       <StatCard label="Recent events" value={state.workflowLog.length} hint="Central activity feed" tone="purple"/>
     </div>
     <div className="grid-2">
       <Card title="Workflow health" subtitle="Protected automation rules currently in effect">
         <div className="automation-rule-list">{state.automations.map(r=><div className="automation-rule-row" key={r.id}><div className="automation-rule-icon">{r.enabled?'✓':'—'}</div><div><b>{r.event}</b><span>{r.action}</span><small>{r.targetModule} • {r.condition}</small></div><Status>{r.enabled?'Active':'Inactive'}</Status></div>)}</div>
       </Card>
-      <Card title="Needs attention" subtitle="Failed or unusual automation executions">
-        <div className="alert-list">{state.workflowLog.filter(x=>x.status==='Failed').length?state.workflowLog.filter(x=>x.status==='Failed').map(x=><div className="alert warning" key={x.id}><div><b>{x.event}</b><span>{x.result}</span></div><Status>{x.status}</Status></div>):<Notice tone="success" title="No unresolved failures">All currently recorded automation executions completed successfully.</Notice>}</div>
+      <Card title="Recorded exceptions" subtitle="Historical failed attempts and warnings; current case status determines the next action">
+        <div className="alert-list">{[...monitor.failed,...monitor.warnings].length?[...monitor.failed,...monitor.warnings].map(x=><div className="alert warning" key={x.id}><div><b>{x.event}</b><span>{x.result}</span><small>{x.createdAt||x.at} • {x.entityType||'Legacy record'} {x.entityId||''}</small></div><Status>{x.status}</Status></div>):<Notice tone="success" title="No recorded exceptions">No failed attempts or warnings are present in the current activity history.</Notice>}</div>
       </Card>
     </div>
     <Card className="top-gap" title="Recent automation activity" subtitle="Central audit trail of system events and triggered actions">
       <Table rows={state.workflowLog} columns={[
         {key:'at',label:'Time'},
         {key:'module',label:'Workflow'},
+        {key:'entity',label:'Affected record',render:e=>`${e.entityType||'Legacy'} • ${e.entityId||'Not linked'}`},
+        {key:'actor',label:'Actor',render:e=>state.users.find(u=>u.id===e.actorUserId)?.name||e.actorUserId||'Historical record'},
         {key:'event',label:'Event'},
         {key:'result',label:'Result'},
         {key:'status',label:'Status',render:r=><Status>{r.status}</Status>}

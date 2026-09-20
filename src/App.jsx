@@ -43,9 +43,9 @@ function AppBody() {
     case 'patients': content=<PatientsPage {...props}/>; break
     case 'treatment': content=<TreatmentPage key={context?.queueEntryId||'none'} {...props}/>; break
     case 'billing': content=<BillingPage role={role} store={store}/>; break
-    case 'hmo': content=<HmoPage role={role} activeBranch={branch} store={store}/>; break
+    case 'hmo': content=<HmoPage {...props}/>; break
     case 'inquiries': content=<InquiriesPage store={store}/>; break
-    case 'messages': content=<MessagesPage role={role} store={store}/>; break
+    case 'messages': content=<MessagesPage {...props}/>; break
     case 'prescriptions': content=<PrescriptionsPage role={role} store={store}/>; break
     case 'followups': content=<FollowupsPage role={role} store={store}/>; break
     case 'branches': content=<BranchesPage store={store}/>; break
