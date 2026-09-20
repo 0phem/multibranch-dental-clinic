@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { ClinicProvider, useClinic } from './store.jsx'
-import { ROLE_INFO } from './data.js'
+import { NAV } from './data.js'
 import { Login, Shell, ToastStack } from './layout.jsx'
 import { DashboardPage } from './pages/Dashboards.jsx'
 import { AppointmentsPage, BookingPage, SchedulePage } from './pages/Scheduling.jsx'
@@ -14,18 +14,23 @@ const START_PAGE={patient:'dashboard',staff:'dashboard',dentist:'dashboard',owne
 function AppBody() {
   const store=useClinic()
   const [role,setRole]=useState(null)
-  const [page,setPage]=useState('dashboard')
+  const [page,setPageState]=useState('dashboard')
+  const [context,setContext]=useState(null)
+  const setPage=(next,record=null)=>{if(role&&NAV[role].some(([key])=>key===next)){setContext(record);setPageState(next)}}
   const [activeBranch,setActiveBranch]=useState('All Branches')
 
   const login=r=>{
-    setRole(r); setPage(START_PAGE[r]); setActiveBranch(ROLE_INFO[r].branch||'All Branches')
+    const session=store.setSession(r)
+    if(!session?.active)return store.toast('This demo account is inactive.','warning')
+    setRole(r); setContext(null);setPageState(START_PAGE[r]); setActiveBranch(store.state.branches.find(b=>b.id===session.branchId)?.name||'All Branches')
   }
-  const logout=()=>{setRole(null);setPage('dashboard');setActiveBranch('All Branches')}
+  const logout=()=>{store.setSession(null);setRole(null);setContext(null);setPageState('dashboard');setActiveBranch('All Branches')}
   useEffect(()=>{if(role==='patient')setActiveBranch('All Branches')},[role])
 
   if (!role) return <><Login onLogin={login}/><ToastStack toasts={store.toasts}/></>
 
-  const props={role,activeBranch,store,setPage}
+  const branch=role==='staff'||role==='dentist'?store.state.branches.find(b=>b.id===store.session?.branchId)?.name||'Unknown branch':activeBranch
+  const props={role,activeBranch:branch,store,setPage,context}
   let content
   switch(page){
     case 'dashboard': content=<DashboardPage {...props}/>; break
@@ -33,12 +38,12 @@ function AppBody() {
     case 'appointments': content=<AppointmentsPage role={role} store={store}/>; break
     case 'schedule': content=<SchedulePage store={store}/>; break
     case 'checkin': content=<CheckInPage store={store}/>; break
-    case 'queue': content=<QueuePage role={role} activeBranch={activeBranch} store={store}/>; break
-    case 'capacity': content=<CapacityPage activeBranch={activeBranch} store={store}/>; break
-    case 'patients': content=<PatientsPage role={role} store={store}/>; break
-    case 'treatment': content=<TreatmentPage store={store}/>; break
+    case 'queue': content=<QueuePage {...props}/>; break
+    case 'capacity': content=<CapacityPage {...props}/>; break
+    case 'patients': content=<PatientsPage {...props}/>; break
+    case 'treatment': content=<TreatmentPage key={context?.queueEntryId||'none'} {...props}/>; break
     case 'billing': content=<BillingPage role={role} store={store}/>; break
-    case 'hmo': content=<HmoPage role={role} activeBranch={activeBranch} store={store}/>; break
+    case 'hmo': content=<HmoPage role={role} activeBranch={branch} store={store}/>; break
     case 'inquiries': content=<InquiriesPage store={store}/>; break
     case 'messages': content=<MessagesPage role={role} store={store}/>; break
     case 'prescriptions': content=<PrescriptionsPage role={role} store={store}/>; break
@@ -55,7 +60,7 @@ function AppBody() {
   }
 
   return <>
-    <Shell role={role} page={page} setPage={setPage} onLogout={logout} activeBranch={activeBranch} setActiveBranch={setActiveBranch} resetDemo={store.resetDemo}>{content}</Shell>
+    <Shell role={role} page={page} setPage={setPage} onLogout={logout} activeBranch={branch} setActiveBranch={setActiveBranch} resetDemo={store.resetDemo} store={store}>{content}</Shell>
     <ToastStack toasts={store.toasts}/>
   </>
 }

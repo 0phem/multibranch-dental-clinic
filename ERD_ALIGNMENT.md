@@ -1,123 +1,107 @@
-# ERD ↔ DentalOps Frontend Alignment
+# ERD v2 ↔ Frontend P0 Alignment
 
-This note maps the current frontend prototype to the supplied master ERD. The frontend remains a mock/localStorage prototype, so its state is intentionally denormalized for demo speed; the backend implementation should persist these records using the ERD relationships.
+The frontend P0 architecture is aligned to the approved **Multi-Branch Dental Clinic Operation System** ERD v2 and Module Documentation v1.1. Browser/localStorage state is still a prototype; the backend must persist the same relationships with server-side validation, transactions, security, and auditability.
 
-## Changes applied in this revision
+## Identity and access
 
-### USERS → STAFF_PROFILES
-- **Owner/Admin creates accounts in `Users & Access` (Module 1).**
-- The account form now includes the ERD `USERS` fields:
-  - `branch_id`
-  - `username` (unique)
-  - `email` (unique)
-  - `role_name`
-  - `account_status`
-- The prototype also keeps a **display/full name** for presentation. The current ERD has no field for this value, so the backend ERD should add a user/person name field or store it in a separate profile table.
-- When the role is **Dentist** or a clinic **Staff** role, the frontend automatically creates/synchronizes the linked Module 3 personnel profile through `user_id`.
-- `Active` is derived from the linked `USERS.account_status`.
-- `Available` remains a separate operational scheduling status in Module 3.
+### PERSONS
+`PERSONS` is the canonical identity/contact source. The frontend now keeps structured:
+- first name;
+- optional middle name;
+- last name;
+- email;
+- phone;
+- birth date;
+- sex; and
+- address.
 
-### STAFF_PROFILES
-The Module 3 screen now visibly uses:
-- `user_id`
-- `staff_type`
-- `license_no`
-- `specialization`
+`USERS`, `PATIENTS`, and `STAFF_PROFILES` link to the same person rather than independently storing another name/contact copy.
 
-Operational fields still required by the documented modules are also shown:
-- branch assignment
-- shift start/end
-- availability
+### USERS → STAFF_PROFILES / PATIENTS
+- Owner/Admin creates the account in Module 1.
+- A Dentist/Staff role automatically creates the linked operational profile used by Module 3.
+- A Patient portal account can link/create the patient record.
+- Account state (`Active/Inactive`) and operational availability (`Available/Unavailable`) are intentionally distinct.
 
-Those operational fields are **not currently present in `STAFF_PROFILES` in the ERD** and should be added or normalized into staff assignment/schedule tables before backend implementation.
+## Clinic reference data
 
-### BRANCHES
-The Branch screen now visibly includes:
-- `branch_name`
-- `branch_code`
-- `city`
-- `branch_status`
+### BRANCHES / BRANCH_OPERATING_HOURS
+Branch identity/status and operating hours feed scheduling and capacity rules.
 
-The frontend also needs branch operating hours, services, contact information and capacity threshold. Those values are required by the documented scheduling/capacity modules but are not represented in the current ERD.
+### SERVICES / BRANCH_SERVICES
+Service name, duration, fee, category, and status come from the service catalog. Branch-service assignments determine where a service may be booked.
 
-### PATIENTS
-The frontend now includes an auto-generated `patient_code` and maps:
-- `patient_code`
-- `full_name`
-- `contact_no`
-- `birth_date`
+### STAFF_SCHEDULES / DENTIST_SERVICE_ASSIGNMENTS
+Dentist shift/availability and service capability feed Smart Scheduling. The UI should not hardcode provider eligibility independently from these records.
 
-The current UI also stores additional patient/clinical demographics used by the project; these are not all represented in the shown `PATIENTS` table.
+## Patient flow
 
-### APPOINTMENTS / CHECK-IN / QUEUE
-The frontend now carries ERD-style identifiers:
-- appointment number (`appointment_no`)
-- branch link (`branch_id`)
-- combined scheduled start (`scheduled_start`)
-- check-in identifier (`check_in_id` equivalent in the mock queue state)
-- dentist queue identifier (`queue_id` equivalent)
-- queue number
-- current queue state
+### APPOINTMENTS
+Appointments reference patient, branch, dentist, service, date/time, duration, and lifecycle state.
 
-The frontend remains denormalized; the production backend should split these into `APPOINTMENTS`, `CHECK_IN_RECORDS`, `DENTIST_QUEUES`, and `QUEUE_ENTRIES` as shown in the ERD.
+### CHECK_IN_RECORDS → QUEUE_ENTRIES
+Check-In is the admission event. After the scheduled appointment/walk-in is validated and arrival is recorded, the queue entry is created automatically.
 
-### WORKFLOW_RULES / SYSTEM_EVENTS / AUTOMATED_ACTIONS
-Module 23 now visually distinguishes:
-- the **Automation Rules** table as the input/reference logic (`WORKFLOW_RULES`)
-- the **Central Automation Activity Feed** as the execution/history view corresponding to `SYSTEM_EVENTS` + `AUTOMATED_ACTIONS`
+### DENTIST_QUEUES / QUEUE_ENTRIES / CAPACITY_EVENTS
+Queue ordering and individual status are distinct from aggregate waiting-time/capacity monitoring. Emergency priority requires authorized action, a reason, and an audit trail in the backend.
 
-A new M1 → M3 automation rule was added:
-> User account created / role updated → create or synchronize linked STAFF_PROFILES record.
+## Clinical and billing
 
-## Existing ERD tables represented by the frontend
+### TREATMENT_PLANS / TREATMENT_PROCEDURES
+The Dentist remains the clinical decision-maker. Templates may reduce typing but must not make diagnosis, treatment, prescription, or follow-up decisions.
 
-| ERD table | Main frontend area |
+### PRESCRIPTIONS / PRESCRIPTION_ITEMS
+Prescription content and authorization remain dentist-controlled.
+
+### TREATMENT_FOLLOW_UPS
+The Dentist creates the clinical follow-up requirement; scheduling remains a scheduling workflow.
+
+### INVOICES / INVOICE_ITEMS / PAYMENTS
+Normal billing begins from completed treatment/procedures. The system prepares the draft invoice from configured services/fees; Staff handles review/exceptions and payment posting. Electronic payment must be verified by the future backend/payment provider before the invoice is treated as paid.
+
+## HMO
+
+`PATIENT_HMO_POLICIES`, `HMO_REQUIREMENT_RULES`, `HMO_CASES`, `HMO_CASE_REQUIREMENTS`, `HMO_CLAIMS`, and `HMO_FOLLOW_UP_TASKS` separate:
+- known patient/policy data;
+- local completeness checks;
+- provider submission/response; and
+- overdue follow-up/escalation.
+
+A locally complete case does **not** equal provider approval.
+
+## Communication
+
+### CONVERSATIONS / CONVERSATION_MESSAGES
+Two-way patient/staff/dentist communication.
+
+### PATIENT_NOTIFICATIONS
+System-generated operational notifications. Module 18 is a cross-cutting event-driven service even when the final UI presents it through a global bell/Notification Center rather than a large standalone operations page.
+
+## Workflow automation
+
+`SYSTEM_EVENTS`, `WORKFLOW_RULES`, and `AUTOMATED_ACTIONS` support Module 23 orchestration. P0 logs/coordinates cross-module actions. The approved P1 UI direction is an **Automation Monitor**, not casual Owner toggling of safety-critical rules.
+
+## Analytics
+
+Modules 21 and 22 are read/reporting layers over operational records/events; they do not need duplicate transaction tables solely to store dashboard values.
+
+## Frontend P0 mapping
+
+| ERD concept | P0 frontend source/use |
 |---|---|
-| `BRANCHES` | Owner/Admin → Branches |
-| `USERS` | Owner/Admin → Users & Access |
-| `STAFF_PROFILES` | Owner/Admin → Staff & Dentists |
-| `AUDIT_LOGS` | Internal audit/log actions in prototype |
-| `PATIENTS` | Staff/Dentist → Patient Records |
-| `APPOINTMENTS` | Patient/Staff → Appointment Management |
-| `CHECK_IN_RECORDS` | Staff → Check-In |
-| `DENTIST_QUEUES` | Staff/Dentist → Patient Queue |
-| `QUEUE_ENTRIES` | Patient/Staff/Dentist → Patient Queue |
-| `TREATMENT_PLANS` | Dentist → Treatment |
-| `TREATMENT_PROCEDURES` | Dentist → Treatment |
-| `PRESCRIPTIONS` | Dentist/Patient → Prescriptions |
-| `TREATMENT_FOLLOW_UPS` | Dentist/Staff/Patient → Follow-Ups |
-| `INVOICES` | Staff/Patient → Billing |
-| `INVOICE_ITEMS` | Billing line items |
-| `PAYMENTS` | Staff → Payment posting |
-| `HMO_PROVIDERS` | Staff/Owner → HMO |
-| `PATIENT_HMO_POLICIES` | Patient HMO details |
-| `HMO_CASES` | HMO Verification |
-| `HMO_CLAIMS` | HMO Request/Approval |
-| `HMO_FOLLOW_UP_TASKS` | HMO Follow-Up/Escalation |
-| `WORKFLOW_RULES` | Owner/Admin → Automation Control (top table) |
-| `SYSTEM_EVENTS` | Automation Control activity feed |
-| `AUTOMATED_ACTIONS` | Automation Control execution results |
-| `SOCIAL_INQUIRIES` | Staff → Social Inquiries |
-| `CONVERSATIONS` | Patient/Staff/Dentist → Messages |
-| `CONVERSATION_MESSAGES` | Message thread records |
-| `PATIENT_NOTIFICATIONS` | Patient/Staff → Notifications |
-| `LOYALTY_ACCOUNTS` | PE → Referral & Loyalty |
+| `PERSONS` | `state.persons`; identity hydration for patient/user/staff/dentist UI |
+| `USERS` | account creation/status/RBAC prototype |
+| `STAFF_PROFILES` | staff/dentist operational profile state |
+| `SERVICES` | `state.services` canonical catalog |
+| `BRANCH_SERVICES` | branch service configuration + booking validation |
+| `DENTIST_SERVICE_ASSIGNMENTS` | provider capability validation |
+| `APPOINTMENTS` | booking/reschedule/cancel state |
+| `CHECK_IN_RECORDS` / `QUEUE_ENTRIES` | arrival + queue handoff concept |
+| Treatment tables | Dentist treatment workflow and completion orchestration |
+| Invoice/payment tables | treatment-driven draft invoice → issue → payment → receipt |
+| HMO tables | state-driven verification/submission/follow-up/response concept |
+| Notification tables | event-generated patient notifications |
+| Workflow tables | rule/event/action activity state |
 
-## ERD gaps to fix before backend implementation
-
-Do **not** delete working UI features merely to force-fit the ERD. Several documented system requirements need fields/tables that the current ERD does not show. Recommended backend ERD additions include:
-
-1. **User/person display name** for staff/dentist accounts.
-2. **Staff schedule/assignment/availability** fields or separate tables for shifts, branch assignments and availability states.
-3. **Branch operating hours, offered services and capacity threshold** used by Modules 2, 7, 10 and 15.
-4. Additional **patient demographics/clinical fields** used by the Patient Records UI.
-5. Appointment **service, duration and notes** if these are to persist.
-6. Prescription **medication, dosage and instructions**; the current `PRESCRIPTIONS` table shown in the ERD only identifies the patient/procedure/dentist and issue time.
-7. Notification **message content/channel/retry metadata** used by Module 18.
-8. Social inquiry **topic, contact, assignment and timestamps** used by Module 16.
-9. Referral/loyalty details such as **referral code and reward/redemption history** if Module 24 PE is retained.
-10. A campaign/reactivation structure if Module 25 PE will be implemented; no campaign table is visible in the supplied ERD.
-
-## Presentation-safe explanation
-
-> “Our frontend is now aligned to the entities and relationships in the ERD. For example, the Owner/Admin creates the account in USERS, and if that account is a dentist or staff member, the system automatically creates or synchronizes the linked STAFF_PROFILES record. The frontend mock data is denormalized, but the backend will persist the same workflow using the normalized ERD tables.”
+## Backend rule
+The backend should implement these normalized relationships as authoritative server-side rules. Do not reintroduce duplicated identity fields or screen-specific copies of service fees, availability, payment state, HMO approval state, or clinical decisions.

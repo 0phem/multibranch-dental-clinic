@@ -1,4 +1,7 @@
-export const TODAY = '2026-09-19'
+import { clinicDate } from './clock.js'
+
+// Compatibility export for deferred modules; workflow code reads the live clinic clock.
+export const TODAY = clinicDate()
 
 export const MODULES = [
   { no: 1, name: 'User, Role & Access Management', owner: 'Licanda, Celin', area: 'Administration', roles: ['owner'] },
@@ -29,43 +32,78 @@ export const MODULES = [
 ]
 
 export const ROLE_INFO = {
-  patient: { label: 'Patient', name: 'Maria Santos', subtitle: 'Patient Portal', patientId: 'p1' },
-  staff: { label: 'Staff', name: 'Alyssa Cruz', subtitle: 'Receptionist / Patient Services', userId: 'u2', branch: 'Branch A' },
-  dentist: { label: 'Dentist', name: 'Dr. Miguel Reyes', subtitle: 'Clinical Services', userId: 'u3', dentistId: 'd1', branch: 'Branch A' },
+  patient: { label: 'Patient', name: 'Maria Santos', subtitle: 'Patient Portal', patientId: 'p1', userId: 'u12' },
+  staff: { label: 'Staff', name: 'Alyssa Cruz', subtitle: 'Receptionist / Patient Services', userId: 'u2', branchId: 'b1', branch: 'Branch A' },
+  dentist: { label: 'Dentist', name: 'Dr. Miguel Reyes', subtitle: 'Clinical Services', userId: 'u3', dentistId: 'd1', branchId: 'b1', branch: 'Branch A' },
   owner: { label: 'Owner / Admin', name: 'Dr. Dana Roxas', subtitle: 'Clinic Owner / Administrator', userId: 'u1', branch: 'All Branches' },
 }
 
 export const NAV = {
   patient: [
-    ['dashboard','Dashboard'], ['book','Book Appointment'], ['appointments','My Appointments'], ['queue','Queue & Wait'],
-    ['messages','Messages & Updates'], ['billing','Bills & Receipts'], ['prescriptions','Prescriptions'], ['followups','Follow-Ups'], ['loyalty','Referral & Loyalty • PE']
+    ['dashboard','Home'], ['book','Book Appointment'], ['appointments','Appointments'], ['queue','Live Queue'],
+    ['messages','Messages'], ['billing','Receipts & Payments'], ['prescriptions','Prescriptions'], ['followups','Follow-Up Care'], ['loyalty','Rewards • PE']
   ],
   staff: [
-    ['dashboard','Dashboard'], ['appointments','Appointments'], ['checkin','Check-In'], ['queue','Patient Queue'], ['capacity','Capacity & Workload'],
-    ['patients','Patient Records'], ['billing','Billing'], ['hmo','HMO'], ['inquiries','Social Inquiries'], ['messages','Messages'], ['followups','Follow-Ups'], ['engagement','Engagement • PE']
+    ['dashboard','Operations'], ['appointments','Appointments'], ['checkin','Check-In'], ['queue','Live Queue'], ['capacity','Capacity'],
+    ['patients','Patient Records'], ['billing','Billing & Payments'], ['hmo','HMO Cases'], ['inquiries','Social Inquiries'], ['messages','Messages'], ['followups','Follow-Up Tasks'], ['engagement','Engagement • PE']
   ],
   dentist: [
-    ['dashboard','Dashboard'], ['schedule','My Schedule'], ['queue','My Queue'], ['patients','Patient Records'], ['treatment','Treatment'],
-    ['prescriptions','Prescriptions'], ['followups','Follow-Ups'], ['messages','Messages']
+    ['dashboard','Clinical Home'], ['schedule','My Schedule'], ['queue','My Queue'], ['patients','Patient Records'], ['treatment','Treatment'],
+    ['prescriptions','Prescriptions'], ['followups','Follow-Up Care'], ['messages','Messages']
   ],
   owner: [
-    ['dashboard','Executive Dashboard'], ['branches','Branches'], ['team','Staff & Dentists'], ['capacity','Capacity & Workload'], ['analytics','Analytics & Reports'],
-    ['users','Users & Access'], ['hmo','HMO Overview'], ['automation','Automation Control'], ['engagement','Engagement • PE'], ['modules','25-Module Coverage']
+    ['dashboard','Executive Dashboard'], ['analytics','Analytics & Reports'], ['branches','Branches'], ['team','People & Team'], ['capacity','Capacity & Workload'],
+    ['hmo','HMO Overview'], ['users','Access & Roles'], ['automation','Automation Monitor'], ['engagement','Engagement • PE']
   ],
 }
 
-export const SERVICES = [
-  { name:'Dental Consultation', duration:30, category:'General Dentistry' },
-  { name:'Oral Prophylaxis', duration:45, category:'General Dentistry' },
-  { name:'Composite Restoration', duration:60, category:'General Dentistry' },
-  { name:'Tooth Extraction', duration:60, category:'Oral Surgery' },
-  { name:'Root Canal Treatment', duration:90, category:'General Dentistry' },
-  { name:'Orthodontic Adjustment', duration:45, category:'Orthodontics' },
-  { name:'Pediatric Consultation', duration:30, category:'Pediatric Dentistry' },
-  { name:'Teeth Whitening', duration:75, category:'Teeth Whitening' },
-  { name:'Dental Implant Consultation', duration:45, category:'Dental Implant' },
-  { name:'TMD / Orofacial Pain Consultation', duration:45, category:'TMD / Orofacial Pain' },
-  { name:'Follow-Up', duration:30, category:'General Dentistry' },
+export const INITIAL_PERSONS = [
+  { id:'per-owner', firstName:'Dana', middleName:'', lastName:'Roxas', email:'dana.roxas@dentalops.demo', phone:'0917 000 0001', dob:'1982-01-12', sex:'Female', address:'Bulacan' },
+  { id:'per-s1', firstName:'Alyssa', middleName:'', lastName:'Cruz', email:'alyssa.cruz@dentalops.demo', phone:'0917 000 0002', dob:'1997-04-21', sex:'Female', address:'Bulacan' },
+  { id:'per-d1', firstName:'Miguel', middleName:'', lastName:'Reyes', email:'miguel.reyes@dentalops.demo', phone:'0917 000 0101', dob:'1988-02-14', sex:'Male', address:'Bulacan' },
+  { id:'per-s2', firstName:'Marco', middleName:'', lastName:'Villanueva', email:'marco.v@dentalops.demo', phone:'0917 000 0004', dob:'1994-06-18', sex:'Male', address:'Bulacan' },
+  { id:'per-s4', firstName:'Lea', middleName:'', lastName:'Mendoza', email:'lea.mendoza@dentalops.demo', phone:'0917 000 0005', dob:'1995-03-08', sex:'Female', address:'Bulacan' },
+  { id:'per-d2', firstName:'Patricia', middleName:'', lastName:'Lim', email:'patricia.lim@dentalops.demo', phone:'0917 000 0102', dob:'1989-09-20', sex:'Female', address:'Bulacan' },
+  { id:'per-d3', firstName:'Carlo', middleName:'', lastName:'Mendoza', email:'carlo.mendoza@dentalops.demo', phone:'0917 000 0103', dob:'1986-12-03', sex:'Male', address:'Bulacan' },
+  { id:'per-d4', firstName:'Andrea', middleName:'', lastName:'Flores', email:'andrea.flores@dentalops.demo', phone:'0917 000 0104', dob:'1990-07-17', sex:'Female', address:'Bulacan' },
+  { id:'per-d5', firstName:'Luis', middleName:'', lastName:'Navarro', email:'luis.navarro@dentalops.demo', phone:'0917 000 0105', dob:'1987-05-09', sex:'Male', address:'Bulacan' },
+  { id:'per-s3', firstName:'Nina', middleName:'', lastName:'Torres', email:'nina.torres@dentalops.demo', phone:'0917 000 0010', dob:'1998-08-11', sex:'Female', address:'Bulacan' },
+  { id:'per-s5', firstName:'Mika', middleName:'', lastName:'Ramos', email:'mika.ramos@dentalops.demo', phone:'0917 000 0011', dob:'1996-10-25', sex:'Female', address:'Bulacan' },
+  { id:'per-p1', firstName:'Maria', middleName:'', lastName:'Santos', email:'maria@example.com', phone:'0917 123 4567', dob:'1998-05-17', sex:'Female', address:'Meycauayan, Bulacan' },
+  { id:'per-p2', firstName:'John', middleName:'', lastName:'Dela Cruz', email:'john@example.com', phone:'0918 221 9001', dob:'1994-11-02', sex:'Male', address:'Quezon City' },
+  { id:'per-p3', firstName:'Bianca', middleName:'', lastName:'Ramos', email:'bianca@example.com', phone:'0920 883 2104', dob:'2001-03-20', sex:'Female', address:'Manila' },
+  { id:'per-p4', firstName:'Paolo', middleName:'', lastName:'Garcia', email:'paolo@example.com', phone:'0916 444 0310', dob:'1988-08-09', sex:'Male', address:'Pasay City' },
+]
+
+export const INITIAL_SERVICES = [
+  { id:'svc1', code:'CONSULT', name:'Dental Consultation', duration:30, baseFee:600, category:'General Dentistry', status:'Active' },
+  { id:'svc2', code:'PROPHY', name:'Oral Prophylaxis', duration:45, baseFee:1200, category:'General Dentistry', status:'Active' },
+  { id:'svc3', code:'RESTORE', name:'Composite Restoration', duration:60, baseFee:2500, category:'General Dentistry', status:'Active' },
+  { id:'svc4', code:'EXTRACT', name:'Tooth Extraction', duration:60, baseFee:4500, category:'Oral Surgery', status:'Active' },
+  { id:'svc5', code:'RCT', name:'Root Canal Treatment', duration:90, baseFee:8000, category:'General Dentistry', status:'Active' },
+  { id:'svc6', code:'ORTHO-ADJ', name:'Orthodontic Adjustment', duration:45, baseFee:1500, category:'Orthodontics', status:'Active' },
+  { id:'svc7', code:'PEDIA-CONSULT', name:'Pediatric Consultation', duration:30, baseFee:800, category:'Pediatric Dentistry', status:'Active' },
+  { id:'svc8', code:'WHITEN', name:'Teeth Whitening', duration:75, baseFee:6500, category:'Teeth Whitening', status:'Active' },
+  { id:'svc9', code:'IMPLANT-CONSULT', name:'Dental Implant Consultation', duration:45, baseFee:1000, category:'Dental Implant', status:'Active' },
+  { id:'svc10', code:'TMD-CONSULT', name:'TMD / Orofacial Pain Consultation', duration:45, baseFee:1200, category:'TMD / Orofacial Pain', status:'Active' },
+  { id:'svc11', code:'FOLLOWUP', name:'Follow-Up', duration:30, baseFee:600, category:'General Dentistry', status:'Active' },
+]
+
+// Compatibility alias for older UI imports; the canonical frontend source is state.services.
+export const SERVICES = INITIAL_SERVICES
+
+export const INITIAL_BRANCH_SERVICES = [
+  ...['svc1','svc2','svc3','svc4','svc5','svc6','svc11'].map(serviceId=>({ id:`bs-b1-${serviceId}`, branchId:'b1', serviceId, active:true })),
+  ...['svc1','svc2','svc3','svc5','svc7','svc8','svc11'].map(serviceId=>({ id:`bs-b2-${serviceId}`, branchId:'b2', serviceId, active:true })),
+  ...['svc1','svc2','svc3','svc5','svc9','svc10','svc11'].map(serviceId=>({ id:`bs-b3-${serviceId}`, branchId:'b3', serviceId, active:true })),
+]
+
+export const INITIAL_DENTIST_SERVICE_ASSIGNMENTS = [
+  ...['svc1','svc2','svc3','svc4','svc5','svc11'].map(serviceId=>({ dentistId:'d1', serviceId })),
+  ...['svc1','svc6','svc11'].map(serviceId=>({ dentistId:'d2', serviceId })),
+  ...['svc1','svc7','svc11'].map(serviceId=>({ dentistId:'d3', serviceId })),
+  ...['svc1','svc4','svc9','svc11'].map(serviceId=>({ dentistId:'d4', serviceId })),
+  ...['svc1','svc2','svc3','svc5','svc11'].map(serviceId=>({ dentistId:'d5', serviceId })),
 ]
 
 export const INITIAL_BRANCHES = [
@@ -75,51 +113,51 @@ export const INITIAL_BRANCHES = [
 ]
 
 export const INITIAL_DENTISTS = [
-  { id:'d1', userId:'u3', staffType:'Dentist', licenseNo:'PRC-D-1001', name:'Dr. Miguel Reyes', branches:['Branch A'], specialty:'General Dentistry', shiftStart:'09:00', shiftEnd:'18:00', available:true, assistant:'Nina Torres' },
-  { id:'d2', userId:'u6', staffType:'Dentist', licenseNo:'PRC-D-1002', name:'Dr. Patricia Lim', branches:['Branch A'], specialty:'Orthodontics', shiftStart:'10:00', shiftEnd:'19:00', available:true, assistant:'Joel Ramos' },
-  { id:'d3', userId:'u7', staffType:'Dentist', licenseNo:'PRC-D-1003', name:'Dr. Carlo Mendoza', branches:['Branch B'], specialty:'Pediatric Dentistry', shiftStart:'09:00', shiftEnd:'18:00', available:true, assistant:'Mia Santos' },
-  { id:'d4', userId:'u8', staffType:'Dentist', licenseNo:'PRC-D-1004', name:'Dr. Andrea Flores', branches:['Branch C'], specialty:'Dental Implant', shiftStart:'10:00', shiftEnd:'19:00', available:true, assistant:'Ken Bautista' },
-  { id:'d5', userId:'u9', staffType:'Dentist', licenseNo:'PRC-D-1005', name:'Dr. Luis Navarro', branches:['Branch B','Branch C'], specialty:'General Dentistry', shiftStart:'11:00', shiftEnd:'19:00', available:true, assistant:'Grace Tan' },
+  { id:'d1', userId:'u3', personId:'per-d1', staffType:'Dentist', licenseNo:'PRC-D-1001', branches:['Branch A'], specialty:'General Dentistry', shiftStart:'09:00', shiftEnd:'18:00', available:true, assistantStaffId:'s3' },
+  { id:'d2', userId:'u6', personId:'per-d2', staffType:'Dentist', licenseNo:'PRC-D-1002', branches:['Branch A'], specialty:'Orthodontics', shiftStart:'10:00', shiftEnd:'19:00', available:true, assistantStaffId:null },
+  { id:'d3', userId:'u7', personId:'per-d3', staffType:'Dentist', licenseNo:'PRC-D-1003', branches:['Branch B'], specialty:'Pediatric Dentistry', shiftStart:'09:00', shiftEnd:'18:00', available:true, assistantStaffId:null },
+  { id:'d4', userId:'u8', personId:'per-d4', staffType:'Dentist', licenseNo:'PRC-D-1004', branches:['Branch C'], specialty:'Dental Implant', shiftStart:'10:00', shiftEnd:'19:00', available:true, assistantStaffId:null },
+  { id:'d5', userId:'u9', personId:'per-d5', staffType:'Dentist', licenseNo:'PRC-D-1005', branches:['Branch B','Branch C'], specialty:'General Dentistry', shiftStart:'11:00', shiftEnd:'19:00', available:true, assistantStaffId:null },
 ]
 
 export const INITIAL_STAFF = [
-  { id:'s1', userId:'u2', staffType:'Receptionist', licenseNo:'—', specialization:'Patient Services', name:'Alyssa Cruz', role:'Receptionist', branch:'Branch A', shiftStart:'09:00', shiftEnd:'18:00', available:true },
-  { id:'s2', userId:'u4', staffType:'HMO Coordinator', licenseNo:'—', specialization:'HMO Processing', name:'Marco Villanueva', role:'HMO Coordinator', branch:'Branch B', shiftStart:'09:00', shiftEnd:'18:00', available:true },
-  { id:'s3', userId:'u10', staffType:'Dental Assistant', licenseNo:'—', specialization:'Chairside Assistance', name:'Nina Torres', role:'Dental Assistant', branch:'Branch A', shiftStart:'09:00', shiftEnd:'18:00', available:true },
-  { id:'s4', userId:'u5', staffType:'Cashier', licenseNo:'—', specialization:'Billing', name:'Lea Mendoza', role:'Cashier', branch:'Branch C', shiftStart:'10:00', shiftEnd:'19:00', available:true },
-  { id:'s5', userId:'u11', staffType:'Patient Engagement Staff', licenseNo:'—', specialization:'Patient Engagement', name:'Mika Ramos', role:'Patient Engagement Staff', branch:'All Branches', shiftStart:'09:00', shiftEnd:'18:00', available:true },
+  { id:'s1', userId:'u2', personId:'per-s1', staffType:'Receptionist', licenseNo:'—', specialization:'Patient Services', role:'Receptionist', branch:'Branch A', shiftStart:'09:00', shiftEnd:'18:00', available:true },
+  { id:'s2', userId:'u4', personId:'per-s2', staffType:'HMO Coordinator', licenseNo:'—', specialization:'HMO Processing', role:'HMO Coordinator', branch:'Branch B', shiftStart:'09:00', shiftEnd:'18:00', available:true },
+  { id:'s3', userId:'u10', personId:'per-s3', staffType:'Dental Assistant', licenseNo:'—', specialization:'Chairside Assistance', role:'Dental Assistant', branch:'Branch A', shiftStart:'09:00', shiftEnd:'18:00', available:true },
+  { id:'s4', userId:'u5', personId:'per-s4', staffType:'Cashier', licenseNo:'—', specialization:'Billing', role:'Cashier', branch:'Branch C', shiftStart:'10:00', shiftEnd:'19:00', available:true },
+  { id:'s5', userId:'u11', personId:'per-s5', staffType:'Patient Engagement Staff', licenseNo:'—', specialization:'Patient Engagement', role:'Patient Engagement Staff', branch:'All Branches', shiftStart:'09:00', shiftEnd:'18:00', available:true },
 ]
 
 export const INITIAL_PATIENTS = [
-  { id:'p1', patientCode:'PAT-0001', name:'Maria Santos', dob:'1998-05-17', sex:'Female', phone:'0917 123 4567', email:'maria@example.com', address:'Meycauayan, Bulacan', preferredBranch:'Branch A', hmo:'MediCare Plus', hmoMember:'MC-10082', allergies:'None', medicalHistory:'No significant medical history.', dentalHistory:'Routine prophylaxis; mild gingivitis noted previously.', emergencyContact:'Ana Santos • 0917 555 0909', consent:true },
-  { id:'p2', patientCode:'PAT-0002', name:'John Dela Cruz', dob:'1994-11-02', sex:'Male', phone:'0918 221 9001', email:'john@example.com', address:'Quezon City', preferredBranch:'Branch B', hmo:'HealthFirst', hmoMember:'HF-22015', allergies:'Penicillin', medicalHistory:'Controlled hypertension.', dentalHistory:'Composite restoration on #26.', emergencyContact:'Joy Dela Cruz • 0918 111 2222', consent:true },
-  { id:'p3', patientCode:'PAT-0003', name:'Bianca Ramos', dob:'2001-03-20', sex:'Female', phone:'0920 883 2104', email:'bianca@example.com', address:'Manila', preferredBranch:'Branch A', hmo:'None', hmoMember:'—', allergies:'None', medicalHistory:'None declared.', dentalHistory:'Active orthodontic treatment.', emergencyContact:'Lara Ramos • 0920 811 1919', consent:true },
-  { id:'p4', patientCode:'PAT-0004', name:'Paolo Garcia', dob:'1988-08-09', sex:'Male', phone:'0916 444 0310', email:'paolo@example.com', address:'Pasay City', preferredBranch:'Branch C', hmo:'MediCare Plus', hmoMember:'MC-88912', allergies:'Latex', medicalHistory:'Asthma, controlled.', dentalHistory:'Extraction of #48; follow-up required.', emergencyContact:'Mina Garcia • 0916 220 1000', consent:true },
+  { id:'p1', personId:'per-p1', userId:'u12', patientCode:'PAT-0001', preferredBranch:'Branch A', hmo:'MediCare Plus', hmoMember:'MC-10082', allergies:'None', medicalHistory:'No significant medical history.', dentalHistory:'Routine prophylaxis; mild gingivitis noted previously.', emergencyContact:'Ana Santos • 0917 555 0909', consent:true },
+  { id:'p2', personId:'per-p2', userId:null, patientCode:'PAT-0002', preferredBranch:'Branch B', hmo:'HealthFirst', hmoMember:'HF-22015', allergies:'Penicillin', medicalHistory:'Controlled hypertension.', dentalHistory:'Composite restoration on #26.', emergencyContact:'Joy Dela Cruz • 0918 111 2222', consent:true },
+  { id:'p3', personId:'per-p3', userId:null, patientCode:'PAT-0003', preferredBranch:'Branch A', hmo:'None', hmoMember:'—', allergies:'None', medicalHistory:'None declared.', dentalHistory:'Active orthodontic treatment.', emergencyContact:'Lara Ramos • 0920 811 1919', consent:true },
+  { id:'p4', personId:'per-p4', userId:null, patientCode:'PAT-0004', preferredBranch:'Branch C', hmo:'MediCare Plus', hmoMember:'MC-88912', allergies:'Latex', medicalHistory:'Asthma, controlled.', dentalHistory:'Extraction of #48; follow-up required.', emergencyContact:'Mina Garcia • 0916 220 1000', consent:true },
 ]
 
 export const INITIAL_APPOINTMENTS = [
-  { id:'a1', appointmentNo:'APT-2026-0001', patientId:'p1', branchId:'b1', branch:'Branch A', dentistId:'d1', service:'Oral Prophylaxis', date:'2026-09-19', start:'10:00', scheduledStart:'2026-09-19T10:00', duration:45, status:'Confirmed', source:'Portal', notes:'Routine cleaning' },
-  { id:'a2', appointmentNo:'APT-2026-0002', patientId:'p2', branchId:'b2', branch:'Branch B', dentistId:'d3', service:'Dental Consultation', date:'2026-09-19', start:'11:00', scheduledStart:'2026-09-19T11:00', duration:30, status:'Confirmed', source:'Front Desk', notes:'Tooth sensitivity' },
-  { id:'a3', appointmentNo:'APT-2026-0003', patientId:'p3', branchId:'b1', branch:'Branch A', dentistId:'d2', service:'Orthodontic Adjustment', date:'2026-09-19', start:'13:30', scheduledStart:'2026-09-19T13:30', duration:45, status:'Confirmed', source:'Front Desk', notes:'Monthly adjustment' },
-  { id:'a4', appointmentNo:'APT-2026-0004', patientId:'p4', branchId:'b3', branch:'Branch C', dentistId:'d4', service:'Follow-Up', date:'2026-09-20', start:'10:30', scheduledStart:'2026-09-20T10:30', duration:30, status:'Confirmed', source:'Follow-Up Task', notes:'Post-extraction review' },
-  { id:'a5', appointmentNo:'APT-2026-0005', patientId:'p2', branchId:'b2', branch:'Branch B', dentistId:'d3', service:'Composite Restoration', date:'2026-09-19', start:'14:00', scheduledStart:'2026-09-19T14:00', duration:60, status:'Pending', source:'Front Desk', notes:'Pending patient confirmation' },
+  { id:'a1', appointmentNo:'APT-2026-0001', patientId:'p1', branchId:'b1', branch:'Branch A', dentistId:'d1', serviceId:'svc2', date:'2026-09-19', start:'10:00', scheduledStart:'2026-09-19T10:00', duration:45, status:'Checked In', source:'Portal', notes:'Routine cleaning' },
+  { id:'a2', appointmentNo:'APT-2026-0002', patientId:'p2', branchId:'b2', branch:'Branch B', dentistId:'d3', serviceId:'svc1', date:'2026-09-19', start:'11:00', scheduledStart:'2026-09-19T11:00', duration:30, status:'Checked In', source:'Front Desk', notes:'Tooth sensitivity' },
+  { id:'a3', appointmentNo:'APT-2026-0003', patientId:'p3', branchId:'b1', branch:'Branch A', dentistId:'d2', serviceId:'svc6', date:'2026-09-19', start:'13:30', scheduledStart:'2026-09-19T13:30', duration:45, status:'Checked In', source:'Front Desk', notes:'Monthly adjustment' },
+  { id:'a4', appointmentNo:'APT-2026-0004', patientId:'p4', branchId:'b3', branch:'Branch C', dentistId:'d4', serviceId:'svc11', date:'2026-09-20', start:'10:30', scheduledStart:'2026-09-20T10:30', duration:30, status:'Confirmed', source:'Follow-Up Task', notes:'Post-extraction review' },
+  { id:'a5', appointmentNo:'APT-2026-0005', patientId:'p2', branchId:'b2', branch:'Branch B', dentistId:'d5', serviceId:'svc3', date:'2026-09-19', start:'14:00', scheduledStart:'2026-09-19T14:00', duration:60, status:'Pending', source:'Front Desk', notes:'Pending patient confirmation' },
 ]
 
 export const INITIAL_QUEUE = [
-  { id:'q1', queueId:'dq1', checkInId:'ci1', queueNumber:1, appointmentId:'a1', patientId:'p1', branch:'Branch A', dentistId:'d1', checkedIn:'09:46', status:'Waiting', currentState:'Waiting', priority:'Normal', position:1, calledAt:null, readyAt:null, completedAt:null, skipCount:0 },
-  { id:'q2', queueId:'dq2', checkInId:'ci2', queueNumber:1, appointmentId:'a3', patientId:'p3', branch:'Branch A', dentistId:'d2', checkedIn:'09:51', status:'Waiting', currentState:'Waiting', priority:'Normal', position:1, calledAt:null, readyAt:null, completedAt:null, skipCount:0 },
-  { id:'q3', queueId:'dq3', checkInId:'ci3', queueNumber:1, appointmentId:'a2', patientId:'p2', branch:'Branch B', dentistId:'d3', checkedIn:'10:02', status:'Waiting', currentState:'Waiting', priority:'Priority', position:1, calledAt:null, readyAt:null, completedAt:null, skipCount:0 },
+  { id:'q1', queueId:'dq1', clinicDate:'2026-09-19', checkInId:'ci1', queueNumber:1, appointmentId:'a1', patientId:'p1', branch:'Branch A', dentistId:'d1', checkedIn:'09:46', status:'Waiting', currentState:'Waiting', priority:'Normal', position:1, calledAt:null, readyAt:null, completedAt:null, skipCount:0 },
+  { id:'q2', queueId:'dq2', clinicDate:'2026-09-19', checkInId:'ci2', queueNumber:1, appointmentId:'a3', patientId:'p3', branch:'Branch A', dentistId:'d2', checkedIn:'09:51', status:'Waiting', currentState:'Waiting', priority:'Normal', position:1, calledAt:null, readyAt:null, completedAt:null, skipCount:0 },
+  { id:'q3', queueId:'dq3', clinicDate:'2026-09-19', checkInId:'ci3', queueNumber:1, appointmentId:'a2', patientId:'p2', branch:'Branch B', dentistId:'d3', checkedIn:'10:02', status:'Waiting', currentState:'Waiting', priority:'Priority', position:1, calledAt:null, readyAt:null, completedAt:null, skipCount:0 },
 ]
 
 export const INITIAL_TREATMENTS = [
-  { id:'t1', patientId:'p4', appointmentId:'old-a4', dentistId:'d4', assistant:'Ken Bautista', date:'2026-09-13', complaint:'Pain from impacted wisdom tooth', plan:'Extraction and post-op review', procedure:'Surgical extraction #48', status:'Completed', notes:'Procedure tolerated well. Hemostasis achieved.', startedAt:'14:05', completedAt:'15:10', followupRequired:true, prescriptionRequired:true },
-  { id:'t2', patientId:'p1', appointmentId:'old-a1', dentistId:'d1', assistant:'Nina Torres', date:'2026-09-12', complaint:'Routine cleaning', plan:'Oral prophylaxis', procedure:'Oral prophylaxis', status:'Completed', notes:'Mild gingivitis. Oral hygiene instructions given.', startedAt:'10:03', completedAt:'10:42', followupRequired:true, prescriptionRequired:false },
+  { id:'t1', patientId:'p4', appointmentId:'old-a4', serviceId:'svc4', dentistId:'d4', assistant:'Ken Bautista', date:'2026-09-13', complaint:'Pain from impacted wisdom tooth', plan:'Extraction and post-op review', procedure:'Surgical extraction #48', status:'Completed', notes:'Procedure tolerated well. Hemostasis achieved.', startedAt:'14:05', completedAt:'15:10', followupRequired:true, prescriptionRequired:true },
+  { id:'t2', patientId:'p1', appointmentId:'old-a1', serviceId:'svc2', dentistId:'d1', assistant:'Nina Torres', date:'2026-09-12', complaint:'Routine cleaning', plan:'Oral prophylaxis', procedure:'Oral prophylaxis', status:'Completed', notes:'Mild gingivitis. Oral hygiene instructions given.', startedAt:'10:03', completedAt:'10:42', followupRequired:true, prescriptionRequired:false },
 ]
 
 export const INITIAL_INVOICES = [
-  { id:'inv1', invoiceNo:'INV-2026-0001', treatmentId:'t2', patientId:'p1', branchId:'b1', visitDate:'2026-09-12', branch:'Branch A', items:[{name:'Consultation',amount:600},{name:'Oral Prophylaxis',amount:1200}], total:1800, netAmount:1800, status:'Paid', paymentStatus:'Paid', method:'GCash', paidAt:'2026-09-12 10:50', receipt:'OR-2026-0912-001' },
-  { id:'inv2', invoiceNo:'INV-2026-0002', treatmentId:null, patientId:'p2', branchId:'b2', visitDate:'2026-09-15', branch:'Branch B', items:[{name:'Composite Restoration',amount:2500}], total:2500, netAmount:2500, status:'Pending', paymentStatus:'Pending', method:'—', paidAt:null, receipt:null },
-  { id:'inv3', invoiceNo:'INV-2026-0003', treatmentId:'t1', patientId:'p4', branchId:'b3', visitDate:'2026-09-13', branch:'Branch C', items:[{name:'Surgical Extraction',amount:4500}], total:4500, netAmount:4500, status:'Paid', paymentStatus:'Paid', method:'Card', paidAt:'2026-09-13 15:22', receipt:'OR-2026-0913-008' },
+  { id:'inv1', invoiceNo:'INV-2026-0001', treatmentId:'t2', patientId:'p1', branchId:'b1', visitDate:'2026-09-12', branch:'Branch A', items:[{serviceId:'svc1',name:'Dental Consultation',amount:600},{serviceId:'svc2',name:'Oral Prophylaxis',amount:1200}], total:1800, netAmount:1800, status:'Paid', paymentStatus:'Paid', method:'GCash', paidAt:'2026-09-12 10:50', receipt:'OR-2026-0912-001' },
+  { id:'inv2', invoiceNo:'INV-2026-0002', treatmentId:null, patientId:'p2', branchId:'b2', visitDate:'2026-09-15', branch:'Branch B', items:[{serviceId:'svc3',name:'Composite Restoration',amount:2500}], total:2500, netAmount:2500, status:'Pending', paymentStatus:'Pending', method:'—', paidAt:null, receipt:null },
+  { id:'inv3', invoiceNo:'INV-2026-0003', treatmentId:'t1', patientId:'p4', branchId:'b3', visitDate:'2026-09-13', branch:'Branch C', items:[{serviceId:'svc4',name:'Tooth Extraction',amount:4500}], total:4500, netAmount:4500, status:'Paid', paymentStatus:'Paid', method:'Card', paidAt:'2026-09-13 15:22', receipt:'OR-2026-0913-008' },
 ]
 
 export const INITIAL_HMO = [
@@ -160,17 +198,18 @@ export const INITIAL_FOLLOWUPS = [
 ]
 
 export const INITIAL_USERS = [
-  { id:'u1', name:'Dr. Dana Roxas', username:'dana.roxas', login:'dana.roxas', email:'dana.roxas@dentalops.demo', roleName:'Owner / Admin', role:'Owner / Admin', branchId:null, branch:'All Branches', accountStatus:'Active', status:'Active', permissions:['all'], lastLogin:'2026-09-19 07:40' },
-  { id:'u2', name:'Alyssa Cruz', username:'alyssa.cruz', login:'alyssa.cruz', email:'alyssa.cruz@dentalops.demo', roleName:'Receptionist', role:'Receptionist', branchId:'b1', branch:'Branch A', accountStatus:'Active', status:'Active', permissions:['appointments','checkin','queue','patient-demographics','billing','hmo','messages','followups'], lastLogin:'2026-09-19 08:00' },
-  { id:'u3', name:'Dr. Miguel Reyes', username:'miguel.reyes', login:'miguel.reyes', email:'miguel.reyes@dentalops.demo', roleName:'Dentist', role:'Dentist', branchId:'b1', branch:'Branch A', accountStatus:'Active', status:'Active', permissions:['schedule','queue','clinical-records','treatment','prescriptions','followups','messages'], lastLogin:'2026-09-19 08:02' },
-  { id:'u4', name:'Marco Villanueva', username:'marco.v', login:'marco.v', email:'marco.v@dentalops.demo', roleName:'HMO Coordinator', role:'HMO Coordinator', branchId:'b2', branch:'Branch B', accountStatus:'Active', status:'Active', permissions:['hmo','patient-demographics','messages'], lastLogin:'2026-09-19 07:58' },
-  { id:'u5', name:'Lea Mendoza', username:'lea.mendoza', login:'lea.mendoza', email:'lea.mendoza@dentalops.demo', roleName:'Cashier', role:'Cashier', branchId:'b3', branch:'Branch C', accountStatus:'Active', status:'Active', permissions:['billing','patient-demographics'], lastLogin:'2026-09-18 17:55' },
-  { id:'u6', name:'Dr. Patricia Lim', username:'patricia.lim', login:'patricia.lim', email:'patricia.lim@dentalops.demo', roleName:'Dentist', role:'Dentist', branchId:'b1', branch:'Branch A', accountStatus:'Active', status:'Active', permissions:['schedule','queue','clinical-records','treatment','prescriptions','followups','messages'], lastLogin:'2026-09-19 07:52' },
-  { id:'u7', name:'Dr. Carlo Mendoza', username:'carlo.mendoza', login:'carlo.mendoza', email:'carlo.mendoza@dentalops.demo', roleName:'Dentist', role:'Dentist', branchId:'b2', branch:'Branch B', accountStatus:'Active', status:'Active', permissions:['schedule','queue','clinical-records','treatment','prescriptions','followups','messages'], lastLogin:'2026-09-19 07:49' },
-  { id:'u8', name:'Dr. Andrea Flores', username:'andrea.flores', login:'andrea.flores', email:'andrea.flores@dentalops.demo', roleName:'Dentist', role:'Dentist', branchId:'b3', branch:'Branch C', accountStatus:'Active', status:'Active', permissions:['schedule','queue','clinical-records','treatment','prescriptions','followups','messages'], lastLogin:'2026-09-19 07:45' },
-  { id:'u9', name:'Dr. Luis Navarro', username:'luis.navarro', login:'luis.navarro', email:'luis.navarro@dentalops.demo', roleName:'Dentist', role:'Dentist', branchId:'b2', branch:'Branch B', accountStatus:'Active', status:'Active', permissions:['schedule','queue','clinical-records','treatment','prescriptions','followups','messages'], lastLogin:'2026-09-19 07:42' },
-  { id:'u10', name:'Nina Torres', username:'nina.torres', login:'nina.torres', email:'nina.torres@dentalops.demo', roleName:'Dental Assistant', role:'Dental Assistant', branchId:'b1', branch:'Branch A', accountStatus:'Active', status:'Active', permissions:['queue','clinical-records'], lastLogin:'2026-09-19 07:54' },
-  { id:'u11', name:'Mika Ramos', username:'mika.ramos', login:'mika.ramos', email:'mika.ramos@dentalops.demo', roleName:'Patient Engagement Staff', role:'Patient Engagement Staff', branchId:null, branch:'All Branches', accountStatus:'Active', status:'Active', permissions:['inquiries','messages','engagement'], lastLogin:'2026-09-19 08:04' },
+  { id:'u1', personId:'per-owner', username:'dana.roxas', login:'dana.roxas', roleName:'Owner / Admin', role:'Owner / Admin', branchId:null, branch:'All Branches', accountStatus:'Active', status:'Active', permissions:['all'], lastLogin:'2026-09-19 07:40' },
+  { id:'u2', personId:'per-s1', username:'alyssa.cruz', login:'alyssa.cruz', roleName:'Receptionist', role:'Receptionist', branchId:'b1', branch:'Branch A', accountStatus:'Active', status:'Active', permissions:['appointments','checkin','queue','patient-demographics','billing','hmo','messages','followups'], lastLogin:'2026-09-19 08:00' },
+  { id:'u3', personId:'per-d1', username:'miguel.reyes', login:'miguel.reyes', roleName:'Dentist', role:'Dentist', branchId:'b1', branch:'Branch A', accountStatus:'Active', status:'Active', permissions:['schedule','queue','clinical-records','treatment','prescriptions','followups','messages'], lastLogin:'2026-09-19 08:02' },
+  { id:'u4', personId:'per-s2', username:'marco.v', login:'marco.v', roleName:'HMO Coordinator', role:'HMO Coordinator', branchId:'b2', branch:'Branch B', accountStatus:'Active', status:'Active', permissions:['hmo','patient-demographics','messages'], lastLogin:'2026-09-19 07:58' },
+  { id:'u5', personId:'per-s4', username:'lea.mendoza', login:'lea.mendoza', roleName:'Cashier', role:'Cashier', branchId:'b3', branch:'Branch C', accountStatus:'Active', status:'Active', permissions:['billing','patient-demographics'], lastLogin:'2026-09-18 17:55' },
+  { id:'u6', personId:'per-d2', username:'patricia.lim', login:'patricia.lim', roleName:'Dentist', role:'Dentist', branchId:'b1', branch:'Branch A', accountStatus:'Active', status:'Active', permissions:['schedule','queue','clinical-records','treatment','prescriptions','followups','messages'], lastLogin:'2026-09-19 07:52' },
+  { id:'u7', personId:'per-d3', username:'carlo.mendoza', login:'carlo.mendoza', roleName:'Dentist', role:'Dentist', branchId:'b2', branch:'Branch B', accountStatus:'Active', status:'Active', permissions:['schedule','queue','clinical-records','treatment','prescriptions','followups','messages'], lastLogin:'2026-09-19 07:49' },
+  { id:'u8', personId:'per-d4', username:'andrea.flores', login:'andrea.flores', roleName:'Dentist', role:'Dentist', branchId:'b3', branch:'Branch C', accountStatus:'Active', status:'Active', permissions:['schedule','queue','clinical-records','treatment','prescriptions','followups','messages'], lastLogin:'2026-09-19 07:45' },
+  { id:'u9', personId:'per-d5', username:'luis.navarro', login:'luis.navarro', roleName:'Dentist', role:'Dentist', branchId:'b2', branch:'Branch B', accountStatus:'Active', status:'Active', permissions:['schedule','queue','clinical-records','treatment','prescriptions','followups','messages'], lastLogin:'2026-09-19 07:42' },
+  { id:'u10', personId:'per-s3', username:'nina.torres', login:'nina.torres', roleName:'Dental Assistant', role:'Dental Assistant', branchId:'b1', branch:'Branch A', accountStatus:'Active', status:'Active', permissions:['queue','clinical-records'], lastLogin:'2026-09-19 07:54' },
+  { id:'u11', personId:'per-s5', username:'mika.ramos', login:'mika.ramos', roleName:'Patient Engagement Staff', role:'Patient Engagement Staff', branchId:null, branch:'All Branches', accountStatus:'Active', status:'Active', permissions:['inquiries','messages','engagement'], lastLogin:'2026-09-19 08:04' },
+  { id:'u12', personId:'per-p1', username:'maria.santos', login:'maria.santos', roleName:'Patient', role:'Patient', branchId:null, branch:'All Branches', accountStatus:'Active', status:'Active', permissions:['patient-portal'], lastLogin:'2026-09-19 08:11' },
 ]
 
 export const INITIAL_AUTOMATIONS = [

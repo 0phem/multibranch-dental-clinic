@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react'
 import { MODULES, ROLE_INFO, TODAY } from '../data.js'
-import { Button, Card, Field, Modal, Notice, PageHeader, Progress, Status, Table, Tabs } from '../components.jsx'
+import { Button, Card, Field, Modal, Notice, PageHeader, Progress, StatCard, Status, Table, Tabs } from '../components.jsx'
 import { branchCapacity, dateLabel, dentistName, makeCsv, patientName, peso, uid } from '../logic.js'
 
 export function BranchesPage({ store }) {
@@ -10,10 +10,20 @@ export function BranchesPage({ store }) {
   const [form,setForm]=useState(branch||{})
   React.useEffect(()=>setForm(branch||{}),[selected])
   const save=()=>{
-    setters.setBranches(xs=>xs.map(b=>b.id===selected?{...b,...form}:b))
+    const {services:legacyServices,...branchPatch}=form
+    setters.setBranches(xs=>xs.map(b=>b.id===selected?{...b,...branchPatch}:b))
     workflow('M2','Branch configuration changed',`${form.branchCode||form.name} • dependent availability synchronized`)
     log(ROLE_INFO.owner.name,`Updated branch configuration ${form.name}`,'M2')
     toast('Branch changes published and dependent availability synchronized.','success')
+  }
+  const serviceActive=serviceId=>state.branchServices.some(bs=>bs.branchId===selected&&bs.serviceId===serviceId&&bs.active!==false)
+  const toggleService=serviceId=>{
+    setters.setBranchServices(xs=>{
+      const existing=xs.find(bs=>bs.branchId===selected&&bs.serviceId===serviceId)
+      if(existing)return xs.map(bs=>bs.id===existing.id?{...bs,active:!existing.active}:bs)
+      return [...xs,{id:uid('bs'),branchId:selected,serviceId,active:true}]
+    })
+    workflow('M2→M6/M7','Branch service availability changed',`${selected} • ${serviceId}`,'Success','branch.service.changed')
   }
   return <>
     <PageHeader title="Multi-Branch Clinic Management" text="ERD-aligned branch identity plus the operating data required by scheduling, staffing, patient flow, and reporting." modules={[2]}/>
@@ -31,7 +41,7 @@ export function BranchesPage({ store }) {
         <Field label="Capacity threshold"><input type="number" min="40" max="100" value={form.threshold||80} onChange={e=>setForm({...form,threshold:Number(e.target.value)})}/></Field>
         <Field label="Phone"><input value={form.phone||''} onChange={e=>setForm({...form,phone:e.target.value})}/></Field>
         <Field label="Address"><textarea value={form.address||''} onChange={e=>setForm({...form,address:e.target.value})}/></Field>
-        <Field label="Available service categories"><textarea value={(form.services||[]).join(', ')} onChange={e=>setForm({...form,services:e.target.value.split(',').map(x=>x.trim()).filter(Boolean)})}/></Field>
+        <div className="span-2"><label className="field-label">Available services <small>BRANCH_SERVICES • scheduling reads this catalog directly</small></label><div className="permission-list">{state.services.filter(s=>s.status==='Active').map(service=><label className="check-control" key={service.id}><input type="checkbox" checked={serviceActive(service.id)} onChange={()=>toggleService(service.id)}/><span><b>{service.name}</b><small>{service.category} • {service.duration} min • {peso.format(service.baseFee)}</small></span></label>)}</div></div>
         <Button className="span-2" onClick={save}>Publish Branch Changes</Button>
       </div></Card>}
     </div>
@@ -69,21 +79,23 @@ export function TeamPage({ store }) {
   const saveDentist=()=>{
     if(!editDentist)return
     if(branchConflict(editDentist))return toast('Assignment conflict: shift is outside the assigned branch operating hours.','warning')
-    setters.setDentists(xs=>xs.map(d=>d.id===editDentist.id?editDentist:d))
+    const {name,email,phone,firstName,middleName,lastName,dob,sex,address,assistant,...profile}=editDentist
+    setters.setDentists(xs=>xs.map(d=>d.id===editDentist.id?profile:d))
     publish(editDentist.name)
     setEditDentist(null)
   }
   const saveStaff=()=>{
     if(!editStaff)return
     if(branchConflict(editStaff))return toast('Assignment conflict: shift is outside the assigned branch operating hours.','warning')
-    setters.setStaff(xs=>xs.map(s=>s.id===editStaff.id?{...editStaff,role:editStaff.staffType}:s))
+    const {name,email,phone,firstName,middleName,lastName,dob,sex,address,...profile}=editStaff
+    setters.setStaff(xs=>xs.map(s=>s.id===editStaff.id?{...profile,role:profile.staffType}:s))
     publish(editStaff.name)
     setEditStaff(null)
   }
 
   return <>
     <PageHeader title="Dentist & Staff Management" text="Personnel records are synchronized from Users & Access. This screen manages the linked STAFF_PROFILES data plus operational shift and availability information used by scheduling and capacity workflows." modules={[3,15]}/>
-    <Notice tone="info" title="M1 → M3 synchronization">Create the account first in <b>Users & Access</b>. If the role is Dentist or clinic Staff, the system automatically creates the linked personnel profile here. <b>Active</b> comes from the user account; <b>Available</b> is the operational scheduling status.</Notice>
+    <Notice tone="info" title="Account & personnel synchronization">Create the account first in <b>Access & Roles</b>. Dentist and staff accounts automatically receive a linked personnel profile here. <b>Active</b> comes from the account; <b>Available</b> reflects operational scheduling status.</Notice>
     <Tabs tabs={[{key:'dentists',label:'Dentists',count:state.dentists.length},{key:'staff',label:'Staff',count:state.staff.length}]} active={tab} onChange={setTab}/>
     {tab==='dentists'?<Card title="Dentist profiles & availability" subtitle="STAFF_PROFILES: user_id • staff_type • license_no • specialization">
       <Table rows={state.dentists} columns={[
@@ -118,8 +130,8 @@ export function TeamPage({ store }) {
         <Field label="Staff type"><input value={editDentist.staffType||'Dentist'} disabled/></Field>
         <Field label="License no."><input value={editDentist.licenseNo||''} onChange={e=>setEditDentist({...editDentist,licenseNo:e.target.value})}/></Field>
         <Field label="Specialization"><input value={editDentist.specialty||''} onChange={e=>setEditDentist({...editDentist,specialty:e.target.value})}/></Field>
-        <Field label="Branch"><select value={editDentist.branches[0]} onChange={e=>setEditDentist({...editDentist,branches:[e.target.value]})}>{state.branches.map(b=><option key={b.id}>{b.name}</option>)}</select></Field>
-        <Field label="Assistant"><input value={editDentist.assistant||''} onChange={e=>setEditDentist({...editDentist,assistant:e.target.value})}/></Field>
+        <Field label="Branch"><select value={editDentist.branches[0]} onChange={e=>setEditDentist({...editDentist,branches:[e.target.value],branchIds:[state.branches.find(b=>b.name===e.target.value)?.id]})}>{state.branches.map(b=><option key={b.id}>{b.name}</option>)}</select></Field>
+        <Field label="Assistant"><select value={editDentist.assistantStaffId||''} onChange={e=>setEditDentist({...editDentist,assistantStaffId:e.target.value||null})}><option value="">Unassigned</option>{state.staff.filter(s=>s.staffType==='Dental Assistant').map(a=><option key={a.id} value={a.id}>{a.name} • {a.branch}</option>)}</select></Field>
         <Field label="Shift start"><input type="time" value={editDentist.shiftStart} onChange={e=>setEditDentist({...editDentist,shiftStart:e.target.value})}/></Field>
         <Field label="Shift end"><input type="time" value={editDentist.shiftEnd} onChange={e=>setEditDentist({...editDentist,shiftEnd:e.target.value})}/></Field>
         <label className="check-control span-2"><input type="checkbox" checked={!!editDentist.available} onChange={e=>setEditDentist({...editDentist,available:e.target.checked})}/><span><b>Available for scheduling</b><small>Active account status is controlled in Users & Access; availability is synchronized to scheduling/workload.</small></span></label>
@@ -134,7 +146,7 @@ export function TeamPage({ store }) {
         <Field label="Staff type"><input value={editStaff.staffType||''} onChange={e=>setEditStaff({...editStaff,staffType:e.target.value})}/></Field>
         <Field label="License no."><input value={editStaff.licenseNo||''} onChange={e=>setEditStaff({...editStaff,licenseNo:e.target.value})}/></Field>
         <Field label="Specialization"><input value={editStaff.specialization||''} onChange={e=>setEditStaff({...editStaff,specialization:e.target.value})}/></Field>
-        <Field label="Branch"><select value={editStaff.branch} onChange={e=>setEditStaff({...editStaff,branch:e.target.value})}><option>All Branches</option>{state.branches.map(b=><option key={b.id}>{b.name}</option>)}</select></Field>
+        <Field label="Branch"><select value={editStaff.branch} onChange={e=>setEditStaff({...editStaff,branch:e.target.value,branchId:state.branches.find(b=>b.name===e.target.value)?.id||null})}><option>All Branches</option>{state.branches.map(b=><option key={b.id}>{b.name}</option>)}</select></Field>
         <Field label="Shift start"><input type="time" value={editStaff.shiftStart} onChange={e=>setEditStaff({...editStaff,shiftStart:e.target.value})}/></Field>
         <Field label="Shift end"><input type="time" value={editStaff.shiftEnd} onChange={e=>setEditStaff({...editStaff,shiftEnd:e.target.value})}/></Field>
         <label className="check-control span-2"><input type="checkbox" checked={!!editStaff.available} onChange={e=>setEditStaff({...editStaff,available:e.target.checked})}/><span><b>Available for operations</b><small>Availability is separate from the account's Active/Inactive status.</small></span></label>
@@ -166,15 +178,17 @@ export function AnalyticsPage({ activeBranch, store }) {
     <div className="cards-3">{metrics.map(m=><Card key={m.name} title={m.name}><div className="analytics-value">{m.value}</div><p className="muted-copy">{m.note}</p><span className="module-inline">{m.module}</span></Card>)}</div>
     <div className="grid-2 top-gap">
       <Card title="Branch workload report"><div className="branch-bars">{state.branches.filter(b=>activeBranch==='All Branches'||b.name===activeBranch).map(b=>{const c=branchCapacity(b.name,state);return <div key={b.id}><div className="bar-label"><span>{b.name}</span><b>{c.workload}%</b></div><Progress value={c.workload} threshold={c.threshold}/><small>{c.waiting} waiting • {c.booked} booked • ~{c.estimate} min wait</small></div>})}</div></Card>
-      <Card title="Report actions" subtitle="Frontend-only demonstration"><div className="action-stack"><Button onClick={()=>makeCsv('dentalops-branch-capacity.csv',exportRows)}>Export Branch Capacity CSV</Button><Button variant="ghost" onClick={()=>makeCsv('dentalops-hmo-report.csv',hmo.map(x=>({Patient:patientName(x.patientId,state.patients),Provider:x.provider,Branch:x.branch,Status:x.status,PendingHours:x.pendingHours,Reference:x.reference||''})))}>Export HMO CSV</Button><Notice tone="info">A real backend would calculate approved KPI definitions from persisted operational events. This prototype demonstrates the final filtering, reporting, and export experience.</Notice></div></Card>
+      <Card title="Report actions" subtitle="Report exports"><div className="action-stack"><Button onClick={()=>makeCsv('dentalops-branch-capacity.csv',exportRows)}>Export Branch Capacity CSV</Button><Button variant="ghost" onClick={()=>makeCsv('dentalops-hmo-report.csv',hmo.map(x=>({Patient:patientName(x.patientId,state.patients),Provider:x.provider,Branch:x.branch,Status:x.status,PendingHours:x.pendingHours,Reference:x.reference||''})))}>Export HMO CSV</Button><Notice tone="info">Reports are prepared from operational records and can be filtered by branch and reporting period.</Notice></div></Card>
     </div>
   </>
 }
 
 export function UsersPage({ store }) {
-  const { state, setters, toast, log, workflow }=store
-  const [form,setForm]=useState({name:'',username:'',email:'',roleName:'Receptionist',branchId:'b1',accountStatus:'Active'})
+  const { state, actions, toast }=store
+  const empty={firstName:'',middleName:'',lastName:'',phone:'',username:'',email:'',roleName:'Receptionist',branchId:'b1',accountStatus:'Active'}
+  const [form,setForm]=useState(empty)
   const permissionMap={
+    Patient:['patient-portal'],
     Receptionist:['appointments','checkin','queue','patient-demographics','billing','hmo','messages','followups'],
     Dentist:['schedule','queue','clinical-records','treatment','prescriptions','followups','messages'],
     'Dental Assistant':['queue','clinical-records'],
@@ -184,85 +198,52 @@ export function UsersPage({ store }) {
     'Owner / Admin':['all']
   }
   const staffRoles=new Set(['Receptionist','Dental Assistant','HMO Coordinator','Cashier','Patient Engagement Staff'])
-  const branchName=branchId=>state.branches.find(b=>b.id===branchId)?.name||'All Branches'
   const profileSync=u=>{
     if(u.roleName==='Dentist') return state.dentists.some(d=>d.userId===u.id)?'Dentist profile linked':'Missing profile'
     if(staffRoles.has(u.roleName)) return state.staff.some(s=>s.userId===u.id)?'Staff profile linked':'Missing profile'
+    if(u.roleName==='Patient') return state.patients.some(p=>p.userId===u.id)?'Patient record linked':'Missing patient link'
     return 'Not required'
   }
   const add=()=>{
-    const name=form.name.trim(), username=form.username.trim(), email=form.email.trim().toLowerCase()
-    if(!name||!username||!email)return toast('Display name, username, and email are required.','warning')
-    if(state.users.some(u=>(u.username||u.login).toLowerCase()===username.toLowerCase()))return toast('Username must be unique.','warning')
-    if(state.users.some(u=>(u.email||'').toLowerCase()===email))return toast('Email must be unique.','warning')
-    const id=uid('u')
-    const roleName=form.roleName
-    const selectedBranch=roleName==='Owner / Admin'?'All Branches':branchName(form.branchId)
-    const selectedBranchId=roleName==='Owner / Admin'?null:form.branchId
-    const u={
-      id,name,username,login:username,email,roleName,role:roleName,
-      branchId:selectedBranchId,branch:selectedBranch,
-      accountStatus:form.accountStatus,status:form.accountStatus,
-      permissions:permissionMap[roleName]||[],lastLogin:'Never'
-    }
-    setters.setUsers(xs=>[...xs,u])
-
-    if(roleName==='Dentist'){
-      const b=state.branches.find(x=>x.id===selectedBranchId)
-      setters.setDentists(xs=>[...xs,{
-        id:uid('d'),userId:id,staffType:'Dentist',licenseNo:'',name,
-        branches:[selectedBranch],specialty:'Unspecified',shiftStart:b?.open||'09:00',shiftEnd:b?.close||'18:00',
-        available:form.accountStatus==='Active',assistant:'Unassigned'
-      }])
-      workflow('M1→M3','User account created / role synchronized',`${username} • Dentist STAFF_PROFILES record created`)
-    } else if(staffRoles.has(roleName)){
-      const b=state.branches.find(x=>x.id===selectedBranchId)
-      setters.setStaff(xs=>[...xs,{
-        id:uid('s'),userId:id,staffType:roleName,licenseNo:'—',specialization:roleName,
-        name,role:roleName,branch:selectedBranch,shiftStart:b?.open||'09:00',shiftEnd:b?.close||'18:00',
-        available:form.accountStatus==='Active'
-      }])
-      workflow('M1→M3','User account created / role synchronized',`${username} • Staff STAFF_PROFILES record created`)
-    }
-
-    log(ROLE_INFO.owner.name,`Created user ${username} (${roleName})`,'M1')
-    toast(roleName==='Owner / Admin'?'Owner/Admin account created.':'User account created and personnel profile synchronized.','success')
-    setForm({name:'',username:'',email:'',roleName:'Receptionist',branchId:'b1',accountStatus:'Active'})
+    const result=actions.createUserAccount(form)
+    if(!result.ok)return toast(result.message,'warning')
+    toast(form.roleName==='Dentist'||staffRoles.has(form.roleName)?'Account created and linked personnel profile synchronized.':form.roleName==='Patient'?'Patient portal account and patient record linked.':'Account created.','success')
+    setForm(empty)
   }
   const toggle=u=>{
-    const current=u.accountStatus||u.status
-    const next=current==='Active'?'Inactive':'Active'
-    setters.setUsers(xs=>xs.map(x=>x.id===u.id?{...x,accountStatus:next,status:next}:x))
-    workflow('M1→M3','Account status changed',`${u.username||u.login} • ${next} • linked availability recalculated`)
-    log(ROLE_INFO.owner.name,`${next==='Active'?'Activated':'Deactivated'} user ${u.username||u.login}`,'M1')
-    toast('Account status updated and linked personnel availability recalculated.','success')
+    const result=actions.toggleUserStatus(u.id)
+    if(!result.ok)return toast(result.message,'warning')
+    toast(`Account is now ${result.status}. Linked personnel availability was synchronized when applicable.`,'success')
   }
+  const branchScoped=!['Owner / Admin','Patient'].includes(form.roleName)
   return <>
-    <PageHeader title="User, Role & Access Management" text="Owner/Admin creates the clinic user account here. The form now follows the ERD USERS fields and automatically synchronizes Dentist/Staff accounts into Module 3." modules={[1]}/>
-    <Notice tone="info" title="ERD mapping">USERS uses <b>branch_id, username, email, role_name, account_status</b>. The prototype also keeps a display name for the UI; the backend ERD should add a name/profile field if that value must be persisted.</Notice>
+    <PageHeader title="People & Access • User Accounts" text="PERSONS stores the single identity/contact record. USERS stores authentication/account state. Dentist/Staff/Patient profiles are linked automatically so the same person is not encoded twice." modules={[1,3,4]}/>
+    <Notice tone="info" title="Identity model">Identity and contact details are stored once and shared by the linked user, staff, dentist, or patient profile.</Notice>
     <div className="grid-2 top-gap">
-      <Card title="Create user account" subtitle="Account creation happens here under the Owner/Admin UI">
+      <Card title="Create user account" subtitle="Owner/Admin can create Patient, Dentist, Staff subrole, or Owner/Admin accounts">
         <div className="form-grid">
-          <Field label="Display / full name" required hint="Frontend profile label; not currently a USERS column in the ERD"><input value={form.name} onChange={e=>setForm({...form,name:e.target.value})}/></Field>
-          <Field label="Username" required hint="USERS.username • unique"><input value={form.username} onChange={e=>setForm({...form,username:e.target.value})}/></Field>
-          <Field label="Email" required hint="USERS.email • unique"><input type="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})}/></Field>
-          <Field label="Role name" hint="USERS.role_name"><select value={form.roleName} onChange={e=>setForm({...form,roleName:e.target.value,branchId:e.target.value==='Owner / Admin'?'':form.branchId||'b1'})}>{Object.keys(permissionMap).map(r=><option key={r}>{r}</option>)}</select></Field>
-          <Field label="Branch access" hint="USERS.branch_id"><select disabled={form.roleName==='Owner / Admin'} value={form.roleName==='Owner / Admin'?'':form.branchId} onChange={e=>setForm({...form,branchId:e.target.value})}>{form.roleName==='Owner / Admin'?<option value="">All Branches</option>:state.branches.map(b=><option key={b.id} value={b.id}>{b.branchCode} • {b.name}</option>)}</select></Field>
-          <Field label="Account status" hint="USERS.account_status"><select value={form.accountStatus} onChange={e=>setForm({...form,accountStatus:e.target.value})}><option>Active</option><option>Inactive</option></select></Field>
-          <Button className="span-2" onClick={add}>Create Account & Synchronize Profile</Button>
+          <Field label="First name" required><input value={form.firstName} onChange={e=>setForm({...form,firstName:e.target.value})}/></Field>
+          <Field label="Middle name" hint="Optional"><input value={form.middleName} onChange={e=>setForm({...form,middleName:e.target.value})}/></Field>
+          <Field label="Last name" required><input value={form.lastName} onChange={e=>setForm({...form,lastName:e.target.value})}/></Field>
+          <Field label="Phone"><input value={form.phone} onChange={e=>setForm({...form,phone:e.target.value})}/></Field>
+          <Field label="Username" required><input value={form.username} onChange={e=>setForm({...form,username:e.target.value})}/></Field>
+          <Field label="Email" required><input type="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})}/></Field>
+          <Field label="Role"><select value={form.roleName} onChange={e=>setForm({...form,roleName:e.target.value,branchId:['Owner / Admin','Patient'].includes(e.target.value)?'':form.branchId||'b1'})}>{Object.keys(permissionMap).map(r=><option key={r}>{r}</option>)}</select></Field>
+          <Field label="Branch scope" hint={branchScoped?'Required for operational clinic roles':'Not applicable'}><select disabled={!branchScoped} value={branchScoped?form.branchId:''} onChange={e=>setForm({...form,branchId:e.target.value})}>{!branchScoped?<option value="">Not branch-bound</option>:state.branches.map(b=><option key={b.id} value={b.id}>{b.branchCode} • {b.name}</option>)}</select></Field>
+          <Field label="Account status"><select value={form.accountStatus} onChange={e=>setForm({...form,accountStatus:e.target.value})}><option>Active</option><option>Inactive</option></select></Field>
+          <Button className="span-2" onClick={add}>Create Linked Account</Button>
         </div>
       </Card>
       <Card title="Permission profiles"><div className="permission-list">{Object.entries(permissionMap).map(([role,perms])=><div key={role}><b>{role}</b><span>{perms.join(' • ')}</span></div>)}</div></Card>
     </div>
-    <Card className="top-gap" title="Authorized users" subtitle="Dentist and clinic-staff accounts automatically link to STAFF_PROFILES (Module 3).">
+    <Card className="top-gap" title="Authorized users" subtitle="Identity is resolved from PERSONS; profile linkage shows which operational record shares that same person.">
       <Table rows={state.users} columns={[
-        {key:'name',label:'Display name'},
+        {key:'name',label:'Person'},
         {key:'username',label:'Username',render:u=>u.username||u.login},
-        {key:'email',label:'Email',render:u=>u.email||'—'},
-        {key:'roleName',label:'Role name',render:u=>u.roleName||u.role},
-        {key:'branch',label:'Branch access'},
-        {key:'permissions',label:'Permission scope',render:u=><span className="permissions-cell">{u.permissions.join(', ')}</span>},
-        {key:'profile',label:'M3 profile',render:u=>profileSync({...u,roleName:u.roleName||u.role})},
+        {key:'email',label:'Email'},
+        {key:'roleName',label:'Role',render:u=>u.roleName||u.role},
+        {key:'branch',label:'Branch scope'},
+        {key:'profile',label:'Linked profile',render:u=>profileSync({...u,roleName:u.roleName||u.role})},
         {key:'status',label:'Account status',render:u=><Status>{u.accountStatus||u.status}</Status>},
         {key:'action',label:'Action',render:u=>(u.roleName||u.role)!=='Owner / Admin'?<Button size="sm" variant={(u.accountStatus||u.status)==='Active'?'danger':'ghost'} onClick={()=>toggle(u)}>{(u.accountStatus||u.status)==='Active'?'Deactivate':'Activate'}</Button>:null}
       ]}/>
@@ -271,33 +252,33 @@ export function UsersPage({ store }) {
 }
 
 export function AutomationPage({ store }) {
-  const { state, setters, toast, log }=store
-  const toggle=r=>{
-    setters.setAutomations(xs=>xs.map(x=>x.id===r.id?{...x,enabled:!x.enabled,isActive:!x.enabled}:x))
-    log(ROLE_INFO.owner.name,`${r.enabled?'Disabled':'Enabled'} automation ${r.id}`,'M23')
-    toast('Automation rule status updated.','success')
-  }
+  const { state }=store
+  const success=state.workflowLog.filter(x=>x.status==='Success').length
+  const failed=state.workflowLog.filter(x=>x.status==='Failed').length
+  const rate=state.workflowLog.length?Math.round((success/state.workflowLog.length)*100):100
   return <>
-    <PageHeader title="Integrated Workflow & Automation Control" text="ERD-aligned control view: WORKFLOW_RULES define triggers/targets, while SYSTEM_EVENTS and AUTOMATED_ACTIONS form the execution history shown below." modules={[23]}/>
-    <Card title="Automation rules" subtitle="Input/reference logic from WORKFLOW_RULES">
-      <Table rows={state.automations} columns={[
-        {key:'event',label:'Workflow event'},
-        {key:'triggerEvent',label:'Trigger event'},
-        {key:'targetModule',label:'Target module'},
-        {key:'condition',label:'Rule condition'},
-        {key:'action',label:'Target action'},
-        {key:'result',label:'Last result',render:r=><Status>{r.lastResult}</Status>},
-        {key:'enabled',label:'Active',render:r=><Status>{r.enabled?'Active':'Inactive'}</Status>},
-        {key:'action2',label:'Control',render:r=><Button size="sm" variant="ghost" onClick={()=>toggle(r)}>{r.enabled?'Disable':'Enable'}</Button>}
-      ]}/>
-    </Card>
-    <Card className="top-gap" title="Central automation activity feed" subtitle="Output/history view combining SYSTEM_EVENTS and AUTOMATED_ACTIONS">
+    <PageHeader kicker="System orchestration" title="Automation monitor" text="Monitor workflow health, failed handoffs and recent cross-module actions. Core automation rules are protected from routine owner changes."/>
+    <div className="stats-grid">
+      <StatCard label="Automation health" value={`${rate}%`} hint="Successful recorded actions"/>
+      <StatCard label="Active rules" value={state.automations.filter(r=>r.enabled).length} hint="Approved workflow rules" tone="blue"/>
+      <StatCard label="Failed actions" value={failed} hint="Requires review or retry" tone="amber"/>
+      <StatCard label="Recent events" value={state.workflowLog.length} hint="Central activity feed" tone="purple"/>
+    </div>
+    <div className="grid-2">
+      <Card title="Workflow health" subtitle="Protected automation rules currently in effect">
+        <div className="automation-rule-list">{state.automations.map(r=><div className="automation-rule-row" key={r.id}><div className="automation-rule-icon">{r.enabled?'✓':'—'}</div><div><b>{r.event}</b><span>{r.action}</span><small>{r.targetModule} • {r.condition}</small></div><Status>{r.enabled?'Active':'Inactive'}</Status></div>)}</div>
+      </Card>
+      <Card title="Needs attention" subtitle="Failed or unusual automation executions">
+        <div className="alert-list">{state.workflowLog.filter(x=>x.status==='Failed').length?state.workflowLog.filter(x=>x.status==='Failed').map(x=><div className="alert warning" key={x.id}><div><b>{x.event}</b><span>{x.result}</span></div><Status>{x.status}</Status></div>):<Notice tone="success" title="No unresolved failures">All currently recorded automation executions completed successfully.</Notice>}</div>
+      </Card>
+    </div>
+    <Card className="top-gap" title="Recent automation activity" subtitle="Central audit trail of system events and triggered actions">
       <Table rows={state.workflowLog} columns={[
         {key:'at',label:'Time'},
-        {key:'module',label:'Source / target module'},
-        {key:'event',label:'System event'},
-        {key:'result',label:'Automated action / execution result'},
-        {key:'status',label:'Execution state',render:r=><Status>{r.status}</Status>}
+        {key:'module',label:'Workflow'},
+        {key:'event',label:'Event'},
+        {key:'result',label:'Result'},
+        {key:'status',label:'Status',render:r=><Status>{r.status}</Status>}
       ]}/>
     </Card>
   </>
@@ -315,7 +296,7 @@ export function EngagementPage({ role, store }) {
     if(points<=0)return toast('Enter a positive points value.','warning')
     if(current){
       const duplicate=current.history.some(h=>h.at===TODAY&&h.type===loyaltyForm.activity&&h.points===points)
-      if(duplicate)return toast('Duplicate reward prevented by the prototype rule.','warning')
+      if(duplicate)return toast('Duplicate reward prevented by the configured reward rule.','warning')
       setters.setLoyalty(xs=>xs.map(l=>l.patientId===loyaltyForm.patientId?{...l,points:l.points+points,history:[{at:TODAY,type:loyaltyForm.activity,detail:'Admin-verified qualified activity',points},...l.history]}:l))
     } else {
       const patient=state.patients.find(p=>p.id===loyaltyForm.patientId)
@@ -335,7 +316,7 @@ export function EngagementPage({ role, store }) {
       </div>
       <Card className="top-gap" title="Loyalty accounts"><Table rows={state.loyalty} columns={[{key:'patient',label:'Patient',render:l=>patientName(l.patientId,state.patients)},{key:'code',label:'Referral code',render:l=>l.referralCode},{key:'points',label:'Balance',render:l=>`${l.points} pts`},{key:'history',label:'Latest activity',render:l=>l.history[0]?`${l.history[0].type} • ${l.history[0].at}`:'—'},{key:'action',label:'Redemption',render:l=>l.history.some(h=>h.type==='Redemption Request'&&h.status==='Pending')?<Button size="sm" onClick={()=>processRedemption(l)}>Process request</Button>:'—'}]} /></Card>
     </>:<>
-      <div className="grid-2"><Card title="Create optional campaign"><div className="form-grid"><Field label="Campaign name"><input value={campaign.name} onChange={e=>setCampaign({...campaign,name:e.target.value})}/></Field><Field label="Type"><select value={campaign.type} onChange={e=>setCampaign({...campaign,type:e.target.value})}><option>Reactivation</option><option>Feedback</option><option>Engagement</option></select></Field><Field label="Target patient group"><input value={campaign.audience} onChange={e=>setCampaign({...campaign,audience:e.target.value})}/></Field><Field label="Channel"><select value={campaign.channel} onChange={e=>setCampaign({...campaign,channel:e.target.value})}><option>SMS</option><option>Portal</option><option>Email</option></select></Field><Field label="Scheduled outreach"><input value={campaign.scheduled} onChange={e=>setCampaign({...campaign,scheduled:e.target.value})}/></Field><Button onClick={createCampaign}>Create Draft Campaign</Button></div></Card><Card title="PE boundaries"><Notice tone="info">Operational confirmations, queue notices, delay updates, and follow-up reminders belong to Module 18. Marketing/reactivation outreach belongs here in Module 25.</Notice></Card></div>
+      <div className="grid-2"><Card title="Create optional campaign"><div className="form-grid"><Field label="Campaign name"><input value={campaign.name} onChange={e=>setCampaign({...campaign,name:e.target.value})}/></Field><Field label="Type"><select value={campaign.type} onChange={e=>setCampaign({...campaign,type:e.target.value})}><option>Reactivation</option><option>Feedback</option><option>Engagement</option></select></Field><Field label="Target patient group"><input value={campaign.audience} onChange={e=>setCampaign({...campaign,audience:e.target.value})}/></Field><Field label="Channel"><select value={campaign.channel} onChange={e=>setCampaign({...campaign,channel:e.target.value})}><option>SMS</option><option>Portal</option><option>Email</option></select></Field><Field label="Scheduled outreach"><input value={campaign.scheduled} onChange={e=>setCampaign({...campaign,scheduled:e.target.value})}/></Field><Button onClick={createCampaign}>Create Draft Campaign</Button></div></Card><Card title="PE boundaries"><Notice tone="info">Operational confirmations, queue notices, delay updates, and follow-up reminders stay separate from optional marketing and reactivation outreach.</Notice></Card></div>
       <Card className="top-gap" title="Campaigns"><Table rows={state.campaigns} columns={[{key:'name',label:'Campaign'},{key:'type',label:'Type'},{key:'audience',label:'Audience'},{key:'channel',label:'Channel'},{key:'scheduled',label:'Schedule'},{key:'responses',label:'Responses / feedback'},{key:'reactivated',label:'Reactivated'},{key:'status',label:'Status',render:c=><Status>{c.status}</Status>}]} /></Card>
     </>}
   </>

@@ -1,11 +1,13 @@
-import { SERVICES, TODAY } from './data.js'
+import { SERVICES } from './data.js'
+import { clinicNow, clinicDate, validDate } from './clock.js'
+import { TERMINAL, isTodayQueue, isWaitingQueue } from './contracts.js'
 
 export const uid = (prefix='id') => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2,7)}`
 export const peso = new Intl.NumberFormat('en-PH', { style:'currency', currency:'PHP', maximumFractionDigits:0 })
 
 export const patientName = (patientId, patients) => patients.find(p=>p.id===patientId)?.name || patientId
 export const dentistName = (dentistId, dentists) => dentists.find(d=>d.id===dentistId)?.name || dentistId
-export const serviceInfo = name => SERVICES.find(s=>s.name===name) || { name, duration:30, category:'General Dentistry' }
+export const serviceInfo = (idOrName, services=SERVICES) => services.find(s=>s.id===idOrName||s.name===idOrName) || { id:null, name:idOrName||'Unknown service', duration:30, baseFee:0, category:'General Dentistry', status:'Active' }
 
 export function toMinutes(value='00:00') {
   if (!value) return 0
@@ -54,82 +56,100 @@ export function overlap(startA, durationA, startB, durationB) {
   return a1 < b2 && b1 < a2
 }
 
-export function validateAppointment(form, state, ignoreId=null) {
-  const branches=state.branches||[], dentists=state.dentists||[], appointments=state.appointments||[]
-  const branch=branches.find(b=>b.name===form.branch)
-  const dentist=dentists.find(d=>d.id===form.dentistId)
-  const svc=serviceInfo(form.service)
-  const duration=Number(form.duration||svc.duration)
-  const start=toMinutes(form.start)
-  const end=start+duration
+export function validateAppointment(form, state, ignoreId=null, now=clinicNow(), suggest=true) {
+  const branch=state.branches.find(b=>form.branchId?b.id===form.branchId:b.name===form.branch)
+  const dentist=state.dentists.find(d=>d.id===form.dentistId)
+  const service=state.services.find(s=>s.id===form.serviceId)
+  const patient=state.patients.find(p=>p.id===form.patientId)
+  const assignment=state.branchServices.find(bs=>bs.branchId===branch?.id&&bs.serviceId===service?.id&&bs.active!==false)
+  const duration=Number(assignment?.durationOverride??service?.duration)
+  const start=toMinutes(form.start), end=start+duration
   const checks=[]
-
-  checks.push({ key:'branch-status', label:'Branch is open', ok:!!branch && branch.status==='Open', detail:branch ? `${branch.name} status: ${branch.status}` : 'Branch not found' })
-  checks.push({ key:'branch-hours', label:'Within branch operating hours', ok:!!branch && start>=toMinutes(branch.open) && end<=toMinutes(branch.close), detail:branch ? `${displayTime(branch.open)}–${displayTime(branch.close)}` : 'No branch schedule' })
-  checks.push({ key:'service', label:'Service available at branch', ok:!!branch && branch.services.includes(svc.category), detail:`${svc.category} • ${duration} min` })
-  checks.push({ key:'dentist-branch', label:'Dentist assigned to branch', ok:!!dentist && dentist.branches.includes(form.branch), detail:dentist ? dentist.branches.join(', ') : 'Dentist not found' })
-  checks.push({ key:'dentist-active', label:'Dentist currently available', ok:!!dentist && dentist.available, detail:dentist ? dentist.specialty : 'Dentist not found' })
-  checks.push({ key:'dentist-shift', label:'Within dentist shift', ok:!!dentist && start>=toMinutes(dentist.shiftStart) && end<=toMinutes(dentist.shiftEnd), detail:dentist ? `${displayTime(dentist.shiftStart)}–${displayTime(dentist.shiftEnd)}` : 'No dentist schedule' })
-
-  const conflict=appointments.find(a=>a.id!==ignoreId && a.status!=='Cancelled' && a.date===form.date && a.dentistId===form.dentistId && overlap(form.start,duration,a.start,a.duration))
-  checks.push({ key:'overlap', label:'No overlapping appointment', ok:!conflict, detail:conflict ? `Conflicts with ${displayTime(conflict.start)}–${displayTime(addMinutes(conflict.start,conflict.duration))}` : 'No conflict found' })
-
+  const check=(key,label,ok,detail=label)=>checks.push({key,label,ok:!!ok,detail})
+  check('patient','Patient exists',patient)
+  check('branch-status','Branch is open',branch&&branch.status==='Open')
+  check('service-exists','Service is active',service&&service.status==='Active')
+  check('service','Service available at branch',assignment)
+  check('dentist','Dentist exists',dentist)
+  check('dentist-branch','Dentist assigned to branch',dentist?.branchIds?.includes(branch?.id) || (!dentist?.branchIds&&dentist?.branches?.includes(branch?.name)))
+  check('dentist-service','Dentist can perform selected service',state.dentistServiceAssignments.some(a=>a.dentistId===dentist?.id&&a.serviceId===service?.id&&a.isAuthorized!==false))
+  const account=state.users?.find(u=>u.id===dentist?.userId)
+  check('dentist-active','Dentist currently available',dentist?.available&&(!account||(account.accountStatus||account.status)==='Active'))
+  check('date','Date is not in the past',validDate(form.date)&&form.date>=now.date)
+  check('time','Valid future start time',/^([01]\d|2[0-3]):[0-5]\d$/.test(form.start||'')&&(form.date!==now.date||form.start>now.time))
+  check('duration','Valid service duration',Number.isFinite(duration)&&duration>0)
+  check('branch-hours','Within branch operating hours',branch&&start>=toMinutes(branch.open)&&end<=toMinutes(branch.close))
+  check('dentist-shift','Within dentist shift',dentist&&start>=toMinutes(dentist.shiftStart)&&end<=toMinutes(dentist.shiftEnd))
+  const overlaps=state.appointments.filter(a=>a.id!==ignoreId&&!TERMINAL.includes(a.status)&&a.date===form.date&&overlap(form.start,duration,a.start,a.duration))
+  const conflict=overlaps.find(a=>a.dentistId===form.dentistId)
+  check('overlap','No overlapping dentist appointment',!conflict)
+  check('patient-overlap','No overlapping patient appointment',!overlaps.some(a=>a.patientId===form.patientId))
   const valid=checks.every(c=>c.ok)
   const alternatives=[]
-  if (!valid && branch && dentist) {
-    for (let minute=Math.max(toMinutes(branch.open),toMinutes(dentist.shiftStart)); minute+duration<=Math.min(toMinutes(branch.close),toMinutes(dentist.shiftEnd)); minute+=30) {
-      const h=Math.floor(minute/60), m=minute%60, t=`${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`
-      const candidate={...form,start:t,duration}
-      const onlyOverlap=appointments.some(a=>a.id!==ignoreId && a.status!=='Cancelled' && a.date===form.date && a.dentistId===form.dentistId && overlap(t,duration,a.start,a.duration))
-      if (!onlyOverlap && branch.status==='Open' && branch.services.includes(svc.category) && dentist.branches.includes(form.branch) && dentist.available) alternatives.push(t)
-      if (alternatives.length>=5) break
+  if(suggest&&!valid&&branch&&dentist&&duration>0){
+    for(let minute=Math.max(toMinutes(branch.open),toMinutes(dentist.shiftStart));minute+duration<=Math.min(toMinutes(branch.close),toMinutes(dentist.shiftEnd));minute+=30){
+      const time=addMinutes('00:00',minute)
+      if(validateAppointment({...form,start:time},state,ignoreId,now,false).valid) alternatives.push(time)
+      if(alternatives.length===5)break
     }
   }
-  return { valid, checks, alternatives, duration, conflict }
+  return {valid,checks,alternatives,duration,conflict,service,branch}
+}
+
+export function availableSlots(form,state,ignoreId=null,now=clinicNow()) {
+  const branch=state.branches.find(b=>b.id===form.branchId)
+  if(!branch)return []
+  const slots=[]
+  for(let minute=toMinutes(branch.open);minute<toMinutes(branch.close);minute+=30){
+    const start=addMinutes('00:00',minute)
+    if(validateAppointment({...form,start},state,ignoreId,now,false).valid)slots.push(start)
+  }
+  return slots
 }
 
 export function recalcQueue(queue) {
   const priorityRank={Urgent:0,Priority:1,Normal:2}
   const groups={}
   queue.forEach(q=>{
-    if (['Completed','No-show'].includes(q.status)) return
-    const key=`${q.branch}|${q.dentistId}`
+    if (!isWaitingQueue(q) || !q.clinicDate) return
+    const key=`${q.clinicDate}|${q.branchId}|${q.dentistId}`
     groups[key] ||= []
     groups[key].push(q)
   })
-  Object.values(groups).forEach(list=>list.sort((a,b)=>(priorityRank[a.priority]??2)-(priorityRank[b.priority]??2) || toMinutes(a.checkedIn)-toMinutes(b.checkedIn)))
+  Object.values(groups).forEach(list=>list.sort((a,b)=>(a.status==='In Treatment'?-1:0)-(b.status==='In Treatment'?-1:0) || (priorityRank[a.priority]??2)-(priorityRank[b.priority]??2) || toMinutes(a.checkedIn)-toMinutes(b.checkedIn)))
   const positions={}
   Object.entries(groups).forEach(([key,list])=>list.forEach((q,i)=>positions[q.id]=i+1))
-  return queue.map(q=>positions[q.id] ? {...q,position:positions[q.id]} : q)
+  return queue.map(q=>({...q,position:positions[q.id]||null}))
 }
 
 export function queueWaitEstimate(entry, queue, appointments, treatments, dentists) {
-  if (!entry || ['Completed','No-show'].includes(entry.status)) return 0
-  const same=queue.filter(q=>q.branch===entry.branch && q.dentistId===entry.dentistId && !['Completed','No-show'].includes(q.status))
+  if (!isWaitingQueue(entry) || !isTodayQueue(entry) || entry.status==='In Treatment') return 0
+  const same=queue.filter(q=>q.branchId===entry.branchId && q.clinicDate===entry.clinicDate && q.dentistId===entry.dentistId && isWaitingQueue(q))
   const ahead=same.filter(q=>(q.position||99)<(entry.position||99)).length
-  const avgDuration=appointments.filter(a=>a.dentistId===entry.dentistId && a.date===TODAY && a.status!=='Cancelled').map(a=>a.duration||30)
+  const avgDuration=appointments.filter(a=>a.dentistId===entry.dentistId && a.date===clinicDate() && a.status!=='Cancelled').map(a=>a.duration||30)
   const typical=avgDuration.length ? Math.round(avgDuration.reduce((a,b)=>a+b,0)/avgDuration.length) : 30
-  const active=treatments.some(t=>t.dentistId===entry.dentistId && t.date===TODAY && t.status==='In Treatment') ? Math.round(typical*.55) : 0
+  const active=treatments.some(t=>t.dentistId===entry.dentistId && t.date===clinicDate() && t.status==='In Treatment') ? Math.round(typical*.55) : 0
   const dentistAvailable=dentists.find(d=>d.id===entry.dentistId)?.available !== false
   return dentistAvailable ? Math.max(5, active + ahead*typical) : Math.max(30,(ahead+1)*typical)
 }
 
 export function branchCapacity(branchName, state) {
   const dentists=(state.dentists||[]).filter(d=>d.available && d.branches.includes(branchName))
-  const activeDentists=Math.max(1,dentists.length)
-  const queue=(state.queue||[]).filter(q=>q.branch===branchName && !['Completed','No-show'].includes(q.status))
+  const activeDentists=dentists.length
+  const divisor=Math.max(1,activeDentists)
+  const queue=(state.queue||[]).filter(q=>q.branch===branchName && isTodayQueue(q) && isWaitingQueue(q))
   const waiting=queue.filter(q=>q.status==='Waiting').length
   const ready=queue.filter(q=>['Called','Treatment Ready'].includes(q.status)).length
-  const booked=(state.appointments||[]).filter(a=>a.branch===branchName && a.date===TODAY && a.status!=='Cancelled').length
+  const booked=(state.appointments||[]).filter(a=>a.branch===branchName && a.date===clinicDate() && a.status!=='Cancelled').length
   const branch=(state.branches||[]).find(b=>b.name===branchName)
-  const workload=Math.min(140, Math.round(((waiting*1.2+ready*1.4+booked*.65)/(activeDentists*4))*100))
-  const estimate=Math.max(0,Math.round((waiting/activeDentists)*22 + ready*8))
+  const workload=Math.min(140, Math.round(((waiting*1.2+ready*1.4+booked*.65)/(divisor*4))*100))
+  const estimate=Math.max(0,Math.round((waiting/divisor)*22 + ready*8))
   const threshold=branch?.threshold ?? 80
   return { branch:branchName, activeDentists, waiting, ready, booked, workload, estimate, threshold, overloaded: workload>=threshold || estimate>=35 }
 }
 
 export function nextAppointment(patientId, appointments) {
-  return appointments.filter(a=>a.patientId===patientId && a.status!=='Cancelled' && a.date>=TODAY).sort((a,b)=>`${a.date}${a.start}`.localeCompare(`${b.date}${b.start}`))[0]
+  return appointments.filter(a=>a.patientId===patientId && !TERMINAL.includes(a.status) && `${a.date} ${a.start}`>=clinicNow().label).sort((a,b)=>`${a.date}${a.start}`.localeCompare(`${b.date}${b.start}`))[0]
 }
 
 export function makeCsv(filename, rows) {
@@ -143,5 +163,5 @@ export function makeCsv(filename, rows) {
 }
 
 export function nowLabel() {
-  return '2026-09-19 10:08'
+  return clinicNow().label
 }

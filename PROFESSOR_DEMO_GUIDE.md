@@ -1,4 +1,4 @@
-# Professor Demo Walkthrough
+# Professor Demo Walkthrough — Approved Target Flow
 
 This sequence is designed to demonstrate the system as one connected BPA solution rather than 25 disconnected pages.
 
@@ -8,19 +8,19 @@ This sequence is designed to demonstrate the system as one connected BPA solutio
 2. Open **Book Appointment** — deliberately choose a conflicting or invalid slot and show Smart Scheduling checks and alternative slots.
 3. Open **My Appointments** — demonstrate reschedule and cancellation using the same validator.
 4. Open **Queue & Wait** — emphasize privacy: the patient only sees their own position/status, not the staff queue.
-5. Show **Bills**, **Prescriptions**, **Follow-Ups**, and **Messages & Updates**.
+5. Show **Receipts/Billing**, **Prescriptions**, **Follow-Ups**, **Messages**, and the global **Notifications** concept.
 6. Show **Referral & Loyalty**, but point out the PE banner.
 
 ## 2. Switch to Staff
 
 1. **Dashboard** — operational work requiring attention.
 2. **Appointments** — create a new booking using Smart Scheduling.
-3. **Check-In** — demonstrate both scheduled and walk-in paths and identity verification.
+3. **Check-In** — demonstrate the lightweight scheduled and walk-in admission paths; routine patients are not re-verified as if registering again.
 4. **Patient Queue** — show priority, call, skip, treatment-ready, no-show and complete controls.
 5. **Capacity & Workload** — show queue load, active dentists, thresholds and cross-branch capacity.
 6. **Patient Records** — create/find a centralized patient record and show that staff clinical fields are restricted.
-7. **Billing** — generate a bill, review amount, post payment and create a receipt.
-8. **HMO** — create case → verify eligibility → complete requirements → submit → follow up → record provider response / escalate. Explain that staff **records** provider approval; staff does not approve its own request.
+7. **Billing** — show the treatment-generated draft invoice, review/issue it, post payment and create the linked receipt.
+8. **HMO** — start the prefilled case → resolve local missing requirements → submit to provider → follow up/escalate if overdue → record/synchronize provider response. Explain that provider approval is external.
 9. **Social Inquiries** — capture inquiry, record response and link a booked appointment conversion.
 10. **Messages** — show conversation history and failed-notification retry.
 11. **Follow-Ups** — schedule a follow-up through the same Smart Scheduling component.
@@ -29,8 +29,8 @@ This sequence is designed to demonstrate the system as one connected BPA solutio
 
 1. **Clinical Dashboard / My Schedule / My Queue**.
 2. **Patient Records** — show clinical fields available to the dentist.
-3. **Treatment** — document complaint, treatment plan, assistant, procedure, notes and treatment status.
-4. Mark prescription/follow-up required, set the recommended follow-up date, and complete the procedure.
+3. **Treatment** — open the current queue patient; patient/dentist/branch/service context is already loaded, then document complaint, plan/procedure and notes.
+4. The Dentist explicitly indicates whether prescription/follow-up is clinically required; completion then triggers the downstream tasks automatically.
 5. Open **Prescriptions** — authorize the generated prescription task.
 6. Open **Follow-Ups** — show the created scheduling obligation.
 
@@ -43,9 +43,9 @@ This sequence is designed to demonstrate the system as one connected BPA solutio
 5. **Analytics & Reports** — cross-process KPI view and CSV export.
 6. **Users & Access** — create the actual clinic account using ERD-aligned username/email/role/branch/status fields; Dentist/Staff roles automatically create the linked Module 3 profile.
 7. **HMO Overview** — read-only management oversight; no fake owner approval button.
-8. **Automation Control** — event/condition/action rules and central success/failure feed.
+8. **Automation Monitor** — show orchestration health, protected rule visibility, and central success/failure feed.
 9. **Engagement PE** — show M24/M25 only after the core modules and call them proposed enhancements.
-10. **25-Module Coverage** — finish with the traceability grid.
+10. Use the **25-Module Coverage document** for professor traceability; it is not a production clinic navigation item.
 
 ## Key defense statement
 

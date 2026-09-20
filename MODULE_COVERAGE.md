@@ -9,22 +9,22 @@
 | M5 | Treatment & Clinical Workflow Management | Dentist → Treatment | Complaint/history context, plan, assistant, status, notes, completion, downstream triggers |
 | M6 | Core Appointment Booking & Schedule Management | Patient → Book/My Appointments; Staff → Appointments | Book, confirm, reschedule, cancel, status and slot release/reserve behavior |
 | M7 | Smart Scheduling & Conflict Prevention | Booking/Reschedule validation panel | Branch schedule, service availability, dentist assignment/shift, overlap checks, alternatives |
-| M8 | Patient Check-In Management | Staff → Check-In | Identity verification, scheduled/walk-in path, arrival, dentist/branch, queue handoff |
+| M8 | Patient Check-In Management | Staff → Check-In | Lightweight scheduled/walk-in admission, arrival timestamp, dentist/branch confirmation, automatic queue handoff |
 | M9 | Smart Patient Queue Management | Patient/Staff/Dentist → Queue | Individual ordering, priority, call/skip/ready/no-show/complete, recalculation |
 | M10 | Waiting-Time & Patient Flow Capacity Management | Patient Queue; Staff/Owner → Capacity | Estimated wait, aggregate load, threshold, alert context, alternative branch capacity |
-| M11 | Billing & Payment Management | Patient → Bills; Staff → Billing | Completed-treatment billing context, charge review, bill, payment, receipt, close transaction |
-| M12 | HMO Verification & Documentation Management | Staff → HMO | Create case, eligibility, missing requirements, document completion, verification |
+| M11 | Billing & Payment Management | Patient → Bills; Staff → Billing | Completed treatment prepares a draft invoice; staff issues/reviews exceptions, posts payment, and generates the linked receipt |
+| M12 | HMO Verification & Documentation Management | Staff → HMO | Prefilled case, local requirement completeness, missing-document states, and verification-ready workflow |
 | M13 | HMO Request & Approval Management | Staff → HMO; Owner → HMO Overview | Submit, reference/pending concept, provider outcome recording, approved/rejected/returned |
 | M14 | HMO Follow-Up & Escalation Automation | Staff → HMO | Threshold worklist, follow-up attempts, escalation, patient status notification |
 | M15 | Staff Workload & Cross-Branch Capacity Automation | Staff/Owner → Capacity & Workload | Staff/dentist capacity, workload %, threshold, cross-branch alternative view |
 | M16 | Social Media Inquiry Management | Staff → Social Inquiries | Capture, assign, status, response, close, booked-appointment conversion linkage |
 | M17 | Unified Patient Messaging Management | Patient/Staff/Dentist → Messages | Identified patient conversation, routing context, reply history, resolved/closed state |
-| M18 | Real-Time Patient Notification Management | Messages & Updates | Operational notifications, delivery status, failed-delivery retry |
+| M18 | Real-Time Patient Notification Management | Global Notification Center (P1/P2 target) | Operational notifications, delivery status, failed-delivery retry; separate from two-way Messages |
 | M19 | Digital Prescription Management | Dentist → Prescriptions; Patient → Prescriptions | Medication/dosage/instructions, authorization, stored history, patient view |
 | M20 | Treatment Follow-Up Scheduling Management | Dentist/Staff/Patient → Follow-Ups | Clinical follow-up requirement, date/interval, task, notification, Smart Scheduling reuse |
 | M21 | Operational Reporting & Analytics Management | Owner/Admin → Analytics & Reports | Cross-process KPIs, branch filter, period control, branch aggregation, CSV export |
 | M22 | Owner Executive Dashboard & Business Intelligence | Owner/Admin → Executive Dashboard | KPI summary, thresholds/exceptions, branch comparison, workload/HMO/revenue, drill-down |
-| M23 | Integrated Workflow & Automation Control | Owner/Admin → Automation Control | Event/rule/action view, enable/disable, result/failure feed, central activity log concept |
+| M23 | Integrated Workflow & Automation Control | Owner/Admin → Automation Monitor (P1 target) | Event/rule/action health, result/failure feed and central activity log; protected rule configuration |
 | M24 | Referral & Loyalty Management **(PE)** | Patient → Referral & Loyalty; Staff/Owner → Engagement | Referral code, qualified activity, duplicate prevention, points, redemption request/process, history |
 | M25 | Marketing, Reactivation & Patient Engagement Management **(PE)** | Staff/Owner → Engagement | Campaign/rule, target group, schedule, channel, response/feedback metrics, close/status view |
 
