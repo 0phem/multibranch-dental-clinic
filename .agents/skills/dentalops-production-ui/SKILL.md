@@ -251,7 +251,7 @@ Production navigation must NOT expose:
 - ERD terminology
 - implementation/debug concepts
 
-M24 and M25 must remain clearly Proposed Enhancements where surfaced.
+M24 and M25 are Approved Frontend Enhancements. Do not present either as a placeholder or merely proposed feature. Present M24 as the implemented prototype it is (team-designed, not an established clinic program) and M25 truthfully as approved with a limited preview and full implementation deferred; never present M25 as complete or as absent.
 
 Messages and Notifications are separate concepts.
 
@@ -310,7 +310,7 @@ Account for applicable states: loading, populated, empty, no results, validation
 
 Loading must be technically meaningful; synchronous/local actions do not justify artificial network spinners. A future loading pattern must not imply an external service is operating.
 
-Every visible control must perform a supported frontend action, navigate to a supported destination, be disabled with a valid reason, or be explicitly identified as future/Proposed Enhancement. No decorative search, filter, button, tab, toggle, dropdown, pagination or export control may pretend to work. Search/filter controls must affect real results; unavailable actions should explain why when useful. Known unsupported controls must be honestly identified, not silently given invented semantics.
+Every visible control must perform a supported frontend action, navigate to a supported destination, be disabled with a valid reason, or be explicitly identified as a preview or future work. No decorative search, filter, button, tab, toggle, dropdown, pagination or export control may pretend to work. Search/filter controls must affect real results; unavailable actions should explain why when useful. Known unsupported controls must be honestly identified, not silently given invented semantics.
 
 ## Status system
 

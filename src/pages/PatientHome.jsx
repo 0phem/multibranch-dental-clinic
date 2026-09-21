@@ -37,6 +37,7 @@ export function PatientHome({ store, setPage }) {
     ['billing','receipt','Receipts & payments','Issued invoices and receipts'],
     ['hmo','shield','HMO coverage','Documents and status'],
     ...(home.hasConversation?[['messages','message','Messages',home.unreadMessages?`${home.unreadMessages} unread`:'Your conversations']]:[]),
+    ...(home.hasLoyalty?[['loyalty','gift','Referral & Loyalty','Your referral code and points']]:[]),
   ]
   return <div className="pt-home">
     <div className="pt-home-main">

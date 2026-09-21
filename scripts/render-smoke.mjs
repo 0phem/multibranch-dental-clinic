@@ -8,14 +8,14 @@ import React from 'react'
 import { renderToString } from 'react-dom/server'
 
 const require=createRequire(import.meta.url)
-const files=['components.jsx','store.jsx','layout.jsx','clock.js','contracts.js','workflow.js','phase2.js','phase3-contracts.js','orchestration.js','pages/Dashboards.jsx','pages/Scheduling.jsx','pages/PatientFlow.jsx','pages/Clinical.jsx','pages/FinanceCommunication.jsx','pages/Admin.jsx','data.js']
+const files=['components.jsx','store.jsx','layout.jsx','clock.js','contracts.js','workflow.js','phase2.js','phase3-contracts.js','orchestration.js','pages/Dashboards.jsx','pages/Scheduling.jsx','pages/PatientFlow.jsx','pages/Clinical.jsx','pages/FinanceCommunication.jsx','pages/Admin.jsx','pages/PatientLoyalty.jsx','loyalty.js','data.js']
 const result=await build({stdin:{contents:files.map(file=>`export * from './src/${file}';`).join('\n'),resolveDir:process.cwd()},bundle:true,write:false,platform:'node',format:'esm',plugins:[{name:'shared-react',setup(b){b.onResolve({filter:/^react$/},()=>({path:pathToFileURL(require.resolve('react')).href,external:true}))}}]})
 const m=await import('data:text/javascript;base64,'+Buffer.from(result.outputFiles[0].text).toString('base64'))
 m.setClockSource(()=>new Date('2026-09-19T02:08:00Z'))
 let store
 function Capture(){store=m.useClinic();return null}
 renderToString(React.createElement(m.ClinicProvider,null,React.createElement(Capture)))
-const pages={dashboard:'DashboardPage',book:'BookingPage',appointments:'AppointmentsPage',schedule:'SchedulePage',checkin:'CheckInPage',queue:'QueuePage',capacity:'CapacityPage',patients:'PatientsPage',treatment:'TreatmentPage',billing:'BillingPage',hmo:'HmoPage',inquiries:'InquiriesPage',messages:'MessagesPage',prescriptions:'PrescriptionsPage',followups:'FollowupsPage',branches:'BranchesPage',team:'TeamPage',analytics:'AnalyticsPage',users:'UsersPage',automation:'AutomationPage',engagement:'EngagementPage',loyalty:'LoyaltyPage'}
+const pages={dashboard:'DashboardPage',book:'BookingPage',appointments:'AppointmentsPage',schedule:'SchedulePage',checkin:'CheckInPage',queue:'QueuePage',capacity:'CapacityPage',patients:'PatientsPage',treatment:'TreatmentPage',billing:'BillingPage',hmo:'HmoPage',inquiries:'InquiriesPage',messages:'MessagesPage',prescriptions:'PrescriptionsPage',followups:'FollowupsPage',branches:'BranchesPage',team:'TeamPage',analytics:'AnalyticsPage',users:'UsersPage',automation:'AutomationPage',engagement:'EngagementPage',loyalty:'PatientLoyaltyPage'}
 let count=0
 function render(page,role='staff',context=null){
   const session=m.sessionForRole(role,store.state)
@@ -350,3 +350,46 @@ store={...store,state:fullState}
 // The other roles keep the shell's floating assistant button unchanged.
 for(const role of ['staff','dentist','owner']){const html=render('dashboard',role);assert.ok(html.includes('assistant-fab')&&!html.includes('clinic-assistant-toggle'),`${role}: floating assistant unchanged`)}
 console.log('PASS: Phase 4B.1 Patient Journey Hub, booking semantics, appointments, live queue, care records, HMO, receipts, Messages, deep links, isolation and fail-closed sessions')
+
+// Phase 4B.2 Referral & Loyalty (M24): the Patient page renders only supported information from real ledger state.
+const account=(points,history,extra={})=>({id:'loy1',patientId:'p1',referralCode:'DANA-MARIA-01',points,history,...extra})
+const earning=points=>({at:'2026-09-12',type:'Qualified Visit',detail:'Oral prophylaxis',points})
+const requestEntry={id:'lh-request',commandId:'req-1',at:'2026-09-19',type:'Redemption Request',detail:'50-point reward requested',points:0,status:'Pending',requestedAt:'2026-09-19T10:00:00+08:00'}
+const rewardButton=html=>html.match(/<button[^>]*>(?:(?!<\/button>)[\s\S])*Request 50-point reward(?:(?!<\/button>)[\s\S])*<\/button>/)?.[0]||''
+const rewardDisabled=html=>/^<button[^>]*\sdisabled/.test(rewardButton(html))
+store={...store,state:fullState}
+const ready=render('loyalty','patient')
+for(const text of ['Referral &amp; Loyalty','A prototype program','not an established clinic policy','Your points','DANA-MARIA-01','Activity history','Oral prophylaxis','Qualified visit','Referral reward','+100 points'])assert.ok(ready.includes(text),`loyalty: ${text}`)
+assert.ok(/<b>120<\/b>/.test(ready),'the ledger-validated balance is shown')
+assert.ok(rewardButton(ready)&&!rewardDisabled(ready),'sufficient balance enables the request')
+assert.ok(!/Proposed|Rewards|assistant-fab|loy1|lh-|<input|<select|<textarea/.test(mainOf(ready)+ready.replace(mainOf(ready),'')),'no PE copy, no internal IDs, no editable points, no floating assistant')
+assert.ok(!/discount|voucher|free treatment|referred by|people you referred|tier/i.test(mainOf(ready)),'no invented reward benefit or referral relationship')
+withState({loyalty:[account(30,[earning(30)])]})
+const low=render('loyalty','patient')
+assert.ok(low.includes('You need 20 more points to request a reward.')&&rewardButton(low)&&rewardDisabled(low),'insufficient balance disables the request and says why')
+withState({loyalty:[account(60,[requestEntry,earning(60)])]})
+const pending=render('loyalty','patient')
+assert.ok(pending.includes('Awaiting clinic processing.')&&!rewardButton(pending),'a Pending request replaces the request control')
+assert.ok(pending.includes('Reward request')&&pending.includes('Pending'),'the pending request is a labelled history entry')
+withState({loyalty:[account(999,[earning(60)])]})
+const review=render('loyalty','patient')
+assert.ok(review.includes('Your loyalty activity needs clinic review.')&&!rewardButton(review)&&!review.includes('Your points')&&!/<b>999<\/b>/.test(review),'an inconsistent ledger shows no balance and no redemption')
+assert.ok(review.includes('DANA-MARIA-01'),'the referral code stays available')
+withState({loyalty:[]})
+assert.ok(render('loyalty','patient').includes('No referral &amp; loyalty account yet'),'no account renders a neutral empty state')
+const enrollHtml=render('engagement','owner')
+assert.ok(enrollHtml.includes('Maria Santos</option>')&&enrollHtml.includes('first qualified activity creates their loyalty account and referral code'),'Owner Engagement still offers a Patient with no loyalty account and explains that the first qualified activity creates it')
+assert.ok(!/recordLoyaltyActivity|Validate &amp; Apply/.test(render('loyalty','patient')),'the Patient page offers no enrollment control')
+assert.ok(!/href="[^"]*loyalty|Referral &amp; Loyalty<\/b>/.test((render('dashboard','patient').match(/<nav class="pt-home-aside"[\s\S]*?<\/nav>/)||[''])[0]),'Journey Hub offers no loyalty entry without an account')
+store={...store,state:fullState}
+assert.ok((render('dashboard','patient').match(/<nav class="pt-home-aside"[\s\S]*?<\/nav>/)||[''])[0].includes('Referral &amp; Loyalty'),'Journey Hub links to Referral & Loyalty when an account exists')
+assert.ok(!/nav-proposed|Rewards|Proposed/.test(render('dashboard','patient')),'Patient navigation carries no PE tag')
+// Staff/Owner Engagement keeps its page but its M24 controls are command-backed and its status copy is aligned.
+withState({loyalty:[account(60,[requestEntry,earning(60)]),{...account(10,[earning(30)]),id:'loy2',patientId:'p2',referralCode:'DANA-JOHN-01'}]})
+const engagement=render('engagement','owner')
+for(const text of ['Approved frontend enhancements','team-designed','Process request','Under review','Marketing &amp; Reactivation • M25'])assert.ok(engagement.includes(text),`engagement: ${text}`)
+assert.ok(!/Proposed Enhancement|\bPE\b|Engagement • PE/.test(engagement+render('dashboard','owner')+render('dashboard','staff')),'Owner and Staff carry no PE copy')
+const modulesHtml=renderToString(React.createElement(m.ModulesPage))
+assert.ok(modulesHtml.includes('Implemented prototype (approved enhancement)')&&modulesHtml.includes('limited preview; full implementation deferred')&&!/Proposed Enhancement|• PE/.test(modulesHtml),'module coverage distinguishes the implemented M24 from the approved-only M25')
+store={...store,state:fullState}
+console.log('PASS: Phase 4B.2 Referral & Loyalty — ledger-validated balance, request/pending/insufficient/review/empty states, Journey Hub entry point, aligned Engagement copy and Patient navigation')

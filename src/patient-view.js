@@ -3,6 +3,7 @@ import { clinicNow, clinicDate } from './clock.js'
 import { inScope, isActiveQueue, isTodayQueue, TERMINAL } from './contracts.js'
 import { availableSlots, dateLabel, nextAppointment, peso, queueWaitEstimate } from './logic.js'
 import { followupDisplayState, linkedTreatment, visibleInvoices, visiblePrescriptions } from './phase2.js'
+import { LOYALTY_PROGRAM, accountsOf, ledgerIssue, needMoreMessage } from './loyalty.js'
 import { HMO_PROVIDERS, notificationDestination, visibleConversations, visibleHmo, visibleNotifications } from './phase3-contracts.js'
 
 // Read-only Patient view models. Every selector revalidates the session, scopes to the exact Patient,
@@ -233,7 +234,28 @@ export function patientHome(state,session) {
     attention:patientAttention(state,session),
     care:patientCare(state,session).slice(0,3).map(c=>({...c,hasVisit:patientAppointments(state,session).some(a=>a.id===c.appointmentId)})),
     hasConversation:conversations.length>0,unreadMessages:conversations.filter(c=>c.unread).length,
+    hasLoyalty:!!accountsOf(state,ctx.patientId)?.length,
   }
+}
+
+// M24 Referral & Loyalty. The balance shown is the ledger-validated one; a ledger the app cannot trust is reported as
+// "review" and never exposes a usable balance or a redemption control. No referral relationship or reward benefit is modeled.
+const LOYALTY_LABELS={'Qualified Visit':'Qualified visit','Qualified Referral':'Qualified referral','Referral Reward':'Referral reward','Redemption Request':'Reward request',Redemption:'Reward redeemed'}
+const pointsLabel=points=>points>0?`+${points} ${points===1?'point':'points'}`:points<0?`−${Math.abs(points)} ${Math.abs(points)===1?'point':'points'}`:''
+const loyaltyEntry=(entry,index)=>({key:nonEmpty(entry.id)||`legacy-${index}`,label:LOYALTY_LABELS[entry.type]||'Loyalty activity',detail:nonEmpty(entry.detail),pointsLabel:pointsLabel(Number.isSafeInteger(entry.points)?entry.points:0),date:typeof entry.at==='string'?entry.at:'',status:nonEmpty(entry.status)})
+export function patientLoyalty(state,session) {
+  const ctx=patientContext(state,session)
+  if(!ctx)return null
+  const {redemptionThreshold:threshold}=LOYALTY_PROGRAM, rows=accountsOf(state,ctx.patientId)
+  if(rows&&!rows.length)return {status:'none',threshold}
+  const account=rows?.length===1?rows[0]:null
+  const history=account&&Array.isArray(account.history)&&account.history.every(e=>e&&typeof e==='object'&&!Array.isArray(e))?account.history.map(loyaltyEntry):[]
+  const code=account&&nonEmpty(account.referralCode)
+  if(!account||ledgerIssue(account))return {status:'review',threshold,code,history}
+  const pending=account.history.find(e=>e.type==='Redemption Request'&&e.status==='Pending')||null
+  const missing=Math.max(0,threshold-account.points)
+  return {status:'ready',threshold,code,points:account.points,history,pending:!!pending,pendingSince:pending?nonEmpty(pending.requestedAt)||nonEmpty(pending.at):null,canRequest:!pending&&!missing,missing,
+    reason:pending?'Your reward request is awaiting clinic processing.':missing?needMoreMessage(missing):''}
 }
 
 // Notification and deep-link contexts only ever focus a record the Patient can actually see.

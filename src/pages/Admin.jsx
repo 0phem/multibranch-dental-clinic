@@ -1,7 +1,8 @@
 import { pendingHours } from '../phase3-contracts.js'
 import { automationSnapshot } from '../orchestration.js'
-import React, { useMemo, useState } from 'react'
-import { MODULES, ROLE_INFO, TODAY } from '../data.js'
+import React, { useMemo, useRef, useState } from 'react'
+import { MODULES, ROLE_INFO } from '../data.js'
+import { LOYALTY_PROGRAM, canManageLoyalty, ledgerIssue } from '../loyalty.js'
 import { Button, Card, Field, Modal, Notice, PageHeader, Progress, StatCard, Status, Table, Tabs } from '../components.jsx'
 import { branchCapacity, dateLabel, dentistName, makeCsv, patientName, peso, uid } from '../logic.js'
 
@@ -267,57 +268,45 @@ export function AutomationPage({ store }) {
 }
 
 export function EngagementPage({ role, store }) {
-  const { state, setters, toast, log }=store
+  const { state, setters, actions, toast, log, session }=store
   const [tab,setTab]=useState('loyalty')
   const [campaign,setCampaign]=useState({name:'',type:'Reactivation',audience:'Patients overdue for routine recall',channel:'SMS',scheduled:'2026-09-25 09:00'})
-  const [loyaltyForm,setLoyaltyForm]=useState({patientId:state.patients[0]?.id||'',activity:'Qualified Visit',points:20})
-  const createCampaign=()=>{if(!campaign.name)return toast('Enter a campaign name.','warning');setters.setCampaigns(xs=>[{id:uid('camp'),...campaign,status:'Draft',responses:0,reactivated:0},...xs]);log(role==='owner'?ROLE_INFO.owner.name:ROLE_INFO.staff.name,'Created optional engagement campaign','M25');toast('Proposed Enhancement campaign created as a draft.','success');setCampaign({...campaign,name:''})}
+  const patients=state.patients.filter(p=>canManageLoyalty(state,session,p.id))
+  const accounts=Array.isArray(state.loyalty)?state.loyalty.filter(l=>canManageLoyalty(state,session,l?.patientId)):[]
+  const [loyaltyForm,setLoyaltyForm]=useState({patientId:patients[0]?.id||'',activity:'Qualified Visit',points:20})
+  const recordCommand=useRef({key:'',id:''})
+  const createCampaign=()=>{if(!campaign.name)return toast('Enter a campaign name.','warning');setters.setCampaigns(xs=>[{id:uid('camp'),...campaign,status:'Draft',responses:0,reactivated:0},...xs]);log(role==='owner'?ROLE_INFO.owner.name:ROLE_INFO.staff.name,'Created optional engagement campaign','M25');toast('Campaign draft created. Nothing is sent.','success');setCampaign({...campaign,name:''})}
+  // M24 writes go through the shared commands, which validate the session, scope, ledger and replay.
   const applyLoyalty=()=>{
-    const current=state.loyalty.find(l=>l.patientId===loyaltyForm.patientId)
-    const points=Number(loyaltyForm.points||0)
-    if(points<=0)return toast('Enter a positive points value.','warning')
-    if(current){
-      const duplicate=current.history.some(h=>h.at===TODAY&&h.type===loyaltyForm.activity&&h.points===points)
-      if(duplicate)return toast('Duplicate reward prevented by the configured reward rule.','warning')
-      setters.setLoyalty(xs=>xs.map(l=>l.patientId===loyaltyForm.patientId?{...l,points:l.points+points,history:[{at:TODAY,type:loyaltyForm.activity,detail:'Admin-verified qualified activity',points},...l.history]}:l))
-    } else {
-      const patient=state.patients.find(p=>p.id===loyaltyForm.patientId)
-      setters.setLoyalty(xs=>[{id:uid('loy'),patientId:loyaltyForm.patientId,referralCode:`DANA-${patient?.name?.split(' ')[0]?.toUpperCase()||'PATIENT'}-${String(Date.now()).slice(-2)}`,points,history:[{at:TODAY,type:loyaltyForm.activity,detail:'Admin-verified qualified activity',points}]},...xs])
-    }
-    log(role==='owner'?ROLE_INFO.owner.name:ROLE_INFO.staff.name,'Recorded qualified referral/loyalty activity','M24');toast('Qualified activity recorded and loyalty balance updated once.','success')
+    // One command ID per form values and ledger state: a rapid second click replays it instead of recording twice.
+    const size=accounts.find(l=>l.patientId===loyaltyForm.patientId)?.history?.length??0, key=`${loyaltyForm.patientId}|${loyaltyForm.activity}|${loyaltyForm.points}|${size}`
+    if(recordCommand.current.key!==key)recordCommand.current={key,id:uid('loyalty')}
+    const result=actions.recordLoyaltyActivity({patientId:loyaltyForm.patientId,activity:loyaltyForm.activity,points:Number(loyaltyForm.points)},recordCommand.current.id)
+    if(!result.ok)return toast(result.message,'warning')
+    toast(result.unchanged?'This activity was already recorded.':'Qualified activity recorded and loyalty balance updated once.','success')
   }
-  const processRedemption=l=>{const pending=l.history.find(h=>h.type==='Redemption Request'&&h.status==='Pending');if(!pending)return;if(l.points<50)return toast('Patient does not have enough points for the demo redemption rule.','warning');setters.setLoyalty(xs=>xs.map(x=>x.id===l.id?{...x,points:x.points-50,history:[{at:TODAY,type:'Redemption',detail:'50-point reward redeemed',points:-50,status:'Processed'},...x.history.map(h=>h===pending?{...h,status:'Processed'}:h)]}:x));log(role==='owner'?ROLE_INFO.owner.name:ROLE_INFO.staff.name,'Processed loyalty redemption','M24');toast('Redemption processed and loyalty balance updated.','success')}
+  const pendingOf=l=>Array.isArray(l.history)?l.history.find(h=>h?.type==='Redemption Request'&&h.status==='Pending'):null
+  const processRedemption=l=>{
+    const pending=pendingOf(l)
+    if(!pending)return
+    const result=actions.processLoyaltyRedemption(l.id,`process:${pending.id||`${l.id}:${l.history.length}`}`)
+    if(!result.ok)return toast(result.message,'warning')
+    toast(result.unchanged?'This redemption was already processed.':'Redemption processed and loyalty balance updated.','success')
+  }
   return <>
-    <PageHeader title="Patient Engagement Enhancements" text="Proposed Enhancements only — referral/loyalty administration and optional marketing/reactivation campaigns, clearly separated from core clinic operations." modules={[24,25]}/>
-    <Notice tone="warning" title="Proposed Enhancement (PE)">Modules 24–25 were not presented as client-stated requirements. They remain optional and should be defended as future/pilot enhancements.</Notice>
+    <PageHeader title="Patient Engagement" text="Referral & loyalty administration, and the preview of optional marketing and reactivation campaigns, kept separate from core clinic operations." modules={[24,25]}/>
+    <Notice tone="info" title="Approved frontend enhancements">Referral & Loyalty (M24) is implemented as a team-designed prototype program approved for demonstration; it is not an established clinic program. Marketing & Reactivation (M25) is approved; only a limited campaign-draft preview exists today, and full management is planned for a later phase. Neither blocks core care operations.</Notice>
     <Tabs tabs={[{key:'loyalty',label:'Referral & Loyalty • M24'},{key:'campaigns',label:'Marketing & Reactivation • M25'}]} active={tab} onChange={setTab}/>
     {tab==='loyalty'?<>
       <div className="grid-2">
-        <Card title="Record qualified referral / loyalty activity" subtitle="Validates activity before applying a configured reward once"><div className="form-grid"><Field label="Patient"><select value={loyaltyForm.patientId} onChange={e=>setLoyaltyForm({...loyaltyForm,patientId:e.target.value})}>{state.patients.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></Field><Field label="Activity"><select value={loyaltyForm.activity} onChange={e=>setLoyaltyForm({...loyaltyForm,activity:e.target.value})}><option>Qualified Visit</option><option>Qualified Referral</option></select></Field><Field label="Reward / points"><input type="number" min="1" value={loyaltyForm.points} onChange={e=>setLoyaltyForm({...loyaltyForm,points:e.target.value})}/></Field><Button onClick={applyLoyalty}>Validate & Apply Reward Once</Button></div></Card>
-        <Card title="Referral & loyalty rules"><Notice tone="info">The frontend represents referral code generation, qualified activity verification, duplicate prevention, balance updates, redemption visibility, and history. Actual reward rules would be server-controlled in production.</Notice></Card>
+        <Card title="Record qualified referral / loyalty activity" subtitle="Validates activity before applying a configured reward once"><div className="form-grid"><Field label="Patient"><select value={loyaltyForm.patientId} onChange={e=>setLoyaltyForm({...loyaltyForm,patientId:e.target.value})}>{patients.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></Field><Field label="Activity"><select value={loyaltyForm.activity} onChange={e=>setLoyaltyForm({...loyaltyForm,activity:e.target.value})}><option>Qualified Visit</option><option>Qualified Referral</option></select></Field><Field label="Reward / points"><input type="number" min="1" step="1" value={loyaltyForm.points} onChange={e=>setLoyaltyForm({...loyaltyForm,points:e.target.value})}/></Field><Button onClick={applyLoyalty}>Validate & Apply Reward Once</Button></div></Card>
+        <Card title="Referral & loyalty rules"><Notice tone="info">Prototype rules designed by the project team, not historical clinic policy: a Patient can request a {LOYALTY_PROGRAM.redemptionThreshold}-point reward once they have {LOYALTY_PROGRAM.redemptionThreshold} points, only one request can be Pending at a time, and each request is processed once. Points must be whole positive numbers (a prototype validation rule) and are recorded here after a qualified visit or referral. Recording a Patient’s first qualified activity creates their loyalty account and referral code. The reward itself is not defined in this prototype, and referred-Patient tracking is not yet modeled. Actual reward rules would be server-controlled in production.</Notice></Card>
       </div>
-      <Card className="top-gap" title="Loyalty accounts"><Table rows={state.loyalty} columns={[{key:'patient',label:'Patient',render:l=>patientName(l.patientId,state.patients)},{key:'code',label:'Referral code',render:l=>l.referralCode},{key:'points',label:'Balance',render:l=>`${l.points} pts`},{key:'history',label:'Latest activity',render:l=>l.history[0]?`${l.history[0].type} • ${l.history[0].at}`:'—'},{key:'action',label:'Redemption',render:l=>l.history.some(h=>h.type==='Redemption Request'&&h.status==='Pending')?<Button size="sm" onClick={()=>processRedemption(l)}>Process request</Button>:'—'}]} /></Card>
+      <Card className="top-gap" title="Loyalty accounts"><Table rows={accounts} columns={[{key:'patient',label:'Patient',render:l=>patientName(l.patientId,state.patients)},{key:'code',label:'Referral code',render:l=>l.referralCode},{key:'points',label:'Balance',render:l=>ledgerIssue(l)?'Under review':`${l.points} pts`},{key:'history',label:'Latest activity',render:l=>Array.isArray(l.history)&&l.history[0]?`${l.history[0].type} • ${l.history[0].at}`:'—'},{key:'action',label:'Redemption',render:l=>pendingOf(l)&&!ledgerIssue(l)?<Button size="sm" onClick={()=>processRedemption(l)}>Process request</Button>:'—'}]} /></Card>
     </>:<>
-      <div className="grid-2"><Card title="Create optional campaign"><div className="form-grid"><Field label="Campaign name"><input value={campaign.name} onChange={e=>setCampaign({...campaign,name:e.target.value})}/></Field><Field label="Type"><select value={campaign.type} onChange={e=>setCampaign({...campaign,type:e.target.value})}><option>Reactivation</option><option>Feedback</option><option>Engagement</option></select></Field><Field label="Target patient group"><input value={campaign.audience} onChange={e=>setCampaign({...campaign,audience:e.target.value})}/></Field><Field label="Channel"><select value={campaign.channel} onChange={e=>setCampaign({...campaign,channel:e.target.value})}><option>SMS</option><option>Portal</option><option>Email</option></select></Field><Field label="Scheduled outreach"><input value={campaign.scheduled} onChange={e=>setCampaign({...campaign,scheduled:e.target.value})}/></Field><Button onClick={createCampaign}>Create Draft Campaign</Button></div></Card><Card title="PE boundaries"><Notice tone="info">Operational confirmations, queue notices, delay updates, and follow-up reminders stay separate from optional marketing and reactivation outreach.</Notice></Card></div>
+      <div className="grid-2"><Card title="Campaign draft (preview)"><div className="form-grid"><Field label="Campaign name"><input value={campaign.name} onChange={e=>setCampaign({...campaign,name:e.target.value})}/></Field><Field label="Type"><select value={campaign.type} onChange={e=>setCampaign({...campaign,type:e.target.value})}><option>Reactivation</option><option>Feedback</option><option>Engagement</option></select></Field><Field label="Target patient group"><input value={campaign.audience} onChange={e=>setCampaign({...campaign,audience:e.target.value})}/></Field><Field label="Channel"><select value={campaign.channel} onChange={e=>setCampaign({...campaign,channel:e.target.value})}><option>SMS</option><option>Portal</option><option>Email</option></select></Field><Field label="Scheduled outreach"><input value={campaign.scheduled} onChange={e=>setCampaign({...campaign,scheduled:e.target.value})}/></Field><Button onClick={createCampaign}>Create Draft Campaign</Button></div></Card><Card title="Campaign boundaries"><Notice tone="info">Campaign management, targeting and consent rules are planned for a later phase; this draft form is a preview and sends nothing. Operational confirmations, queue notices, delay updates, and follow-up reminders stay separate from marketing and reactivation outreach.</Notice></Card></div>
       <Card className="top-gap" title="Campaigns"><Table rows={state.campaigns} columns={[{key:'name',label:'Campaign'},{key:'type',label:'Type'},{key:'audience',label:'Audience'},{key:'channel',label:'Channel'},{key:'scheduled',label:'Schedule'},{key:'responses',label:'Responses / feedback'},{key:'reactivated',label:'Reactivated'},{key:'status',label:'Status',render:c=><Status>{c.status}</Status>}]} /></Card>
     </>}
-  </>
-}
-
-export function LoyaltyPage({ store }) {
-  const { state, setters, toast, log }=store
-  const pid=ROLE_INFO.patient.patientId
-  const account=state.loyalty.find(l=>l.patientId===pid)
-  const requestRedemption=()=>{
-    if(!account)return
-    if(account.history.some(h=>h.type==='Redemption Request'&&h.status==='Pending')) return toast('A redemption request is already pending staff processing.','warning')
-    setters.setLoyalty(xs=>xs.map(l=>l.id===account.id?{...l,history:[{at:TODAY,type:'Redemption Request',detail:'Patient requested reward redemption',points:0,status:'Pending'},...l.history]}:l))
-    log(ROLE_INFO.patient.name,'Requested loyalty redemption','M24');toast('Redemption request submitted for clinic staff processing.','success')
-  }
-  return <>
-    <PageHeader title="Referral & Loyalty" text="Proposed Enhancement only — optional referral identifiers, qualified activity, points, redemption requests, duplicate prevention, and referral/loyalty history." modules={[24]}/>
-    <Notice tone="warning" title="Proposed Enhancement (PE)">Referral and loyalty were not presented as a client-stated requirement. This UI is an optional future enhancement.</Notice>
-    {account?<div className="grid-2 top-gap"><Card title="My referral & loyalty"><div className="loyalty-card"><small>Available points</small><div className="points">{account.points}<span> points</span></div><small>Referral code</small><div className="referral-big">{account.referralCode}</div><Button onClick={requestRedemption}>Request Redemption</Button></div></Card><Card title="Loyalty history"><Table rows={account.history.map((x,i)=>({...x,id:i}))} columns={[{key:'at',label:'Date'},{key:'type',label:'Activity'},{key:'detail',label:'Details'},{key:'points',label:'Points',render:x=>x.points>0?`+${x.points}`:String(x.points)},{key:'status',label:'Status',render:x=>x.status?<Status>{x.status}</Status>:'—'}]} /></Card></div>:<Notice>No loyalty account is available in the demo data.</Notice>}
   </>
 }
 
@@ -327,8 +316,8 @@ export function ModulesPage() {
   const visible=MODULES.filter(m=>area==='All'||m.area===area)
   return <>
     <PageHeader title="25-Module UI Coverage" text="Professor-facing traceability view showing where every documented process is represented in the frontend prototype." modules={[]}/>
-    <div className="module-summary"><div><b>25</b><span>Documented modules</span></div><div><b>4</b><span>Main role experiences</span></div><div><b>2</b><span>Proposed Enhancements</span></div></div>
+    <div className="module-summary"><div><b>25</b><span>Documented modules</span></div><div><b>4</b><span>Main role experiences</span></div><div><b>2</b><span>Approved enhancements</span></div></div>
     <div className="tabs top-gap">{areas.map(a=><button className={area===a?'active':''} key={a} onClick={()=>setArea(a)}>{a}</button>)}</div>
-    <div className="module-grid">{visible.map(m=><div className="module-tile" key={m.no}><div className="module-tile-top"><span className={`module-badge ${m.pe?'pe':''}`}>M{m.no}{m.pe?' • PE':''}</span><span>{m.area}</span></div><strong>{m.name}</strong><small>Module owner: {m.owner}</small><div className="role-tags">{m.roles.map(r=><span key={r}>{r==='owner'?'Owner/Admin':r[0].toUpperCase()+r.slice(1)}</span>)}</div><div className="coverage-state">✓ Represented in final UI</div></div>)}</div>
+    <div className="module-grid">{visible.map(m=><div className="module-tile" key={m.no}><div className="module-tile-top"><span className="module-badge">M{m.no}{m.enhancement?' • Approved enhancement':''}</span><span>{m.area}</span></div><strong>{m.name}</strong><small>Module owner: {m.owner}</small><div className="role-tags">{m.roles.map(r=><span key={r}>{r==='owner'?'Owner/Admin':r[0].toUpperCase()+r.slice(1)}</span>)}</div><div className="coverage-state">{m.enhancement?(m.implemented?'✓ Implemented prototype (approved enhancement)':m.preview?'Approved enhancement — limited preview; full implementation deferred':'Approved enhancement'):'✓ Represented in final UI'}</div></div>)}</div>
   </>
 }

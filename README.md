@@ -16,7 +16,7 @@ The protected implementation checkpoint is **`dac864e` — Complete Phase 3.5 sa
 - M23 coordinates predefined administrative events/actions. Owner/Admin sees a read-only Automation Monitor, not switches for clinical or privacy rules.
 - Phase 3.5 adds current-state authorization, encounter/financial integrity, finalized-record protection, stale draft/retry safeguards, storage warnings and spreadsheet-safe CSV output.
 
-M1–M23 have frontend representations with the partial areas documented in [Module Coverage](MODULE_COVERAGE.md). **M24/M25 remain Proposed Enhancements.** Analytics filtering has known limitations; see the [conflict register](DOCUMENTATION_RECONCILIATION.md#conflicts-retained-for-review).
+M1–M23 have frontend representations with the partial areas documented in [Module Coverage](MODULE_COVERAGE.md). **M24 and M25 are Approved Frontend Enhancements** (previously Proposed Enhancements): M24 Referral & Loyalty is implemented as a team-designed prototype that is not an established clinic program (Phase 4B.2), and M25 Marketing & Reactivation is approved with only a limited frontend campaign-draft preview today (it sends nothing); full management, consent, targeting, delivery and analytics are deferred to a later role phase. Analytics filtering has known limitations; see the [conflict register](DOCUMENTATION_RECONCILIATION.md#conflicts-retained-for-review).
 
 ## Run and verify
 
@@ -47,6 +47,7 @@ Use **Reset demo data** only when intentionally discarding local demo changes. S
 - [Frontend Scope](FRONTEND_SCOPE.md), [Module Coverage](MODULE_COVERAGE.md), [ERD Alignment](ERD_ALIGNMENT.md).
 - [Professor Demo Guide](PROFESSOR_DEMO_GUIDE.md), [Agent instructions](AGENTS.md), [Branding Alignment](BRANDING_ALIGNMENT.md).
 - [ERD Data Dictionary](docs/architecture/ERD_v2_Data_Dictionary.md) and unchanged diagrams in `docs/architecture/`.
+- [Phase 4B Patient experience and M24](PHASE4B_PATIENT_EXPERIENCE.md).
 - Historical implementation records: [Phase 1](PHASE1_IMPLEMENTATION_NOTES.md), [Phase 2](PHASE2_IMPLEMENTATION_NOTES.md), [Phase 3](PHASE3_IMPLEMENTATION_NOTES.md), [Phase 3.5](PHASE3_5_SAFEGUARDS.md), [P0](P0_IMPLEMENTATION_NOTES.md), [P1 UI refresh](P1_PRODUCTION_UI_REFRESH.md).
 
 Production UI/UX, accessibility and responsive polish belong to Phase 4. The application's visible identity is the clinic's own: **Dr. Dana E. Roxas — Dental Clinic**. It is rendered as text beside the unchanged official compact logo `public/images/logo.png`; the supplied `public/images/logo-with-name.png` is preserved unchanged but not rendered until its usage is confirmed. See [Branding Alignment](BRANDING_ALIGNMENT.md). Internal identifiers such as the `dentalops-v4-` storage namespace are intentionally unchanged so saved workspaces keep loading.

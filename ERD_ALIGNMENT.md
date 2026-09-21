@@ -61,7 +61,9 @@ Returned → corrected/local validation → Ready → resubmission retains case 
 | SYSTEM_EVENTS / AUTOMATED_ACTIONS | Contextual `workflowLog` events/results; `audit` projection | Combined local ledger, not separate transaction tables or durable event queue; deduplicated command/event keys |
 | WORKFLOW_RULES | Descriptive `automations` catalog plus protected domain commands | Read-only Automation Monitor; no arbitrary critical-rule toggles |
 | M21 / M22 | Read projections of operational collections | No duplicate operational data stores; current reporting limitations remain explicit |
-| M24 / M25 logical entities | Illustrative `loyalty` / `campaigns` and PE views | Proposed Enhancements, not complete normalized referral/ledger/recipient systems |
+| M24 / M25 logical entities | `loyalty` (account with embedded ledger; M24 implemented prototype) / `campaigns` (draft preview only) | Approved Frontend Enhancements, not complete normalized referral/ledger/recipient systems |
+
+**Authorization status update (Phase 4B.2):** the authorization status of M24 and M25 changed from Proposed to Approved Frontend Enhancement. The ERD structure remains unchanged: no relationship, table or diagram/dictionary change is authorized, and the existing diagrams keep their historical labels. A normalized referral lifecycle (referrer → referred Patient → qualifying appointment) is a later M24 extension and would need its own approved model.
 
 M23 coordinates administrative handoffs after explicit actions. A completed Treatment closes exact queue/appointment, prepares actual-procedure billing and only the requested Prescription/Follow-Up obligations, then applicable HMO and notifications. A failed HMO handoff leaves valid completed care intact and exposes a warning. Selected failed commands log deduplicated failure results; not every validation rejection creates a monitor record. Rendering/normalization creates no events.
 

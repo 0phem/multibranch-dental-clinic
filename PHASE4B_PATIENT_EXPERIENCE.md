@@ -76,3 +76,100 @@ Presentation only; no workflow, command, business rule, ERD, dependency or backe
 - **Keyboard focus visibility.** Scripted Tab testing showed keyboard focus could land under the sticky booking footer (375px) and, at 200% zoom, under the sticky top bar. Patient focusable controls now carry `scroll-margin` that accounts for the top bar, bottom navigation and sticky booking footer, and on viewports 520px tall or shorter the scheduler footer is no longer sticky.
 - **Checked (headless Chrome, scripted; not a WCAG certification):** Tab order and a visible focus indicator on every stop (375 and 1440px); the skip link; native booking radios by arrow keys; Enter on Continue moving focus to the step heading; the cancel dialog starting on the safe action, keeping Tab inside it, and Escape restoring focus to its opener; Messages list → thread → Back with focus restored to the conversation; an accessible name on every measured control (966 across 108 views); status, unread and flag badges always carry text; a selected booking choice shows a check mark; no page-level horizontal overflow; 200% zoom (viewports 720×450, 640×400, 512×384, 384×450 and 188×406) on Journey Hub, booking, appointments, Messages, HMO and billing/receipt with every control reachable and unobscured.
 - **Still not covered:** screen readers, physical devices, other browsers, forced-colors.
+
+# Phase 4B.2 — Referral & Loyalty (M24)
+
+Built on `7b27d00` (Complete Phase 4B.1 Patient core experience) with a clean tree: 337 tests, 12 render-smoke scenarios and a passing build. This is checkpoint 2 of Phase 4B. It implements M24 as a protected prototype module and aligns the current classification of M24/M25. Phase 4C is not started, and no M25 behavior was implemented.
+
+## Client authorization and classification
+
+The client authorized the team to propose and demonstrate how referral and loyalty could work, and expressed interest in marketing improvements. Therefore, in the current source-of-truth documents and visible copy:
+
+- **M24 Referral & Loyalty = Approved Frontend Enhancement, implemented prototype.** Its mechanics are team-designed for demonstration. They are **not** an established Dr. Dana clinic program and no years of prior operation are implied. It must not block core care.
+- **M25 Marketing & Reactivation = Approved Frontend Enhancement.** A limited frontend preview/demo already exists (the Engagement campaign-draft form and table): it sends no real campaigns and still writes through the earlier raw campaign setter, a known technical-debt item. Full Staff/Owner management behavior, a safe command architecture, marketing consent, targeting, delivery and analytics are deferred to the appropriate later role phase.
+
+`AGENTS.md`, `CLAUDE.md`, `README.md`, `MODULE_COVERAGE.md`, `FRONTEND_SCOPE.md`, `ERD_ALIGNMENT.md`, `DOCUMENTATION_RECONCILIATION.md`, `PROFESSOR_DEMO_GUIDE.md` and the production UI skill now say so (the reconciliation record carries a dated requirement-update note). The Phase 1–3.5, 4A and earlier records are deliberately **not** rewritten. The ERD diagrams and Data Dictionary are untouched: only the authorization status changed, and the ERD structure is unchanged. No M26+ was added.
+
+## Prototype program rule
+
+`LOYALTY_PROGRAM.redemptionThreshold = 50` in `src/loyalty.js` is the single exported prototype constant. 50 points is a **team-designed prototype rule**, carried over from the earlier frontend, as are the other program rules in this module: one Pending request at a time, each request processed once, and the same-day duplicate-reward check; whole positive points is the team-designed prototype validation rule for recorded activity; the `DANA-<FIRST>-NN` referral-code format is a technical convention. None is an established Dr. Dana clinic policy. Owner-editable configuration may be considered in a later Owner phase. No monetary value, discount, free treatment, service reward, tier, expiry or referral-qualification timing is defined; the Patient sees neutral "50-point reward" wording only.
+
+## Existing M24 defects corrected
+
+| Before | Now |
+| --- | --- |
+| Patient page used the fixed `ROLE_INFO.patient.patientId` and wrote `state.loyalty` through the raw setter | Identity comes only from the validated session; the only write is the shared `requestLoyaltyRedemption` command |
+| A Patient could request a reward at any balance (the 50-point check only ran when Staff processed it) | The threshold is enforced when the request is made (see the business-rule note below) |
+| Staff/Owner handlers wrote the ledger and audit through raw setters, a module-load `TODAY` constant, `Number()` points (fractions allowed), and a `Date.now()`-derived referral code | Shared commands with session actor, centralized clock, safe-integer points, deterministic unique code (`DANA-<FIRST>-NN`) |
+| No replay protection, no entry identity, no ledger validation; a stored balance was trusted | Command IDs, stable entry IDs, ledger-derived balance validation, fail-closed on disagreement |
+| History rows had no identity; processing mutated whichever "Pending" entry it found | Exactly one Pending request is allowed and processed once; the request is closed and one `Redemption` entry is added |
+
+## Command architecture
+
+`src/loyalty.js` exports `loyaltyActions(run)` (same pattern as `hmo.js` / `communication.js`), registered in `createWorkflowActions`:
+
+- `requestLoyaltyRedemption(commandId)` — Patient only. Takes no Patient or account argument; resolves exactly one account from the session Patient. Extra arguments fail.
+- `recordLoyaltyActivity({patientId,activity,points},commandId)` — Staff with the existing `engagement` permission, or the Owner (`all`). Behavior-preserving equivalent of the old form: Qualified Visit / Qualified Referral, same-day duplicate prevention, creates the account when none exists (existing behavior).
+- `processLoyaltyRedemption(accountId,commandId)` — same actors. Requires the single Pending request and enough points; never deducts twice.
+
+Each command revalidates the session and role (`permitted()` alone returns true for any Patient, so roles are checked explicitly), branch scope for branch-bound Staff, exactly one account per Patient, a valid ledger, cross-account command-ID ownership and replay, and emits an M24 workflow event. No Patient notification or automation rule was added. `M24` events use the shared runner's failure logging like the other commands. No `createCampaign` command exists.
+
+Ledger rules (`ledgerIssue`): known types only; earning entries positive, requests zero with `Pending`/`Processed`, redemptions negative and `Processed`; safe integers; at most one Pending; unique entry IDs; **stored balance must equal the sum of the ledger**. A ledger that fails is never repaired: mutation is blocked and the Patient sees "Your loyalty activity needs clinic review." Legacy entries without IDs remain valid and are never rewritten for display.
+
+## Patient experience
+
+`src/pages/PatientLoyalty.jsx` + `patientLoyalty()` in `src/patient-view.js` (pure, session-scoped, read-only): a prototype notice; the ledger-validated balance with a progress meter; a referral code with a Copy control only where the browser supports it (success or an honest failure message); the redemption block (enabled request, or a disabled control with "You need N more points…", or the Pending message); readable activity cards (label, detail, signed points, date, status) with no internal IDs; a neutral empty state when there is no account (nothing is auto-created); a clinic-review state that shows no balance and no redemption. Focus moves to the Pending message after a request. The Patient nav label is "Referral & Loyalty" (page key `loyalty` unchanged) and Journey Hub gets a last-position quick-access tile only when an account exists; it never outranks the visit, queue or attention items.
+
+## Staff/Owner rewiring
+
+The Engagement page keeps its layout. Its M24 handlers call the shared commands (session actor, shared clock), errors surface through toasts, the Patient list and account table are limited to Patients the actor may manage, an inconsistent balance shows "Under review", and Process is offered only for a valid Pending request. Copy is aligned; the "Engagement • PE" navigation label and "Proposed" tag are removed. M25 was not redesigned: its limited campaign-draft preview remains the earlier raw draft (`setters.setCampaigns`) with corrected preview/"sends nothing" copy, documented as later-phase technical debt.
+
+## Referral lifecycle boundary
+
+A referral **code** exists; a normalized referral **relationship** does not. Nothing on the page claims who the Patient referred, whether a referred person registered, whether a referral qualified, conversion or revenue, and no referral collection was added. A true lifecycle (referrer → referred Patient → qualifying appointment/completion, tied to Staff-side Patient creation/intake) is a later M24 extension needing its own approved model.
+
+## Persistence and legacy compatibility
+
+No new persistence namespace: the existing `dentalops-v4-loyalty` collection is used. The seeded legacy account (120 points, two ID-less entries) is a valid ledger and reloads unchanged. A Pending request and a Processed redemption survive repeated save/reload cycles byte-for-byte with no false Saved Workspace Recovery. Non-JSON, non-array, id-less or non-object loyalty data still triggers recovery with the stored data untouched. A structurally readable but inconsistent ledger loads (it is not dropped) and is reported for review.
+
+## Business-rule statement
+
+- **Authorized M24 prototype rule enforcement (changed on purpose):** redemption eligibility is now enforced at *request* time (balance ≥ 50, no second Pending request), where before only Staff processing checked the balance. Points must be whole positive numbers. A Patient with an inconsistent ledger cannot request.
+- **Unrelated clinic operational/clinical policy: unchanged.** P1–P9 remain `POLICY DECISION REQUIRED` and untouched.
+- ERD, M1–M25 mapping (no M26+), dependencies, persistence keys and backend: unchanged. No M25 behavior was implemented.
+
+## Verification
+
+- `npm test`: **390 total, 390 passing, 0 failing** (337 baseline unmodified + 53 in `tests/phase4b2-loyalty.test.js`). `npm run test:smoke`: **13 scenarios** pass (12 + 1 Phase 4B.2; the Phase 4B.1 scenario keeps its assertions). `npm run build` passes with the existing >500 kB chunk warning still visible.
+- New unit coverage: Patient scope (second Patient, forged/stale/deactivated sessions, duplicate/non-array data), request (threshold, Pending block, idempotent replay, cross-Patient command IDs, malformed command IDs, non-Patient callers), Staff/Owner (authorized, unauthorized, forged, demoted, branch scope, input validation, duplicate rule, account creation, processing once, legacy Pending entries), ledger integrity (13 malformed shapes fail closed and are never repaired; inconsistent balance; legacy readability; read-only selectors), persistence (legacy reload, Pending/Processed across reloads, corrupt-data recovery, no new collection) and UI/documentation source guards (no raw setter or `ROLE_INFO` in M24 code, no invented benefit or referral relationship, PE copy removed, M25 behavior unchanged (only its pre-existing limited preview), current docs aligned, historical docs untouched).
+- **Browser QA** (headless Chrome, states built with the real commands): the 12 required journeys (36 checks, 0 console errors) — open the page, referral code, history, insufficient state, request, Pending across two reloads, Owner processing through the Engagement UI, Processed for the Patient, rapid double click/process creating one effect, another Patient's account invisible, clinic-review state, no-account state — plus a real clipboard copy verified by reading it back, keyboard operation and focus, and long-content wrapping. Responsive: 35 views (375/430/768/1024/1440 × 7 states) with no overflow, no control under 44px, no text under 12px, no unnamed control and no overlap. Phase 4B.1 regression: 234-view audit, 135-view matrix, 93 journeys, 28 accessibility checks, focus-not-obscured and 200% zoom all pass (the only 200% note remains the browser's native file input at 188px). Cross-role: Staff, Dentist and Owner pages are pixel-identical to `7b27d00` at 1440/1024/768/375 except the intentionally changed Owner Engagement page (and the assistant panel captured over it); HMO pages drifted with wall-clock time between runs and were identical back-to-back.
+
+## Known limitations and later work
+
+- Referral lifecycle, Owner-editable program configuration, reward definition/fulfilment, and any Patient notification for M24 are not built. A reward is a recorded, processed request only.
+- The demo Staff login (Receptionist) lacks the `engagement` permission, so the Owner is the live demo path for Engagement; Staff with the permission are covered by tests.
+- M25 management, marketing consent and targeting, and the raw campaign setter are later-phase work.
+- Frontend checks are not backend security; headless Chrome only, no screen reader or physical device testing; not a WCAG certification.
+
+# Phase 4B.2 — final acceptance / consistency pass
+
+Narrow pass before the 4B.2 commit; M24 was not redesigned.
+
+## Staff/Owner loyalty-account enrollment (audited, not regressed)
+
+- **At `7b27d00`:** the Engagement Patient list was `state.patients` (every Patient, including those with no account). Applying a qualified activity to one with no account created the loyalty account in the same step (`uid('loy')` ID, a `Date.now()`-suffixed referral code, the entered points as the balance, and that one activity as its only history entry). There was no separate zero-balance enrollment action.
+- **Now:** the same path, through the shared command. The Patient list is `state.patients` filtered to those the actor may manage; `recordLoyaltyActivity` takes the no-account branch, mints a stable `loy-…` ID and a unique `DANA-<FIRST>-NN` code (existing codes are never reused; no `Date.now()`), sets the balance to the recorded points and writes exactly one history entry. It was verified in the real browser (Owner, Patient with no account, Engagement, apply, Patient login).
+- **No regression, so no new command.** Adding an `enroll` command would have added a zero-balance enrollment the earlier frontend never had. The Engagement rules notice now says in words that recording a Patient's first qualified activity creates their account and referral code.
+- **Safeguard boundary:** Patient, Dentist, unauthorized Staff and forged roles cannot enroll; Staff need the existing `engagement` permission and scope (branch-bound Staff are limited to their scope; all-branch Engagement Staff and the Owner are not); the target Patient must exist; existing duplicate accounts and unreadable ledgers fail closed; a retry with the same command ID returns `unchanged`; other retries append to the one account (or hit the duplicate-reward check), never create a second account; malformed input creates nothing. The Patient page's no-account state stays read-only and neutral.
+- **Tests:** 12 new tests (10 enrollment tests and 2 documentation-precision guards: Owner, Staff with permission, Engagement Staff, Staff without permission, Patient self/other, replay and immediate retry, duplicate accounts, malformed input, unique codes and IDs, two persistence reloads without recovery, and source guards that the Patient list is built from Patients and the Patient page cannot enroll).
+
+## Prototype rules and M25 wording
+
+- Every M24 rule is documented as team-designed prototype behavior, not historical clinic policy: the 50-point redemption threshold, one Pending request at a time, each request processed once, the same-day duplicate-reward check, and whole positive points as the input validation rule. No monetary value, discount, free service, expiry, tier, referral-qualification timing or conversion rule was added.
+- M25 is described precisely everywhere current: **approved; a limited frontend preview exists; it sends no real campaigns; full Staff/Owner management, a safe command architecture, consent, targeting, delivery and analytics are deferred to a later role phase; the raw campaign setter is known technical debt.** The module coverage tile, the Engagement notices and `MODULES` data (`preview: true`) match. No M25 behavior changed.
+
+## Verification
+
+- `git diff --check` clean. `npm test`: **402 total, 402 passing, 0 failing** (390 + 12 new). `npm run test:smoke`: **13 scenarios** pass (the 4B.2 scenario gained two enrollment assertions). `npm run build` passes (JavaScript 546.81 kB, CSS 87.15 kB); the existing >500 kB chunk warning remains visible.
+- **Browser QA** (headless Chrome, states built with the real commands): enrollment journey at 375, 1024 and 1440px, 34 checks: Patient with no account → Owner opens Engagement → establishes the account (rapid double click) → one account with one referral code and the recorded balance appears once → Patient logs in and Referral & Loyalty shows the new account → two reloads keep exactly one unchanged account with no recovery warning; then request → Pending (rapid double click creates one request; survives two reloads) → Owner Process (rapid double click deducts once) → Processed for the Patient → reload/retry has no duplicate effect and no Process control remains. Re-verified on the final build: the 12 M24 journeys (36/36), the M24 responsive matrix (35 views, no problems), the Engagement/M25 preview checks, the 93 Phase 4B.1 Patient journeys and the 234-view audit, 0 console errors throughout. Cross-role pixel comparison against `7b27d00`: identical except the intentionally changed Owner Engagement page (and the assistant panel captured over it); the time-driven Owner Dashboard/HMO pages matched back-to-back.
+- One harness note: the saved QA states are date-pinned, so after the calendar date rolled the 4B.1 journeys failed until the states were rebuilt for the new day (stale test data, not an application change).

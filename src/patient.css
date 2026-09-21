@@ -204,3 +204,16 @@
   .role-patient .pt-scheduler:not(.is-modal) { --pt-sticky-foot: 0px; }
   .role-patient .pt-scheduler:not(.is-modal) .pt-stage-footer { position: static; }
 }
+
+/* ---- Referral & Loyalty (M24) ---- */
+.role-patient .pt-loyalty-top { display: grid; gap: var(--space-4); align-items: start; }
+@media (min-width: 768px) { .role-patient .pt-loyalty-top { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.role-patient .pt-points { display: flex; align-items: baseline; gap: var(--space-2); margin: 0 0 var(--space-3); }
+.role-patient .pt-points b { font-size: 2.5rem; line-height: 1; color: var(--ink); font-weight: var(--weight-heading); }
+.role-patient .pt-points span { color: var(--muted); font-size: var(--font-md); }
+.role-patient .pt-meter { display: block; width: 100%; height: 10px; margin-bottom: var(--space-2); accent-color: var(--brand); }
+.role-patient .pt-top-gap { margin-top: var(--space-5); }
+.role-patient .pt-pending { margin: 0; padding: var(--space-3) var(--space-4); border: 1px solid var(--line); border-left: 4px solid var(--amber); border-radius: var(--radius); background: var(--amber-soft); color: var(--ink); font-size: var(--font-body); }
+.role-patient .pt-error { margin: var(--space-3) 0 0; color: var(--red); font-weight: var(--weight-strong); font-size: var(--font-md); }
+.role-patient .pt-code { display: block; margin-bottom: var(--space-3); padding: var(--space-3) var(--space-4); border: 1px dashed var(--line-strong); border-radius: var(--radius); background: var(--surface-2); color: var(--ink); font-size: var(--font-lg); font-weight: var(--weight-strong); letter-spacing: .04em; overflow-wrap: anywhere; user-select: all; }
+.role-patient .pt-entry-points { margin: var(--space-2) 0 0; color: var(--ink); font-weight: var(--weight-strong); font-size: var(--font-body); }

@@ -37,8 +37,8 @@ export function Icon({name,size=20,className=''}){
   return <svg className={`icon ${className}`} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{ICON_PATHS[name]||ICON_PATHS.home}</svg>
 }
 
-export function ModuleBadge({ no, pe=false }) {
-  return <span className={`module-badge ${pe?'pe':''}`}>M{no}{pe?' • PE':''}</span>
+export function ModuleBadge({ no, enhancement=false }) {
+  return <span className="module-badge">M{no}{enhancement?' • Approved enhancement':''}</span>
 }
 
 export function Status({ children }) {

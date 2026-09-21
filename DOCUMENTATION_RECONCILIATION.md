@@ -1,5 +1,9 @@
 # Documentation Reconciliation — Through Phase 3.5
 
+## Requirement update — M24/M25 classification (Phase 4B.2, 2026-09-21)
+
+The client authorized the team to propose and demonstrate M24 Referral & Loyalty and M25 Marketing & Reactivation. Both are now **Approved Frontend Enhancements** rather than Proposed Enhancements. M24 is implemented as a team-designed prototype (its 50-point redemption threshold, one-Pending-request and process-once rules, same-day duplicate-reward check and whole-positive-points validation are team-designed prototype rules, not historical clinic policy or an established clinic program; Owner-editable configuration may be considered in a later Owner phase). M25 is approved with only a limited frontend preview today (the Engagement campaign-draft form; it sends nothing and still uses the earlier raw campaign setter, a known technical-debt item). Full management, a safe command architecture, consent, targeting, delivery and analytics are deferred to a later role phase, after marketing consent and targeting rules are designed. The ERD structure is unchanged. The sections below describe the state at the Phase 3.5 checkpoint and are otherwise historical.
+
 ## Checkpoint and purpose
 
 Protected implementation: **`dac864e` — Complete Phase 3.5 safeguards and user acceptance hardening**. Starting working tree was clean. Baseline verification passed: **260 tests, 260 passing, 0 failing**, `npm run test:smoke`, and `npm run build`. The existing nonfatal >500 kB JavaScript chunk warning remains. This reconciliation changes documentation only; application behavior, tests, dependencies, ERD artifacts, official logo and production UI skill are unchanged.
@@ -24,7 +28,7 @@ Current entry points are README (overview), FRONTEND_SCOPE (implemented/future b
 | --- | --- |
 | README | Current phases/workflow, run commands, test evidence, local limits and document index; removes “final interface” implications |
 | FRONTEND_SCOPE | Replaces obsolete P0/P1/P2 roadmap with current capabilities, safeguards, partial areas and future infrastructure |
-| MODULE_COVERAGE | Purpose/status/capability/boundary for each M1–M25; separates shared-screen modules and labels partial/PE scope |
+| MODULE_COVERAGE | Purpose/status/capability/boundary for each M1–M25; separates shared-screen modules and labels partial scope and the then-Proposed M24/M25 |
 | ERD_ALIGNMENT | Current named/embedded structures, IDs/evidence, normalized-model differences and walk-in ambiguity |
 | PROFESSOR_DEMO_GUIDE | Real current role journey, exact encounter, explicit clinical decisions, invoice Review, honest HMO timing and defense statements |
 | AGENTS | Current context list, shared safeguards/clock and verification guidance, explicit administrative exception reference |
@@ -87,7 +91,7 @@ Current checks read canonical users/persons/profiles, current permissions and br
 | Dental Assistant | Queue and clinical-records permissions in catalog; route/command role checks still apply. Not a treating Dentist or prescription author |
 | HMO Coordinator | HMO, Patient demographics and Messages within branch |
 | Cashier | Billing and Patient demographics within branch |
-| Patient Engagement Staff | Inquiries, Messages and Engagement; M24/M25 remain PE |
+| Patient Engagement Staff | Inquiries, Messages and Engagement; M24/M25 are Approved Frontend Enhancements (M25 has only a limited preview; full implementation deferred) |
 | Dentist | Schedule, own queue, scoped clinical records, exact Treatment/Prescription decisions, Follow-Ups and explicit-participant Messages. No Staff payment/HMO processing |
 | Owner/Admin | Account/configuration administration and oversight; `all` permission does not bypass domain role restrictions |
 
@@ -162,7 +166,7 @@ Phase 4 preparation only:
 - Make all roles responsive across mobile/tablet/desktop: Patient mobile-first, Staff fast repetitive work, Dentist exact encounters, Owner oversight.
 - Preserve private drafts, receipt evidence, HMO decision boundaries, independent Messages/Notifications, current-state errors and recovery affordances in state-driven presentation.
 - Add browser/device, keyboard/focus, accessibility and interaction QA beyond SSR; improve production copy and performance (existing bundle warning).
-- Keep M24/M25 PE, module coverage outside production navigation, and Automation Monitor read-oriented. Do not hide C1 reporting limitations through styling; resolve functionality under explicit implementation scope.
+- Present M24 as an implemented prototype and M25 as approved with a limited preview and full implementation deferred; keep module coverage outside production navigation, and Automation Monitor read-oriented. Do not hide C1 reporting limitations through styling; resolve functionality under explicit implementation scope.
 
 No Phase 4 work, skill update, backend integration, policy activation, commit or push is part of this reconciliation. Documentation changes remain for review.
 

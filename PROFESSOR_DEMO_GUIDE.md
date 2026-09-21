@@ -79,7 +79,7 @@ Analytics is **partial**. Show existing operational projections and spreadsheet-
 
 Owner oversight does not grant Treatment, Prescription, Payment, HMO processing or Message participation. Existing shared administrative booking/admission/queue exceptions are documented; use the Staff surface for the normal demo.
 
-If showing M24/M25, do so last and call them **Proposed Enhancements**. Use the coverage document for defense; it is not a production navigation item.
+If showing M24/M25, do so last. Call them **Approved Frontend Enhancements**: M24 Referral & Loyalty is an implemented team-designed prototype (the 50-point redemption threshold, one-Pending-request rule and whole-positive-points validation are team-designed prototype rules, not historical clinic policy), and M25 Marketing & Reactivation is approved with only a limited campaign-draft preview today (it sends nothing); full management is deferred to a later role phase. Use the coverage document for defense; it is not a production navigation item.
 
 ## Module-defense statements
 

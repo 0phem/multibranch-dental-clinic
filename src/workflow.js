@@ -2,6 +2,7 @@ import { administrationActions } from './administration.js'
 import { validSession, permitted, isRecord, encounterIssue, validTime, completedEncounter } from './safeguards.js'
 import { communicationActions } from './communication.js'
 import { hmoActions, prepareHmoCase } from './hmo.js'
+import { loyaltyActions } from './loyalty.js'
 import { workflowContext, notificationEventKey, appendWorkflowEvent, appendNotification, notifyBranch } from './orchestration.js'
 import { phase2Actions, procedureLines, linkedTreatment, money, validInvoice } from './phase2.js'
 import { clinicNow, validDate } from './clock.js'
@@ -311,7 +312,7 @@ export function createWorkflowActions({getState,commit,getSession,clock=clinicNo
     event(`patient:${record.id}`,'M4','patient.record.created',record.patientCode,record.id,preferredBranchId)
     return {ok:true,record:patientProjection(record,personRecord)}
   })
-  const commands={...administrationActions(run),...phase2Actions(run),...hmoActions(run),...communicationActions(run),saveAppointment,cancelAppointment,checkInAppointment,admitWalkIn,updateQueue,saveTreatment,completeTreatment:(input,status='Completed')=>saveTreatment(input,status),createPatientRecord}
-  const permissions={saveAppointment:'appointments',cancelAppointment:'appointments',checkInAppointment:'checkin',admitWalkIn:'checkin',updateQueue:'queue',saveTreatment:'treatment',completeTreatment:'treatment',createPatientRecord:'patient-demographics',reviewInvoice:'billing',issueInvoice:'billing',postPayment:'billing',savePrescription:'prescriptions',authorizePrescription:'prescriptions'}
+  const commands={...administrationActions(run),...phase2Actions(run),...hmoActions(run),...communicationActions(run),...loyaltyActions(run),saveAppointment,cancelAppointment,checkInAppointment,admitWalkIn,updateQueue,saveTreatment,completeTreatment:(input,status='Completed')=>saveTreatment(input,status),createPatientRecord}
+  const permissions={saveAppointment:'appointments',cancelAppointment:'appointments',checkInAppointment:'checkin',admitWalkIn:'checkin',updateQueue:'queue',saveTreatment:'treatment',completeTreatment:'treatment',createPatientRecord:'patient-demographics',reviewInvoice:'billing',issueInvoice:'billing',postPayment:'billing',savePrescription:'prescriptions',authorizePrescription:'prescriptions',recordLoyaltyActivity:'engagement',processLoyaltyRedemption:'engagement'}
   return Object.fromEntries(Object.entries(commands).map(([name,action])=>[name,(...args)=>permissions[name]&&!permitted(getState(),getSession(),permissions[name])?fail('Your current account or permission no longer allows this action. Reopen your workspace or ask an administrator.'):action(...args)]))
 }

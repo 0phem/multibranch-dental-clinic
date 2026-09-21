@@ -27,8 +27,8 @@ export const MODULES = [
   { no: 21, name: 'Operational Reporting & Analytics Management', owner: 'Delos Santos, Joevan', area: 'Analytics', roles: ['owner'] },
   { no: 22, name: 'Owner Executive Dashboard & Business Intelligence', owner: 'Licanda, Celin', area: 'Analytics', roles: ['owner'] },
   { no: 23, name: 'Integrated Workflow & Automation Control', owner: 'Delos Santos, Joevan', area: 'Automation', roles: ['owner'] },
-  { no: 24, name: 'Referral & Loyalty Management', owner: 'Millar, John Yzhekiel', area: 'Engagement', roles: ['patient','staff','owner'], pe: true },
-  { no: 25, name: 'Marketing, Reactivation & Patient Engagement Management', owner: 'Millar, John Yzhekiel', area: 'Engagement', roles: ['staff','owner'], pe: true },
+  { no: 24, name: 'Referral & Loyalty Management', owner: 'Millar, John Yzhekiel', area: 'Engagement', roles: ['patient','staff','owner'], enhancement: true, implemented: true },
+  { no: 25, name: 'Marketing, Reactivation & Patient Engagement Management', owner: 'Millar, John Yzhekiel', area: 'Engagement', roles: ['staff','owner'], enhancement: true, implemented: false, preview: true },
 ]
 
 export const ROLE_INFO = {
@@ -41,11 +41,11 @@ export const ROLE_INFO = {
 export const NAV = {
   patient: [
     ['dashboard','Home'], ['book','Book Appointment'], ['appointments','Appointments'], ['queue','Live Queue'],
-    ['hmo','HMO Coverage'], ['messages','Messages'], ['billing','Receipts & Payments'], ['prescriptions','Prescriptions'], ['followups','Follow-Up Care'], ['loyalty','Rewards • PE']
+    ['hmo','HMO Coverage'], ['messages','Messages'], ['billing','Receipts & Payments'], ['prescriptions','Prescriptions'], ['followups','Follow-Up Care'], ['loyalty','Referral & Loyalty']
   ],
   staff: [
     ['dashboard','Operations'], ['appointments','Appointments'], ['checkin','Check-In'], ['queue','Live Queue'], ['capacity','Capacity'],
-    ['patients','Patient Records'], ['billing','Billing & Payments'], ['hmo','HMO Cases'], ['inquiries','Social Inquiries'], ['messages','Messages'], ['followups','Follow-Up Tasks'], ['engagement','Engagement • PE']
+    ['patients','Patient Records'], ['billing','Billing & Payments'], ['hmo','HMO Cases'], ['inquiries','Social Inquiries'], ['messages','Messages'], ['followups','Follow-Up Tasks'], ['engagement','Engagement']
   ],
   dentist: [
     ['dashboard','Clinical Home'], ['schedule','My Schedule'], ['queue','My Queue'], ['patients','Patient Records'], ['treatment','Treatment'],
@@ -53,7 +53,7 @@ export const NAV = {
   ],
   owner: [
     ['dashboard','Executive Dashboard'], ['analytics','Analytics & Reports'], ['branches','Branches'], ['team','People & Team'], ['capacity','Capacity & Workload'],
-    ['hmo','HMO Overview'], ['users','Access & Roles'], ['automation','Automation Monitor'], ['engagement','Engagement • PE']
+    ['hmo','HMO Overview'], ['users','Access & Roles'], ['automation','Automation Monitor'], ['engagement','Engagement']
   ],
 }
 

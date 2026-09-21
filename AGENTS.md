@@ -65,7 +65,7 @@ Approved requirements, module meanings and ERD concepts precede implementation e
 - Messages and Notifications are separate.
 - M23 is cross-module orchestration logic.
 - Do not expose 25-Module Coverage in production navigation.
-- M24 and M25 remain Proposed Enhancements.
+- M24 and M25 are **Approved Frontend Enhancements** (client-authorized; previously recorded as Proposed Enhancements). M24 (Referral & Loyalty) is an implemented prototype whose program rules (the 50-point redemption threshold, one Pending request at a time, each request processed once, the same-day duplicate-reward check) and validation rule (whole positive points) are team-designed prototype rules for demonstration, not historical clinic policy or an established clinic program; its writes go through the shared commands in `src/loyalty.js`. M25 (Marketing & Reactivation) is approved. A limited frontend preview/demo exists today (the Engagement campaign-draft form): it sends no real campaigns and still writes through the earlier raw campaign setter, which is known technical debt. Full Staff/Owner management behavior, a safe command architecture, marketing consent, targeting, delivery and analytics are deferred to a later role phase. Neither may block core care operations. See PHASE4B_PATIENT_EXPERIENCE.md.
 - This is frontend-only until explicitly changed. Do not invent backend infrastructure.
 
 ## Architecture rules

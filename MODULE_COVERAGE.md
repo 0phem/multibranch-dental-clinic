@@ -1,6 +1,6 @@
 # Approved 25-Module Coverage
 
-Current implementation: `dac864e`, through Phase 3.5. **Implemented** means frontend behavior with local persistence, not backend/integration completeness. **Partial** identifies a materially narrower frontend representation than the approved module/ERD scope. M1–M23 are Core; M24/M25 are Proposed Enhancements regardless of illustrative controls. Shared screens do not merge modules.
+Current implementation: `dac864e`, through Phase 3.5. **Implemented** means frontend behavior with local persistence, not backend/integration completeness. **Partial** identifies a materially narrower frontend representation than the approved module/ERD scope. M1–M23 are Core; M24/M25 are Approved Frontend Enhancements (previously recorded as Proposed Enhancements): M24 is an implemented prototype (Phase 4B.2) and M25 is approved with only a limited frontend preview today (full implementation is deferred). Shared screens do not merge modules.
 
 | Module / purpose | Status | Current capability / main surface | Important boundary |
 | --- | --- | --- | --- |
@@ -27,8 +27,8 @@ Current implementation: `dac864e`, through Phase 3.5. **Implemented** means fron
 | M21 — Analytics | Core / Partial | Operational KPIs, some branch projections, CSV export/formula protection | Period control is ineffective; communication metric/export scope inconsistent. Read layer, not duplicated operational stores; see conflict C1 |
 | M22 — Owner Dashboard | Core / Implemented frontend overview | Cross-branch summaries, workload, exceptions and drill-downs | Read/oversight layer; historical demo Paid totals are not verified financial reconciliation |
 | M23 — Workflow Automation | Core / Implemented frontend | Shared predefined handoffs, contextual events/actions, deduplication, failure/warning feed, read-only Automation Monitor | No clinical judgment, unrestricted rule editor, generic engine or background worker |
-| M24 — Referral / Loyalty | Proposed Enhancement | Illustrative PE screens for referral/points/redemption concepts | Not completed core implementation or validated production loyalty service |
-| M25 — Marketing / Reactivation | Proposed Enhancement | Illustrative PE campaign/engagement screens | No real outreach/consent-delivery infrastructure; must not block core care |
+| M24 — Referral / Loyalty | Approved Frontend Enhancement / Implemented prototype | Patient Referral & Loyalty page (referral code, ledger-validated points, activity history, reward request); Staff/Owner Engagement records qualified activity and processes requests; every write is a shared M24 command (`src/loyalty.js`) | Team-designed prototype program rules (50-point redemption threshold, one Pending request at a time, each request processed once, same-day duplicate-reward check) and validation rule (whole positive points), not historical clinic policy or an established clinic program. Staff/Owner enroll a Patient by recording their first qualified activity, which creates the account. No reward benefit, monetary value, tier or expiry is modeled. No referral relationship exists yet, so no referred-Patient list. Must not block core care |
+| M25 — Marketing / Reactivation | Approved Frontend Enhancement / Limited preview exists; full implementation deferred | The existing Engagement campaign-draft form and table are a limited frontend preview/demo: they send no real campaigns and still write through the earlier raw campaign setter (known technical debt) | Full Staff/Owner management, a safe command architecture, marketing consent, targeting, delivery and analytics belong to a later role phase. No real outreach/consent-delivery infrastructure; must not block core care |
 
 ## Responsibilities and separations
 
@@ -39,12 +39,12 @@ Current implementation: `dac864e`, through Phase 3.5. **Implemented** means fron
 
 ## Role surfaces
 
-Patient: own dashboard/care, booking, appointments, Queue & Wait, Prescriptions, Follow-Ups, HMO, Messages, Receipts & Payments; Loyalty is PE.
+Patient: own dashboard/care, booking, appointments, Queue & Wait, Prescriptions, Follow-Ups, HMO, Messages, Receipts & Payments; Referral & Loyalty (M24).
 
 Staff: operational worklists as allowed by current subrole and assigned branch. Receptionist, Dental Assistant, Cashier, HMO Coordinator and Patient Engagement Staff do not have interchangeable permission sets. See the [role matrix](DOCUMENTATION_RECONCILIATION.md#role-and-permission-clarifications).
 
 Dentist: schedule, own queue, scoped Patient chart, exact Treatment, Prescriptions, Follow-Ups and participant Messages. No Staff payment/HMO processing authority.
 
-Owner/Admin: Dashboard, Analytics, Branches, Team, Capacity, People & Access, HMO oversight and Automation Monitor; Engagement is PE. Shared Phase 1 administrative exceptions do not imply clinical authority. **25-Module Coverage is a defense document, not production navigation.**
+Owner/Admin: Dashboard, Analytics, Branches, Team, Capacity, People & Access, HMO oversight and Automation Monitor; Engagement (M24 administration, M25 preview). Shared Phase 1 administrative exceptions do not imply clinical authority. **25-Module Coverage is a defense document, not production navigation.**
 
 See [Frontend Scope](FRONTEND_SCOPE.md), [ERD Alignment](ERD_ALIGNMENT.md), [conflict C1](DOCUMENTATION_RECONCILIATION.md#conflicts-retained-for-review) and the [demo guide](PROFESSOR_DEMO_GUIDE.md). Partial status preserves approved requirements; it does not remove them.

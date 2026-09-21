@@ -128,7 +128,7 @@ export function Shell({ role, page, setPage, onLogout, activeBranch, setActiveBr
     return ()=>media.removeEventListener('change',close)
   },[])
   const navigation=<><div className="role-card"><span aria-hidden="true">{initials}</span><div><small>{info.label}</small><b>{name}</b><em>{role==='owner'?'Branch oversight':activeBranch}</em></div></div>
-    <nav className="main-nav" aria-label={`${info.label} navigation`}>{groups.map(([title,items])=><div className="nav-group" key={title}><span className="nav-group-label">{title}</span>{items.map(([key,label])=><button type="button" key={key} aria-current={page===key?'page':undefined} className={page===key?'active':''} onClick={()=>selectPage(key)}><Icon name={NAV_ICONS[key]||'home'} size={18}/><span>{label}</span>{['loyalty','engagement'].includes(key)&&<small className="nav-proposed">Proposed</small>}</button>)}</div>)}</nav>
+    <nav className="main-nav" aria-label={`${info.label} navigation`}>{groups.map(([title,items])=><div className="nav-group" key={title}><span className="nav-group-label">{title}</span>{items.map(([key,label])=><button type="button" key={key} aria-current={page===key?'page':undefined} className={page===key?'active':''} onClick={()=>selectPage(key)}><Icon name={NAV_ICONS[key]||'home'} size={18}/><span>{label}</span></button>)}</div>)}</nav>
     <div className="sidebar-footer"><button onClick={()=>{setMobileOpen(false);setResetOpen(true)}}><Icon name="settings" size={16}/>Reset demo data</button><button onClick={onLogout}><Icon name="logout" size={16}/>Log out</button></div></>
   return <ShellActionsContext.Provider value={shellActions}><div className={`app-shell role-${role}`}>
     <a className="skip-link" href="#main-content">Skip to content</a>
