@@ -1,5 +1,7 @@
 # Phase 3.5 safeguards and user-acceptance hardening
 
+> Historical Phase 3.5 record. The work described below was subsequently committed as `dac864e`. Its audit and original no-commit scope remain historical; the current documentation and central unresolved-policy register are in [Documentation Reconciliation](DOCUMENTATION_RECONCILIATION.md).
+
 ## Checkpoint, scope and method
 
 Protected starting HEAD: `cfb59e2` — Complete Phase 3 HMO communications and orchestration. Starting working tree was clean. The actual baseline passed 184/184 tests, all render-smoke scenarios and the production Vite build.

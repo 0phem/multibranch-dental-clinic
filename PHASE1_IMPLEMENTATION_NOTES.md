@@ -1,5 +1,7 @@
 # Phase 1 — shared contracts and encounter handoff
 
+> Historical Phase 1 record. Phases 2–3.5 supersede its single-service billing and deferred downstream-status statements. See [current reconciliation](DOCUMENTATION_RECONCILIATION.md); original phase decisions and verification remain below.
+
 This pass preserves the approved React/Vite frontend, ClinicProvider, localStorage, role experiences, and M23 orchestration model. It does not add a backend or redesign the visual system.
 
 ## Files and responsibilities

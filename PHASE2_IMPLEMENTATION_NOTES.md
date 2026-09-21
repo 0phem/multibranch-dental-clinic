@@ -1,5 +1,7 @@
 # Phase 2 — clinical-to-financial workflow
 
+> Historical Phase 2 record. Phases 3–3.5 supersede its deferred HMO/communications and historical receipt-display behavior; unsupported Paid records are now withheld as Patient receipts. See [current reconciliation](DOCUMENTATION_RECONCILIATION.md).
+
 Phase 1 remains the foundation. This change preserves React/Vite, ClinicProvider, browser persistence, the Manila clock, exact queue encounters, and the shared appointment validator. No backend, external integrations, dependencies, branding changes, or Phase 3 work were introduced.
 
 ## Commands and orchestration

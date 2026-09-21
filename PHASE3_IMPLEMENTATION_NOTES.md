@@ -1,5 +1,7 @@
 # Phase 3 implementation notes
 
+> Historical Phase 3 record. Its then-uncommitted work was subsequently committed as `cfb59e2`, followed by Phase 3.5 at `dac864e`. Later safeguards and current status are in [Documentation Reconciliation](DOCUMENTATION_RECONCILIATION.md); the original account below is preserved.
+
 ## Scope and protected checkpoint
 
 Phase 3 extends the existing React/Vite frontend and shared workflow commands. Protected Phase 2 HEAD: `c440d5f` (`Complete Phase 2 clinical and billing workflow`). The initial clean baseline passed all 100 Phase 1/2 tests and the production build. Those test files and `src/phase2.js` remain unchanged. Phase 3 changes are intentionally uncommitted.

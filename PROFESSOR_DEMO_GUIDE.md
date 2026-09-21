@@ -1,52 +1,105 @@
-# Professor Demo Walkthrough — Approved Target Flow
+# Professor Demo Guide — Current Connected Workflow
 
-This sequence is designed to demonstrate the system as one connected BPA solution rather than 25 disconnected pages.
+For checkpoint `dac864e`, through Phase 3.5. Use [Module Coverage](MODULE_COVERAGE.md) for all 25 approved modules and [Documentation Reconciliation](DOCUMENTATION_RECONCILIATION.md) for policies/conflicts. This is a frontend with local persistence and shared validation, not a live provider/payment system.
 
-## 1. Start as Patient
+## Prepare the demonstration
 
-1. Open **Dashboard** — show next visit, private queue status, follow-ups and notifications.
-2. Open **Book Appointment** — deliberately choose a conflicting or invalid slot and show Smart Scheduling checks and alternative slots.
-3. Open **My Appointments** — demonstrate reschedule and cancellation using the same validator.
-4. Open **Queue & Wait** — emphasize privacy: the patient only sees their own position/status, not the staff queue.
-5. Show **Receipts/Billing**, **Prescriptions**, **Follow-Ups**, **Messages**, and the global **Notifications** concept.
-6. Show **Referral & Loyalty**, but point out the PE banner.
+1. Run `npm test`, `npm run test:smoke` and `npm run build`; start `npm run dev`.
+2. Use illustrative data only. Reset demo data only if discarding existing local demo work is intended. Reset rebases pristine examples; refresh does not move saved history to today.
+3. Note the Manila clinic date/time, open branch, assigned Staff and logged-in Dentist. The role-entry buttons use fixed demo identities, not a general password-login service. Select a branch/Dentist reachable by those identities for the connected journey.
+4. For live admission/treatment, use today's valid appointment and available assigned Dentist. If there is no valid remaining slot or the clinic is closed, show a future booking and explain admission is a separate current-day event. Use the deterministic smoke scenarios as evidence for the full chain; do not bypass time validation or pretend a historical encounter is current.
+5. Follow one Patient and exact appointment/queue/treatment/invoice IDs throughout. A fresh completed treatment supplies a usable invoice; historical seed charges may correctly require clinic review.
 
-## 2. Switch to Staff
+## 1. Patient: book without payment
 
-1. **Dashboard** — operational work requiring attention.
-2. **Appointments** — create a new booking using Smart Scheduling.
-3. **Check-In** — demonstrate the lightweight scheduled and walk-in admission paths; routine patients are not re-verified as if registering again.
-4. **Patient Queue** — show priority, call, skip, treatment-ready, no-show and complete controls.
-5. **Capacity & Workload** — show queue load, active dentists, thresholds and cross-branch capacity.
-6. **Patient Records** — create/find a centralized patient record and show that staff clinical fields are restricted.
-7. **Billing** — show the treatment-generated draft invoice, review/issue it, post payment and create the linked receipt.
-8. **HMO** — start the prefilled case → resolve local missing requirements → submit to provider → follow up/escalate if overdue → record/synchronize provider response. Explain that provider approval is external.
-9. **Social Inquiries** — capture inquiry, record response and link a booked appointment conversion.
-10. **Messages** — show conversation history and failed-notification retry.
-11. **Follow-Ups** — schedule a follow-up through the same Smart Scheduling component.
+Open Book Appointment: **Branch → Service → Dentist preference → Date & Time → Review**. Date and time share a UI step but remain separate booking decisions. Show manual selection and Find best schedule using the same validator. An unavailable/conflicting option must not create a booking.
 
-## 3. Switch to Dentist
+Confirm a valid future start. Explain that the booked service provides context; the Dentist later chooses actual Performed Procedures. Nothing is charged during booking. In My Appointments, optionally reschedule before admission, retaining Patient identity. Cancellation/rebooking can be shown before care; do not claim an unsupported minute-based cutoff.
 
-1. **Clinical Dashboard / My Schedule / My Queue**.
-2. **Patient Records** — show clinical fields available to the dentist.
-3. **Treatment** — open the current queue patient; patient/dentist/branch/service context is already loaded, then document complaint, plan/procedure and notes.
-4. The Dentist explicitly indicates whether prescription/follow-up is clinically required; completion then triggers the downstream tasks automatically.
-5. Open **Prescriptions** — authorize the generated prescription task.
-6. Open **Follow-Ups** — show the created scheduling obligation.
+Show the confirmation Notification. Patient does not perform Check-In in the current app. Switch to Staff for arrival.
 
-## 4. Switch to Owner/Admin — Dr. Dana Roxas
+## 2. Staff: fast Check-In and queue operations
 
-1. **Executive Dashboard** — exceptions first, cross-branch comparison, HMO and revenue summary.
-2. **Branches** — operating hours/services/status reference.
-3. **Staff & Dentists** — profiles are synchronized from Users & Access through `user_id`; edit license/specialization/branch/shift and show separate Active vs Available states.
-4. **Capacity & Workload** — management-level branch pressure.
-5. **Analytics & Reports** — cross-process KPI view and CSV export.
-6. **Users & Access** — create the actual clinic account using ERD-aligned username/email/role/branch/status fields; Dentist/Staff roles automatically create the linked Module 3 profile.
-7. **HMO Overview** — read-only management oversight; no fake owner approval button.
-8. **Automation Monitor** — show orchestration health, protected rule visibility, and central success/failure feed.
-9. **Engagement PE** — show M24/M25 only after the core modules and call them proposed enhancements.
-10. Use the **25-Module Coverage document** for professor traceability; it is not a production clinic navigation item.
+Select the intended scheduled arrival explicitly in Check-In, verify Patient/branch/Dentist, then Confirm arrival. Known Patient data is reused. A repeated admission reuses the existing encounter instead of adding another queue row. Walk-in admission is a separate validated path and does not invent a reserved appointment.
 
-## Key defense statement
+Open Patient Queue. Demonstrate Call/Ready as appropriate, Temporarily Away and Return; arrival time is preserved. Emergency priority requires a reason and creates audit context. No-show remains an operational Staff action; no grace period is invented. Avoid marking the main demo encounter No-show if it will continue to Treatment.
 
-> The prototype intentionally has no backend/database yet. The purpose of this submission is to prove the complete final interface, roles, workflow boundaries, module connections, automation touchpoints, and user experience before persistence and integrations are implemented.
+Explain that an admitted appointment cannot be rescheduled. Cancellation before clinical documentation can close its linked queue/check-in; after clinical work starts, it is protected. Staff never independently completes clinical treatment or the clinical queue step.
+
+As Patient, show only the Patient's own position/status. As Dentist, show only that Dentist's queue. Compare Queue with Capacity & Workload: order and state are different from aggregate wait/load estimates. Durations are case-by-case, so estimates are not guarantees.
+
+## 3. Dentist: exact encounter and explicit clinical choices
+
+From My Queue, call the Patient if needed and open the exact Treatment context. Check Patient, branch, Dentist and linked visit; no global Patient replacement is permitted inside this encounter.
+
+Document progress with **Save Treatment Progress**. Add actual procedure lines from authorized services, quantities and notes. If appropriate to the illustrative case, demonstrate two authorized procedures despite only one booked service. Enter the required performed-procedure description. Draft saving keeps care active and creates no final invoice or unnecessary downstream tasks.
+
+Explicitly choose whether Prescription and Follow-Up are required. For a requested Follow-Up, enter the recommended date/interval and reason. These are Dentist decisions, not automation suggestions.
+
+Choose **Complete Treatment**. Show the exact queue/appointment closed, one Draft invoice from performed procedures, and only the requested obligations. Completed treatment is read-only. Repeating completion must not duplicate the chain.
+
+If Prescription was requested, open its task, enter illustrative medication/dose/instructions yourself, optionally save Draft, then explicitly authorize. Do not use the app to select medication. Patient cannot see the draft; authorization makes their own prescription available. Correction/reissue is an unresolved workflow, not a draft-edit action.
+
+## 4. Staff: review, issue, record payment and schedule return
+
+Open the newly generated invoice in Billing. Select **Review Invoice** and inspect Patient, treatment, each performed procedure/quantity/fee and total. Review is a meaningful state before **Issue Invoice**. Draft/Review is private from Patient.
+
+After issuance, choose **Record Payment** and the exact full positive total. Use **Record Cash** for a locally recorded cash example or **Simulate Card / Electronic**, explicitly stating no funds transfer occurs. Show Paid, payment ID and linked receipt; a retry must not create a second payment. Invalid/partial/overpayment attempts are rejected. Do not use a zero-fee case to demonstrate settlement: that clinic policy is unresolved.
+
+Open Follow-Ups and schedule the obligation the Dentist already requested. The form preserves the source Patient/Dentist/branch and uses the same appointment validator. Show that a cancelled/no-show return appointment permits rescheduling the obligation; changing a booking does not change the clinical decision. Own Patient self-scheduling is also supported.
+
+## 5. Staff and Patient: HMO M12 → M13 → M14
+
+Use an insured Patient with configured membership and an exact appointment/completed treatment. Staff can prepare the case; qualifying completed care also triggers preparation/linkage once. Missing membership is not invented.
+
+- **M12:** inspect the HMO Card, Valid ID and Dentist treatment request checklist. Patient records metadata for their own missing document; no file is uploaded. Staff validates local requirements. Ready for Submission means local preparation only.
+- **M13:** select **Record External Submission**, enter channel and tracking note for the illustrative action handled outside the app. Then **Record Provider Response** records an illustrative externally received Approved, Rejected or Returned outcome. State clearly that the demo does not contact an insurer or verify coverage.
+- For **Returned**, select requirements needing correction, correct/validate them, then **Record Resubmission**. Same case ID, new cycle; stale-cycle responses are rejected.
+- **M14:** use an already eligible pending case with valid timestamps/current-cycle contact to show follow-up and escalation. The documented threshold is 12 hours; do not claim a newly submitted case instantly qualifies. If no eligible case exists, show the deterministic timer/contact/escalation smoke coverage. Escalated remains actionable for contact and provider response; it does not mean Approved or Rejected.
+
+Patient sees only own status, public outcome and required actions. Internal contact/response notes remain operational. Historical or malformed legacy cases may require review rather than accepting new tracking actions.
+
+## 6. Patient: results, Notifications and Messages
+
+Show Your care, authorized Prescription, Follow-Up, issued itemized invoice/payment status/Receipt, and safe HMO information. Use the newly completed encounter, since unsupported historical Paid records are not valid Patient receipts.
+
+Open the global notification bell: own unread count, recent/full history, individual read and Mark All Read for this recipient only. Follow a relevant action; a stale or inaccessible destination is unavailable instead of exposing another record. Updates occur through shared local state, not cross-device transport.
+
+Open Messages separately. Use an explicit-participant conversation, record a reply and show its independent unread state. A role named Dentist does not grant access to every thread; Owner is not automatically a participant. Closed conversations reject replies. Do not describe failed-email retry as part of Messages.
+
+Optionally show Staff Social Inquiries: record assigned inquiry/status, link the already-booked appointment, then show the traceable conversation. Repeating conversion reuses the links. No Facebook/email provider receives these records.
+
+## 7. Owner/Admin: configuration and oversight
+
+Show account/profile synchronization in People & Access and Team: canonical person identity, role/branch, separate account status and operational availability. Branch hours/services and personnel changes use shared validation.
+
+Show Dashboard, Capacity, HMO oversight and Automation Monitor. The monitor presents event/entity/actor/time, successes, warnings and selected failed actions with read-only rule descriptions. A clinical completion can remain valid while an HMO handoff warning needs attention; do not call that whole handoff successful.
+
+Analytics is **partial**. Show existing operational projections and spreadsheet-safe CSV export, but do not claim Today/This Week/This Month filters work. Communication aggregate and capacity export do not consistently honor branch selection. Historical Paid totals are illustrative, not verified revenue reconciliation. These are disclosed in the conflict register, not fixed by this documentation phase.
+
+Owner oversight does not grant Treatment, Prescription, Payment, HMO processing or Message participation. Existing shared administrative booking/admission/queue exceptions are documented; use the Staff surface for the normal demo.
+
+If showing M24/M25, do so last and call them **Proposed Enhancements**. Use the coverage document for defense; it is not a production navigation item.
+
+## Module-defense statements
+
+| Module | Explain its distinct responsibility |
+| --- | --- |
+| M8 | “Record that the Patient has arrived.” |
+| M9 | “Where am I in line?” |
+| M10 | “How long will the line take / can the clinic handle it?” |
+| M12 | “Verify and prepare HMO requirements.” Local preparation is not coverage approval |
+| M13 | “Submit and track the provider's externally received response.” Here the app records external submission/response |
+| M14 | “Follow up and escalate overdue HMO cases.” |
+| M17 / M18 | Two-way human Messages / one-way operational Notifications |
+| M21 | “Analyze what happened.” Current reporting remains partial |
+| M22 | Present that information for Owner oversight |
+| M23 | “Automate what happens next based on predefined workflow events.” |
+
+> Module 23 connects the modules by listening for workflow events and automatically triggering the next required administrative action based on predefined rules.
+
+In this frontend, shared commands implement that coordination; there is no background event server. M23 never determines diagnosis, procedures, medication, Prescription need or Follow-Up need.
+
+## Honest verification statement
+
+The clinic already has digital booking, billing and records; paper prescriptions are an exception. This prototype demonstrates improved coordination and safeguards. At the checkpoint, 260 automated tests, render-smoke and Vite build pass. SSR smoke covers workflow/recovery renders, not real browser clicks, device/accessibility certification or backend security. Production UI/UX and browser QA remain later work. No unknown timing, override or amendment policy is assumed for this demo.

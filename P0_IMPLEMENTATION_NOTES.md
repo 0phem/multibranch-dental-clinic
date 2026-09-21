@@ -1,5 +1,7 @@
 # P0 Frontend Architecture Implementation Notes
 
+> Historical P0 record. Later phases supersede some deferred-feature and build-status statements. The verified implementation through Phase 3.5 is `dac864e`; see [current reconciliation](DOCUMENTATION_RECONCILIATION.md). Original results below are preserved.
+
 **Baseline:** Module Documentation v1.1 + ERD v2  
 **System:** Multi-Branch Dental Clinic Operation System  
 **Status:** P0 data/workflow architecture implemented; P1 UI/UX rebuild remains.

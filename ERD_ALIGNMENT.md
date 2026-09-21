@@ -1,107 +1,72 @@
-# ERD v2 ↔ Frontend P0 Alignment
+# ERD v2 and Current Frontend Alignment
 
-The frontend P0 architecture is aligned to the approved **Multi-Branch Dental Clinic Operation System** ERD v2 and Module Documentation v1.1. Browser/localStorage state is still a prototype; the backend must persist the same relationships with server-side validation, transactions, security, and auditability.
+Reviewed against protected checkpoint `dac864e`, the [Data Dictionary](docs/architecture/ERD_v2_Data_Dictionary.md), and the approved [PNG](docs/architecture/Multi-Branch_Dental_Clinic_Operation_System_ERD.png) / [SVG](docs/architecture/Multi-Branch_Dental_Clinic_Operation_System_ERD.svg). The ERD artifacts are unchanged. This mapping explains frontend representations; it does not replace normalized backend requirements.
 
-## Identity and access
+## Foundation and patient flow
 
-### PERSONS
-`PERSONS` is the canonical identity/contact source. The frontend now keeps structured:
-- first name;
-- optional middle name;
-- last name;
-- email;
-- phone;
-- birth date;
-- sex; and
-- address.
+| Approved concept | Current frontend mapping | Simplification / integrity boundary |
+| --- | --- | --- |
+| PERSONS | `persons`; identity/contact projections | One person identity, display names derived; compatibility projections are not independent keys |
+| USERS | `users` linked by `personId` | Demo account status/permissions; no password authentication server |
+| ROLES / USER_ROLE_ASSIGNMENTS | Role catalog and user permissions/branch; live session checks | Flattened assignment model, not normalized multi-role rows; Owner exceptions documented in reconciliation |
+| STAFF_PROFILES | `staff`, `dentists`, with `personId`/`userId` | M1 creation synchronizes M3; Active account and operational Available remain separate |
+| PATIENTS | `patients` with `personId`, optional `userId` | Patient may exist without portal login; centralized chart, scoped operational access |
+| BRANCHES / BRANCH_OPERATING_HOURS | `branches`, inline `open`/`close` | Canonical branch IDs; full per-weekday hours/holiday exceptions not represented |
+| SERVICES / BRANCH_SERVICES | `services`, `branchServices` | Canonical duration/fee/status and branch availability/optional overrides |
+| STAFF_SCHEDULES | Inline profile shifts and availability | No complete date-specific schedule/exception collection |
+| DENTIST_SERVICE_ASSIGNMENTS | `dentistServiceAssignments` | Shared scheduler and performed-procedure authorization |
+| APPOINTMENTS | `appointments` | Patient, branch, Dentist, service IDs; current validator; revision/retry context; immutable Patient on reschedule |
+| CHECK_IN_RECORDS | `checkIns` | Distinct arrival linked to appointment or walk-in, exact queue and clinic day |
+| DENTIST_QUEUES / QUEUE_ENTRIES | `queue`, with per-Dentist/branch/day `queueId` | Container identity embedded rather than separate queue table; exact appointment/check-in/treatment links |
+| CAPACITY_EVENTS | Derived queue/capacity views and workflow events | No independent persisted aggregate snapshot table; estimates do not replace queue entries |
+| AUDIT_LOGS | `audit` alongside `workflowLog` | Local audit projection (recent audit list capped); not immutable server security evidence |
 
-`USERS`, `PATIENTS`, and `STAFF_PROFILES` link to the same person rather than independently storing another name/contact copy.
+## Clinical and financial
 
-### USERS → STAFF_PROFILES / PATIENTS
-- Owner/Admin creates the account in Module 1.
-- A Dentist/Staff role automatically creates the linked operational profile used by Module 3.
-- A Patient portal account can link/create the patient record.
-- Account state (`Active/Inactive`) and operational availability (`Available/Unavailable`) are intentionally distinct.
+| Approved concept | Current frontend mapping | Simplification / integrity boundary |
+| --- | --- | --- |
+| PATIENT_DOCUMENTS | HMO requirement document metadata; general chart document cards are illustrative | No file bytes, controlled upload service or general document repository |
+| CLINICAL_TEMPLATES | No persisted template catalog | Documentation aid remains an approved concept; no automated diagnosis or clinical choice |
+| TREATMENT_PLANS | `treatments` | Exact `queueEntryId`, Patient, Dentist, branch, optional appointment; draft revisions; immutable completion |
+| TREATMENT_PROCEDURES | `treatment.procedures[]` | Child `id`, `treatmentId`, `serviceId`, quantity, configured unit fee snapshot, amount, notes; multiple lines |
+| PRESCRIPTIONS / PRESCRIPTION_ITEMS | `prescriptions` / `prescription.items[]` | Exact treatment/Patient/Dentist, private draft, explicit authorization identity/time/version; requested tasks are derived before a record exists |
+| TREATMENT_FOLLOW_UPS | `followups` | Explicit clinical decision, source treatment and linked return `appointmentId`; Open/Awaiting Scheduling → Scheduled → Completed |
+| INVOICES / INVOICE_ITEMS | `invoices` / `invoice.items[]` | One normal invoice per completed treatment; each charge links procedure/service; Draft → Review → Issued → Paid |
+| PAYMENTS | `invoice.payment` and linked receipt reference | One completed full payment; exact invoice/Patient/branch/amount, recorder/time and simulation flag; no partial-payment or refund ledger |
 
-## Clinic reference data
+Fees are snapshots of configured fees for the performed work, not a competing editable catalog. A later catalog change does not rewrite completed charges. Review/issuance validates child links/arithmetic and completed encounter evidence. Patient receipt visibility requires supported payment evidence; malformed/historical financial records are retained for scoped review rather than supplied with invented evidence.
 
-### BRANCHES / BRANCH_OPERATING_HOURS
-Branch identity/status and operating hours feed scheduling and capacity rules.
-
-### SERVICES / BRANCH_SERVICES
-Service name, duration, fee, category, and status come from the service catalog. Branch-service assignments determine where a service may be booked.
-
-### STAFF_SCHEDULES / DENTIST_SERVICE_ASSIGNMENTS
-Dentist shift/availability and service capability feed Smart Scheduling. The UI should not hardcode provider eligibility independently from these records.
-
-## Patient flow
-
-### APPOINTMENTS
-Appointments reference patient, branch, dentist, service, date/time, duration, and lifecycle state.
-
-### CHECK_IN_RECORDS → QUEUE_ENTRIES
-Check-In is the admission event. After the scheduled appointment/walk-in is validated and arrival is recorded, the queue entry is created automatically.
-
-### DENTIST_QUEUES / QUEUE_ENTRIES / CAPACITY_EVENTS
-Queue ordering and individual status are distinct from aggregate waiting-time/capacity monitoring. Emergency priority requires authorized action, a reason, and an audit trail in the backend.
-
-## Clinical and billing
-
-### TREATMENT_PLANS / TREATMENT_PROCEDURES
-The Dentist remains the clinical decision-maker. Templates may reduce typing but must not make diagnosis, treatment, prescription, or follow-up decisions.
-
-### PRESCRIPTIONS / PRESCRIPTION_ITEMS
-Prescription content and authorization remain dentist-controlled.
-
-### TREATMENT_FOLLOW_UPS
-The Dentist creates the clinical follow-up requirement; scheduling remains a scheduling workflow.
-
-### INVOICES / INVOICE_ITEMS / PAYMENTS
-Normal billing begins from completed treatment/procedures. The system prepares the draft invoice from configured services/fees; Staff handles review/exceptions and payment posting. Electronic payment must be verified by the future backend/payment provider before the invoice is treated as paid.
+**Known walk-in difference:** the diagram labels `TREATMENT_PLANS.appointment_id` as FK without NULL, while approved Check-In supports walk-ins. Phases 1–3.5 use `appointmentId: null` and an explicit Check-In/Queue encounter for those treatments. This intentional frontend decision is retained, but the logical schema ambiguity requires approval before backend constraints are finalized. Do not invent a scheduled appointment just to satisfy the drawing. See [conflict C2](DOCUMENTATION_RECONCILIATION.md#conflicts-retained-for-review).
 
 ## HMO
 
-`PATIENT_HMO_POLICIES`, `HMO_REQUIREMENT_RULES`, `HMO_CASES`, `HMO_CASE_REQUIREMENTS`, `HMO_CLAIMS`, and `HMO_FOLLOW_UP_TASKS` separate:
-- known patient/policy data;
-- local completeness checks;
-- provider submission/response; and
-- overdue follow-up/escalation.
+| Approved concept | Current frontend mapping | Simplification / integrity boundary |
+| --- | --- | --- |
+| HMO_PROVIDERS | Canonical frontend provider catalog | Illustrative configured providers; no API adapter |
+| PATIENT_HMO_POLICIES | Patient provider/member fields; case membership snapshot | No complete dated policy/eligibility subsystem; membership does not prove coverage |
+| HMO_REQUIREMENT_RULES | Three fixed frontend rules: HMO Card, Valid ID, Dentist treatment request | Broader provider/service-specific ERD rules remain future scope |
+| HMO_CASES / HMO_CASE_REQUIREMENTS | `hmo`, embedded `requirements[]` | Patient/branch/provider and exact appointment/treatment; Missing/Provided/Validated locally; metadata only |
+| HMO_CLAIMS | No separate claims collection | Case submissions/responses are tracking, not adjudicated invoice claims or reimbursement |
+| HMO_FOLLOW_UP_TASKS | Embedded `followUpTasks[]` | Unique case/submission-cycle tasks; contacts, submission history and external response evidence embedded in case |
 
-A locally complete case does **not** equal provider approval.
+Returned → corrected/local validation → Ready → resubmission retains case identity and advances the cycle. Pending/Escalated accepts current-cycle recorded responses; escalation is not a terminal coverage decision. Timestamps drive the documented 12-hour follow-up threshold. Staff records externally handled actions; local completeness never creates provider approval. Modern outcome evidence is checked; legacy historical outcomes are not fabricated into modern response histories.
 
-## Communication
+## Communication, automation and reporting
 
-### CONVERSATIONS / CONVERSATION_MESSAGES
-Two-way patient/staff/dentist communication.
+| Approved concept | Current frontend mapping | Simplification / integrity boundary |
+| --- | --- | --- |
+| SOCIAL_INQUIRIES | `inquiries` | Assigned identity/branch; conversation and booked-appointment links; no external channel transport |
+| CONVERSATIONS / CONVERSATION_MESSAGES | `conversations` with `messages[]` | Explicit `participantUserIds`, assigned identity, sender IDs and participant-specific unread/read state; no broad-role ownership |
+| PATIENT_NOTIFICATIONS | `notifications` | Generalized to identity-targeted Patient, Dentist and Staff operational notifications; event/entity IDs, independent read state and validated action context |
+| SYSTEM_EVENTS / AUTOMATED_ACTIONS | Contextual `workflowLog` events/results; `audit` projection | Combined local ledger, not separate transaction tables or durable event queue; deduplicated command/event keys |
+| WORKFLOW_RULES | Descriptive `automations` catalog plus protected domain commands | Read-only Automation Monitor; no arbitrary critical-rule toggles |
+| M21 / M22 | Read projections of operational collections | No duplicate operational data stores; current reporting limitations remain explicit |
+| M24 / M25 logical entities | Illustrative `loyalty` / `campaigns` and PE views | Proposed Enhancements, not complete normalized referral/ledger/recipient systems |
 
-### PATIENT_NOTIFICATIONS
-System-generated operational notifications. Module 18 is a cross-cutting event-driven service even when the final UI presents it through a global bell/Notification Center rather than a large standalone operations page.
+M23 coordinates administrative handoffs after explicit actions. A completed Treatment closes exact queue/appointment, prepares actual-procedure billing and only the requested Prescription/Follow-Up obligations, then applicable HMO and notifications. A failed HMO handoff leaves valid completed care intact and exposes a warning. Selected failed commands log deduplicated failure results; not every validation rejection creates a monitor record. Rendering/normalization creates no events.
 
-## Workflow automation
+## Legacy and backend boundary
 
-`SYSTEM_EVENTS`, `WORKFLOW_RULES`, and `AUTOMATED_ACTIONS` support Module 23 orchestration. P0 logs/coordinates cross-module actions. The approved P1 UI direction is an **Automation Monitor**, not casual Owner toggling of safety-critical rules.
+Canonical IDs win over display strings. Compatibility normalization can recover known direct links/unambiguous identities and explicit legacy check-in references, but does not guess encounters from Patient + Dentist + day or manufacture modern clinical/payment/provider evidence. Ambiguous recipients and participants confer no access. Saved historical dates never rebase on reload.
 
-## Analytics
-
-Modules 21 and 22 are read/reporting layers over operational records/events; they do not need duplicate transaction tables solely to store dashboard values.
-
-## Frontend P0 mapping
-
-| ERD concept | P0 frontend source/use |
-|---|---|
-| `PERSONS` | `state.persons`; identity hydration for patient/user/staff/dentist UI |
-| `USERS` | account creation/status/RBAC prototype |
-| `STAFF_PROFILES` | staff/dentist operational profile state |
-| `SERVICES` | `state.services` canonical catalog |
-| `BRANCH_SERVICES` | branch service configuration + booking validation |
-| `DENTIST_SERVICE_ASSIGNMENTS` | provider capability validation |
-| `APPOINTMENTS` | booking/reschedule/cancel state |
-| `CHECK_IN_RECORDS` / `QUEUE_ENTRIES` | arrival + queue handoff concept |
-| Treatment tables | Dentist treatment workflow and completion orchestration |
-| Invoice/payment tables | treatment-driven draft invoice → issue → payment → receipt |
-| HMO tables | state-driven verification/submission/follow-up/response concept |
-| Notification tables | event-generated patient notifications |
-| Workflow tables | rule/event/action activity state |
-
-## Backend rule
-The backend should implement these normalized relationships as authoritative server-side rules. Do not reintroduce duplicated identity fields or screen-specific copies of service fees, availability, payment state, HMO approval state, or clinical decisions.
+These embedded structures preserve conceptual relationships without claiming every normalized ERD table exists in browser state. The backend must enforce foreign keys, branch/role scope, uniqueness, idempotency, versions and atomic updates independently. Real electronic payments require server/provider verification; current explicitly simulated Card/Electronic records do not satisfy that future integration requirement. Policy gaps and remaining differences are centrally recorded in [Documentation Reconciliation](DOCUMENTATION_RECONCILIATION.md).

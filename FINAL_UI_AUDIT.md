@@ -1,5 +1,7 @@
 # Approved Frontend Rebuild Audit — Current Status
 
+> Historical pre-Phase-1 rebuild audit. Its “Current Status” and P1/P2 remaining-work statements describe that earlier checkpoint, not the implementation through Phase 3.5. See [Documentation Reconciliation](DOCUMENTATION_RECONCILIATION.md) for current status; the original audit is preserved.
+
 The team-approved audit is the basis of the frontend rebuild. **P0 architecture is implemented; P1/P2 UI/UX work remains.**
 
 ## Locked decisions

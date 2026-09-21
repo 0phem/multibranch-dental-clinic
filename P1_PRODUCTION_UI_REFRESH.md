@@ -1,5 +1,7 @@
 # P1 Production UI Refresh
 
+> Historical UI-refresh record, not a claim of current production readiness or completed Phase 4. Later workflow safeguards and current frontend limits are described in [Documentation Reconciliation](DOCUMENTATION_RECONCILIATION.md).
+
 This frontend revision focuses on production-grade presentation while preserving the approved ERD v2 / module workflow logic.
 
 ## Major UI changes
