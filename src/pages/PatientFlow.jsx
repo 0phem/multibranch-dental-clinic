@@ -9,7 +9,7 @@ export function CheckInPage({ store }) {
   const { state, actions, toast }=store
   const session=store.session||sessionForRole('staff',state)
   const [mode,setMode]=useState('scheduled')
-  const eligible=state.appointments.filter(a=>inScope(a,session)&&a.date===clinicDate()&&['Confirmed','Pending'].includes(a.status)&&!state.checkIns.some(c=>c.appointmentId===a.id)&&!state.queue.some(q=>q.appointmentId===a.id))
+  const eligible=state.appointments.filter(a=>inScope(a,session,state)&&a.date===clinicDate()&&['Confirmed','Pending'].includes(a.status)&&!state.checkIns.some(c=>c.appointmentId===a.id)&&!state.queue.some(q=>q.appointmentId===a.id))
   const [appointmentId,setAppointmentId]=useState('')
   const [walkIn,setWalkIn]=useState({patientId:'',branchId:session.branchId||'',dentistId:'',serviceId:''})
   const walkCommand=useRef(uid('walkin'))
@@ -20,7 +20,7 @@ export function CheckInPage({ store }) {
     setAdmitted(false);walkCommand.current=uid('walkin')
     setWalkIn(previous=>({...previous,[key]:value,...(key==='branchId'?{serviceId:'',dentistId:''}:key==='serviceId'?{dentistId:''}:{})}))
   }
-  const selectedAppointment=eligible.find(a=>a.id===appointmentId)||(!appointmentId?eligible[0]:null)
+  const selectedAppointment=eligible.find(a=>a.id===appointmentId)
   const checkScheduled=()=>{
     if(!selectedAppointment)return
     const result=actions.checkInAppointment(selectedAppointment.id)
@@ -58,7 +58,7 @@ export function QueuePage({ role, activeBranch, store, setPage }) {
   const [statusFilter,setStatusFilter]=useState('Active')
   const active=isActiveQueue
   const visible=state.queue.filter(q=>{
-    if(!inScope(q,session)||!isTodayQueue(q))return false
+    if(!inScope(q,session,state)||!isTodayQueue(q))return false
     if(role==='owner'&&activeBranch!=='All Branches'&&q.branch!==activeBranch)return false
     if(role==='staff'&&dentistFilter!=='All Dentists'&&q.dentistId!==dentistFilter)return false
     if(statusFilter==='Active'&&!active(q))return false

@@ -35,3 +35,10 @@ export function rebaseDemoRecords(records, today=clinicDate()) {
   }
   return visit(records)
 }
+
+export function clinicDateAt(timestamp) {
+  const instant=new Date(timestamp)
+  if(!Number.isFinite(instant.getTime()))return null
+  const parts=Object.fromEntries(new Intl.DateTimeFormat('en-CA',{timeZone:CLINIC_TIME_ZONE,year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(instant).map(p=>[p.type,p.value]))
+  return `${parts.year}-${parts.month}-${parts.day}`
+}

@@ -1,3 +1,4 @@
+import { validTime, isRecord } from './safeguards.js'
 import { SERVICES } from './data.js'
 import { clinicNow, clinicDate, validDate } from './clock.js'
 import { TERMINAL, isTodayQueue, isWaitingQueue } from './contracts.js'
@@ -10,6 +11,7 @@ export const dentistName = (dentistId, dentists) => dentists.find(d=>d.id===dent
 export const serviceInfo = (idOrName, services=SERVICES) => services.find(s=>s.id===idOrName||s.name===idOrName) || { id:null, name:idOrName||'Unknown service', duration:30, baseFee:0, category:'General Dentistry', status:'Active' }
 
 export function toMinutes(value='00:00') {
+  if (typeof value!=='string') return NaN
   if (!value) return 0
   if (/^\d{2}:\d{2}$/.test(value)) {
     const [h,m]=value.split(':').map(Number); return h*60+m
@@ -57,6 +59,7 @@ export function overlap(startA, durationA, startB, durationB) {
 }
 
 export function validateAppointment(form, state, ignoreId=null, now=clinicNow(), suggest=true) {
+  form=isRecord(form)?form:{}
   const branch=state.branches.find(b=>form.branchId?b.id===form.branchId:b.name===form.branch)
   const dentist=state.dentists.find(d=>d.id===form.dentistId)
   const service=state.services.find(s=>s.id===form.serviceId)
@@ -74,12 +77,12 @@ export function validateAppointment(form, state, ignoreId=null, now=clinicNow(),
   check('dentist-branch','Dentist assigned to branch',dentist?.branchIds?.includes(branch?.id) || (!dentist?.branchIds&&dentist?.branches?.includes(branch?.name)))
   check('dentist-service','Dentist can perform selected service',state.dentistServiceAssignments.some(a=>a.dentistId===dentist?.id&&a.serviceId===service?.id&&a.isAuthorized!==false))
   const account=state.users?.find(u=>u.id===dentist?.userId)
-  check('dentist-active','Dentist currently available',dentist?.available&&(!account||(account.accountStatus||account.status)==='Active'))
+  check('dentist-active','Dentist currently available',dentist?.available&&account&&(account.accountStatus||account.status)==='Active')
   check('date','Date is not in the past',validDate(form.date)&&form.date>=now.date)
-  check('time','Valid future start time',/^([01]\d|2[0-3]):[0-5]\d$/.test(form.start||'')&&(form.date!==now.date||form.start>now.time))
+  check('time','Valid future start time',validTime(form.start)&&(form.date!==now.date||form.start>now.time))
   check('duration','Valid service duration',Number.isFinite(duration)&&duration>0)
-  check('branch-hours','Within branch operating hours',branch&&start>=toMinutes(branch.open)&&end<=toMinutes(branch.close))
-  check('dentist-shift','Within dentist shift',dentist&&start>=toMinutes(dentist.shiftStart)&&end<=toMinutes(dentist.shiftEnd))
+  check('branch-hours','Within branch operating hours',branch&&validTime(branch.open)&&validTime(branch.close)&&start>=toMinutes(branch.open)&&end<=toMinutes(branch.close))
+  check('dentist-shift','Within dentist shift',dentist&&validTime(dentist.shiftStart)&&validTime(dentist.shiftEnd)&&start>=toMinutes(dentist.shiftStart)&&end<=toMinutes(dentist.shiftEnd))
   const overlaps=state.appointments.filter(a=>a.id!==ignoreId&&!TERMINAL.includes(a.status)&&a.date===form.date&&overlap(form.start,duration,a.start,a.duration))
   const conflict=overlaps.find(a=>a.dentistId===form.dentistId)
   check('overlap','No overlapping dentist appointment',!conflict)
@@ -152,10 +155,16 @@ export function nextAppointment(patientId, appointments) {
   return appointments.filter(a=>a.patientId===patientId && !TERMINAL.includes(a.status) && `${a.date} ${a.start}`>=clinicNow().label).sort((a,b)=>`${a.date}${a.start}`.localeCompare(`${b.date}${b.start}`))[0]
 }
 
+export function csvCell(value) {
+  const text=String(value??'')
+  const safe=/^[\s]*[=+@-]/.test(text)?`'${text}`:text
+  return `"${safe.replaceAll('"','""')}"`
+}
+
 export function makeCsv(filename, rows) {
   if (!rows?.length) return
   const keys=Object.keys(rows[0])
-  const esc=v=>`"${String(v??'').replaceAll('"','""')}"`
+  const esc=csvCell
   const text=[keys.map(esc).join(','),...rows.map(r=>keys.map(k=>esc(r[k])).join(','))].join('\n')
   const blob=new Blob([text],{type:'text/csv;charset=utf-8'})
   const url=URL.createObjectURL(blob)

@@ -165,3 +165,34 @@ assert.ok(render('hmo','patient',{hmoCaseId:hmoCase.id}).includes('Provider Appr
 assert.ok(render('messages','patient',{conversationId:conversation.id}).includes('Phase Three clinic reply'))
 delete globalThis.localStorage
 console.log('PASS: persisted ID-only records reload and render across appointments, queue, schedule, chart, dashboards')
+
+// Phase 3.5: invalid/current-state recovery surfaces, without changing fixtures on disk.
+const recoveryBase=store.state
+const recoveryFollow=recoveryBase.followups.find(f=>f.id===followup.id)
+store={...store,state:m.normalizeClinicState({...recoveryBase,
+  appointments:recoveryBase.appointments.map(a=>a.id===recoveryFollow.appointmentId?{...a,status:'Cancelled'}:a),
+  conversations:recoveryBase.conversations.map(c=>c.id===conversation.id?{...c,status:'Closed'}:c),
+})}
+assert.ok(render('appointments','staff').includes('Cancelled'))
+assert.ok(render('followups','staff').includes('Schedule follow-up'))
+assert.ok(render('billing','patient').includes(payment.receipt))
+assert.ok(render('messages','patient',{conversationId:conversation.id}).includes('Closed'))
+assert.ok(!render('treatment','dentist',{queueEntryId:'missing'}).includes('Save Treatment Progress'))
+const stalePanel=renderToString(React.createElement(m.NotificationPanel,{role:'patient',store:{...store,session:m.sessionForRole('patient',store.state),state:{...store.state,notifications:[{id:'stale',recipientUserId:'u12',patientId:'p1',title:'Old update',body:'Review availability',entityType:'invoice',entityId:'missing',action:{page:'billing'}}]}},setPage:()=>{},onClose:()=>{}}))
+assert.ok(stalePanel.includes('Old update'));assert.ok(!stalePanel.includes('View update'))
+store={...store,state:{...store.state,queue:[]}}
+assert.ok(render('queue','patient').includes('No active queue entry'))
+store={...store,state:{...store.state,users:store.state.users.map(u=>u.id==='u12'?{...u,accountStatus:'Inactive'}:u)}}
+assert.ok(!render('billing','patient').includes(payment.receipt))
+store={...store,state:recoveryBase}
+console.log('PASS: Phase 3.5 cancelled appointment/follow-up recovery, paid receipt, closed conversation, invalid encounter, stale notification, empty queue and inactive-account privacy')
+store={...store,state:{...recoveryBase,patients:[]}}
+assert.ok(render('patients','staff').includes('New Patient'))
+store={...store,state:recoveryBase}
+console.log('PASS: empty patient registry retains the Staff registration recovery action')
+assert.ok(render('checkin','staff').includes('Select an appointment to check the patient in.'))
+assert.doesNotMatch(render('checkin','staff'),/Confirm arrival<\/button>/)
+store={...store,state:{...recoveryBase,hmo:recoveryBase.hmo.map(h=>h.id===hmoCase.id?{...h,contacts:{malformed:true}}:h)}}
+assert.ok(render('hmo','staff',{hmoCaseId:hmoCase.id}).includes('need clinic review'))
+store={...store,state:recoveryBase}
+console.log('PASS: explicit arrival selection and malformed HMO tracking recovery render')

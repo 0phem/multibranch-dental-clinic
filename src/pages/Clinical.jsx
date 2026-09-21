@@ -5,7 +5,7 @@ import { dateLabel, dentistName, displayTime, patientName } from '../logic.js'
 import { AppointmentForm } from './Scheduling.jsx'
 
 import { visibleHmo, HMO_PROVIDERS } from '../phase3-contracts.js'
-import { visiblePrescriptions, prescriptionTasks, linkedTreatment } from '../phase2.js'
+import { visiblePrescriptions, prescriptionTasks, linkedTreatment, followupDisplayState } from '../phase2.js'
 import { inScope, isTodayQueue, patientInScope, sessionForRole } from '../contracts.js'
 
 export function PatientsPage({ role, store, context, setPage }) {
@@ -15,13 +15,14 @@ export function PatientsPage({ role, store, context, setPage }) {
   const [selected,setSelected]=useState(context?.patientId||availablePatients[0]?.id||'')
   React.useEffect(()=>{if(context?.patientId)setSelected(context.patientId)},[context?.patientId])
   const [tab,setTab]=useState('summary')
+  const [search,setSearch]=useState('')
   const [newOpen,setNewOpen]=useState(false)
   const [newPatient,setNewPatient]=useState({firstName:'',middleName:'',lastName:'',dob:'',sex:'Female',phone:'',email:'',address:'',preferredBranch:'Branch A',hmo:'None',hmoMember:'—',allergies:'None',medicalHistory:'',dentalHistory:'',emergencyContact:'',consent:false,createPortalAccount:false})
   const patient=availablePatients.find(p=>p.id===selected)
-  const visits=state.appointments.filter(a=>a.patientId===selected&&inScope(a,session)).sort((a,b)=>`${b.date}${b.start}`.localeCompare(`${a.date}${a.start}`))
+  const visits=state.appointments.filter(a=>a.patientId===selected&&inScope(a,session,state)).sort((a,b)=>`${b.date}${b.start}`.localeCompare(`${a.date}${a.start}`))
   const treatments=state.treatments.filter(t=>t.patientId===selected).sort((a,b)=>b.date.localeCompare(a.date))
-  const hmo=state.hmo.filter(h=>h.patientId===selected)
-  const encounter=state.queue.find(q=>q.id===context?.queueEntryId&&q.patientId===selected&&inScope(q,session)&&isTodayQueue(q))
+  const hmo=visibleHmo(state,session).filter(h=>h.patientId===selected)
+  const encounter=state.queue.find(q=>q.id===context?.queueEntryId&&q.patientId===selected&&inScope(q,session,state)&&isTodayQueue(q))
   const saveRecord=({person,patient:patientPatch})=>{
     const result=actions.updatePatientRecord(selected,{person,patient:patientPatch})
     if(!result.ok)return toast(result.message,'warning')
@@ -40,22 +41,21 @@ export function PatientsPage({ role, store, context, setPage }) {
     setSelected(result.record.id);setNewOpen(false)
     setNewPatient({firstName:'',middleName:'',lastName:'',dob:'',sex:'Female',phone:'',email:'',address:'',preferredBranch:'Branch A',hmo:'None',hmoMember:'—',allergies:'None',medicalHistory:'',dentalHistory:'',emergencyContact:'',consent:false,createPortalAccount:false})
   }
-  if (!patient) return <Notice>The selected patient is unavailable in your current scope.</Notice>
   const tabs=[{key:'summary',label:'Summary'},{key:'visits',label:'Visit history',count:visits.length},{key:'clinical',label:'Clinical',count:treatments.length},{key:'hmo',label:'HMO',count:hmo.length},{key:'documents',label:'Documents'}]
   return <>
     <PageHeader title="Centralized Patient Records" text="PERSONS is the single source of identity/contact data. Staff may maintain approved demographics; dentists see those fields read-only and edit only clinical information." modules={[4]} aside={role==='dentist'&&encounter&&['Called','Treatment Ready','In Treatment'].includes(encounter.status)?<Button onClick={()=>setPage('treatment',context)}>{encounter.treatmentId?'Continue Treatment':'Open Treatment'}</Button>:null}/>
-    <div className="records-layout">
-      <Card className="patient-list" title="Patients" actions={role==='staff'?<Button size="sm" onClick={()=>setNewOpen(true)}>New Patient</Button>:null}><input className="search-input" placeholder="Search patient..."/><div className="patient-list-scroll">{availablePatients.map(p=><button key={p.id} className={selected===p.id?'selected':''} onClick={()=>{setSelected(p.id);setTab('summary')}}><span className="avatar">{p.name.split(' ').map(x=>x[0]).slice(0,2).join('')}</span><div><b>{p.name}</b><small>{p.patientCode||p.id} • {p.preferredBranch} • {p.hmo}</small></div></button>)}</div></Card>
+    {!patient?<Notice>The selected patient is unavailable in your current scope. {availablePatients.length>0&&<Button onClick={()=>setSelected(availablePatients[0].id)}>Open an available patient</Button>}{role==='staff'&&<Button onClick={()=>setNewOpen(true)}>New Patient</Button>}</Notice>:<div className="records-layout">
+      <Card className="patient-list" title="Patients" actions={role==='staff'?<Button size="sm" onClick={()=>setNewOpen(true)}>New Patient</Button>:null}><input className="search-input" aria-label="Search patients" placeholder="Search patient..." value={search} onChange={e=>setSearch(e.target.value)}/><div className="patient-list-scroll">{availablePatients.filter(p=>`${p.name} ${p.patientCode||''}`.toLowerCase().includes(search.trim().toLowerCase())).map(p=><button key={p.id} className={selected===p.id?'selected':''} onClick={()=>{setSelected(p.id);setTab('summary')}}><span className="avatar">{p.name.split(' ').map(x=>x[0]).slice(0,2).join('')}</span><div><b>{p.name}</b><small>{p.patientCode||p.id} • {p.preferredBranch} • {p.hmo}</small></div></button>)}</div></Card>
       <div>
         <Card className="patient-header-card"><div className="patient-record-head"><div className="avatar xl">{patient.name.split(' ').map(x=>x[0]).slice(0,2).join('')}</div><div><h2>{patient.name}</h2><p>{patient.patientCode||patient.id} • {patient.dob||'DOB not set'} • {patient.sex||'—'} • {patient.preferredBranch}</p><div className="chip-row"><span className="mini-chip">HMO: {patient.hmo}</span><span className="mini-chip">Allergies: {patient.allergies}</span>{patient.consent&&<span className="mini-chip success">Consent on file</span>}</div></div></div></Card>
         <Tabs tabs={tabs} active={tab} onChange={setTab}/>
-        {tab==='summary'&&<SummaryTab patient={patient} role={role} onSave={saveRecord}/>} 
+        {tab==='summary'&&<SummaryTab key={patient.id} patient={patient} role={role} onSave={saveRecord}/>}
         {tab==='visits'&&<Card title="Cross-branch visit history"><Table rows={visits} columns={[{key:'date',label:'Date',render:a=>dateLabel(a.date)},{key:'branch',label:'Branch'},{key:'service',label:'Service'},{key:'dentist',label:'Dentist',render:a=>dentistName(a.dentistId,state.dentists)},{key:'status',label:'Status',render:a=><Status>{a.status}</Status>}]} /></Card>}
         {tab==='clinical'&&<Card title="Treatment history" subtitle={role==='dentist'?'Dentist-authorized clinical view':'Staff read-only clinical summary'}>{treatments.length?treatments.map(t=><div className="clinical-history" key={t.id}><div><b>{dateLabel(t.date)} • {t.procedure||t.plan}</b><p>{t.notes}</p><small>{dentistName(t.dentistId,state.dentists)} • {t.status}</small></div><Status>{t.status}</Status></div>):<Notice>No treatment history recorded.</Notice>}</Card>}
         {tab==='hmo'&&<Card title="HMO record"><Table rows={hmo} columns={[{key:'provider',label:'Provider'},{key:'memberId',label:'Member ID'},{key:'treatment',label:'Requested treatment'},{key:'eligibility',label:'Eligibility',render:h=><Status>{h.eligibility}</Status>},{key:'status',label:'Status',render:h=><Status>{h.status}</Status>}]} /></Card>}
         {tab==='documents'&&<Card title="Visit documents"><Notice tone="info">Document upload/storage is represented in the UI only. A backend will store file metadata and protected object-storage references linked to this patient.</Notice><div className="document-grid"><div><span>PDF</span><b>Consent Form</b><small>Verified • 2026-09-12</small></div><div><span>IMG</span><b>Visit Attachment</b><small>Branch A • 2026-09-12</small></div></div></Card>}
       </div>
-    </div>
+    </div>}
     <Modal open={newOpen} onClose={()=>setNewOpen(false)} title="Create patient record" subtitle="Identity/contact fields create one PERSON record; PATIENTS stores only patient-specific information." wide><div className="form-grid">
       <Field label="First name" required><input value={newPatient.firstName} onChange={e=>setNewPatient({...newPatient,firstName:e.target.value})}/></Field>
       <Field label="Middle name" hint="Optional"><input value={newPatient.middleName} onChange={e=>setNewPatient({...newPatient,middleName:e.target.value})}/></Field>
@@ -111,9 +111,10 @@ function SummaryTab({ patient, role, onSave }) {
 export function TreatmentPage({ store, context, setPage }) {
   const { state, actions, toast }=store
   const session=store.session||sessionForRole('dentist',state)
-  const queueEntry=state.queue.find(q=>q.id===context?.queueEntryId&&inScope(q,session)&&isTodayQueue(q))
+  const queueEntry=state.queue.find(q=>q.id===context?.queueEntryId&&inScope(q,session,state)&&isTodayQueue(q))
   const selected=queueEntry?.patientId||''
-  const current=queueEntry?.treatmentId?state.treatments.find(t=>t.id===queueEntry.treatmentId&&t.queueEntryId===queueEntry.id):state.treatments.find(t=>t.queueEntryId===queueEntry?.id)
+  const linked=queueEntry?.treatmentId?state.treatments.find(t=>t.id===queueEntry.treatmentId&&t.queueEntryId===queueEntry.id):state.treatments.find(t=>t.queueEntryId===queueEntry?.id)
+  const current=linked&&queueEntry&&['patientId','dentistId','branchId','appointmentId'].every(k=>(linked[k]??null)===(queueEntry[k]??null))?linked:null
   const dentist=state.dentists.find(d=>d.id===session.dentistId)
   const emptyForm={complaint:'',plan:'',procedure:'',notes:'',assistant:dentist?.assistant||'Unassigned',assistantStaffId:dentist?.assistantStaffId||null,serviceId:queueEntry?.serviceId||'',procedures:[],followupRequired:false,prescriptionRequired:false,followupDate:'',followupInterval:''}
   const [form,setForm]=useState(current?{...current,procedures:(Array.isArray(current.procedures)?current.procedures.filter(Boolean):null)||[{serviceId:current.serviceId,quantity:1,notes:current.procedure||''}]}:emptyForm)
@@ -124,7 +125,7 @@ export function TreatmentPage({ store, context, setPage }) {
     const result=actions.saveTreatment({...form,id:current?.id,queueEntryId:queueEntry.id},status)
     if(!result.ok)return toast(result.message,'warning')
     setForm(result.record)
-    toast(status==='Completed'?'Treatment completed; this encounter is closed and downstream tasks prepared.':'Treatment progress saved.','success')
+    toast(result.warnings?.length?`Treatment completed. Clinic review needed: ${result.warnings.join(' ')}`:status==='Completed'?'Treatment completed; this encounter is closed and downstream tasks prepared.':'Treatment progress saved.',result.warnings?.length?'warning':'success')
   }
   return <>
     <PageHeader title="Treatment & Clinical Workflow" text="Treatment opens from the logged-in dentist’s active queue. Patient, appointment, dentist, branch, and service context are loaded automatically; clinical judgment remains with the dentist." modules={[5,11,19,20,23]}/>
@@ -194,7 +195,7 @@ export function PrescriptionsPage({ role, store }) {
 export function FollowupsPage({ role, store }) {
   const { state, toast }=store
   const session=store.session||sessionForRole(role,state)
-  const visible=state.followups.filter(f=>inScope(f,session)&&(role!=='patient'||linkedTreatment(state,f)))
+  const visible=state.followups.filter(f=>inScope(f,session,state)&&(role!=='patient'||linkedTreatment(state,f)))
   const [booking,setBooking]=useState(null)
   const prefill=booking?{patientId:booking.patientId,branchId:booking.branchId,dentistId:booking.dentistId,date:booking.recommendedDate,service:'Follow-Up',source:'Follow-Up Task',notes:booking.reason}:{}
   return <>
@@ -202,7 +203,8 @@ export function FollowupsPage({ role, store }) {
     {role==='dentist'&&<Notice>Record the clinical follow-up requirement in the exact treatment encounter.</Notice>}
     <Card title="Follow-up tasks">{!visible.length&&<Notice>No follow-up requirements.</Notice>}{visible.map(f=>{
       const appointment=state.appointments.find(a=>a.id===f.appointmentId)
-      return <div className="clinical-history" key={f.id}><div><b>{patientName(f.patientId,state.patients)} • {f.reason}</b><p>{dateLabel(f.recommendedDate)} {f.interval} • {dentistName(f.dentistId,state.dentists)}</p>{!linkedTreatment(state,f)&&<p>Care record needs clinic review before scheduling.</p>}<small>{appointment?`${dateLabel(appointment.date)} • ${displayTime(appointment.start)}`:'Awaiting scheduling'}</small></div><Status>{f.status==='Open'?'Awaiting Scheduling':f.status}</Status>{f.status==='Open'&&linkedTreatment(state,f)&&['staff','patient'].includes(role)&&<Button size="sm" onClick={()=>setBooking(f)}>Schedule follow-up</Button>}</div>
+      const effectiveStatus=followupDisplayState(state,f)
+      return <div className="clinical-history" key={f.id}><div><b>{patientName(f.patientId,state.patients)} • {f.reason}</b><p>{dateLabel(f.recommendedDate)} {f.interval} • {dentistName(f.dentistId,state.dentists)}</p>{!linkedTreatment(state,f)&&<p>Care record needs clinic review before scheduling.</p>}<small>{appointment?`${dateLabel(appointment.date)} • ${displayTime(appointment.start)}`:'Awaiting scheduling'}</small></div><Status>{effectiveStatus==='Open'?'Awaiting Scheduling':effectiveStatus}</Status>{effectiveStatus==='Open'&&linkedTreatment(state,f)&&['staff','patient'].includes(role)&&<Button size="sm" onClick={()=>setBooking(f)}>Schedule follow-up</Button>}</div>
     })}</Card>
     <Modal open={!!booking} onClose={()=>setBooking(null)} title="Schedule required follow-up" wide>{booking&&<AppointmentForm role={role} store={store} prefill={prefill} followupId={booking.id} onSaved={()=>{setBooking(null);toast('Follow-up appointment scheduled.','success')}} submitLabel="Validate & Schedule Follow-Up"/>}</Modal>
   </>

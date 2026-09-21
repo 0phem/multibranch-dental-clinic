@@ -1,3 +1,4 @@
+import { validSession } from './safeguards.js'
 import { normalizePhase3 } from './phase3-contracts.js'
 import { INITIAL_BRANCHES, ROLE_INFO } from './data.js'
 import { clinicDate } from './clock.js'
@@ -14,17 +15,19 @@ export function sessionForRole(role, state) {
   const info=ROLE_INFO[role]
   if (!info) return null
   const user=state.users.find(u=>u.id===info.userId)
-  return {...info,role,branchId:user?.branchId||info.branchId||null,active:!!user&&(user.accountStatus||user.status)==='Active'}
+  const session={...info,role,branchId:user?.branchId??null,active:!!user&&(user.accountStatus||user.status)==='Active'}
+  return {...session,active:validSession(state,session)}
 }
-export function inScope(record, session) {
+export function inScope(record, session, state=null) {
+  if(state&&!validSession(state,session))return false
   if (!session?.active || !record) return false
   if (session.role==='owner') return !session.scopeBranchId || record.branchId===session.scopeBranchId
   if (session.role==='patient') return record.patientId===session.patientId
-  if (session.role==='dentist') return record.dentistId===session.dentistId
+  if (session.role==='dentist') return record.dentistId===session.dentistId&&(!state||state.dentists.find(d=>d.id===session.dentistId)?.branchIds?.includes(record.branchId))
   return session.role==='staff' && !!session.branchId && record.branchId===session.branchId
 }
 export function patientInScope(patient, state, session) {
-  if (!session?.active) return false
+  if (!validSession(state,session)||!patient) return false
   if (session.role==='patient') return patient.id===session.patientId
   if (session.role==='owner') return true
   if (session.role==='staff' && patient.preferredBranchId===session.branchId) return true

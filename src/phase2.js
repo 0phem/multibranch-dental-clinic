@@ -1,8 +1,10 @@
+import { validSession, permitted, completedEncounter, paymentConsistent, isRecord } from './safeguards.js'
 import { inScope } from './contracts.js'
 import { uid } from './logic.js'
 
 const fail=message=>({ok:false,message})
 const clean=value=>String(value??'').trim()
+const numericInput=value=>typeof value==='number'||typeof value==='string'&&!!value.trim()
 export const money=value=>Math.round(Number(value)*100)/100
 export function linkedTreatment(state, record) {
   const treatment=state.treatments.find(t=>t.id===record?.treatmentId)
@@ -10,13 +12,16 @@ export function linkedTreatment(state, record) {
     record.patientId===treatment.patientId && ['dentistId','branchId'].every(k=>record[k]==null||record[k]===treatment[k]) ? treatment : null
 }
 export function visiblePrescriptions(state, session) {
-  return state.prescriptions.filter(r=>inScope(r,session)&&linkedTreatment(state,r)&&(session.role==='dentist'||session.role==='patient'&&r.status==='Authorized'))
+  if(!validSession(state,session)||session.role==='dentist'&&!permitted(state,session,'prescriptions'))return []
+  return state.prescriptions.filter(r=>inScope(r,session,state)&&linkedTreatment(state,r)&&(!Array.isArray(r.items)||completedEncounter(state,linkedTreatment(state,r))&&r.items.every(i=>i&&i.prescriptionId===r.id)&& (r.status!=='Authorized'||r.authorizedBy===state.dentists.find(d=>d.id===r.dentistId)?.userId))&&(session.role==='dentist'||session.role==='patient'&&r.status==='Authorized'))
 }
 export function visibleInvoices(state, session) {
-  return state.invoices.filter(i=>inScope(i,session)&&(['staff','owner'].includes(session.role)||session.role==='patient'&&linkedTreatment(state,i)&&['Issued','Open','Paid'].includes(i.status)&&(!i.payment||i.payment.invoiceId===i.id&&i.payment.patientId===i.patientId&&i.payment.receipt===i.receipt)))
+  if(!validSession(state,session)||session.role==='staff'&&!permitted(state,session,'billing'))return []
+  return state.invoices.filter(i=>inScope(i,session,state)&&(['staff','owner'].includes(session.role)||session.role==='patient'&&linkedTreatment(state,i)&&['Issued','Open','Paid'].includes(i.status)&&paymentConsistent(i)))
 }
 export function prescriptionTasks(state, session) {
-  return state.treatments.filter(t=>session?.role==='dentist'&&inScope(t,session)&&t.status==='Completed'&&t.prescriptionRequired===true&&!state.prescriptions.some(r=>r.treatmentId===t.id&&r.status==='Authorized'))
+  if(!permitted(state,session,'prescriptions'))return []
+  return state.treatments.filter(t=>session?.role==='dentist'&&inScope(t,session,state)&&t.status==='Completed'&&t.prescriptionRequired===true&&!state.prescriptions.some(r=>r.treatmentId===t.id&&r.status==='Authorized'))
 }
 
 // Embedded child rows retain canonical foreign keys, while fees are encounter snapshots.
@@ -26,13 +31,13 @@ export function procedureLines(state, entry, treatmentId, input, current) {
   if(!Array.isArray(source))return fail('Enter valid performed procedures.')
   const lines=[]
   for(const [index,row] of source.entries()){
-    if(!row||row.treatmentId&&row.treatmentId!==treatmentId)return fail('Procedure belongs to another treatment.')
+    if(!isRecord(row)||row.treatmentId&&row.treatmentId!==treatmentId)return fail('Procedure belongs to another treatment.')
     const service=state.services.find(s=>s.id===row.serviceId&&s.status==='Active')
     const assignment=state.branchServices.find(b=>b.branchId===entry.branchId&&b.serviceId===row.serviceId&&b.active!==false)
     const configuredFee=assignment?.feeOverride??service?.baseFee
     const quantity=Number(row.quantity), unitFee=Number(configuredFee)
     if(!service||!assignment||!state.dentistServiceAssignments.some(a=>a.dentistId===entry.dentistId&&a.serviceId===row.serviceId&&a.isAuthorized!==false))return fail('Select an authorized performed procedure for this branch.')
-    if(configuredFee==null||configuredFee===''||!Number.isSafeInteger(quantity)||quantity<=0||!Number.isFinite(unitFee)||unitFee<0||!Number.isSafeInteger(Math.round(unitFee*100)*quantity))return fail('Procedure quantity and configured fee must be valid.')
+    if(!numericInput(row.quantity)||!numericInput(configuredFee)||configuredFee==null||typeof configuredFee==='boolean'||typeof configuredFee==='string'&&!configuredFee.trim()||!Number.isSafeInteger(quantity)||quantity<=0||!Number.isFinite(unitFee)||unitFee<0||!Number.isSafeInteger(Math.round(unitFee*100)*quantity))return fail('Procedure quantity and configured fee must be valid.')
     lines.push({id:`${treatmentId}-procedure-${index+1}`,treatmentId,serviceId:service.id,quantity,unitFee:money(unitFee),amount:money(money(unitFee)*quantity),notes:clean(row.notes)})
   }
   if(!Number.isSafeInteger(lines.reduce((sum,p)=>sum+Math.round(p.amount*100),0)))return fail('Procedure total exceeds the supported amount.')
@@ -61,8 +66,8 @@ export function validInvoice(state, invoice) {
 export function phase2Actions(run) {
   const invoiceCommand=transition=>run(({state,session,now,event,notify},id,method,amount)=>{
     const invoice=state.invoices.find(i=>i.id===id)
-    if(session.role!=='staff'||!invoice||!inScope(invoice,session))return fail('Only assigned Staff may operate this invoice.')
-    if(!validInvoice(state,invoice))return fail('Invoice and completed procedure links need review before financial processing.')
+    if(session.role!=='staff'||!invoice||!inScope(invoice,session,state))return fail('Only assigned Staff may operate this invoice.')
+    if(!validInvoice(state,invoice)||!paymentConsistent(invoice))return fail('Invoice and completed procedure links need review before financial processing.')
     let record={...invoice}
     if(transition==='review'){
       if(invoice.status==='Review')return {ok:true,unchanged:true,record:invoice}
@@ -75,7 +80,7 @@ export function phase2Actions(run) {
       record={...record,status:'Issued',issuedAt:now.timestamp,issuedBy:session.userId}
       notify(`issued:${id}`,invoice.patientId,'Bill Available',`Your bill ${invoice.invoiceNo} is ready for payment.`)
     }else{
-      if(!['Cash','Card','Electronic'].includes(method)||!Number.isFinite(Number(amount))||Number(amount)<=0||money(amount)!==Number(amount)||Number(amount)!==invoice.total)return fail('Record the exact full invoice amount using Cash or Card / Electronic.')
+      if(!numericInput(amount)||!['Cash','Card','Electronic'].includes(method)||!Number.isFinite(Number(amount))||Number(amount)<=0||money(amount)!==Number(amount)||Number(amount)!==invoice.total)return fail('Record the exact full invoice amount using Cash or Card / Electronic.')
       if(invoice.status==='Paid'&&invoice.payment?.status==='Completed'&&invoice.payment.amount===invoice.total&&invoice.payment.invoiceId===id&&invoice.payment.patientId===invoice.patientId)return {ok:true,unchanged:true,record:invoice,receipt:invoice.receipt}
       if(invoice.status!=='Issued'||invoice.payment||invoice.paymentStatus!=='Unpaid')return fail('Only an issued, unpaid invoice can receive payment.')
       const paymentId=uid('pay'),receipt=`RCPT-${paymentId}`
@@ -87,16 +92,19 @@ export function phase2Actions(run) {
     event(`invoice:${transition}:${id}`,'M11',`billing.${transition}`,record.invoiceNo,record.patientId,record.branchId)
     return {ok:true,record,receipt:record.receipt}
   })
-  const savePrescription=run(({state,session,now,event,notify},input,authorize=false)=>{
+  const savePrescription=run(({state,session,now,event,notify},input={},authorize=false)=>{
+    if(!isRecord(input))return fail('Select a valid prescription task.')
     const t=state.treatments.find(t=>t.id===input.treatmentId)
-    if(session.role!=='dentist'||!t||!inScope(t,session)||!state.patients.some(p=>p.id===t.patientId)||t.status!=='Completed'||t.prescriptionRequired!==true)return fail('Only the treating Dentist can document a requested prescription.')
+    if(session.role!=='dentist'||!t||!inScope(t,session,state)||!state.patients.some(p=>p.id===t.patientId)||!completedEncounter(state,t)||t.prescriptionRequired!==true)return fail('Only the treating Dentist can document a requested prescription.')
     if(['patientId','dentistId','branchId'].some(k=>input[k]!=null&&input[k]!==t[k]))return fail('Prescription context does not match treatment.')
     const matches=state.prescriptions.filter(r=>r.treatmentId===t.id),current=matches[0]
     if(matches.length>1||current&&!linkedTreatment(state,current)||input.id&&input.id!==current?.id)return fail('Prescription linkage needs review.')
     if(current?.status==='Authorized')return {ok:true,unchanged:true,record:current}
     if(current&&current.dentistId!==t.dentistId)return fail('Prescription Dentist does not match treatment.')
+    if(current&&input.revision!=null&&input.revision!==current.revision)return fail('This prescription draft changed. Reopen it before saving.')
     const source=input.items??current?.items??[]
-    if(!Array.isArray(source)||source.some(r=>!r||r.prescriptionId&&r.prescriptionId!==current?.id))return fail('Enter valid medication items for this prescription.')
+    if(!Array.isArray(source)||source.some(r=>!isRecord(r)||r.prescriptionId&&r.prescriptionId!==current?.id))return fail('Enter valid medication items for this prescription.')
+    if(source.some(r=>['medication','dosage','instructions','duration'].some(k=>r[k]!=null&&typeof r[k]!=='string')))return fail('Medication fields must contain text entered by the Dentist.')
     const id=current?.id||uid('rx')
     const items=source.map((r,index)=>({id:`${id}-item-${index+1}`,prescriptionId:id,medication:clean(r?.medication),dosage:clean(r?.dosage),instructions:clean(r?.instructions),duration:clean(r?.duration)}))
     if(authorize&&(!items.length||items.some(r=>!r.medication||!r.dosage||!r.instructions)))return fail('Medication, dosage, and instructions are required for every item.')
@@ -108,4 +116,16 @@ export function phase2Actions(run) {
     return {ok:true,record}
   })
   return {reviewInvoice:invoiceCommand('review'),issueInvoice:invoiceCommand('issue'),postPayment:invoiceCommand('payment'),savePrescription,authorizePrescription:input=>savePrescription(input,true)}
+}
+
+// Safe display/recovery for persisted follow-ups whose cancellation predates reconciliation.
+export function followupDisplayState(state,f) {
+  const t=linkedTreatment(state,f)
+  if(!t||t.status!=='Completed'||t.followupRequired!==true)return 'Needs clinic review'
+  if(!f.appointmentId)return f.status==='Open'?'Open':'Needs clinic review'
+  const a=state.appointments.find(a=>a.id===f.appointmentId)
+  if(!a||['patientId','dentistId','branchId'].some(k=>a[k]!==f[k]))return 'Needs clinic review'
+  if(['Cancelled','No-show'].includes(a.status))return 'Open'
+  if(a.status==='Completed')return 'Completed'
+  return f.status==='Scheduled'?'Scheduled':'Needs clinic review'
 }

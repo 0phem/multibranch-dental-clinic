@@ -1,27 +1,39 @@
-import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import { readCollection, writeCollection } from './persistence.js'
+import React, { createContext, useContext, useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import {
   INITIAL_PERSONS, INITIAL_SERVICES, INITIAL_BRANCH_SERVICES, INITIAL_DENTIST_SERVICE_ASSIGNMENTS,
   INITIAL_BRANCHES, INITIAL_DENTISTS, INITIAL_STAFF, INITIAL_PATIENTS, INITIAL_APPOINTMENTS, INITIAL_QUEUE,
   INITIAL_TREATMENTS, INITIAL_INVOICES, INITIAL_HMO, INITIAL_INQUIRIES, INITIAL_CONVERSATIONS,
   INITIAL_NOTIFICATIONS, INITIAL_PRESCRIPTIONS, INITIAL_FOLLOWUPS, INITIAL_USERS, INITIAL_AUTOMATIONS,
-  INITIAL_WORKFLOW_LOG, INITIAL_CAMPAIGNS, INITIAL_LOYALTY, INITIAL_AUDIT, ROLE_INFO
+  INITIAL_WORKFLOW_LOG, INITIAL_CAMPAIGNS, INITIAL_LOYALTY, INITIAL_AUDIT
 } from './data.js'
 import { uid, nowLabel } from './logic.js'
 import { clinicNow, rebaseDemoRecords } from './clock.js'
-import { normalizeClinicState, sessionForRole, patientInScope, persistableCollection } from './contracts.js'
-import { HMO_PROVIDERS } from './phase3-contracts.js'
+import { normalizeClinicState, sessionForRole, persistableCollection } from './contracts.js'
 import { createWorkflowActions } from './workflow.js'
 
 const ClinicContext=createContext(null)
 const STORAGE_PREFIX='dentalops-v4-'
 
-function usePersist(key, initial) {
+function usePersist(key, initial, report, recoveryBlocked) {
+  const blocked=useRef(false)
+  const loadError=useRef(null)
   const [value,setValue]=useState(()=>{
     const seed=['appointments','queue','treatments','invoices','followups','prescriptions','hmo','notifications','conversations','inquiries'].includes(key)?rebaseDemoRecords(initial):initial
-    try { const saved=localStorage.getItem(`${STORAGE_PREFIX}${key}`); const parsed=saved?JSON.parse(saved):null; return Array.isArray(parsed)?parsed:seed }
-    catch { return seed }
+    // SSR smoke has no browser storage; it must not simulate a storage failure.
+    if(typeof localStorage==='undefined')return seed
+    const result=readCollection(localStorage,`${STORAGE_PREFIX}${key}`,seed)
+    blocked.current=result.blocked;loadError.current=result.error
+    if(result.blocked)recoveryBlocked.current=true
+    return result.value
   })
-  useEffect(()=>{ try{localStorage.setItem(`${STORAGE_PREFIX}${key}`,JSON.stringify(value))}catch{} },[key,value])
+  useEffect(()=>{
+    if(blocked.current){report(key,loadError.current);return}
+    if(recoveryBlocked.current)return
+    if(typeof localStorage==='undefined')return
+    const result=writeCollection(localStorage,`${STORAGE_PREFIX}${key}`,value)
+    report(key,result.ok?null:result.message)
+  },[key,value,report])
   return [value,setValue]
 }
 
@@ -29,31 +41,38 @@ const cleanNamePart=value=>String(value||'').trim().replace(/\s+/g,' ')
 const fullName=person=>[person?.firstName,person?.middleName,person?.lastName].map(cleanNamePart).filter(Boolean).join(' ')
 
 export function ClinicProvider({ children }) {
-  const [persons,setPersons]=usePersist('persons',INITIAL_PERSONS)
-  const [services,setServices]=usePersist('services',INITIAL_SERVICES)
-  const [branchServices,setBranchServices]=usePersist('branch-services',INITIAL_BRANCH_SERVICES)
-  const [dentistServiceAssignments,setDentistServiceAssignments]=usePersist('dentist-service-assignments',INITIAL_DENTIST_SERVICE_ASSIGNMENTS)
-  const [branches,setBranches]=usePersist('branches',INITIAL_BRANCHES)
-  const [dentists,setDentists]=usePersist('dentists',INITIAL_DENTISTS)
-  const [staff,setStaff]=usePersist('staff',INITIAL_STAFF)
-  const [patients,setPatients]=usePersist('patients',INITIAL_PATIENTS)
-  const [appointments,setAppointments]=usePersist('appointments',INITIAL_APPOINTMENTS)
-  const [queue,setQueue]=usePersist('queue',INITIAL_QUEUE)
-  const [treatments,setTreatments]=usePersist('treatments',INITIAL_TREATMENTS)
-  const [invoices,setInvoices]=usePersist('invoices',INITIAL_INVOICES)
-  const [hmo,setHmo]=usePersist('hmo',INITIAL_HMO)
-  const [inquiries,setInquiries]=usePersist('inquiries',INITIAL_INQUIRIES)
-  const [conversations,setConversations]=usePersist('conversations',INITIAL_CONVERSATIONS)
-  const [notifications,setNotifications]=usePersist('notifications',INITIAL_NOTIFICATIONS)
-  const [prescriptions,setPrescriptions]=usePersist('prescriptions',INITIAL_PRESCRIPTIONS)
-  const [followups,setFollowups]=usePersist('followups',INITIAL_FOLLOWUPS)
-  const [users,setUsers]=usePersist('users',INITIAL_USERS)
-  const [automations,setAutomations]=usePersist('automations',INITIAL_AUTOMATIONS)
-  const [workflowLog,setWorkflowLog]=usePersist('workflow-log',INITIAL_WORKFLOW_LOG)
-  const [campaigns,setCampaigns]=usePersist('campaigns',INITIAL_CAMPAIGNS)
-  const [loyalty,setLoyalty]=usePersist('loyalty',INITIAL_LOYALTY)
-  const [audit,setAudit]=usePersist('audit',INITIAL_AUDIT)
-  const [checkIns,setCheckIns]=usePersist('check-ins',[])
+  const recoveryBlocked=useRef(false)
+  const [persistenceErrors,setPersistenceErrors]=useState({})
+  const reportPersistence=useCallback((key,message)=>setPersistenceErrors(previous=>{
+    if(previous[key]===message||!previous[key]&&!message)return previous
+    const next={...previous};if(message)next[key]=message;else delete next[key];return next
+  }),[])
+
+  const [persons,setPersons]=usePersist('persons',INITIAL_PERSONS,reportPersistence,recoveryBlocked)
+  const [services,setServices]=usePersist('services',INITIAL_SERVICES,reportPersistence,recoveryBlocked)
+  const [branchServices,setBranchServices]=usePersist('branch-services',INITIAL_BRANCH_SERVICES,reportPersistence,recoveryBlocked)
+  const [dentistServiceAssignments,setDentistServiceAssignments]=usePersist('dentist-service-assignments',INITIAL_DENTIST_SERVICE_ASSIGNMENTS,reportPersistence,recoveryBlocked)
+  const [branches,setBranches]=usePersist('branches',INITIAL_BRANCHES,reportPersistence,recoveryBlocked)
+  const [dentists,setDentists]=usePersist('dentists',INITIAL_DENTISTS,reportPersistence,recoveryBlocked)
+  const [staff,setStaff]=usePersist('staff',INITIAL_STAFF,reportPersistence,recoveryBlocked)
+  const [patients,setPatients]=usePersist('patients',INITIAL_PATIENTS,reportPersistence,recoveryBlocked)
+  const [appointments,setAppointments]=usePersist('appointments',INITIAL_APPOINTMENTS,reportPersistence,recoveryBlocked)
+  const [queue,setQueue]=usePersist('queue',INITIAL_QUEUE,reportPersistence,recoveryBlocked)
+  const [treatments,setTreatments]=usePersist('treatments',INITIAL_TREATMENTS,reportPersistence,recoveryBlocked)
+  const [invoices,setInvoices]=usePersist('invoices',INITIAL_INVOICES,reportPersistence,recoveryBlocked)
+  const [hmo,setHmo]=usePersist('hmo',INITIAL_HMO,reportPersistence,recoveryBlocked)
+  const [inquiries,setInquiries]=usePersist('inquiries',INITIAL_INQUIRIES,reportPersistence,recoveryBlocked)
+  const [conversations,setConversations]=usePersist('conversations',INITIAL_CONVERSATIONS,reportPersistence,recoveryBlocked)
+  const [notifications,setNotifications]=usePersist('notifications',INITIAL_NOTIFICATIONS,reportPersistence,recoveryBlocked)
+  const [prescriptions,setPrescriptions]=usePersist('prescriptions',INITIAL_PRESCRIPTIONS,reportPersistence,recoveryBlocked)
+  const [followups,setFollowups]=usePersist('followups',INITIAL_FOLLOWUPS,reportPersistence,recoveryBlocked)
+  const [users,setUsers]=usePersist('users',INITIAL_USERS,reportPersistence,recoveryBlocked)
+  const [automations,setAutomations]=usePersist('automations',INITIAL_AUTOMATIONS,reportPersistence,recoveryBlocked)
+  const [workflowLog,setWorkflowLog]=usePersist('workflow-log',INITIAL_WORKFLOW_LOG,reportPersistence,recoveryBlocked)
+  const [campaigns,setCampaigns]=usePersist('campaigns',INITIAL_CAMPAIGNS,reportPersistence,recoveryBlocked)
+  const [loyalty,setLoyalty]=usePersist('loyalty',INITIAL_LOYALTY,reportPersistence,recoveryBlocked)
+  const [audit,setAudit]=usePersist('audit',INITIAL_AUDIT,reportPersistence,recoveryBlocked)
+  const [checkIns,setCheckIns]=usePersist('check-ins',[],reportPersistence,recoveryBlocked)
   const [toasts,setToasts]=useState([])
   const [session,setSessionState]=useState(null)
   const sessionRef=useRef(null)
@@ -105,7 +124,7 @@ export function ClinicProvider({ children }) {
   stateRef.current=state
   const migrationDone=useRef(false)
   useEffect(()=>{
-    if(migrationDone.current)return
+    if(migrationDone.current||recoveryBlocked.current)return
     migrationDone.current=true
     // Persist recovered IDs once, before a later branch rename can lose a legacy
     // name-based relationship. Preserve unknown dates; do not fabricate encounters.
@@ -142,75 +161,7 @@ export function ClinicProvider({ children }) {
   const workflow=(module,event,result,status='Success',eventType=null)=>{
     setWorkflowLog(xs=>[{id:uid('log'),at:nowLabel(),module,event,eventType:eventType||event,result,status},...xs])
   }
-  const updatePatientRecord=(patientId,{person:personPatch={},patient:patientPatch={}})=>{
-    const raw=patients.find(p=>p.id===patientId)
-    if(!raw) return {ok:false,message:'Patient record not found.'}
-    const actor=sessionRef.current
-    const projected=stateRef.current.patients.find(p=>p.id===patientId)
-    if(!actor?.active||!['staff','dentist'].includes(actor.role)||!patientInScope(projected,stateRef.current,actor))return {ok:false,message:'Patient is outside your scope.'}
-    const personKeys=actor.role==='staff'?['firstName','middleName','lastName','phone','email','dob','sex','address']:[]
-    const patientKeys=actor.role==='staff'?['preferredBranchId','hmo','hmoMember','emergencyContact','consent']:['allergies','medicalHistory','dentalHistory']
-    if(actor.role==='staff'&&patientPatch.preferredBranch!==undefined){
-      const branch=branches.find(b=>b.name===patientPatch.preferredBranch)
-      if(!branch)return {ok:false,message:'Choose an existing preferred branch.'}
-      patientPatch={...patientPatch,preferredBranchId:branch.id}
-    }
-    personPatch=Object.fromEntries(Object.entries(personPatch).filter(([key])=>personKeys.includes(key)))
-    patientPatch=Object.fromEntries(Object.entries(patientPatch).filter(([key])=>patientKeys.includes(key)))
-    if(patientPatch.hmo!==undefined)patientPatch.hmoProviderId=HMO_PROVIDERS.find(h=>h.name===patientPatch.hmo)?.id||null
-    setPersons(xs=>xs.map(p=>p.id===raw.personId?{...p,...personPatch}:p))
-    setPatients(xs=>xs.map(p=>p.id===patientId?{...p,...patientPatch}:p))
-    workflow('M4','Patient record updated',patientId,'Success','patient.record.updated')
-    return {ok:true}
-  }
-
-  const createUserAccount=form=>{
-    const username=String(form.username||'').trim().toLowerCase()
-    const email=String(form.email||'').trim().toLowerCase()
-    if(!cleanNamePart(form.firstName)||!cleanNamePart(form.lastName)||!username||!email) return {ok:false,message:'First name, last name, username, and email are required.'}
-    if(users.some(u=>(u.username||u.login).toLowerCase()===username)) return {ok:false,message:'Username must be unique.'}
-    if(persons.some(p=>(p.email||'').toLowerCase()===email)) return {ok:false,message:'Email must be unique.'}
-    const personId=uid('per'), userId=uid('u')
-    const personRecord={id:personId,firstName:cleanNamePart(form.firstName),middleName:cleanNamePart(form.middleName),lastName:cleanNamePart(form.lastName),email,phone:String(form.phone||'').trim(),dob:form.dob||'',sex:form.sex||'',address:form.address||''}
-    const roleName=form.roleName
-    const branch=branches.find(b=>b.id===form.branchId)
-    const selectedBranch=roleName==='Owner / Admin'||roleName==='Patient'?'All Branches':branch?.name||'All Branches'
-    const selectedBranchId=roleName==='Owner / Admin'||roleName==='Patient'?null:form.branchId
-    const permissionMap={
-      Patient:['patient-portal'],Receptionist:['appointments','checkin','queue','patient-demographics','billing','hmo','messages','followups'],
-      Dentist:['schedule','queue','clinical-records','treatment','prescriptions','followups','messages'],'Dental Assistant':['queue','clinical-records'],
-      'HMO Coordinator':['hmo','patient-demographics','messages'],Cashier:['billing','patient-demographics'],'Patient Engagement Staff':['inquiries','messages','engagement'],'Owner / Admin':['all']
-    }
-    const user={id:userId,personId,username,login:username,roleName,role:roleName,branchId:selectedBranchId,branch:selectedBranch,accountStatus:form.accountStatus||'Active',status:form.accountStatus||'Active',permissions:permissionMap[roleName]||[],lastLogin:'Never'}
-    setPersons(xs=>[...xs,personRecord]); setUsers(xs=>[...xs,user])
-    const display=fullName(personRecord)
-    if(roleName==='Dentist'){
-      const profileId=uid('d')
-      setDentists(xs=>[...xs,{id:profileId,userId,personId,staffType:'Dentist',licenseNo:'',branches:[selectedBranch],branchIds:[selectedBranchId],specialty:'Unspecified',shiftStart:branch?.open||'09:00',shiftEnd:branch?.close||'18:00',available:user.accountStatus==='Active',assistantStaffId:null}])
-      workflow('M1→M3','User account created / role synchronized',`${username} • Dentist profile created`,'Success','access.user.created')
-    } else if(['Receptionist','Dental Assistant','HMO Coordinator','Cashier','Patient Engagement Staff'].includes(roleName)){
-      setStaff(xs=>[...xs,{id:uid('s'),userId,personId,staffType:roleName,licenseNo:'—',specialization:roleName,role:roleName,branchId:selectedBranchId,branch:selectedBranch,shiftStart:branch?.open||'09:00',shiftEnd:branch?.close||'18:00',available:user.accountStatus==='Active'}])
-      workflow('M1→M3','User account created / role synchronized',`${username} • Staff profile created`,'Success','access.user.created')
-    } else if(roleName==='Patient'){
-      const patientCode=`PAT-${String(patients.length+1).padStart(4,'0')}`
-      setPatients(xs=>[...xs,{id:uid('p'),personId,userId,patientCode,preferredBranchId:branches[0]?.id||null,preferredBranch:branches[0]?.name||'Branch A',hmo:'None',hmoMember:'—',allergies:'None',medicalHistory:'',dentalHistory:'',emergencyContact:'',consent:false}])
-      workflow('M1→M4','Patient portal account created',`${username} • Patient record linked`,'Success','access.user.created')
-    }
-    log(ROLE_INFO.owner.name,`Created ${roleName} account for ${display}`,'M1')
-    return {ok:true,user:{...user,name:roleName==='Dentist'?`Dr. ${display}`:display,email}}
-  }
-
-  const toggleUserStatus=userId=>{
-    const current=users.find(u=>u.id===userId); if(!current) return {ok:false,message:'User not found.'}
-    const next=(current.accountStatus||current.status)==='Active'?'Inactive':'Active'
-    setUsers(xs=>xs.map(u=>u.id===userId?{...u,accountStatus:next,status:next}:u))
-    setDentists(xs=>xs.map(d=>d.userId===userId?{...d,available:next==='Active'}:d))
-    setStaff(xs=>xs.map(s=>s.userId===userId?{...s,available:next==='Active'}:s))
-    workflow('M1→M3','Account status changed',`${current.username} • ${next} • personnel availability synchronized`,'Success','access.user.status.changed')
-    return {ok:true,status:next}
-  }
-
-  const actions={updatePatientRecord,createUserAccount,toggleUserStatus}
+  const actions={}
 
   Object.assign(actions,createWorkflowActions({
     getState:()=>stateRef.current,
@@ -229,7 +180,7 @@ export function ClinicProvider({ children }) {
     window.location.reload()
   }
 
-  const value=useMemo(()=>({state,setters,actions,toast,log,workflow,resetDemo,toasts,session,setSession}),[persons,services,branchServices,dentistServiceAssignments,branches,dentists,staff,patients,appointments,queue,treatments,invoices,hmo,inquiries,conversations,notifications,prescriptions,followups,users,automations,workflowLog,campaigns,loyalty,audit,toasts,checkIns,session,clock])
+  const value=useMemo(()=>({state,setters,actions,toast,log,workflow,resetDemo,toasts,session,setSession,persistenceErrors}),[persons,services,branchServices,dentistServiceAssignments,branches,dentists,staff,patients,appointments,queue,treatments,invoices,hmo,inquiries,conversations,notifications,prescriptions,followups,users,automations,workflowLog,campaigns,loyalty,audit,toasts,checkIns,session,clock,persistenceErrors])
   return <ClinicContext.Provider value={value}>{children}</ClinicContext.Provider>
 }
 

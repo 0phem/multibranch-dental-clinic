@@ -1,9 +1,10 @@
+import { isRecord } from './safeguards.js'
 import { appendNotification } from './orchestration.js'
 import { uid } from './logic.js'
 import { canReadConversation, ownsNotification, activeUser, clinicTimestamp } from './phase3-contracts.js'
 
 const fail=message=>({ok:false,message})
-const clean=value=>String(value??'').trim()
+const clean=value=>typeof value==='string'?value.trim():''
 export function communicationActions(run) {
   const markNotificationRead=run(({state,session,now},id)=>{
     const n=state.notifications.find(n=>n.id===id)
@@ -32,7 +33,7 @@ export function communicationActions(run) {
     if(!commandId||!clean(text))return fail('Enter a message and a reply command ID.')
     const previous=c.messages.find(m=>m.commandId===commandId)
     if(previous)return previous.senderUserId===session.userId?{ok:true,unchanged:true,record:c}:fail('Reply command belongs to another participant.')
-    if(state.conversations.some(other=>other.id!==id&&other.messages.some(m=>m.commandId===commandId)))return fail('Reply command belongs to another conversation.')
+    if(state.conversations.some(other=>other.id!==id&&Array.isArray(other.messages)&&other.messages.some(m=>m?.commandId===commandId)))return fail('Reply command belongs to another conversation.')
     if(c.status!=='Open')return fail('This conversation is closed.')
     const message={id:uid('cm'),commandId,senderUserId:session.userId,text:clean(text),at:now.timestamp}
     const record={...c,messages:[...c.messages,message],unreadUserIds:[...new Set([...c.unreadUserIds,...c.participantUserIds.filter(id=>id!==session.userId)])].filter(id=>id!==session.userId),readAtByUser:{...c.readAtByUser,[session.userId]:now.timestamp}}
@@ -50,7 +51,8 @@ export function communicationActions(run) {
     return {ok:true,record}
   })
   const canInquiry=(state,session,i)=>session.role==='staff'&&i?.assignedUserId===session.userId&&i.branchId===session.branchId&&state.users.some(u=>u.id===session.userId&&(u.permissions?.includes('inquiries')||(u.roleName||u.role)==='Receptionist'&&u.permissions?.includes('messages')))
-  const createInquiry=run(({state,session,now,event},form,commandId)=>{
+  const createInquiry=run(({state,session,now,event},form={},commandId)=>{
+    if(!isRecord(form))return fail('Enter valid inquiry details.')
     if(!canInquiry(state,session,{assignedUserId:session.userId,branchId:session.branchId})||!clean(form.name)||!clean(form.topic)||!commandId)return fail('Assigned Staff, contact name, inquiry topic and command ID are required.')
     const old=state.inquiries.find(i=>i.commandId===commandId)
     if(old)return canInquiry(state,session,old)?{ok:true,unchanged:true,record:old}:fail('Inquiry is outside your scope.')

@@ -1,3 +1,5 @@
+import { hmoDataValid } from '../hmo.js'
+import { clinicNow } from '../clock.js'
 import React, { useState, useRef } from 'react'
 import { Button, Card, Field, Modal, Notice, PageHeader, Status, Table } from '../components.jsx'
 import { dateLabel, displayTime, patientName, peso, uid } from '../logic.js'
@@ -64,7 +66,7 @@ export function HmoPage({ role, activeBranch, store, context }) {
   }
   const eligible=[...state.appointments.filter(a=>a.branchId===session.branchId&&!['Cancelled','No-show'].includes(a.status)).map(a=>({key:`appointment:${a.id}`,record:a})),...state.treatments.filter(t=>t.branchId===session.branchId&&!t.appointmentId).map(t=>({key:`treatment:${t.id}`,record:t}))].filter(x=>state.patients.find(p=>p.id===x.record.patientId)?.hmoProviderId)
   const staff=role==='staff',internal=staff||role==='owner'
-  const label=h=>['Approved','Rejected','Returned'].includes(h.status)?`Provider ${h.status}`:h.status
+  const label=h=>h.legacy&&['Approved','Rejected','Returned'].includes(h.status)?`Historical recorded ${h.status}`:['Approved','Rejected','Returned'].includes(h.status)?`Provider ${h.status}`:h.status
   return <>
     <PageHeader title={role==='patient'?'My HMO Coverage':role==='owner'?'HMO Overview':'HMO Verification & Tracking'} text="The clinic tracks requirements and externally received provider responses. Local document checks do not confirm provider eligibility or approval."/>
     {staff&&<div className="page-toolbar"><Button onClick={()=>setCreating(true)}>Prepare HMO Case</Button><Button variant="ghost" onClick={()=>report(actions.evaluateHmoTimers(),'Pending case timers checked.')}>Check overdue cases</Button></div>}
@@ -72,16 +74,16 @@ export function HmoPage({ role, activeBranch, store, context }) {
       <Card title="HMO cases">{visible.map(h=><div className="clinical-history" key={h.id}><div><b>{role==='patient'?HMO_PROVIDERS.find(p=>p.id===h.providerId)?.name:patientName(h.patientId,state.patients)}</b><p>{state.branches.find(b=>b.id===h.branchId)?.name}</p><Status>{label(h)}</Status>{internal&&pendingHmo(h)&&<small className="block-muted">Pending {pendingHours(h,state.clock).toFixed(1)} hours</small>}</div><Button size="sm" variant="ghost" onClick={()=>setSelectedId(h.id)}>View case</Button></div>)}</Card>
       {selected&&<Card title={`${HMO_PROVIDERS.find(p=>p.id===selected.providerId)?.name||'HMO'} case`} subtitle={label(selected)}>
         <p>{patientName(selected.patientId,state.patients)} • {state.branches.find(b=>b.id===selected.branchId)?.name}</p>
-        {internal&&!validHmoContext(state,selected)&&<Notice tone="warning">Case relationships need clinic review before processing.</Notice>}
+        {internal&&(!validHmoContext(state,selected)||!hmoDataValid(selected,clinicNow()))&&<Notice tone="warning">Case relationships need clinic review before processing.</Notice>}
         <p>{selected.submittedAt?`Submission recorded: ${selected.submittedAt}`:'Not submitted'}</p>
         {selected.providerRespondedAt&&<p>Provider response recorded: {selected.providerRespondedAt}</p>}
         <h3>Requirements</h3>
         {(selected.requirements||[]).filter(Boolean).map(r=><HmoRequirement key={`${selected.id}:${r.id}`} requirement={r} canEdit={(staff||role==='patient')&&['Draft','Missing Requirements','Ready for Submission','Returned'].includes(selected.status)} patient={role==='patient'} onProvide={metadata=>report(actions.provideHmoRequirement(selected.id,r.ruleId,metadata),role==='patient'?'Document metadata recorded for clinic review.':'Requirement checked locally.')}/>)}
-        {staff&&validHmoContext(state,selected)&&<div className="form-actions">
+        {staff&&validHmoContext(state,selected)&&hmoDataValid(selected,clinicNow())&&<div className="form-actions">
           {selected.status==='Ready for Submission'&&<Button onClick={()=>operate('submit',selected)}>{selected.submissionCycle?'Record Resubmission':'Record External Submission'}</Button>}
           {pendingHmo(selected)&&<><Button variant="ghost" onClick={()=>operate('contact',selected)}>Record Contact Attempt</Button><Button onClick={()=>operate('response',selected)}>Record Provider Response</Button>{selected.status!=='Escalated'&&pendingHours(selected,state.clock)>=HMO_PENDING_HOURS&&<Button variant="danger" onClick={()=>report(actions.escalateHmo(selected.id),'Case escalated for clinic attention.')}>Escalate Case</Button>}</>}
         </div>}
-        {internal&&<><h3>Clinic follow-up history</h3>{!(selected.contacts||[]).length&&<Notice>No contact attempts recorded.</Notice>}{(selected.contacts||[]).map(c=><p key={c.id}><b>{c.at} • {c.method} • {state.users.find(u=>u.id===c.staffUserId)?.name||c.staffUserId}</b><br/>{c.note}<br/>Next action: {c.nextAction}</p>)}{(selected.responses||[]).map(r=><p key={r.id}><b>Provider response recorded: {r.outcome}</b><br/>{r.recordedAt} • {r.method}<br/>{r.note}</p>)}</>}
+        {internal&&hmoDataValid(selected,clinicNow())&&<><h3>Clinic follow-up history</h3>{!(selected.contacts||[]).length&&<Notice>No contact attempts recorded.</Notice>}{(selected.contacts||[]).map(c=><p key={c.id}><b>{c.at} • {c.method} • {state.users.find(u=>u.id===c.staffUserId)?.name||c.staffUserId}</b><br/>{c.note}<br/>Next action: {c.nextAction}</p>)}{(selected.responses||[]).map(r=><p key={r.id}><b>Provider response recorded: {r.outcome}</b><br/>{r.recordedAt} • {r.method}<br/>{r.note}</p>)}</>}
       </Card>}
     </div>}
     <Modal open={creating} onClose={()=>setCreating(false)} title="Prepare HMO case"><Field label="Insured encounter" required><select value={encounter} onChange={e=>setEncounter(e.target.value)}><option value="">Select encounter</option>{eligible.map(({key,record:r})=><option key={key} value={key}>{patientName(r.patientId,state.patients)} • {r.date} • {state.services.find(s=>s.id===r.serviceId)?.name} • {r.id}</option>)}</select></Field><Notice>Patient, membership, branch, and encounter details are prefilled from the selected visit.</Notice><Button onClick={create}>Prepare Case</Button></Modal>

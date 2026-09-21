@@ -1,6 +1,7 @@
+import { validSession, canAccessPage } from './safeguards.js'
+import { Notice } from './components.jsx'
 import React, { useEffect, useState } from 'react'
 import { ClinicProvider, useClinic } from './store.jsx'
-import { NAV } from './data.js'
 import { Login, Shell, ToastStack } from './layout.jsx'
 import { DashboardPage } from './pages/Dashboards.jsx'
 import { AppointmentsPage, BookingPage, SchedulePage } from './pages/Scheduling.jsx'
@@ -16,7 +17,7 @@ function AppBody() {
   const [role,setRole]=useState(null)
   const [page,setPageState]=useState('dashboard')
   const [context,setContext]=useState(null)
-  const setPage=(next,record=null)=>{if(role&&NAV[role].some(([key])=>key===next)){setContext(record);setPageState(next)}}
+  const setPage=(next,record=null)=>{if(role&&canAccessPage(store.state,store.session,next)){setContext(record);setPageState(next)}}
   const [activeBranch,setActiveBranch]=useState('All Branches')
 
   const login=r=>{
@@ -27,12 +28,17 @@ function AppBody() {
   const logout=()=>{store.setSession(null);setRole(null);setContext(null);setPageState('dashboard');setActiveBranch('All Branches')}
   useEffect(()=>{if(role==='patient')setActiveBranch('All Branches')},[role])
 
+  const storageWarnings=Object.values(store.persistenceErrors||{})
+  if(storageWarnings.some(message=>message.includes('could not be read')))return <Notice title="Saved workspace needs recovery">{storageWarnings.join(' ')}</Notice>
+
   if (!role) return <><Login onLogin={login}/><ToastStack toasts={store.toasts}/></>
+
+  if(!validSession(store.state,store.session))return <><Notice>Your account or branch access changed. Reopen your workspace or ask an administrator.</Notice><Login onLogin={login}/></>
 
   const branch=role==='staff'||role==='dentist'?store.state.branches.find(b=>b.id===store.session?.branchId)?.name||'Unknown branch':activeBranch
   const props={role,activeBranch:branch,store,setPage,context}
   let content
-  switch(page){
+  switch(canAccessPage(store.state,store.session,page)?page:'unavailable'){
     case 'dashboard': content=<DashboardPage {...props}/>; break
     case 'book': content=<BookingPage role={role} store={store}/>; break
     case 'appointments': content=<AppointmentsPage role={role} store={store}/>; break
@@ -56,11 +62,11 @@ function AppBody() {
     case 'engagement': content=<EngagementPage role={role} store={store}/>; break
     case 'loyalty': content=<LoyaltyPage store={store}/>; break
     case 'modules': content=<ModulesPage/>; break
-    default: content=<DashboardPage {...props}/>;
+    default: content=<Notice>This screen is no longer available with your current permissions. <button onClick={()=>setPage('dashboard')}>Return home</button></Notice>;
   }
 
   return <>
-    <Shell role={role} page={page} setPage={setPage} onLogout={logout} activeBranch={branch} setActiveBranch={setActiveBranch} resetDemo={store.resetDemo} store={store}>{content}</Shell>
+    <Shell role={role} page={page} setPage={setPage} onLogout={logout} activeBranch={branch} setActiveBranch={setActiveBranch} resetDemo={store.resetDemo} store={store}>{storageWarnings.length>0&&<Notice tone="warning">{[...new Set(storageWarnings)].join(" ")}</Notice>}{content}</Shell>
     <ToastStack toasts={store.toasts}/>
   </>
 }

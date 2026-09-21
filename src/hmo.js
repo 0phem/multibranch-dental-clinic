@@ -1,9 +1,10 @@
+import { isRecord } from './safeguards.js'
 import { uid } from './logic.js'
-import { HMO_PROVIDERS, HMO_REQUIREMENT_RULES, HMO_PENDING_HOURS, canProcessHmo, validHmoContext, pendingHours, pendingHmo, missingRequirements, clinicTimestamp } from './phase3-contracts.js'
+import { HMO_PROVIDERS, HMO_REQUIREMENT_RULES, HMO_PENDING_HOURS, canProcessHmo, validHmoContext, pendingHours, pendingHmo, missingRequirements, clinicTimestamp, validProviderOutcome, visibleHmo } from './phase3-contracts.js'
 import { appendNotification, notifyBranch } from './orchestration.js'
 
 const fail=message=>({ok:false,message})
-const clean=value=>String(value??'').trim()
+const clean=value=>typeof value==='string'?value.trim():''
 const replace=(state,record)=>{state.hmo=(state.hmo||[]).some(h=>h.id===record.id)?state.hmo.map(h=>h.id===record.id?record:h):[record,...(state.hmo||[])]}
 const caseContext=h=>({entityType:'hmo',entityId:h.id,hmoCaseId:h.id,patientId:h.patientId,branchId:h.branchId,treatmentId:h.treatmentId,appointmentId:h.appointmentId,action:{page:'hmo',context:{hmoCaseId:h.id,patientId:h.patientId}}})
 function publish(ctx,h,key,type,title,body,{staff=false,patient=true,status='Success',module='M13'}={}) {
@@ -15,19 +16,25 @@ function publish(ctx,h,key,type,title,body,{staff=false,patient=true,status='Suc
 function coherentRequirements(h) {
   return Array.isArray(h.requirements)&&h.requirements.length===HMO_REQUIREMENT_RULES.length&&HMO_REQUIREMENT_RULES.every(rule=>h.requirements.filter(r=>r?.ruleId===rule.id&&r.id===`${h.id}:${rule.id}`&&['Missing','Provided','Validated locally'].includes(r.state)&&(!r.treatmentId||r.treatmentId===h.treatmentId)).length===1)
 }
-function coherentTracking(h) {
-  return ['contacts','responses','followUpTasks','submissionHistory'].every(k=>Array.isArray(h[k]))&&
-    ['contacts','responses','followUpTasks'].every(k=>h[k].every(r=>r&&r.caseId===h.id&&Number.isInteger(r.submissionCycle)&&r.submissionCycle>0))
+function coherentTracking(h,now) {
+  return Number.isSafeInteger(h.submissionCycle)&&h.submissionCycle>=0&&(!pendingHmo(h)||h.submissionCycle>0)&&['contacts','responses','followUpTasks','submissionHistory'].every(k=>Array.isArray(h[k]))&&
+    ['contacts','responses','followUpTasks'].every(k=>h[k].every(r=>r&&r.caseId===h.id&&Number.isInteger(r.submissionCycle)&&r.submissionCycle>0&&r.submissionCycle<=h.submissionCycle))&&validProviderOutcome(h)&&
+    h.submissionHistory.every(r=>r&&Number.isInteger(r.cycle)&&r.cycle>0&&r.cycle<=h.submissionCycle&&!!clinicTimestamp(r.at))&&
+    (!now||h.contacts.every(c=>clinicTimestamp(c.at)&&Date.parse(clinicTimestamp(c.at))<=Date.parse(now.timestamp)&&Date.parse(clinicTimestamp(c.at))>=Date.parse(clinicTimestamp(h.submissionHistory.find(s=>s.cycle===c.submissionCycle)?.at||h.submittedAt))))
+}
+export function hmoDataValid(h,now) {
+  return !!h&&coherentRequirements(h)&&coherentTracking(h,now)&&(!pendingHmo(h)||clinicTimestamp(h.submittedAt)&&Date.parse(clinicTimestamp(h.submittedAt))<=Date.parse(now.timestamp))
 }
 function getCase(ctx,id) {
   const h=(ctx.state.hmo||[]).find(h=>h.id===id)
-  return h&&canProcessHmo(ctx.state,ctx.session,h)&&coherentRequirements(h)&&coherentTracking(h)&&(!pendingHmo(h)||clinicTimestamp(h.submittedAt)&&Date.parse(clinicTimestamp(h.submittedAt))<=Date.parse(ctx.now.timestamp))?h:null
+  return h&&canProcessHmo(ctx.state,ctx.session,h)&&hmoDataValid(h,ctx.now)?h:null
 }
 
 // A clinic-side case is prepared once for an explicitly linked insured encounter.
 // This does not request coverage or decide whether a provider will reimburse it.
-export function prepareHmoCase(ctx,input,{system=false}={}) {
+export function prepareHmoCase(ctx,input={},{system=false}={}) {
   const {state,session,now}=ctx
+  if(!isRecord(input))return fail('Select a valid encounter for HMO handling.')
   const treatment=input.treatmentId?state.treatments.find(t=>t.id===input.treatmentId):null
   const appointmentId=input.appointmentId||treatment?.appointmentId||null
   const appointment=appointmentId?state.appointments.find(a=>a.id===appointmentId):null
@@ -36,6 +43,8 @@ export function prepareHmoCase(ctx,input,{system=false}={}) {
   if(['patientId','branchId'].some(k=>input[k]!=null&&input[k]!==encounter[k])||appointment&&treatment&&['patientId','branchId','dentistId'].some(k=>appointment[k]!==treatment[k]))return fail('HMO encounter context does not match.')
   const patient=state.patients.find(p=>p.id===encounter.patientId)
   const providerId=patient?.hmoProviderId||HMO_PROVIDERS.find(p=>p.name===patient?.hmo)?.id
+  if(input.providerId&&input.providerId!==providerId)return fail('Provider does not match this patient membership.')
+  if(appointment&&['Cancelled','No-show'].includes(appointment.status))return fail('Select an active or completed encounter for HMO handling.')
   if(!patient||!providerId||!clean(patient.hmoMember)||patient.hmoMember==='—')return system?{ok:true,unchanged:true,notApplicable:true}:fail('This patient has no usable configured HMO membership.')
   const context={patientId:patient.id,branchId:encounter.branchId,providerId,treatmentId:treatment?.id||null,appointmentId}
   if(!validHmoContext(state,context)||!system&&!canProcessHmo(state,session,context))return fail('HMO processing is outside your assigned branch or permission.')
@@ -43,7 +52,7 @@ export function prepareHmoCase(ctx,input,{system=false}={}) {
   if(matches.length>1)return fail('Duplicate legacy HMO cases need clinic review.')
   const existing=matches[0]
   if(existing){
-    if(!validHmoContext(state,existing)||!coherentRequirements(existing)||!coherentTracking(existing)||existing.patientId!==patient.id||existing.branchId!==encounter.branchId||existing.providerId!==providerId||existing.treatmentId&&existing.treatmentId!==treatment?.id&&treatment)return fail('Existing HMO case has conflicting encounter links.')
+    if(!validHmoContext(state,existing)||!coherentRequirements(existing)||!coherentTracking(existing,now)||existing.patientId!==patient.id||existing.branchId!==encounter.branchId||existing.providerId!==providerId||existing.treatmentId&&existing.treatmentId!==treatment?.id&&treatment)return fail('Existing HMO case has conflicting encounter links.')
     if(treatment&&!existing.treatmentId){
       const canPrefill=['Draft','Missing Requirements','Ready for Submission'].includes(existing.status)&&treatment.status==='Completed'
       const requirements=existing.requirements.map(r=>canPrefill&&r.ruleId==='treatment-request'&&r.state==='Missing'?{...r,state:'Validated locally',treatmentId:treatment.id,validatedAt:now.timestamp}:r)
@@ -66,13 +75,13 @@ export function hmoActions(run) {
     const {state,session,now}=ctx
     const raw=(state.hmo||[]).find(h=>h.id===id)
     const patientOwns=session.role==='patient'&&raw?.patientId===session.patientId&&state.patients.find(p=>p.id===session.patientId)?.userId===session.userId
-    const h=patientOwns&&validHmoContext(state,raw)&&coherentRequirements(raw)?raw:getCase(ctx,id)
+    const h=patientOwns&&validHmoContext(state,raw)&&coherentRequirements(raw)&&coherentTracking(raw,now)?raw:getCase(ctx,id)
     if(!h)return fail('HMO requirement is outside your scope or has invalid links.')
     if(!['Missing Requirements','Ready for Submission','Returned','Draft'].includes(h.status))return fail('Requirements cannot change while submitted or after a final provider outcome.')
     const requirement=h.requirements.find(r=>r.ruleId===ruleId)
     if(!requirement)return fail('Requirement does not belong to this case.')
     const target=patientOwns?'Provided':'Validated locally'
-    if(requirement.state===target||requirement.state==='Validated locally')return {ok:true,unchanged:true,record:h}
+    if(requirement.state===target||requirement.state==='Validated locally')return {ok:true,unchanged:true,record:patientOwns?visibleHmo(state,session).find(x=>x.id===id):h}
     if(!clean(input.fileName)&&!requirement.document?.fileName)return fail('Enter the document name or select a file. Only metadata is stored.')
     const document={fileName:clean(input.fileName)||requirement.document.fileName,size:Number.isFinite(input.size)&&input.size>=0?input.size:null,metadataOnly:true,providedBy:session.userId,providedAt:now.timestamp}
     const requirements=h.requirements.map(r=>r.ruleId===ruleId?{...r,state:target,document,...(!patientOwns?{validatedBy:session.userId,validatedAt:now.timestamp}:{})}:r)
@@ -80,7 +89,7 @@ export function hmoActions(run) {
     const record={...h,requirements,status:ready?'Ready for Submission':h.status==='Returned'?'Returned':'Missing Requirements'}
     replace(state,record)
     publish(ctx,record,`hmo:requirement:${id}:${h.submissionCycle}:${ruleId}:${target}`,patientOwns?'hmo.requirement.provided':'hmo.requirement.validated',patientOwns?'HMO document recorded':'HMO requirement checked locally','Clinic requirement status updated.',{staff:patientOwns,patient:false,module:'M12'})
-    return {ok:true,record}
+    return {ok:true,record:patientOwns?visibleHmo(state,session).find(x=>x.id===id):record}
   })
   const submitHmoCase=command('hmo.submit','M13',(ctx,id,input={})=>{
     const h=getCase(ctx,id)

@@ -49,7 +49,7 @@ export function AppointmentForm({ role, store, prefill={}, ignoreId=null, onSave
   const save=()=>{
     const r=validateAppointment(form,state,ignoreId)
     setResult(r)
-    const result=actions.saveAppointment(form,{appointmentId:ignoreId,commandId:commandId.current,followupId})
+    const result=actions.saveAppointment(form,{appointmentId:ignoreId,commandId:commandId.current,expectedRevision:prefill.revision,followupId})
     if(!result.ok)return toast(result.message,'warning')
     toast(ignoreId?'Appointment rescheduled.':'Appointment confirmed.','success')
     onSaved?.(result.record)
@@ -159,7 +159,7 @@ export function AppointmentsPage({ role, store }) {
   const [newOpen,setNewOpen]=useState(false)
   const [patientTab,setPatientTab]=useState('upcoming')
   const pid=ROLE_INFO.patient.patientId
-  const visible=state.appointments.filter(a=>inScope(a,session)).sort((a,b)=>`${a.date}${a.start}`.localeCompare(`${b.date}${b.start}`))
+  const visible=state.appointments.filter(a=>inScope(a,session,state)).sort((a,b)=>`${a.date}${a.start}`.localeCompare(`${b.date}${b.start}`))
   const cancel=a=>{
     if (!window.confirm('Cancel this appointment and release the reserved slot?')) return
     const result=actions.cancelAppointment(a.id)

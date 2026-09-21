@@ -6,27 +6,14 @@ import { Button, Card, Field, Modal, Notice, PageHeader, Progress, StatCard, Sta
 import { branchCapacity, dateLabel, dentistName, makeCsv, patientName, peso, uid } from '../logic.js'
 
 export function BranchesPage({ store }) {
-  const { state, setters, toast, log, workflow }=store
+  const { state, actions, toast }=store
   const [selected,setSelected]=useState(state.branches[0]?.id||'')
   const branch=state.branches.find(b=>b.id===selected)
   const [form,setForm]=useState(branch||{})
   React.useEffect(()=>setForm(branch||{}),[selected])
-  const save=()=>{
-    const {services:legacyServices,...branchPatch}=form
-    setters.setBranches(xs=>xs.map(b=>b.id===selected?{...b,...branchPatch}:b))
-    workflow('M2','Branch configuration changed',`${form.branchCode||form.name} • dependent availability synchronized`)
-    log(ROLE_INFO.owner.name,`Updated branch configuration ${form.name}`,'M2')
-    toast('Branch changes published and dependent availability synchronized.','success')
-  }
+  const save=()=>{const result=actions.saveBranch(selected,form);toast(result.ok?'Branch configuration saved.':result.message,result.ok?'success':'warning')}
   const serviceActive=serviceId=>state.branchServices.some(bs=>bs.branchId===selected&&bs.serviceId===serviceId&&bs.active!==false)
-  const toggleService=serviceId=>{
-    setters.setBranchServices(xs=>{
-      const existing=xs.find(bs=>bs.branchId===selected&&bs.serviceId===serviceId)
-      if(existing)return xs.map(bs=>bs.id===existing.id?{...bs,active:!existing.active}:bs)
-      return [...xs,{id:uid('bs'),branchId:selected,serviceId,active:true}]
-    })
-    workflow('M2→M6/M7','Branch service availability changed',`${selected} • ${serviceId}`,'Success','branch.service.changed')
-  }
+  const toggleService=serviceId=>{const result=actions.setBranchService(selected,serviceId,!serviceActive(serviceId));if(!result.ok)toast(result.message,'warning')}
   return <>
     <PageHeader title="Multi-Branch Clinic Management" text="ERD-aligned branch identity plus the operating data required by scheduling, staffing, patient flow, and reporting." modules={[2]}/>
     <div className="grid-2 admin-config">
@@ -51,7 +38,7 @@ export function BranchesPage({ store }) {
 }
 
 export function TeamPage({ store }) {
-  const { state, setters, toast, log, workflow }=store
+  const { state, actions, toast }=store
   const [tab,setTab]=useState('dentists')
   const [editDentist,setEditDentist]=useState(null)
   const [editStaff,setEditStaff]=useState(null)
@@ -73,26 +60,15 @@ export function TeamPage({ store }) {
     if(branchConflict(profile)) return 'Conflict'
     return profile.available?'Available':'Unavailable'
   }
-  const publish=(label)=>{
-    workflow('M3','Staff/dentist profile updated',`${label} • scheduling/workload availability synchronized`)
-    log(ROLE_INFO.owner.name,`Updated staff/dentist profile: ${label}`,'M3')
-    toast('Profile changes published and availability synchronized.','success')
-  }
   const saveDentist=()=>{
-    if(!editDentist)return
-    if(branchConflict(editDentist))return toast('Assignment conflict: shift is outside the assigned branch operating hours.','warning')
-    const {name,email,phone,firstName,middleName,lastName,dob,sex,address,assistant,...profile}=editDentist
-    setters.setDentists(xs=>xs.map(d=>d.id===editDentist.id?profile:d))
-    publish(editDentist.name)
-    setEditDentist(null)
+    const result=actions.savePersonnel('dentists',editDentist?.id,editDentist)
+    if(!result.ok)return toast(result.message,'warning')
+    toast('Personnel changes saved.','success');setEditDentist(null)
   }
   const saveStaff=()=>{
-    if(!editStaff)return
-    if(branchConflict(editStaff))return toast('Assignment conflict: shift is outside the assigned branch operating hours.','warning')
-    const {name,email,phone,firstName,middleName,lastName,dob,sex,address,...profile}=editStaff
-    setters.setStaff(xs=>xs.map(s=>s.id===editStaff.id?{...profile,role:profile.staffType}:s))
-    publish(editStaff.name)
-    setEditStaff(null)
+    const result=actions.savePersonnel('staff',editStaff?.id,editStaff)
+    if(!result.ok)return toast(result.message,'warning')
+    toast('Personnel changes saved.','success');setEditStaff(null)
   }
 
   return <>
@@ -213,7 +189,7 @@ export function UsersPage({ store }) {
     setForm(empty)
   }
   const toggle=u=>{
-    const result=actions.toggleUserStatus(u.id)
+    const result=actions.setUserStatus(u.id,(u.accountStatus||u.status)==='Active'?'Inactive':'Active')
     if(!result.ok)return toast(result.message,'warning')
     toast(`Account is now ${result.status}. Linked personnel availability was synchronized when applicable.`,'success')
   }
