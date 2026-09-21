@@ -6,7 +6,7 @@ import React from 'react'
 import { renderToString } from 'react-dom/server'
 
 const require=createRequire(import.meta.url)
-const files=['store.jsx','layout.jsx','clock.js','contracts.js','workflow.js','phase2.js','phase3-contracts.js','orchestration.js','pages/Dashboards.jsx','pages/Scheduling.jsx','pages/PatientFlow.jsx','pages/Clinical.jsx','pages/FinanceCommunication.jsx','pages/Admin.jsx','data.js']
+const files=['components.jsx','store.jsx','layout.jsx','clock.js','contracts.js','workflow.js','phase2.js','phase3-contracts.js','orchestration.js','pages/Dashboards.jsx','pages/Scheduling.jsx','pages/PatientFlow.jsx','pages/Clinical.jsx','pages/FinanceCommunication.jsx','pages/Admin.jsx','data.js']
 const result=await build({stdin:{contents:files.map(file=>`export * from './src/${file}';`).join('\n'),resolveDir:process.cwd()},bundle:true,write:false,platform:'node',format:'esm',plugins:[{name:'shared-react',setup(b){b.onResolve({filter:/^react$/},()=>({path:pathToFileURL(require.resolve('react')).href,external:true}))}}]})
 const m=await import('data:text/javascript;base64,'+Buffer.from(result.outputFiles[0].text).toString('base64'))
 m.setClockSource(()=>new Date('2026-09-19T02:08:00Z'))
@@ -196,3 +196,37 @@ store={...store,state:{...recoveryBase,hmo:recoveryBase.hmo.map(h=>h.id===hmoCas
 assert.ok(render('hmo','staff',{hmoCaseId:hmoCase.id}).includes('need clinic review'))
 store={...store,state:recoveryBase}
 console.log('PASS: explicit arrival selection and malformed HMO tracking recovery render')
+
+// Phase 4A: shared presentation must preserve semantic controls and role scope.
+const ui=component=>renderToString(component)
+const field=ui(React.createElement(m.Field,{label:'Visit note',required:true,hint:'Keep the encounter context',error:'Review the current visit'},React.createElement('input',{defaultValue:'Retained draft'})))
+assert.match(field,/aria-required="true"/)
+assert.match(field,/aria-invalid="true"/)
+assert.match(field,/aria-describedby=/)
+assert.ok(field.includes('Retained draft'))
+assert.match(ui(React.createElement(m.Button,null,'Continue')),/type="button"/)
+const records=ui(React.createElement(m.Table,{caption:'Patient appointments',columns:[{key:'name',label:'Patient'},{key:'status',label:'State'}],rows:[{id:'long',name:'A long patient name retained in full',status:'Cancelled'}]}))
+assert.ok(records.includes('Patient appointments'))
+assert.match(records,/scope="col"/)
+assert.ok(records.includes('mobile-cell-label'))
+assert.ok(records.includes('A long patient name retained in full'))
+assert.match(ui(React.createElement(m.Status,null,'Escalated')),/status attention/)
+assert.match(ui(React.createElement(m.Status,null,'Rejected')),/status danger/)
+assert.match(ui(React.createElement(m.Status,null,'Validated locally')),/status info/)
+const modal=ui(React.createElement(m.Modal,{open:true,title:'Review invoice',onClose:()=>{}},'Exact invoice'))
+assert.match(modal,/<dialog/)
+assert.match(modal,/aria-labelledby=/)
+assert.ok(modal.includes('Close Review invoice'))
+assert.ok(render('dashboard','patient').includes('/images/logo.png'))
+assert.ok(render('dashboard','owner').includes('Skip to content'))
+const staffUser=m.sessionForRole('staff',store.state).userId
+const beforeRestricted=store
+store={...store,state:{...store.state,users:store.state.users.map(u=>u.id===staffUser?{...u,permissions:u.permissions.filter(p=>p!=='billing')}:u)}}
+const restricted=render('dashboard','staff')
+assert.ok(!restricted.includes('>Billing &amp; Payments</span>'))
+// Inspect the navigation itself rather than unrelated dashboard text.
+const navMarkup=restricted.match(/<nav class="main-nav"[\s\S]*?<\/nav>/)?.[0]||''
+assert.ok(navMarkup.length)
+assert.ok(!navMarkup.includes('Billing'))
+store=beforeRestricted
+console.log('PASS: Phase 4A shared field/table/dialog semantics, distinct statuses, official logo and permission-filtered navigation')

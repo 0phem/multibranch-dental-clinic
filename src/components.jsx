@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useEffect, useId, useRef } from 'react'
 import { statusTone } from './logic.js'
 
 const ICON_PATHS={
@@ -42,13 +42,15 @@ export function ModuleBadge({ no, pe=false }) {
 }
 
 export function Status({ children }) {
-  return <span className={`status ${statusTone(String(children))}`}><i/>{children}</span>
+  const label=String(children)
+  const tone=label==='Escalated'?'attention':label==='Validated locally'?'info':statusTone(label)
+  return <span className={`status ${tone}`}><i aria-hidden="true"/>{children}</span>
 }
 
 export function Card({ title, subtitle, actions, children, className='' }) {
   return <section className={`card ${className}`}>
     {(title||subtitle||actions) && <div className="card-head">
-      <div>{title&&<h3>{title}</h3>}{subtitle&&<p>{subtitle}</p>}</div>
+      <div>{title&&<h2>{title}</h2>}{subtitle&&<p>{subtitle}</p>}</div>
       {actions&&<div className="card-actions">{actions}</div>}
     </div>}
     {children}
@@ -70,19 +72,30 @@ export function PageHeader({ title, text, modules=[], aside, kicker }) {
   </div>
 }
 
-export function Button({ children, variant='primary', size='md', className='', icon, ...props }) {
-  return <button className={`btn ${variant} ${size} ${className}`} {...props}>{icon&&<Icon name={icon} size={size==='sm'?15:17}/>}<span>{children}</span></button>
+export function Button({ children, variant='primary', size='md', className='', icon, type='button', ...props }) {
+  return <button type={type} className={`btn ${variant} ${size} ${className}`} {...props}>{icon&&<Icon name={icon} size={size==='sm'?15:17}/>}<span>{children}</span></button>
 }
 
-export function Field({ label, children, hint, required=false }) {
-  return <label className="field"><span>{label}{required&&<b className="required">*</b>}</span>{children}{hint&&<small>{hint}</small>}</label>
+export function Field({ label, children, hint, required=false, error }) {
+  const id=useId(), hintId=`${id}-hint`, errorId=`${id}-error`
+  const control=React.Children.map(children,child=>{
+    if(!React.isValidElement(child)||!['input','select','textarea'].includes(child.type))return child
+    return React.cloneElement(child,{
+      id:child.props.id||id,
+      'aria-required':required||undefined,
+      'aria-invalid':error?true:child.props['aria-invalid'],
+      'aria-describedby':[child.props['aria-describedby'],hint&&hintId,error&&errorId].filter(Boolean).join(' ')||undefined,
+    })
+  })
+  return <label className={`field ${error?'has-error':''}`}><span>{label}{required&&<b className="required" aria-hidden="true">*</b>}</span>{control}{hint&&<small id={hintId}>{hint}</small>}{error&&<small id={errorId} className="field-error" role="alert">{error}</small>}</label>
 }
 
-export function Table({ columns, rows, keyField='id', empty='No records found.' }) {
+export function Table({ columns, rows, keyField='id', empty='No records found.', caption='Records' }) {
   if (!rows?.length) return <Empty text={empty}/>
-  return <div className="table-wrap"><table>
-    <thead><tr>{columns.map(c=><th key={c.key}>{c.label}</th>)}</tr></thead>
-    <tbody>{rows.map(row=><tr key={row[keyField]}>{columns.map(c=><td key={c.key}>{c.render?c.render(row):row[c.key]}</td>)}</tr>)}</tbody>
+  return <div className="table-wrap"><table role="table">
+    <caption className="sr-only">{caption}</caption>
+    <thead role="rowgroup"><tr role="row">{columns.map(c=><th scope="col" role="columnheader" key={c.key}>{c.label}</th>)}</tr></thead>
+    <tbody role="rowgroup">{rows.map(row=><tr role="row" key={row[keyField]}>{columns.map(c=><td role="cell" key={c.key}><span className="mobile-cell-label" aria-hidden="true">{c.label}</span><div className="cell-value">{c.render?c.render(row):row[c.key]}</div></td>)}</tr>)}</tbody>
   </table></div>
 }
 
@@ -91,11 +104,11 @@ export function Empty({ text='No records found.', title='Nothing here yet' }) {
 }
 
 export function Notice({ tone='info', title, children }) {
-  return <div className={`notice ${tone}`}><div className="notice-icon"><Icon name={tone==='warning'?'activity':tone==='success'?'shield':'sparkles'} size={17}/></div><div>{title&&<b>{title}</b>}<span>{children}</span></div></div>
+  return <div className={`notice ${tone}`} role={tone==='danger'||tone==='error'?'alert':'status'}><div className="notice-icon"><Icon name={tone==='warning'?'activity':tone==='success'?'shield':'sparkles'} size={17}/></div><div>{title&&<b>{title}</b>}<span>{children}</span></div></div>
 }
 
 export function Tabs({ tabs, active, onChange }) {
-  return <div className="tabs">{tabs.map(t=><button key={t.key} className={active===t.key?'active':''} onClick={()=>onChange(t.key)}>{t.label}{t.count!=null&&<span>{t.count}</span>}</button>)}</div>
+  return <div className="tabs" role="group" aria-label="Views">{tabs.map(t=><button key={t.key} type="button" aria-pressed={active===t.key} className={active===t.key?'active':''} onClick={()=>onChange(t.key)}>{t.label}{t.count!=null&&<span>{t.count}</span>}</button>)}</div>
 }
 
 export function Progress({ value=0, label, threshold=100 }) {
@@ -106,14 +119,28 @@ export function Progress({ value=0, label, threshold=100 }) {
   </div>
 }
 
-export function Modal({ open, title, subtitle, onClose, children, wide=false }) {
+export function Modal({ open, title, subtitle, onClose, children, wide=false, className='' }) {
+  const ref=useRef(null), closeRef=useRef(onClose), titleId=useId(), subtitleId=useId()
+  closeRef.current=onClose
+  useEffect(()=>{
+    if(!open||!ref.current)return
+    const dialog=ref.current, previous=document.activeElement, overflow=document.body.style.overflow
+    dialog.showModal()
+    document.body.style.overflow='hidden'
+    return ()=>{
+      dialog.close()
+      document.body.style.overflow=overflow
+      if(previous?.isConnected)previous.focus({preventScroll:true})
+    }
+  },[open])
   if (!open) return null
-  return <div className="modal-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)onClose?.()}}>
-    <div className={`modal ${wide?'wide':''}`}>
-      <div className="modal-head"><div><h2>{title}</h2>{subtitle&&<p>{subtitle}</p>}</div><button className="icon-btn" onClick={onClose}><Icon name="x" size={19}/></button></div>
-      <div className="modal-body">{children}</div>
-    </div>
-  </div>
+  return <dialog ref={ref} className={`modal ${wide?'wide':''} ${className}`} aria-labelledby={titleId} aria-describedby={subtitle?subtitleId:undefined} onCancel={e=>{e.preventDefault();closeRef.current?.()}} onClick={e=>{
+    const r=e.currentTarget.getBoundingClientRect()
+    if(e.target===e.currentTarget&&(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom))closeRef.current?.()
+  }}>
+    <div className="modal-head"><div><h2 id={titleId}>{title}</h2>{subtitle&&<p id={subtitleId}>{subtitle}</p>}</div><button type="button" className="icon-btn" aria-label={`Close ${title}`} onClick={onClose}><Icon name="x" size={19}/></button></div>
+    <div className="modal-body">{children}</div>
+  </dialog>
 }
 
 export function Timeline({ items=[] }) {
