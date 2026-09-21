@@ -9,7 +9,9 @@ You are acting as a senior product designer and senior frontend engineer.
 
 The goal is not merely to make the application attractive.
 
-The goal is to make it feel like a polished, coherent, production-ready dental clinic platform that could realistically be deployed to patients, clinic staff, dentists, and clinic owners.
+The goal is a polished, coherent, production-usable healthcare interface for Patient, Staff, Dentist and Owner/Admin. Every role requires responsive, state-driven interfaces. Presentation must not imply production backend security or integrations that do not exist.
+
+Skill maintenance does not authorize a redesign. Begin Phase 4 implementation only when explicitly requested, and stay within the user’s authorized scope. Do not commit or push unless requested.
 
 ## Source of truth
 
@@ -19,10 +21,17 @@ Before UI work, read:
 - README.md
 - ERD_ALIGNMENT.md
 - FRONTEND_SCOPE.md
+- MODULE_COVERAGE.md
+- DOCUMENTATION_RECONCILIATION.md
+- PHASE3_5_SAFEGUARDS.md
 - P1_PRODUCTION_UI_REFRESH.md
 - PHASE1_IMPLEMENTATION_NOTES.md
+- PHASE2_IMPLEMENTATION_NOTES.md
+- PHASE3_IMPLEMENTATION_NOTES.md
 - PROFESSOR_DEMO_GUIDE.md
 - docs/architecture/ERD_v2_Data_Dictionary.md
+
+Repository-root paths above refer to project documents. Approved requirements/module meanings/ERD concepts precede implementation evidence. Historical phase notes retain their historical context; use the reconciliation conflict and policy registers rather than treating old deferred-feature statements as current instructions.
 
 Preserve the existing approved workflows and domain rules.
 
@@ -43,7 +52,7 @@ Each interface should reflect the role's actual job.
 
 ### Patient
 
-Design mobile-first.
+Design mobile-first: app-like, touch-friendly, minimal cognitive load and the lowest necessary information density. Show clear next actions and only the Patient’s own information.
 
 The patient experience should feel closer to a modern healthcare/mobile service application than an enterprise administration dashboard.
 
@@ -55,16 +64,17 @@ Prioritize:
 - prescriptions
 - follow-up requirements
 - receipts
+- HMO status and required actions
 - messages
 - notifications
 
 Use cards and progressive disclosure rather than wide tables.
 
-On mobile, avoid horizontal scrolling whenever reasonably possible.
+Appointments, queue, care/results, Prescription, Follow-Up, HMO, receipts, Notifications and Messages must stay understandable on small screens.
 
 ### Staff
 
-Design for high-frequency clinic operations.
+Design desktop productivity-first for high-frequency clinic operations, while remaining fully usable on tablets and phones. Higher density is appropriate for scanning and repetitive work; transform dense desktop tables on smaller screens.
 
 Optimize for:
 - fast scanning
@@ -83,7 +93,7 @@ Do not expose unrestricted cross-branch operational control to ordinary Staff.
 
 ### Dentist
 
-Design around the clinical encounter.
+Design around the clinical encounter, primarily for desktop/tablet work and usable on phones when necessary. Use moderate density with strong current-Patient context at every size; prevent accidental Patient-context switching. Keep Treatment documentation, Performed Procedures, Prescription and Follow-Up decisions clearly separated.
 
 The primary workflow is:
 
@@ -101,7 +111,7 @@ Never automate clinical judgment.
 
 ### Owner/Admin
 
-Design for oversight and management.
+Design desktop analytics and oversight-first. Allow high analytical density on large screens; progressively prioritize KPIs and stack charts/tables on tablets and phones rather than shrinking the dashboard. Oversight must not visually imply clinical or operational authority the role lacks.
 
 Prioritize:
 - high-level operational KPIs
@@ -137,6 +147,9 @@ Avoid making it look like:
 - a collection of disconnected cards
 - a crypto dashboard
 - a neon/glassmorphism showcase
+- excessive gradients or decorative operational-page heroes
+- excessive nested rounded cards, pills/badges or random icons
+- wasteful low-density desktop layouts or overly dense Patient screens
 
 Use consistent:
 - spacing
@@ -176,30 +189,39 @@ Use whitespace intentionally.
 
 Desktop layouts may use multi-column structures when useful.
 
-Patient mobile layouts should generally collapse into a clear single-column flow.
+Mobile forms and content for all roles should collapse into logical sections where appropriate. Do not force one card/table pattern on every role.
 
 ## Responsive design
 
-Test conceptually at approximately:
+Design and verify representative workflows for **all four roles** at approximately:
 
-- 375px mobile
-- 768px tablet
-- 1024px laptop
-- 1440px desktop
+- 375px — small phone
+- 430px — large phone
+- 768px — tablet
+- 1024px — laptop/tablet landscape
+- 1440px — desktop
 
-Patient UI is mobile-first.
+No primary workflow may require a desktop viewport or become clipped, overlapping, unusable, or dependent on page-level horizontal scrolling. Responsiveness means adapting information architecture, not shrinking desktop UI or hiding critical workflow information.
 
-Tables that are unsuitable for phones should become:
-- cards
-- stacked records
-- compact lists
-- expandable sections
+| Desktop pattern | Smaller-screen transformation |
+| --- | --- |
+| Wide table | Stacked cards, compact responsive rows/lists or expandable records |
+| Multi-column form | Single-column logical sections |
+| Sidebar | Role-aware responsive navigation |
+| Dense dashboard | Prioritized KPI cards and vertically stacked charts |
+| Large modal | Viewport-safe sheet or full-screen dialog where appropriate |
+| Wide action toolbar | Wrapped, grouped or contextual actions |
+| Dense filter bar | Responsive filter panel/sheet |
 
-Do not merely place a desktop table inside horizontal scrolling unless the data truly requires tabular comparison.
+Tables are allowed: use desktop tables for scanning/comparison, compact or hybrid layouts on tablet, and responsive rows/cards on mobile unless a compact table remains usable. Do not solve responsiveness with page-level horizontal scrolling; use contained tabular scrolling only when comparison genuinely requires it and no better representation exists. Primary actions must remain reachable.
+
+## Official brand asset
+
+Use the existing `public/images/logo.png` during authorized Phase 4 work; its browser URL in Vite is `/images/logo.png`. Never redraw, regenerate, replace or approximate the official logo. Keep it readable and visually respectful across responsive layouts.
 
 ## Navigation
 
-Keep navigation role-specific.
+Keep navigation role- and viewport-specific, organized around user tasks. A redesigned menu must not expose unauthorized pages; direct-navigation safeguards and current permissions remain authoritative.
 
 Production navigation must NOT expose:
 - 25-Module Coverage
@@ -224,7 +246,7 @@ Avoid showing internal technical wording such as:
 - backend explanations
 - developer terminology
 
-Replace prototype copy with natural product language.
+Replace prototype copy with natural product language: reassuring and clear for Patient; concise and operational for Staff; clinical and encounter-focused for Dentist; oversight/configuration language for Owner/Admin. Avoid raw IDs unless operationally useful. Never invent clinic policy in copy or hide meaningful simulation/storage limitations behind polished wording.
 
 Buttons should describe the actual action.
 
@@ -255,28 +277,19 @@ Forms must have:
 
 Never ask users to reselect information already known from encounter context.
 
-For long processes, use sections or steps.
+For long processes, use sections or steps. Clearly distinguish required from optional fields, preserve shared validation and surface actionable errors. Retain entered values after recoverable failures where safe; never retain one Patient’s draft under another Patient’s context. Mobile forms must not remain overly dense/multi-column. Do not add UI-only validation that contradicts shared domain validation.
 
-## States
+## Dynamic state and interactions
 
-Production-quality screens must account for:
+Canonical IDs and current application state drive visible data. Derive Appointment status/revision, Check-In status, queue position/state/wait, Treatment and Performed Procedures, invoice totals/status, Payment and Receipt availability, Prescription status/availability, Follow-Up state, HMO status/elapsed time, Notification unread counts, Message unread state, dashboard/workload values, workflow/automation health and account/permission/branch/service/Dentist availability from existing state/selectors.
 
-- populated
-- empty
-- loading/simulated loading where applicable
-- error
-- disabled
-- completed
-- pending
-- cancelled
-- no results
-- success feedback
+React correctly to changes. Do not hardcode visual demo values when underlying data exists, fabricate metrics, or create competing visual-only workflow state. Local UI state may hold drafts, selection and disclosure, but must not override current domain state or retain stale encounter identity.
 
-Do not leave dead buttons or decorative controls.
+Account for applicable states: loading, populated, empty, no results, validation error, workflow error, permission denied, inaccessible context, stale state, disabled, unavailable, pending, in progress, Returned, Escalated, Completed, Cancelled, No-show, Paid, Authorized, success and recovery-required. Do not design only the happy path.
 
-Search fields must actually search/filter if presented as functional.
+Loading must be technically meaningful; synchronous/local actions do not justify artificial network spinners. A future loading pattern must not imply an external service is operating.
 
-Filters must actually affect displayed results.
+Every visible control must perform a supported frontend action, navigate to a supported destination, be disabled with a valid reason, or be explicitly identified as future/Proposed Enhancement. No decorative search, filter, button, tab, toggle, dropdown, pagination or export control may pretend to work. Search/filter controls must affect real results; unavailable actions should explain why when useful. Known unsupported controls must be honestly identified, not silently given invented semantics.
 
 ## Status system
 
@@ -297,7 +310,16 @@ Examples:
 - Returned
 - Escalated
 
-Do not create several visually different badge systems for the same type of state.
+Do not create several visually different badge systems for the same type of state. Match domain labels and allowed transitions:
+
+- Escalated HMO is unresolved, not Rejected; local validation is not provider Approved.
+- Prescription Draft is private from Patient; Authorized Prescription cannot silently become editable Draft.
+- Paid Invoice is terminal under the current workflow; Completed Treatment is finalized.
+- Follow-Up need is a clinical decision; scheduling is operational.
+- Messages and Notifications have separate ownership, read state and purposes.
+- Account Inactive differs from Dentist operationally Unavailable.
+
+Do not use styling or controls to imply unsupported transitions.
 
 ## Accessibility
 
@@ -308,16 +330,22 @@ Ensure:
 - sufficient contrast
 - visible focus styles
 - keyboard-operable controls
-- semantic buttons
+- semantic HTML/buttons and sensible heading hierarchy
 - labels connected to inputs
 - accessible icon buttons
-- dialogs with appropriate semantics
+- dialogs with appropriate semantics and accessible focus behavior
+- meaningful button names and accessible table/card alternatives
+- useful empty/error messages
 - reasonable touch targets
 - important information is not communicated by color alone
 
 Avoid 8–11px functional text.
 
-Interactive targets should generally be around 44px where practical, especially on mobile.
+Interactive targets should generally be around 44px or larger where practical, especially on mobile. Avoid cramped/closely packed actions, clipped labels, precision taps, hover-only essential interactions and excessive scrolling to reach critical actions. Icon-only controls require accessible names; do not depend on icons or color alone.
+
+## Content resilience
+
+Verify long Patient/Dentist/Staff, branch, service/treatment and HMO/provider names; multiple procedures/invoice items/notifications; long Message threads and Prescription instructions; many rows and empty collections; validation/recovery warnings and long status/reason text. Wrap or truncate deliberately. Never truncate information needed for safe clinical/financial understanding without an accessible way to read its full value.
 
 ## Modals and dialogs
 
@@ -328,6 +356,8 @@ Dialogs should:
 - support Escape where practical
 - restore/focus appropriately
 - not be used when a normal page or inline interaction is more appropriate
+- stay within the viewport, including mobile; use a responsive sheet/full-screen dialog where needed
+- identify affected Patient/record, action and consequence in critical confirmations when confusion could cause harm
 
 ## Data visualization
 
@@ -343,13 +373,15 @@ Examples:
 
 Pair charts with clear labels/summary metrics.
 
-Filters must actually modify the data shown.
+Use actual available state and meaningful labels, summaries and responsive charts. Do not fabricate trends or totals to fill layouts.
+
+The reconciliation records an existing Analytics conflict: period selection does not filter calculations consistently, and some communication metrics/capacity exports do not honor branch scope. Polished charts must not disguise this. Show only supported behavior or clearly identify unavailable/partial controls; do not silently claim filtering works or implement reporting/business changes outside authorized scope. M21/M22 are read projections, not duplicate operational stores; M23’s Automation Monitor remains read-oriented.
 
 ## Interaction polish
 
 Use subtle transitions where they improve comprehension.
 
-Do not over-animate.
+Do not over-animate or slow repetitive Staff tasks. Avoid distracting page animations and ornamental motion; notification-panel and sheet transitions are appropriate when functional.
 
 Appropriate uses:
 - step transitions
@@ -374,7 +406,28 @@ Do not invent:
 
 Frontend simulations should be clearly implemented within the existing architecture.
 
-Preserve existing business logic unless the UI change genuinely requires an approved supporting adjustment.
+Preserve all Phase 1–3.5 safeguards. Any supporting domain change needs explicit authorized scope; visual convenience is not justification. Preserve:
+
+- current account/profile, role, branch and permission validation, including direct-navigation checks;
+- exact Patient/encounter ownership, current-state and revision validation;
+- finalized Treatment/Prescription protection and invoice/Payment/Receipt evidence;
+- HMO submission-cycle integrity and external provider-response boundary;
+- Notification recipient ownership and Message participant ownership;
+- retry/idempotency rules, centralized Manila clinic time and persistence recovery behavior.
+
+Use **user action → shared command → validation → state transition → state-driven UI update**. Never replace domain actions with page-local direct collection mutation. Preserve recovery warnings and current safe errors, rather than disguising failures as success. Frontend safeguards do not provide authoritative backend security, cross-device synchronization or transactional locking; timers/reminders remain foreground-only.
+
+Preserve M8 admission, M9 queue and M10 capacity distinctions; M12 local preparation, M13 external-response tracking and M14 follow-up/escalation; and Dentist clinical decisions versus Staff operations. Existing explicit Owner administrative exceptions are described in reconciliation; do not expand oversight into clinical/payment/HMO authority.
+
+### Known model and policy boundaries
+
+The ERD implies required Treatment appointment linkage, while approved walk-ins use exact Check-In/Queue context without an appointment. Preserve that walk-in flow and disclose the scheduled/walk-in context correctly. Do not change workflow or ERD to resolve this ambiguity during Phase 4.
+
+The central policy register remains unresolved: Patient cancellation cutoff, Patient reschedule cutoff, earliest Patient check-in, late-arrival/No-show threshold, Staff override authority/reason, completed-treatment amendment, authorized Prescription correction/reissue, conversation reopening and zero-fee settlement. Do not invent values, fake policy controls or copy implying approval. Present current supported behavior; current Check-In is Staff admission, not a new Patient self-Check-In action.
+
+### Performance
+
+Respect the existing nonfatal Vite bundle-size warning. Reuse components/utilities, avoid unnecessary dependencies, and consider code splitting only when it materially improves the app without sacrificing maintainability. Do not suppress warnings to hide them.
 
 Reuse components where appropriate instead of duplicating markup.
 
@@ -389,9 +442,9 @@ For every major screen:
 3. Identify the primary action.
 4. Identify secondary actions.
 5. Identify information that can be removed or de-emphasized.
-6. Check mobile behavior.
+6. Check all supported viewport sizes and the role’s density/navigation needs.
 7. Check role permissions.
-8. Check loading/empty/error/completed states.
+8. Check applicable interaction, stale-state and recovery states, including long content.
 9. Check whether every visible control actually works.
 
 ## Implementation workflow
@@ -402,27 +455,44 @@ When asked to redesign:
 2. State the intended UX structure briefly.
 3. Preserve workflow behavior.
 4. Implement reusable UI patterns.
-5. Check responsive behavior.
-6. Run tests.
-7. Run production build.
-8. Review changed files for visual inconsistency.
-9. Fix regressions before stopping.
+5. Verify the responsive QA matrix below with browser/layout inspection, keyboard and touch-oriented interactions.
+6. Run `npm test` and `npm run test:smoke`; preserve existing regression assertions.
+7. Run `npm run build`.
+8. Run `git diff --check`, inspect `git status` and review changed files for unintended behavior, dependency, asset or visual changes.
+9. Fix introduced regressions before stopping; report any verification limitations honestly.
 
 Do not claim something is polished merely because it compiles.
 
+## Responsive QA matrix
+
+At each of 375px, 430px, 768px, 1024px and 1440px, verify representative workflows for every major role:
+
+| Role | Required representative coverage |
+| --- | --- |
+| Patient | Home/dashboard, booking, appointment detail, arrival/queue information, Treatment result, Prescription, invoice/Receipt, HMO, Notifications, Messages |
+| Staff | Appointments, Check-In, Patient registry, queue, billing/Payment, Follow-Up, HMO, communications |
+| Dentist | My Queue, Patient/encounter context, chart, Treatment, Performed Procedures, Prescription, Follow-Up, communications |
+| Owner/Admin | Dashboard, users/access, branches, personnel, Analytics, Automation Monitor |
+
+Inspect populated/empty/error and applicable stale/recovery/terminal states with realistic long content. Check overflow, action reachability, dialogs, navigation and actual control behavior. Patient arrival coverage verifies current supported information, not an invented self-admission action. SSR render-smoke and a successful build do not prove responsive layout, keyboard/focus, browser interaction or accessibility correctness. Record what was actually inspected; report gaps rather than claiming conceptual checks are verified.
+
 ## Definition of done
 
-A redesigned feature is not done until:
+A screen is not complete merely because it looks good at 1440px. A redesigned feature is not done until:
 
 - its information hierarchy is clear
 - actions correspond to real workflow actions
-- responsive behavior is intentional
-- mobile layout is usable
+- canonical current state drives dynamic data and updates correctly
+- mobile, tablet and desktop layouts pass applicable responsive QA
+- content does not clip, overlap or require page-level horizontal scrolling
 - role boundaries remain correct
-- empty/error/status states make sense
+- empty, validation/workflow error, stale, recovery and applicable terminal states work
 - text does not expose academic/developer terminology
-- forms are usable
+- forms retain shared validation, safe context and recoverable input
+- accessibility, keyboard/focus and touch usability have been checked
 - controls work
 - shared components remain coherent
-- existing tests pass
-- production build passes
+- all Phase 1–3.5 safeguards remain intact
+- no unsupported clinic policy or frontend capability is implied
+- existing tests and render-smoke pass
+- production build and diff checks pass; verification limits are reported
