@@ -80,8 +80,8 @@ button:disabled { opacity: .65; }
 .sidebar { width: var(--sidebar); background: var(--surface); padding: var(--space-5) var(--space-3); transform: none; }
 .sidebar-brand { padding: 0 var(--space-2) var(--space-5); }
 .brand { gap: var(--space-3); min-width: 0; }
-.clinic-logo { width: 56px; height: 56px; object-fit: contain; flex: none; background: #fff; border-radius: var(--radius-sm); }
-.brand strong { font-size: var(--font-lg); font-weight: var(--weight-heading); }
+.clinic-logo { width: 48px; height: 48px; object-fit: contain; flex: none; border-radius: var(--radius-sm); }
+.brand strong { font-size: var(--font-body); font-weight: var(--weight-heading); line-height: 1.25; }
 .brand span { font-size: var(--font-xs); color: var(--muted); }
 .role-card { margin: 0 0 var(--space-5); padding: var(--space-3); border-radius: var(--radius); background: var(--surface-2); box-shadow: none; }
 .role-card small { font-size: var(--font-xs); text-transform: none; letter-spacing: 0; }
@@ -220,6 +220,12 @@ dialog.notification-dialog { margin: var(--space-3) var(--space-3) auto auto; wi
 /* Login uses explanatory copy, never fabricated live dashboard data. */
 .login-shell { min-height: 100dvh; grid-template-columns: minmax(0, 1.1fr) minmax(0, .9fr); }
 .login-panel { padding: var(--space-10) clamp(24px, 6vw, 96px); max-width: 800px; width: 100%; margin: auto; }
+/* Login brand: same identity as the sidebar, scaled up. Text is real HTML; the logo is decorative. The logo has ~15% built-in transparent margin, offset here so its artwork aligns with the copy below. */
+.brand-login { gap: var(--space-4); }
+.brand-login { --brand-logo: 68px; }
+.brand-login .clinic-logo { width: var(--brand-logo); height: var(--brand-logo); margin-left: calc(var(--brand-logo) * -.146); }
+.brand-login strong { font-size: 1.375rem; }
+.brand-login span { font-size: var(--font-md); }
 .login-copy-wrap { margin-top: var(--space-10); }
 .login-panel h1 { font-size: clamp(2rem, 4vw, 3rem); }
 .login-copy { font-size: var(--font-body); }
@@ -296,6 +302,8 @@ dialog.notification-dialog { margin: var(--space-3) var(--space-3) auto auto; wi
   dialog.navigation-dialog { width: min(340px, calc(100vw - 16px)); height: 100dvh; max-height: 100dvh; border-radius: 0 var(--radius) var(--radius) 0; }
   dialog.notification-dialog { margin: 8px auto; }
   .login-panel { padding: var(--space-6); }
+  .brand-login { --brand-logo: 56px; }
+  .brand-login strong { font-size: 1.25rem; }
   .role-switcher { grid-template-columns: minmax(0, 1fr); margin-top: var(--space-4); }
   .role-choice { min-height: 76px; }
   .login-copy-wrap { margin-top: var(--space-6); }

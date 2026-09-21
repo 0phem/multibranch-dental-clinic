@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict'
+import { createHash } from 'node:crypto'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { build } from 'esbuild'
 import { createRequire } from 'node:module'
 import { pathToFileURL } from 'node:url'
@@ -230,3 +232,37 @@ assert.ok(navMarkup.length)
 assert.ok(!navMarkup.includes('Billing'))
 store=beforeRestricted
 console.log('PASS: Phase 4A shared field/table/dialog semantics, distinct statuses, official logo and permission-filtered navigation')
+
+// Clinic brand alignment: the authoritative visible identity is the text "Dr. Dana E. Roxas" / "Dental Clinic" beside the
+// official compact logo, never the old product name. Only rendered text/markup is checked; stable internal identifiers
+// (e.g. storage namespaces) are deliberately out of scope.
+const clinicName='Dr. Dana E. Roxas',clinicIdentity=`<strong>${clinicName}</strong><span>Dental Clinic</span>`
+const loginHtml=renderToString(React.createElement(m.Login,{onLogin:()=>{}}))
+assert.ok(loginHtml.includes('src="/images/logo.png"'),'login uses the official compact logo')
+assert.ok(loginHtml.includes(clinicIdentity),'login shows the exact clinic identity as real text')
+const brandedHtml=[loginHtml]
+for(const [role,nav] of Object.entries(m.NAV)){
+  for(const [page] of nav)brandedHtml.push(render(page,role))
+  const shell=render('dashboard',role)
+  assert.ok(shell.includes('src="/images/logo.png"'),`${role} shell uses the compact official logo`)
+  assert.ok(shell.includes(clinicIdentity),`${role} shell shows the clinic name with Dental Clinic subtitle`)
+}
+for(const html of brandedHtml)assert.ok(!/dentalops/i.test(html),'no user-facing render still uses the old product name')
+// Every image the UI references must exist. logo-with-name.png is a supplied asset that is deliberately not rendered.
+for(const file of new Set(brandedHtml.flatMap(html=>[...html.matchAll(/src="(\/images\/[^"]+)"/g)].map(x=>x[1])))){
+  assert.ok(existsSync(`public${file}`),`${file} exists in public/`)
+  assert.equal(readFileSync(`public${file}`).subarray(0,8).toString('hex'),'89504e470d0a1a0a',`${file} is a PNG`)
+}
+// The official artwork must never be altered. Update these hashes only when the client supplies a replacement asset.
+const assetSha256={'public/images/logo.png':'9ffca1383e222e1e6b04068b8026212f1c0f7619ec441201aec0a684752c8e5e','public/images/logo-with-name.png':'dffe98c29e6acd00b3970fe4246824943ab2057b70e547dbec1e7ab00c2f068b'}
+for(const [file,hash] of Object.entries(assetSha256)){
+  assert.ok(existsSync(file),`${file} exists as a supplied clinic asset`)
+  assert.equal(createHash('sha256').update(readFileSync(file)).digest('hex'),hash,`${file} must remain unmodified`)
+}
+// Copy that only renders after interaction (Assistant panel, export filenames) is checked at source. Presentation files
+// hold no stable internal identifiers; storage namespaces live in store.jsx/persistence.js, which are intentionally not scanned.
+for(const file of ['App.jsx','layout.jsx','components.jsx',...readdirSync('src/pages').map(name=>`pages/${name}`)])
+  assert.ok(!/dentalops/i.test(readFileSync(`src/${file}`,'utf8')),`src/${file} still contains the old product name`)
+const documentTitle=readFileSync('index.html','utf8').match(/<title>([^<]*)<\/title>/)?.[1]
+assert.equal(documentTitle,`${clinicName} Dental Clinic`)
+console.log('PASS: clinic brand alignment — compact logo with exact clinic text on login and every role shell, unmodified official assets, document title and no old product name in the UI')

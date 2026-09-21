@@ -3,7 +3,9 @@ name: dentalops-production-ui
 description: Use when designing, redesigning, polishing, reviewing, or implementing frontend UI/UX for the Multi-Branch Dental Clinic Operation System. Focus on production-quality responsive healthcare SaaS interfaces while preserving approved workflows and role boundaries.
 ---
 
-# DentalOps Production UI/UX Skill
+# Dr. Dana E. Roxas Dental Clinic — Production UI/UX Skill
+
+(The skill identifier `dentalops-production-ui` is a stable internal name kept so existing references keep working. It is not the product brand.)
 
 You are acting as a senior product designer and senior frontend engineer.
 
@@ -215,9 +217,28 @@ No primary workflow may require a desktop viewport or become clipped, overlappin
 
 Tables are allowed: use desktop tables for scanning/comparison, compact or hybrid layouts on tablet, and responsive rows/cards on mobile unless a compact table remains usable. Do not solve responsiveness with page-level horizontal scrolling; use contained tabular scrolling only when comparison genuinely requires it and no better representation exists. Primary actions must remain reachable.
 
-## Official brand asset
+## Official clinic brand
 
-Use the existing `public/images/logo.png` during authorized Phase 4 work; its browser URL in Vite is `/images/logo.png`. Never redraw, regenerate, replace or approximate the official logo. Keep it readable and visually respectful across responsive layouts.
+The visible clinic identity is:
+
+**Dr. Dana E. Roxas**
+**Dental Clinic**
+
+"Dental Clinic" is the supporting/subtitle line. Never present the application to users as "DentalOps" in the shell, login, page/document titles, accessibility labels, demo copy, assistant text or export filenames.
+
+The authoritative identity is this **text**, rendered as real accessible HTML. Logo artwork never substitutes for it.
+
+Two clinic assets exist. Neither may be redrawn, regenerated, destructively recolored, cropped, replaced or approximated:
+
+| Asset | Browser path | Use |
+| --- | --- | --- |
+| Compact logo | `/images/logo.png` (`public/images/logo.png`) | Approved compact clinic logo and the current primary application branding asset: login/welcome, sidebar and phone navigation drawer, always beside the clinic name as text. |
+| Full lockup | `/images/logo-with-name.png` (`public/images/logo-with-name.png`) | Supplied full artwork; preserve unchanged. Its embedded wording ("DANA ROXAS / DENTAL CLINIC", another Dentist's name, a services line) does not match the authoritative identity, so do not render it in the primary shell or login. Use it only where the client explicitly approves the usage and the wording is appropriate. |
+
+- The compact logo is decorative beside the clinic-name text: empty alt. Do not add a duplicate logo to the phone top bar merely for branding; the navigation drawer carries the brand.
+- Do not make the logo oversized. The asset has about 15% built-in transparent margin: compensate with CSS size/layout only, never by editing the file.
+- Check the brand at 375, 430, 1024 and 1440px for readability and page-level overflow.
+- Stable internal identifiers are not brand: keep the `dentalops-v4-` storage namespace, the `dentalops-production-ui` skill and package names unless a reviewed migration is authorized. Do not rename saved-data keys as part of a visual change.
 
 ## Navigation
 
@@ -495,4 +516,5 @@ A screen is not complete merely because it looks good at 1440px. A redesigned fe
 - all Phase 1–3.5 safeguards remain intact
 - no unsupported clinic policy or frontend capability is implied
 - existing tests and render-smoke pass
+- the clinic identity text and asset usage follow the brand rules above; no user-facing copy uses the old product name
 - production build and diff checks pass; verification limits are reported

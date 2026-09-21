@@ -45,8 +45,8 @@ Use **Reset demo data** only when intentionally discarding local demo changes. S
 
 - [Documentation Reconciliation](DOCUMENTATION_RECONCILIATION.md): source hierarchy, conflicts, policies and Phase 4 inputs.
 - [Frontend Scope](FRONTEND_SCOPE.md), [Module Coverage](MODULE_COVERAGE.md), [ERD Alignment](ERD_ALIGNMENT.md).
-- [Professor Demo Guide](PROFESSOR_DEMO_GUIDE.md), [Agent instructions](AGENTS.md).
+- [Professor Demo Guide](PROFESSOR_DEMO_GUIDE.md), [Agent instructions](AGENTS.md), [Branding Alignment](BRANDING_ALIGNMENT.md).
 - [ERD Data Dictionary](docs/architecture/ERD_v2_Data_Dictionary.md) and unchanged diagrams in `docs/architecture/`.
 - Historical implementation records: [Phase 1](PHASE1_IMPLEMENTATION_NOTES.md), [Phase 2](PHASE2_IMPLEMENTATION_NOTES.md), [Phase 3](PHASE3_IMPLEMENTATION_NOTES.md), [Phase 3.5](PHASE3_5_SAFEGUARDS.md), [P0](P0_IMPLEMENTATION_NOTES.md), [P1 UI refresh](P1_PRODUCTION_UI_REFRESH.md).
 
-Production UI/UX, accessibility and responsive polish belong to Phase 4. The official `public/images/logo.png` remains unchanged.
+Production UI/UX, accessibility and responsive polish belong to Phase 4. The application's visible identity is the clinic's own: **Dr. Dana E. Roxas — Dental Clinic**. It is rendered as text beside the unchanged official compact logo `public/images/logo.png`; the supplied `public/images/logo-with-name.png` is preserved unchanged but not rendered until its usage is confirmed. See [Branding Alignment](BRANDING_ALIGNMENT.md). Internal identifiers such as the `dentalops-v4-` storage namespace are intentionally unchanged so saved workspaces keep loading.

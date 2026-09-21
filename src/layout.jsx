@@ -23,8 +23,11 @@ function navGroups(role){
   return GROUPS[role].map(([title,keys])=>[title,keys.filter(k=>lookup[k]).map(k=>[k,lookup[k]])]).filter(([,items])=>items.length)
 }
 
-function Brand(){
-  return <div className="brand"><img className="clinic-logo" src="/images/logo.png" alt="Clinic logo" width="56" height="56"/><div><strong>DentalOps</strong><span>Clinic workspace</span></div></div>
+// Authoritative clinic identity is the text "Dr. Dana E. Roxas" / "Dental Clinic", set beside the official compact
+// logo (decorative, so empty alt). Never redraw or recolor the logo. logo-with-name.png is a supplied asset whose
+// embedded wording differs from this identity, so it is intentionally not rendered.
+function Brand({className=''}){
+  return <div className={`brand ${className}`.trim()}><img className="clinic-logo" src="/images/logo.png" alt="" width="48" height="48"/><div><strong>Dr. Dana E. Roxas</strong><span>Dental Clinic</span></div></div>
 }
 
 export function Login({ onLogin }) {
@@ -32,7 +35,7 @@ export function Login({ onLogin }) {
   const info=ROLE_INFO[selected]
   return <main className="login-shell">
     <section className="login-panel" aria-labelledby="login-title">
-      <Brand/>
+      <Brand className="brand-login"/>
       <div className="login-copy-wrap"><div className="eyebrow">Welcome to your clinic workspace</div><h1 id="login-title">Care, connected.</h1><p className="login-copy">Choose your workspace to manage your visit or continue the clinic’s day.</p></div>
       <div className="role-switcher" role="group" aria-label="Choose demo role">
         {Object.entries(ROLE_INFO).map(([key,role])=><button type="button" key={key} aria-pressed={selected===key} className={`role-choice ${selected===key?'selected':''}`} onClick={()=>setSelected(key)}>
@@ -79,7 +82,7 @@ function ClinicAssistant({role}){
   }
   return <>
     <button className="assistant-fab" onClick={()=>setOpen(v=>!v)} aria-expanded={open} aria-label={open?"Close clinic help":"Open clinic help"}><Icon name="robot" size={22}/></button>
-    {open&&<div className="assistant-panel"><div className="assistant-head"><div className="assistant-avatar"><Icon name="robot" size={19}/></div><div><b>DentalOps Assistant</b><small>Clinic navigation & workflow help</small></div><button className="icon-btn" aria-label="Close clinic help" onClick={()=>setOpen(false)}><Icon name="x" size={16}/></button></div><div className="assistant-body"><div className="assistant-bubble">Hi! I can help you navigate the clinic system. I won’t diagnose conditions or make treatment decisions.</div>{answer&&<div className="assistant-bubble answer">{answer}</div>}<div className="assistant-quick">{quick.map(q=><button key={q} onClick={()=>reply(q)}>{q}</button>)}</div></div></div>}
+    {open&&<div className="assistant-panel"><div className="assistant-head"><div className="assistant-avatar"><Icon name="robot" size={19}/></div><div><b>Clinic Assistant</b><small>Clinic navigation & workflow help</small></div><button className="icon-btn" aria-label="Close clinic help" onClick={()=>setOpen(false)}><Icon name="x" size={16}/></button></div><div className="assistant-body"><div className="assistant-bubble">Hi! I can help you navigate the clinic system. I won’t diagnose conditions or make treatment decisions.</div>{answer&&<div className="assistant-bubble answer">{answer}</div>}<div className="assistant-quick">{quick.map(q=><button key={q} onClick={()=>reply(q)}>{q}</button>)}</div></div></div>}
   </>
 }
 
@@ -108,7 +111,7 @@ export function Shell({ role, page, setPage, onLogout, activeBranch, setActiveBr
   return <div className={`app-shell role-${role}`}>
     <a className="skip-link" href="#main-content">Skip to content</a>
     <aside className="sidebar"><div className="sidebar-brand"><Brand/></div>{navigation}</aside>
-    <Modal open={mobileOpen} title="Your workspace" onClose={()=>setMobileOpen(false)} className="navigation-dialog">{navigation}</Modal>
+    <Modal open={mobileOpen} title="Your workspace" onClose={()=>setMobileOpen(false)} className="navigation-dialog"><div className="sidebar-brand"><Brand/></div>{navigation}</Modal>
     <div className="main-shell">
       <header className="topbar">
         <div className="topbar-left"><button className="mobile-menu icon-btn" aria-label="Open navigation" aria-haspopup="dialog" aria-expanded={mobileOpen} onClick={()=>setMobileOpen(true)}><Icon name="menu" size={21}/></button><div className="topbar-context"><span className="workspace-label">{info.label} workspace</span>{role==='owner'&&<label className="branch-scope"><span>Branch</span><select value={activeBranch} onChange={e=>setActiveBranch(e.target.value)}><option>All Branches</option>{store.state.branches.map(b=><option key={b.id}>{b.name}</option>)}</select></label>}{(role==='staff'||role==='dentist')&&<div className="branch-lock"><small>Assigned branch</small><b>{activeBranch}</b></div>}</div></div>

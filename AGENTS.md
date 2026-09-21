@@ -12,6 +12,26 @@ Four product experiences:
 
 This repository is the canonical implementation.
 
+## Clinic branding
+
+Official clinic identity:
+
+**Dr. Dana E. Roxas**
+**Dental Clinic**
+
+"Dental Clinic" is the supporting/subtitle line. The application must not present itself to users as "DentalOps".
+
+The authoritative identity is the **text** above, rendered as real accessible HTML. Logo artwork never substitutes for it.
+
+Clinic assets (browser paths in parentheses):
+
+- `public/images/logo.png` (`/images/logo.png`): the approved compact clinic logo and the current primary application branding asset. Render it beside the clinic-name text on the login/welcome surface, the sidebar and the phone navigation drawer. It is decorative next to that text, so it takes an empty alt.
+- `public/images/logo-with-name.png` (`/images/logo-with-name.png`): supplied full artwork/lockup. Preserve it unchanged. Its embedded wording ("DANA ROXAS / DENTAL CLINIC", another Dentist's name and a services line) does not match the authoritative identity, so it is not rendered in the primary shell or login. Use it only where the client explicitly approves that usage and its embedded wording is appropriate.
+
+Neither asset may be redrawn, regenerated, destructively recolored, cropped or replaced. Adjust only display size and layout in CSS. `scripts/render-smoke.mjs` records SHA-256 hashes of both files and fails if either changes; update the hashes only when the client supplies a replacement.
+
+Stable internal identifiers keep their existing names and are not user-facing brand: the `dentalops-v4-` localStorage namespace, the `dentalops-production-ui` skill and the npm package name. Do not rename storage keys without a reviewed migration; that would strand existing saved workspaces. See BRANDING_ALIGNMENT.md.
+
 ## Read before substantial work
 
 Use these as project context:
@@ -27,6 +47,7 @@ Use these as project context:
 - PHASE2_IMPLEMENTATION_NOTES.md
 - PHASE3_IMPLEMENTATION_NOTES.md
 - PHASE3_5_SAFEGUARDS.md
+- BRANDING_ALIGNMENT.md (official clinic identity, assets and retained internal identifiers)
 - DOCUMENTATION_RECONCILIATION.md (current conflicts and unresolved policies)
 - docs/architecture/ERD_v2_Data_Dictionary.md
 
