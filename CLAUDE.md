@@ -58,6 +58,7 @@ For workflow or safeguard work, inspect:
 For current UI work, inspect:
 
 - `PHASE4A_UI_FOUNDATION.md`
+- `PHASE4B_PATIENT_EXPERIENCE.md`
 - `BRANDING_ALIGNMENT.md`
 - `.agents/skills/dentalops-production-ui/SKILL.md`
 

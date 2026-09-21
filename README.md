@@ -2,13 +2,13 @@
 
 React/Vite frontend for Patient, Staff, Dentist and Owner/Admin experiences. This is the canonical repository for the clinic operations project (client: Dr. Dana Roxas; Business Process Automation, Group 3 — BSIT 3B).
 
-The protected implementation checkpoint is **`dac864e` — Complete Phase 3.5 safeguards and user acceptance hardening**. Phases 1–3.5 implement and test the frontend workflow with local persistence; they do not constitute a production backend or a finished production UI.
+The protected implementation checkpoint is **`dac864e` — Complete Phase 3.5 safeguards and user acceptance hardening**. Phases 1–3.5 implement and test the frontend workflow with local persistence; they do not constitute a production backend or a finished production UI. Phase 4A (the shared UI foundation) and Phase 4B (the Patient experience, including the M24 Referral & Loyalty prototype) have since been completed on top of that checkpoint; the Staff, Dentist and Owner/Admin role experiences are later phases.
 
 ## Current workflow
 
 **Appointment → Check-In → Queue → Treatment → Performed Procedures → Draft Invoice → Review → Issue → Payment → Receipt**
 
-- Patient booking and Find Best use the same scheduling validator. Booking takes no payment. Staff records a distinct arrival; Dentist works from their own exact queue encounter.
+- Patient booking and its Suggested times use the same scheduling validator. Booking takes no payment. Staff records a distinct arrival; Dentist works from their own exact queue encounter.
 - Dentist explicitly documents actual procedures and decides whether a Prescription or Follow-Up is required. Completion closes the linked encounter and prepares administrative handoffs. Nothing chooses diagnosis, procedures or medication automatically.
 - Staff reviews itemized treatment-derived charges, issues invoices and records full payment. Card/Electronic is a labeled local simulation.
 - HMO separates local requirements (M12), externally performed submission/provider-response recording (M13), and timestamp-driven contact/follow-up/escalation (M14). Local completeness and escalation never mean provider approval.
@@ -31,7 +31,7 @@ npm run build
 npm run preview
 ```
 
-Open the URL printed by Vite. The verified checkpoint has **260 automated domain/regression/safeguard tests: 260 passing, 0 failing**, passing React render-smoke/integration scenarios and a passing production Vite build. The build has an existing nonfatal JavaScript chunk-size warning. These checks are not full browser automation, accessibility certification, penetration testing or backend integration tests.
+Open the URL printed by Vite. At Phase 4B the suite has **402 automated domain/regression/safeguard tests: 402 passing, 0 failing** (260 at the Phase 3.5 checkpoint), 13 passing React render-smoke/integration scenarios and a passing production Vite build. The build has an existing nonfatal JavaScript chunk-size warning. These checks are not full browser automation, accessibility certification, penetration testing or backend integration tests.
 
 ## Scope and demo data
 
@@ -50,4 +50,4 @@ Use **Reset demo data** only when intentionally discarding local demo changes. S
 - [Phase 4B Patient experience and M24](PHASE4B_PATIENT_EXPERIENCE.md).
 - Historical implementation records: [Phase 1](PHASE1_IMPLEMENTATION_NOTES.md), [Phase 2](PHASE2_IMPLEMENTATION_NOTES.md), [Phase 3](PHASE3_IMPLEMENTATION_NOTES.md), [Phase 3.5](PHASE3_5_SAFEGUARDS.md), [P0](P0_IMPLEMENTATION_NOTES.md), [P1 UI refresh](P1_PRODUCTION_UI_REFRESH.md).
 
-Production UI/UX, accessibility and responsive polish belong to Phase 4. The application's visible identity is the clinic's own: **Dr. Dana E. Roxas — Dental Clinic**. It is rendered as text beside the unchanged official compact logo `public/images/logo.png`; the supplied `public/images/logo-with-name.png` is preserved unchanged but not rendered until its usage is confirmed. See [Branding Alignment](BRANDING_ALIGNMENT.md). Internal identifiers such as the `dentalops-v4-` storage namespace are intentionally unchanged so saved workspaces keep loading.
+Production UI/UX, accessibility and responsive polish belong to Phase 4: the shared foundation (4A) and the Patient role (4B) are complete, and the Staff, Dentist and Owner/Admin role passes remain. The application's visible identity is the clinic's own: **Dr. Dana E. Roxas — Dental Clinic**. It is rendered as text beside the unchanged official compact logo `public/images/logo.png`; the supplied `public/images/logo-with-name.png` is preserved unchanged but not rendered until its usage is confirmed. See [Branding Alignment](BRANDING_ALIGNMENT.md). Internal identifiers such as the `dentalops-v4-` storage namespace are intentionally unchanged so saved workspaces keep loading.

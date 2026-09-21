@@ -47,6 +47,8 @@ Use these as project context:
 - PHASE2_IMPLEMENTATION_NOTES.md
 - PHASE3_IMPLEMENTATION_NOTES.md
 - PHASE3_5_SAFEGUARDS.md
+- PHASE4A_UI_FOUNDATION.md (shared UI foundation)
+- PHASE4B_PATIENT_EXPERIENCE.md (Patient experience and the M24 prototype)
 - BRANDING_ALIGNMENT.md (official clinic identity, assets and retained internal identifiers)
 - DOCUMENTATION_RECONCILIATION.md (current conflicts and unresolved policies)
 - docs/architecture/ERD_v2_Data_Dictionary.md

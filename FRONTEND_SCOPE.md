@@ -1,6 +1,6 @@
 # Current Frontend Scope
 
-Scope at protected implementation checkpoint `dac864e`, through Phase 3.5. Approved module meanings and ERD concepts remain requirements; this document distinguishes implemented frontend behavior from future infrastructure. See [reconciliation and policies](DOCUMENTATION_RECONCILIATION.md).
+Scope at domain baseline `dac864e` (through Phase 3.5) plus the Phase 4B Patient experience and M24. Approved module meanings and ERD concepts remain requirements; this document distinguishes implemented frontend behavior from future infrastructure. See [reconciliation and policies](DOCUMENTATION_RECONCILIATION.md).
 
 ## Implemented frontend behavior
 
@@ -8,7 +8,7 @@ Scope at protected implementation checkpoint `dac864e`, through Phase 3.5. Appro
 | --- | --- | --- |
 | Identity/access | Canonical PERSON identity; linked accounts and operational profiles; current account, role, profile, permission and branch checks in shared commands, sensitive selectors and page navigation | Demo sessions, not secure authentication. Account Active/Inactive differs from scheduling Available/Unavailable |
 | Administration | Owner-only validated account, branch/service and personnel commands; explicit desired-state updates; account/profile synchronization | No unrestricted clinical authority; existing administrative exceptions are listed below |
-| Scheduling | Branch → Service → Dentist preference → Date/Time → Review; manual and Find Best share validation of current catalog, hours, shift, capability, Patient/Dentist overlap and future time | No booking payment; no invented cancellation/reschedule cutoff |
+| Scheduling | Branch → Service → Dentist preference → Date/Time → Review; manual selection and the Patient's Suggested times share validation of current catalog, hours, shift, capability, Patient/Dentist overlap and future time | No booking payment; no invented cancellation/reschedule cutoff |
 | Admission/queue | Staff scheduled Check-In and walk-ins; one linked arrival/queue per scheduled encounter; own Patient position, own Dentist queue; reasoned priority and Staff absence controls | No Patient self-Check-In command; wait/capacity values are estimates, not clinical duration predictions |
 | Clinical | Exact encounter documentation, multiple actual Performed Procedures, draft revision checks and immutable completed care | No autonomous clinical decisions; no clinical-template library or amendment workflow |
 | Financial | Completed procedures/configured fee snapshots → Draft → Review → Issued → exact full payment → Paid/Receipt | No arbitrary manual bill, partial payment, refund or real gateway. Zero-fee settlement remains unresolved |
@@ -59,4 +59,4 @@ The older approved roadmap also names administrative chatbot/Staff handoff, repo
 
 ## Verification scope
 
-260 passing domain/regression/safeguard tests; React SSR render/integration scenarios; production Vite build passing at the checkpoint. These do not establish browser interaction correctness, accessibility certification, security penetration coverage, device compatibility or backend integration. The existing >500 kB build warning is a later performance input.
+402 passing domain/regression/safeguard tests (260 at the Phase 3.5 checkpoint); 13 React SSR render/integration scenarios; production Vite build passing at Phase 4B. These do not establish browser interaction correctness, accessibility certification, security penetration coverage, device compatibility or backend integration. The existing >500 kB build warning is a later performance input.
