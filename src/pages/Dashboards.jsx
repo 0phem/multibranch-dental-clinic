@@ -1,59 +1,20 @@
 import React from 'react'
+import { PatientHome } from './PatientHome.jsx'
 import { ROLE_INFO } from '../data.js'
 import { Button, Card, Icon, MetricRow, Notice, PageHeader, Progress, StatCard, Status } from '../components.jsx'
-import { branchCapacity, dateLabel, dentistName, displayTime, nextAppointment, patientName, peso, queueWaitEstimate } from '../logic.js'
+import { branchCapacity, dentistName, displayTime, patientName, peso } from '../logic.js'
 
-import { visibleNotifications, visibleConversations, pendingHours } from '../phase3-contracts.js'
+import { pendingHours } from '../phase3-contracts.js'
 import { prescriptionTasks } from '../phase2.js'
 import { clinicDate } from '../clock.js'
 import { encounterContext, isTodayQueue, isActiveQueue, sessionForRole } from '../contracts.js'
 
 export function DashboardPage({ role, activeBranch, setPage, store }) {
   const { state }=store
-  if (role==='patient') return <PatientDashboard setPage={setPage} state={state} session={store.session}/>
+  if (role==='patient') return <PatientHome store={store} setPage={setPage}/>
   if (role==='staff') return <StaffDashboard setPage={setPage} activeBranch={activeBranch} state={state} session={store.session}/>
   if (role==='dentist') return <DentistDashboard setPage={setPage} state={state} session={store.session}/>
   return <OwnerDashboard setPage={setPage} activeBranch={activeBranch} state={state}/>
-}
-
-function PatientDashboard({ setPage, state, session }) {
-  const pid=session?.patientId||ROLE_INFO.patient.patientId
-  const firstName=ROLE_INFO.patient.name.split(' ')[0]
-  const next=nextAppointment(pid,state.appointments)
-  const q=state.queue.find(x=>x.patientId===pid&&isTodayQueue(x)&&isActiveQueue(x))
-  const wait=q?queueWaitEstimate(q,state.queue,state.appointments,state.treatments,state.dentists):0
-  const openFollowups=state.followups.filter(f=>f.patientId===pid&&f.status==='Open').length
-  const participant=session||sessionForRole('patient',state)
-  const unread=visibleConversations(state,participant).filter(c=>c.unreadUserIds.includes(participant.userId)).length
-  const dentist=next?dentistName(next.dentistId,state.dentists):'—'
-  const recent=visibleNotifications(state,participant).slice(0,4)
-  return <>
-    <section className={`patient-home-hero ${q?'queue-active':''}`}>
-      <div className="patient-hero-copy"><span className="hero-eyebrow">Good afternoon, {firstName}</span>{q?<><h1>You’re checked in.</h1><p>We’ll keep this page updated while you wait. {q.status==='Temporarily Away'?'Your place is paused while you are away.':<>You’re currently <strong>#{q.position}</strong> in line.</>}</p><div className="hero-actions"><Button onClick={()=>setPage('queue')} icon="queue">View live queue</Button><Button variant="soft" onClick={()=>setPage('messages')} icon="message">Message clinic</Button></div></>:next?<><h1>Your next visit is coming up.</h1><p>{dateLabel(next.date)} at {displayTime(next.start)} with {dentist}.</p><div className="hero-actions"><Button onClick={()=>setPage('appointments')} icon="calendar">View appointment</Button><Button variant="soft" onClick={()=>setPage('book')} icon="plusCalendar">Book another visit</Button></div></>:<><h1>Ready for your next dental visit?</h1><p>Choose a branch, service and schedule in a few simple steps.</p><div className="hero-actions"><Button onClick={()=>setPage('book')} icon="plusCalendar">Book an appointment</Button></div></>}</div>
-      <div className="patient-hero-card">{q?<><span className="hero-card-label">Live queue</span><div className="queue-orb"><b>{q.position?`#${q.position}`:'—'}</b><span>{q.status==='Temporarily Away'?'Paused':'in line'}</span></div><div className="hero-card-row"><span>Estimated wait</span><b>{q.status==='Temporarily Away'?'Paused':`~${wait} min`}</b></div><div className="hero-card-row"><span>Status</span><Status>{q.status}</Status></div></>:next?<><span className="hero-card-label">Upcoming appointment</span><div className="calendar-tile"><strong>{next.date.slice(-2)}</strong><span>{dateLabel(next.date).split(' ')[0]}</span></div><h3>{next.service}</h3><p>{displayTime(next.start)} • {next.branch}</p><small>{dentist}</small></>:<><span className="hero-card-label">No upcoming appointment</span><div className="hero-empty-icon"><Icon name="calendar" size={28}/></div><h3>Your schedule is clear</h3><p>Book whenever you’re ready.</p></>}</div>
-    </section>
-
-    <div className="patient-quick-grid">
-      <button onClick={()=>setPage('book')}><span><Icon name="plusCalendar" size={21}/></span><div><b>Book a visit</b><small>Find an available schedule</small></div><Icon name="chevron" size={16}/></button>
-      <button onClick={()=>setPage('appointments')}><span><Icon name="calendar" size={21}/></span><div><b>Appointments</b><small>Manage upcoming visits</small></div><Icon name="chevron" size={16}/></button>
-      <button onClick={()=>setPage('prescriptions')}><span><Icon name="pill" size={21}/></span><div><b>Prescriptions</b><small>View authorized medication</small></div><Icon name="chevron" size={16}/></button>
-      <button onClick={()=>setPage('messages')}><span><Icon name="message" size={21}/></span><div><b>Messages</b><small>{unread?`${unread} unread update${unread>1?'s':''}`:'Talk with the clinic'}</small></div><Icon name="chevron" size={16}/></button>
-    </div>
-
-    <div className="grid-2 patient-dashboard-grid">
-      <Card title="Your care" subtitle="What needs your attention next">
-        {state.treatments.filter(t=>t.patientId===pid&&t.status==='Completed').map(t=><div className="clinical-history" key={t.id}><div><b>{dateLabel(t.date)} • {t.procedure}</b><p>{(Array.isArray(t.procedures)?t.procedures.filter(Boolean):[]).map(p=>state.services.find(s=>s.id===p.serviceId)?.name).filter(Boolean).join(', ')}</p><small>{dentistName(t.dentistId,state.dentists)}</small></div><Status>Completed</Status></div>)}
-        <Button variant="ghost" onClick={()=>setPage('prescriptions')}>View authorized prescriptions</Button>
-        <div className="care-list">
-          <div className="care-row"><span className="care-icon"><Icon name="followup" size={18}/></span><div><b>{openFollowups?`${openFollowups} follow-up${openFollowups>1?'s':''} to schedule`:'No pending follow-ups'}</b><small>{openFollowups?'Your dentist recommended a return visit.':'Your follow-up care is up to date.'}</small></div>{openFollowups>0&&<button onClick={()=>setPage('followups')}>Review</button>}</div>
-          <div className="care-row"><span className="care-icon"><Icon name="receipt" size={18}/></span><div><b>Receipts & payments</b><small>View your clinic transactions and digital receipts.</small></div><button onClick={()=>setPage('billing')}>Open</button></div>
-        </div>
-      </Card>
-      <Card title="Recent notifications" subtitle="Latest updates from the clinic" actions={<button className="text-link" onClick={()=>setPage('messages')}>Messages</button>}>
-        <div className="feed-list">{recent.length?recent.map(n=><div className="feed-item" key={n.id}><span className={`feed-dot ${n.read?'':'new'}`}/><div><b>{n.type}</b><p>{n.text}</p><small>{n.createdAt}</small></div></div>):<Notice>You have no recent updates.</Notice>}</div>
-      </Card>
-    </div>
-  </>
 }
 
 function StaffDashboard({ activeBranch, setPage, state, session }) {

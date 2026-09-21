@@ -7,12 +7,14 @@ import { dateLabel, displayTime, patientName, peso, uid } from '../logic.js'
 import { visibleInvoices, validInvoice } from '../phase2.js'
 import { visibleHmo, HMO_PROVIDERS, HMO_REQUIREMENT_RULES, HMO_PENDING_HOURS, pendingHmo, pendingHours, validHmoContext, visibleConversations } from '../phase3-contracts.js'
 import { sessionForRole } from '../contracts.js'
+import { PatientBillingPage, PatientHmoPage } from './PatientCare.jsx'
+import { PatientMessagesPage } from './PatientMessages.jsx'
 
 function InvoiceCharges({invoice,state}) {
   return <>{(Array.isArray(invoice.items)?invoice.items.filter(Boolean):[]).map((item,index)=><p key={item.id||index}><b>{state.services.find(s=>s.id===item.serviceId)?.name||item.name||'Unknown procedure'}</b> • {item.quantity||1} × {peso.format(item.unitFee??item.amount)} = {peso.format(item.amount)}</p>)}<p>Subtotal: {peso.format(invoice.subtotal??invoice.total)}</p><p><b>Total: {peso.format(invoice.total)}</b></p></>
 }
 
-export function BillingPage({ role, store }) {
+export function BillingPage({ role, store, context }) {
   const { state, actions, toast }=store
   const session=store.session||sessionForRole(role,state)
   const visible=visibleInvoices(state,session)
@@ -33,6 +35,7 @@ export function BillingPage({ role, store }) {
     if(!result.ok)return toast(result.message,'warning')
     setPayId(null);toast(method==='Cash'?'Cash payment recorded; receipt available.':'Simulated electronic payment recorded; demo receipt available.','success')
   }
+  if(role==='patient')return <PatientBillingPage store={store} context={context}/>
   return <>
     <PageHeader title={role==='patient'?'Receipts & Payments':'Billing & Payments'} text="Itemized charges from completed treatment. Staff reviews the invoice before issuance and records full payment."/>
     <Card title={role==='patient'?'My transactions':'Transactions'}>{!visible.length&&<Notice>No invoices available.</Notice>}{visible.map(i=><div className="clinical-history" key={i.id}><div><b>{i.invoiceNo||i.id} • {patientName(i.patientId,state.patients)}</b><p>{dateLabel(i.visitDate)} • {i.branch}</p><InvoiceCharges invoice={i} state={state}/><p>Payment: {i.paymentStatus} • {i.method}</p>{i.receipt&&<p>Receipt: {i.receipt}{i.payment?.simulation?' • Simulated electronic payment':''}<small className="block-muted">{i.paidAt} {i.payment&&`• Payment ${i.payment.id}`}</small></p>}</div><div><Status>{i.status}</Status>{role==='staff'&&!validInvoice(state,i)&&i.status!=='Paid'&&<Notice>Historical charges need clinic review; completed procedure links are unavailable.</Notice>}{role==='staff'&&validInvoice(state,i)&&<div className="row-actions">{['Draft','Review'].includes(i.status)&&<Button size="sm" onClick={()=>reviewInvoice(i)}>Review Invoice</Button>}{i.status==='Issued'&&<Button size="sm" onClick={()=>{setPayId(i.id);setAmount(String(i.total))}}>Record Payment</Button>}</div>}</div></div>)}</Card>
@@ -67,6 +70,7 @@ export function HmoPage({ role, activeBranch, store, context }) {
   const eligible=[...state.appointments.filter(a=>a.branchId===session.branchId&&!['Cancelled','No-show'].includes(a.status)).map(a=>({key:`appointment:${a.id}`,record:a})),...state.treatments.filter(t=>t.branchId===session.branchId&&!t.appointmentId).map(t=>({key:`treatment:${t.id}`,record:t}))].filter(x=>state.patients.find(p=>p.id===x.record.patientId)?.hmoProviderId)
   const staff=role==='staff',internal=staff||role==='owner'
   const label=h=>h.legacy&&['Approved','Rejected','Returned'].includes(h.status)?`Historical recorded ${h.status}`:['Approved','Rejected','Returned'].includes(h.status)?`Provider ${h.status}`:h.status
+  if(role==='patient')return <PatientHmoPage store={store} context={context}/>
   return <>
     <PageHeader title={role==='patient'?'My HMO Coverage':role==='owner'?'HMO Overview':'HMO Verification & Tracking'} text="The clinic tracks requirements and externally received provider responses. Local document checks do not confirm provider eligibility or approval."/>
     {staff&&<div className="page-toolbar"><Button onClick={()=>setCreating(true)}>Prepare HMO Case</Button><Button variant="ghost" onClick={()=>report(actions.evaluateHmoTimers(),'Pending case timers checked.')}>Check overdue cases</Button></div>}
@@ -143,6 +147,7 @@ export function MessagesPage({ role, store, context }) {
     setText('');toast('Reply recorded in the conversation.','success')
   }
   const resolve=()=>{const result=actions.closeConversation(convo.id);toast(result.ok?'Conversation closed.':result.message,result.ok?'success':'warning')}
+  if(role==='patient')return <PatientMessagesPage store={store} context={context}/>
   return <>
     <PageHeader title="Messages" text="Two-way conversations with your assigned participants. Operational notifications remain in the notification bell."/>
     <div className="grid-2">

@@ -1,10 +1,10 @@
 import React, { useState, useRef } from 'react'
-import { ROLE_INFO } from '../data.js'
-import { Button, Card, Field, Icon, Modal, Notice, PageHeader, Status, Table } from '../components.jsx'
-import { availableSlots, addMinutes, dateLabel, dentistName, displayTime, patientName, serviceInfo, uid, validateAppointment } from '../logic.js'
+import { Button, Card, Field, Modal, Notice, PageHeader, Status, Table } from '../components.jsx'
+import { addMinutes, dateLabel, dentistName, displayTime, patientName, serviceInfo, uid, validateAppointment } from '../logic.js'
 
 import { clinicDate } from '../clock.js'
-import { inScope, patientInScope, sessionForRole, TERMINAL } from '../contracts.js'
+import { PatientAppointmentsPage, PatientBookingPage } from './PatientVisits.jsx'
+import { inScope, patientInScope, sessionForRole } from '../contracts.js'
 
 function appointmentFormDefaults(state, prefill={}, session=null) {
   const patientId=session?.role==='patient'?session.patientId:prefill.patientId || state.patients.find(p=>!session||patientInScope(p,state,session))?.id||''
@@ -83,101 +83,23 @@ export function AppointmentForm({ role, store, prefill={}, ignoreId=null, onSave
   </div>
 }
 
-function PatientBookingWizard({store}){
-  const {state,actions,toast}=store
-  const session=store.session||sessionForRole('patient',state)
-  const commandId=useRef(uid('booking'))
-  const defaults=appointmentFormDefaults(state,{},session)
-  const [form,setForm]=useState(defaults)
-  const [step,setStep]=useState(0)
-  const [finding,setFinding]=useState(false)
-  const [suggestions,setSuggestions]=useState([])
-  const [confirmed,setConfirmed]=useState(null)
-  const steps=['Branch','Service','Dentist','Date & time','Review']
-  const branch=state.branches.find(b=>b.id===form.branchId)
-  const branchServiceIds=new Set(state.branchServices.filter(bs=>bs.branchId===branch?.id&&bs.active!==false).map(bs=>bs.serviceId))
-  const services=state.services.filter(s=>s.status==='Active'&&branchServiceIds.has(s.id))
-  const allowedDentistIds=new Set(state.dentistServiceAssignments.filter(a=>a.serviceId===form.serviceId).map(a=>a.dentistId))
-  const dentists=state.dentists.filter(d=>d.branchIds.includes(form.branchId)&&d.available&&allowedDentistIds.has(d.id))
-  const selectedService=serviceInfo(form.serviceId,state.services)
-  const selectedDentist=state.dentists.find(d=>d.id===form.dentistId)
-  const update=(key,val)=>{
-    const next={...form,[key]:val}
-    if(key==='branchId'){
-      const b=state.branches.find(x=>x.id===val)
-      const ids=new Set(state.branchServices.filter(bs=>bs.branchId===b?.id&&bs.active!==false).map(bs=>bs.serviceId))
-      const svc=state.services.find(s=>s.status==='Active'&&ids.has(s.id)); next.serviceId=svc?.id||'';next.duration=svc?.duration||0
-      const allowed=new Set(state.dentistServiceAssignments.filter(a=>a.serviceId===next.serviceId).map(a=>a.dentistId))
-      const d=state.dentists.find(x=>x.branchIds.includes(val)&&x.available&&allowed.has(x.id)); next.dentistId=d?.id||''
-    }
-    if(key==='serviceId'){
-      const svc=serviceInfo(val,state.services); next.duration=svc.duration
-      const allowed=new Set(state.dentistServiceAssignments.filter(a=>a.serviceId===val).map(a=>a.dentistId))
-      const d=state.dentists.find(x=>x.branchIds.includes(next.branchId)&&x.available&&allowed.has(x.id)); next.dentistId=d?.id||''
-    }
-    setForm(next);setSuggestions([])
-  }
-  const timeOptions=availableSlots(form,state)
-  const smartFind=()=>{
-    setFinding(true);setSuggestions([])
-    window.setTimeout(()=>{
-      const options=[]
-      for(const d of dentists) for(const start of availableSlots({...form,dentistId:d.id},state)) {
-        options.push({dentistId:d.id,start,score:Math.abs(Number(start.slice(0,2))-11)})
-      }
-      setSuggestions(options.sort((a,b)=>a.score-b.score).slice(0,4));setFinding(false)
-    },850)
-  }
-  const chooseSuggestion=s=>{setForm(x=>({...x,dentistId:s.dentistId,start:s.start}));setSuggestions([]);setStep(4)}
-  const save=()=>{
-    const result=actions.saveAppointment(form,{commandId:commandId.current})
-    if(!result.ok){toast(result.message,'warning');setStep(3);return}
-    toast('Appointment confirmed.','success');setConfirmed(result.record)
-  }
-  if(confirmed)return <div className="booking-success"><div className="booking-success-icon">✓</div><span>Appointment confirmed</span><h2>You’re all set.</h2><p>{confirmed.service} on {dateLabel(confirmed.date)} at {displayTime(confirmed.start)} in {confirmed.branch}.</p><div className="booking-success-summary"><div><span>Dentist</span><b>{dentistName(confirmed.dentistId,state.dentists)}</b></div><div><span>Confirmation</span><b>{confirmed.appointmentNo}</b></div></div><Button onClick={()=>{commandId.current=uid('booking');setConfirmed(null);setStep(0);setForm(appointmentFormDefaults(state,{},session))}} variant="soft">Book another visit</Button></div>
-  return <div className="patient-booking">
-    <div className="booking-stepper">{steps.map((s,i)=><button key={s} className={`${i===step?'active':''} ${i<step?'complete':''}`} onClick={()=>i<=step&&setStep(i)}><span>{i<step?'✓':i+1}</span><b>{s}</b></button>)}</div>
-    <div className="booking-stage">
-      {step===0&&<div className="booking-choice-stage"><div className="stage-copy"><span>Step 1 of 5</span><h2>Which clinic works best for you?</h2><p>You can switch branches later if you need a different schedule.</p></div><div className="choice-card-grid">{state.branches.filter(b=>b.status==='Open'&&(session.role!=='staff'||b.id===session.branchId)).map(b=><button key={b.id} className={`choice-card ${form.branchId===b.id?'selected':''}`} onClick={()=>update('branchId',b.id)}><div className="choice-icon"><Icon name="building" size={21}/></div><div><b>{b.name}</b><span>{b.city}</span><small>{b.open}–{b.close} • {b.status}</small></div>{form.branchId===b.id&&<i>✓</i>}</button>)}</div><div className="booking-footer"><span/><Button onClick={()=>setStep(1)} icon="arrow">Continue</Button></div></div>}
-      {step===1&&<div className="booking-choice-stage"><div className="stage-copy"><span>Step 2 of 5</span><h2>What can we help you with?</h2><p>Choose the service or visit type you’d like to schedule.</p></div><div className="service-choice-grid">{services.map(s=><button key={s.id} className={`service-choice ${form.serviceId===s.id?'selected':''}`} onClick={()=>update('serviceId',s.id)}><span><Icon name="tooth" size={19}/></span><div><b>{s.name}</b><small>{s.category} • ~{s.duration} min</small></div>{form.serviceId===s.id&&<i>✓</i>}</button>)}</div><div className="booking-footer"><Button variant="ghost" onClick={()=>setStep(0)}>Back</Button><Button onClick={()=>setStep(2)} icon="arrow">Continue</Button></div></div>}
-      {step===2&&<div className="booking-choice-stage"><div className="stage-copy"><span>Step 3 of 5</span><h2>Choose your dentist</h2><p>Only dentists assigned to {branch?.name||'Select branch'} and eligible for {selectedService.name} are shown.</p></div><div className="dentist-choice-grid">{dentists.map(d=><button key={d.id} className={`dentist-choice ${form.dentistId===d.id?'selected':''}`} onClick={()=>update('dentistId',d.id)}><div className="avatar large">{d.name.replace('Dr. ','').split(' ').map(x=>x[0]).slice(0,2).join('')}</div><div><b>{d.name}</b><span>{d.specialty}</span><small>{d.shiftStart}–{d.shiftEnd}</small></div>{form.dentistId===d.id&&<i>✓</i>}</button>)}</div><div className="booking-footer"><Button variant="ghost" onClick={()=>setStep(1)}>Back</Button><Button onClick={()=>setStep(3)} icon="arrow">Continue</Button></div></div>}
-      {step===3&&<div className="booking-time-stage"><div className="stage-copy"><span>Step 4 of 5</span><h2>Pick a date and available time</h2><p>Past dates and conflicting times are automatically blocked.</p></div><div className="date-time-layout"><div className="date-panel"><Field label="Appointment date"><input type="date" min={clinicDate()} value={form.date} onChange={e=>update('date',e.target.value)}/></Field><div className="smart-find-card"><span><Icon name="sparkles" size={20}/></span><div><b>Want us to find it?</b><small>We’ll scan valid times for this service and branch.</small></div><Button size="sm" variant="soft" onClick={smartFind} disabled={finding}>{finding?'Finding…':'Find best schedule'}</Button></div></div><div className="time-panel"><div className="time-panel-head"><div><b>Available times</b><small>{dateLabel(form.date)} • {selectedDentist?.name}</small></div><span>{timeOptions.length} slots</span></div><div className="time-grid">{timeOptions.length?timeOptions.map(t=><button className={form.start===t?'selected':''} key={t} onClick={()=>update('start',t)}>{displayTime(t)}</button>):<Notice tone="warning">No available times for this dentist on the selected date. Try Smart Schedule or choose another dentist.</Notice>}</div></div></div>{finding&&<div className="finding-overlay"><div className="finding-loader"><Icon name="sparkles" size={24}/></div><b>Finding the best schedules for you…</b><span>Checking branch hours, dentist availability and conflicts</span></div>}{suggestions.length>0&&<div className="smart-results"><div className="smart-results-head"><div><span><Icon name="sparkles" size={18}/></span><div><b>Best available options</b><small>All of these passed Smart Scheduling validation.</small></div></div><button onClick={()=>setSuggestions([])}>Dismiss</button></div><div className="smart-result-grid">{suggestions.map((s,i)=><button key={`${s.dentistId}-${s.start}`} onClick={()=>chooseSuggestion(s)}><span>#{i+1} match</span><b>{displayTime(s.start)}</b><small>{dentistName(s.dentistId,state.dentists)}</small></button>)}</div></div>}<div className="booking-footer"><Button variant="ghost" onClick={()=>setStep(2)}>Back</Button><Button onClick={()=>setStep(4)} icon="arrow" disabled={!timeOptions.includes(form.start)}>Review appointment</Button></div></div>}
-      {step===4&&<div className="booking-review-stage"><div className="stage-copy"><span>Step 5 of 5</span><h2>Review your appointment</h2><p>Nothing is charged at booking. Billing is based on completed treatment after your visit.</p></div><div className="review-card"><div className="review-main"><div className="calendar-tile"><strong>{form.date.slice(-2)}</strong><span>{dateLabel(form.date).split(' ')[0]}</span></div><div><span className="review-label">{selectedService.name}</span><h3>{dateLabel(form.date)} • {displayTime(form.start)}</h3><p>{branch?.name||'Select branch'} • {selectedDentist?.name}</p></div></div><div className="review-details"><div><span>Expected duration</span><b>~{form.duration} minutes</b></div><div><span>Booking source</span><b>Patient Portal</b></div><div><span>Payment</span><b>After completed treatment</b></div></div></div><Field label="Optional note"><textarea value={form.notes} placeholder="Anything the clinic should know before your visit?" onChange={e=>update('notes',e.target.value)}/></Field><div className="booking-footer"><Button variant="ghost" onClick={()=>setStep(3)}>Back</Button><Button onClick={save} icon="checkin">Confirm appointment</Button></div></div>}
-    </div>
-  </div>
-}
-
-export function BookingPage({ role, store }) {
-  if(role==='patient')return <><PageHeader kicker="Online booking" title="Book your visit" text="Choose what you need and we’ll only show schedules that are actually available."/><PatientBookingWizard store={store}/></>
+export function BookingPage({ role, store, setPage }) {
+  if(role==='patient')return <PatientBookingPage store={store} setPage={setPage}/>
   return <><PageHeader kicker="Scheduling" title="Create an appointment" text="Staff bookings use the same conflict-prevention and availability rules as patient self-booking."/><Card title="Appointment details"><AppointmentForm role={role} store={store}/></Card></>
 }
 
-export function AppointmentsPage({ role, store }) {
+export function AppointmentsPage({ role, store, setPage, context }) {
   const { state, actions, toast }=store
   const session=store.session||sessionForRole(role,state)
   const [reschedule,setReschedule]=useState(null)
   const [newOpen,setNewOpen]=useState(false)
-  const [patientTab,setPatientTab]=useState('upcoming')
-  const pid=ROLE_INFO.patient.patientId
   const visible=state.appointments.filter(a=>inScope(a,session,state)).sort((a,b)=>`${a.date}${a.start}`.localeCompare(`${b.date}${b.start}`))
   const cancel=a=>{
     if (!window.confirm('Cancel this appointment and release the reserved slot?')) return
     const result=actions.cancelAppointment(a.id)
     toast(result.ok?'Appointment cancelled.':result.message,result.ok?'success':'warning')
   }
-  if(role==='patient'){
-    const upcoming=visible.filter(a=>!TERMINAL.includes(a.status)&&a.date>=clinicDate())
-    const completed=visible.filter(a=>['Completed','No-show'].includes(a.status)||(a.date<clinicDate()&&a.status!=='Cancelled'))
-    const cancelled=visible.filter(a=>a.status==='Cancelled')
-    const map={upcoming,completed,cancelled}; const rows=map[patientTab]
-    return <>
-      <PageHeader kicker="Your visits" title="Appointments" text="Everything you need for upcoming and previous clinic visits." aside={<Button onClick={()=>setNewOpen(true)} icon="plusCalendar">Book appointment</Button>}/>
-      <div className="patient-tabs"><button className={patientTab==='upcoming'?'active':''} onClick={()=>setPatientTab('upcoming')}>Upcoming <span>{upcoming.length}</span></button><button className={patientTab==='completed'?'active':''} onClick={()=>setPatientTab('completed')}>Past <span>{completed.length}</span></button><button className={patientTab==='cancelled'?'active':''} onClick={()=>setPatientTab('cancelled')}>Cancelled <span>{cancelled.length}</span></button></div>
-      <div className="appointment-card-list">{rows.length?rows.map(a=><article className="appointment-card" key={a.id}><div className="appointment-date-block"><b>{a.date.slice(-2)}</b><span>{dateLabel(a.date).split(' ')[0]}</span></div><div className="appointment-card-main"><div className="appointment-card-head"><div><span>{a.service}</span><h3>{displayTime(a.start)} • {a.branch}</h3></div><Status>{a.status}</Status></div><div className="appointment-card-meta"><span><Icon name="tooth" size={15}/>{dentistName(a.dentistId,state.dentists)}</span><span><Icon name="calendar" size={15}/>{a.duration} minutes</span><span><Icon name="file" size={15}/>{a.appointmentNo||a.id}</span></div>{a.notes&&<p className="appointment-note">{a.notes}</p>}<div className="appointment-card-actions">{['Confirmed','Pending'].includes(a.status)&&a.date>=clinicDate()&&<><Button size="sm" variant="soft" onClick={()=>setReschedule(a)}>Reschedule</Button><Button size="sm" variant="ghost" onClick={()=>cancel(a)}>Cancel appointment</Button></>}</div></div></article>):<div className="appointment-empty"><span><Icon name="calendar" size={26}/></span><h3>No {patientTab} appointments</h3><p>{patientTab==='upcoming'?'When you book a visit, it will appear here.':'There are no visits in this section.'}</p>{patientTab==='upcoming'&&<Button onClick={()=>setNewOpen(true)} icon="plusCalendar">Book a visit</Button>}</div>}</div>
-      <Modal open={newOpen} title="Book an appointment" subtitle="Choose a valid schedule and confirm your visit." wide onClose={()=>setNewOpen(false)}><PatientBookingWizard store={store}/></Modal>
-      <Modal open={!!reschedule} title="Reschedule appointment" subtitle="Your new time must pass the same availability checks." wide onClose={()=>setReschedule(null)}>{reschedule&&<AppointmentForm role={role} store={store} ignoreId={reschedule.id} prefill={reschedule} submitLabel="Save new schedule" onSaved={()=>setReschedule(null)}/>}</Modal>
-    </>
-  }
+  if(role==='patient')return <PatientAppointmentsPage store={store} setPage={setPage} context={context}/>
   return <>
     <PageHeader kicker="Scheduling" title="Appointment management" text="Create, confirm, reschedule and cancel visits from one operational view." aside={<Button onClick={()=>setNewOpen(true)} icon="plusCalendar">New appointment</Button>}/>
     <Card title="Clinic appointments" subtitle="Smart Scheduling validation applies to every new or changed slot.">

@@ -40,20 +40,20 @@ function AppBody() {
   let content
   switch(canAccessPage(store.state,store.session,page)?page:'unavailable'){
     case 'dashboard': content=<DashboardPage {...props}/>; break
-    case 'book': content=<BookingPage role={role} store={store}/>; break
-    case 'appointments': content=<AppointmentsPage role={role} store={store}/>; break
+    case 'book': content=<BookingPage role={role} store={store} setPage={setPage}/>; break
+    case 'appointments': content=<AppointmentsPage role={role} store={store} setPage={setPage} context={context}/>; break
     case 'schedule': content=<SchedulePage store={store}/>; break
     case 'checkin': content=<CheckInPage store={store}/>; break
     case 'queue': content=<QueuePage {...props}/>; break
     case 'capacity': content=<CapacityPage {...props}/>; break
     case 'patients': content=<PatientsPage {...props}/>; break
     case 'treatment': content=<TreatmentPage key={context?.queueEntryId||'none'} {...props}/>; break
-    case 'billing': content=<BillingPage role={role} store={store}/>; break
+    case 'billing': content=<BillingPage role={role} store={store} context={context}/>; break
     case 'hmo': content=<HmoPage {...props}/>; break
     case 'inquiries': content=<InquiriesPage store={store}/>; break
     case 'messages': content=<MessagesPage {...props}/>; break
-    case 'prescriptions': content=<PrescriptionsPage role={role} store={store}/>; break
-    case 'followups': content=<FollowupsPage role={role} store={store}/>; break
+    case 'prescriptions': content=<PrescriptionsPage role={role} store={store} context={context}/>; break
+    case 'followups': content=<FollowupsPage role={role} store={store} setPage={setPage} context={context}/>; break
     case 'branches': content=<BranchesPage store={store}/>; break
     case 'team': content=<TeamPage store={store}/>; break
     case 'analytics': content=<AnalyticsPage activeBranch={activeBranch} store={store}/>; break

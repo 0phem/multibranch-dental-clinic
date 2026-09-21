@@ -1,8 +1,9 @@
 import React, { useState, useRef } from 'react'
-import { Button, Card, Field, Icon, Notice, PageHeader, Progress, StatCard, Status, Table } from '../components.jsx'
+import { Button, Card, Field, Icon, Notice, PageHeader, Progress, Status, Table } from '../components.jsx'
 import { branchCapacity, dentistName, displayTime, patientName, queueWaitEstimate, uid } from '../logic.js'
 
 import { clinicDate } from '../clock.js'
+import { PatientQueuePage } from './PatientVisits.jsx'
 import { encounterContext, inScope, isActiveQueue, isTodayQueue, patientInScope, sessionForRole } from '../contracts.js'
 
 export function CheckInPage({ store }) {
@@ -72,14 +73,7 @@ export function QueuePage({ role, activeBranch, store, setPage }) {
     const reason=window.prompt('Reason for emergency priority:')
     if(reason?.trim())update(q.id,q.status,{priority:'Urgent',reason})
   }
-  if (role==='patient') {
-    const current=visible.find(active)||visible[0]
-    const wait=current?queueWaitEstimate(current,state.queue,state.appointments,state.treatments,state.dentists):0
-    return <>
-      <PageHeader title="Queue & Waiting Time" text="Private patient view showing only your queue status and aggregate waiting-time estimate." modules={[9,10]}/>
-      {current?<><div className="stats-grid small"><StatCard label="Status" value={current.status}/><StatCard label="Position" value={current.position?`#${current.position}`:'—'} tone="blue"/><StatCard label="Estimated wait" value={current.status==='Temporarily Away'?'Paused':active(current)?`${wait} min`:'0 min'} tone="amber"/><StatCard label="Dentist" value={dentistName(current.dentistId,state.dentists).replace('Dr. ','')} tone="purple"/></div><Card title="Live queue status"><div className="patient-queue-card"><div className="queue-position">{active(current)?current.position||'—':'✓'}</div><div><h2>{current.status}</h2><p>{current.branch} • {dentistName(current.dentistId,state.dentists)}</p><small>Checked in {displayTime(current.checkedIn)} • Queue updates automatically</small></div></div><Notice tone="info">For privacy, only your own queue information is shown. Estimated wait uses your current position and the dentist’s active patient flow.</Notice></Card></>:<Notice>No active queue entry is recorded for your patient account.</Notice>}
-    </>
-  }
+  if (role==='patient') return <PatientQueuePage store={store} setPage={setPage}/>
   return <>
     <PageHeader title={role==='dentist'?'My Patient Queue':'Smart Patient Queue'} text="Operational queue controls with priority, check-in age, patient state transitions, and automatic position recalculation." modules={[9,10]}/>
     <Card title={role==='dentist'?'My queue filters':'Queue filters'} className="filter-card"><div className="filter-row"><label>Branch <select value={activeBranch} disabled><option>{activeBranch}</option></select></label>{role!=='dentist'&&<label>Dentist <select value={dentistFilter} onChange={e=>setDentistFilter(e.target.value)}><option>All Dentists</option>{state.dentists.filter(d=>role==='owner'||d.branchIds.includes(session.branchId)).map(d=><option key={d.id} value={d.id}>{d.name}</option>)}</select></label>}<label>Status <select value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}><option>Active</option><option>All</option><option>Waiting</option><option>Called</option><option>Treatment Ready</option><option>In Treatment</option><option>Temporarily Away</option><option>Completed</option><option>No-show</option></select></label></div></Card>

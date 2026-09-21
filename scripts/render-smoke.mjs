@@ -183,7 +183,8 @@ assert.ok(!render('treatment','dentist',{queueEntryId:'missing'}).includes('Save
 const stalePanel=renderToString(React.createElement(m.NotificationPanel,{role:'patient',store:{...store,session:m.sessionForRole('patient',store.state),state:{...store.state,notifications:[{id:'stale',recipientUserId:'u12',patientId:'p1',title:'Old update',body:'Review availability',entityType:'invoice',entityId:'missing',action:{page:'billing'}}]}},setPage:()=>{},onClose:()=>{}}))
 assert.ok(stalePanel.includes('Old update'));assert.ok(!stalePanel.includes('View update'))
 store={...store,state:{...store.state,queue:[]}}
-assert.ok(render('queue','patient').includes('No active queue entry'))
+// Phase 4B.1 Patient wording: an empty queue renders an explicit no-visit/not-checked-in state (previously "No active queue entry").
+assert.ok(/No visit today|haven’t been checked in yet/.test(render('queue','patient')))
 store={...store,state:{...store.state,users:store.state.users.map(u=>u.id==='u12'?{...u,accountStatus:'Inactive'}:u)}}
 assert.ok(!render('billing','patient').includes(payment.receipt))
 store={...store,state:recoveryBase}
@@ -266,3 +267,86 @@ for(const file of ['App.jsx','layout.jsx','components.jsx',...readdirSync('src/p
 const documentTitle=readFileSync('index.html','utf8').match(/<title>([^<]*)<\/title>/)?.[1]
 assert.equal(documentTitle,`${clinicName} Dental Clinic`)
 console.log('PASS: clinic brand alignment — compact logo with exact clinic text on login and every role shell, unmodified official assets, document title and no old product name in the UI')
+
+// Phase 4B.1 Patient core experience: real Patient pages rendered from state built through real commands.
+store={...store,state}
+const patientPages=m.NAV.patient.map(([page])=>page)
+const mainOf=html=>html.match(/<main id="main-content"[\s\S]*?<\/main>/)?.[0]||''
+const staffControls=['Record Payment','Review Invoice','Issue Invoice','Confirm arrival','Call patient','Prepare HMO Case','Record Provider Response','Authorize Prescription','Emergency priority','Mark resolved']
+for(const page of patientPages){
+  const html=render(page,'patient'),main=mainOf(html)
+  assert.equal((main.match(/<h1[\s>]/g)||[]).length,1,`${page}: exactly one h1`)
+  for(const control of staffControls)assert.ok(!html.includes(control),`${page}: no Staff control ${control}`)
+  assert.ok(!html.includes('assistant-fab'),`${page}: the Patient assistant never floats over content`)
+  assert.ok(html.includes('id="clinic-assistant-toggle"')&&html.includes('aria-controls="clinic-assistant-panel"')&&html.includes('aria-expanded="false"'),`${page}: the Patient assistant trigger lives in the top bar`)
+  assert.ok(!html.includes('PhaseOne'),`${page}: no other Patient's data`)
+  for(const tag of main.match(/<button\b[^>]*>/g)||[])assert.ok(/\stype="/.test(tag),`${page}: button declares a type ${tag}`)
+}
+const home=render('dashboard','patient')
+assert.ok(/Good (morning|afternoon|evening), Maria/.test(home))
+for(const text of ['Needs your attention','Recent care','Phase Two completed care','Quick access'])assert.ok(home.includes(text),text)
+assert.ok(!/keep this page updated|Recent notifications/.test(home))
+assert.ok(home.includes('Care &amp; coverage')&&home.includes('Visits'))
+const upcomingVisit=state.appointments.find(a=>a.id===followBooking.record.id)
+const visit=state.appointments.find(a=>a.id===ownQueue.appointmentId)
+const appts=render('appointments','patient')
+assert.ok(appts.includes('Reschedule')&&appts.includes('Cancel appointment')&&appts.includes('aria-pressed'))
+const past=render('appointments','patient',{entityId:visit.id})
+assert.ok(past.includes('Visit details')&&past.includes('is-target')&&past.includes('Phase Two completed care'))
+assert.ok(!past.includes('Rescheduled')&&!render('appointments','patient',{entityId:'nope'}).includes('is-target'))
+assert.ok(render('appointments','patient',{entityId:upcomingVisit.id}).includes('is-target'))
+const rxRecord=state.prescriptions.find(r=>r.status==='Authorized')
+assert.ok(render('prescriptions','patient',{entityId:rxRecord.id}).includes('is-target'))
+assert.ok(!render('prescriptions','patient',{entityId:'other'}).includes('is-target'))
+assert.ok(!/Renew|Reissue|Edit prescription/.test(render('prescriptions','patient')))
+const bill=render('billing','patient',{invoiceId:invoice.id})
+assert.ok(bill.includes('is-target')&&bill.includes(payment.receipt)&&bill.includes('Total')&&bill.includes('The clinic records payments'))
+assert.ok(!/>Pay</.test(bill)&&!/Payment pay-/.test(bill))
+assert.ok(render('followups','patient',{entityId:followup.id}).includes('is-target'))
+const hmoPage=render('hmo','patient',{hmoCaseId:hmoCase.id})
+assert.ok(hmoPage.includes('is-target')&&hmoPage.includes('Provider Approved')&&hmoPage.includes('is not approval from your HMO'))
+assert.ok(!/Internal|Record Provider Response/.test(hmoPage))
+const bookPage=render('book','patient')
+for(const text of ['class="pt-stepper"','aria-current="step"','type="radio"','<fieldset','Step 1 of 5'])assert.ok(bookPage.includes(text),text)
+assert.ok(!/Any available|Finding|Smart Scheduling validation/.test(bookPage))
+const doneQueue=render('queue','patient')
+assert.ok(doneQueue.includes('Your visit is complete.')&&!/0 min|updates automatically/.test(doneQueue))
+assert.ok(/Unread: /.test(renderPanel('patient')))
+// A live queue entry, built by the real Staff check-in command.
+m.setClockSource(()=>new Date('2026-09-19T02:08:00Z'))
+session=m.sessionForRole('staff',state)
+const liveVisit=actions.saveAppointment({patientId:'p1',branchId:'b1',dentistId:'d2',serviceId:'svc1',date:'2026-09-19',start:'16:30'},{commandId:'p4b-live'})
+assert.equal(liveVisit.ok,true,liveVisit.message)
+assert.equal(actions.checkInAppointment(liveVisit.record.id).ok,true)
+store={...store,state}
+const liveQueue=render('queue','patient')
+assert.ok(liveQueue.includes('in line')&&liveQueue.includes('aria-live="polite"')&&liveQueue.includes('Estimated wait')&&!liveQueue.includes('PhaseOne'))
+assert.ok(render('dashboard','patient').includes('You’re checked in.')&&render('dashboard','patient').includes('View live queue'))
+m.setClockSource(()=>new Date('2026-09-19T15:08:00Z'))
+// Messages: participant conversations only, and never a control that promises Patient-started messages.
+const messages=render('messages','patient')
+assert.ok(messages.includes('Conversations')&&messages.includes('Select a conversation'))
+assert.ok(!/Start (a )?(new )?(conversation|message)|New message/i.test(messages))
+const threadPage=render('messages','patient',{conversationId:conversation.id})
+assert.ok(threadPage.includes('has-thread')&&threadPage.includes('Send message')&&threadPage.includes('All conversations'))
+const withState=patch=>{store={...store,state:{...store.state,...patch}}}
+const fullState=store.state
+withState({conversations:store.state.conversations.map(c=>({...c,status:'Closed'}))})
+const closedThread=render('messages','patient',{conversationId:conversation.id})
+assert.ok(closedThread.includes('This conversation is closed')&&!closedThread.includes('<textarea'))
+withState({conversations:[]})
+assert.ok(render('messages','patient').includes('No messages from the clinic yet.'))
+const quietHome=render('dashboard','patient')
+assert.ok(!quietHome.includes('Message the clinic')&&!quietHome.includes('Your conversations'))
+store={...store,state:fullState}
+// Invalid or stale Patient session: every Patient page fails closed instead of showing another identity.
+withState({users:fullState.users.map(u=>u.id==='u12'?{...u,accountStatus:'Inactive',status:'Inactive'}:u)})
+for(const page of ['dashboard','book','appointments','queue','prescriptions','followups','hmo','billing','messages']){
+  const html=render(page,'patient')
+  assert.ok(html.includes('couldn’t confirm your account'),`${page}: fails closed for an inactive account`)
+  assert.ok(!html.includes('Phase Two')&&!html.includes(payment.receipt),`${page}: exposes nothing`)
+}
+store={...store,state:fullState}
+// The other roles keep the shell's floating assistant button unchanged.
+for(const role of ['staff','dentist','owner']){const html=render('dashboard',role);assert.ok(html.includes('assistant-fab')&&!html.includes('clinic-assistant-toggle'),`${role}: floating assistant unchanged`)}
+console.log('PASS: Phase 4B.1 Patient Journey Hub, booking semantics, appointments, live queue, care records, HMO, receipts, Messages, deep links, isolation and fail-closed sessions')

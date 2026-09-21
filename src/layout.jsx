@@ -3,7 +3,10 @@ import { NAV, ROLE_INFO } from './data.js'
 import { visibleNotifications, notificationDestination } from './phase3-contracts.js'
 import { sessionForRole } from './contracts.js'
 import { canAccessPage } from './safeguards.js'
-import { Button, Icon, Modal } from './components.jsx'
+import { Button, Icon, Modal, ShellActionsContext } from './components.jsx'
+import { patientConversations } from './patient-view.js'
+
+const useLayoutEffectSafe=typeof window==='undefined'?React.useEffect:React.useLayoutEffect
 
 const NAV_ICONS={
   dashboard:'home',book:'plusCalendar',appointments:'calendar',schedule:'calendar',checkin:'checkin',queue:'queue',capacity:'activity',
@@ -12,7 +15,7 @@ const NAV_ICONS={
 }
 
 const GROUPS={
-  patient:[['Overview',['dashboard']],['Your care',['book','appointments','queue','prescriptions','followups','hmo']],['Communication',['messages','billing','loyalty']]],
+  patient:[['Overview',['dashboard']],['Visits',['book','appointments','queue','followups']],['Care & coverage',['prescriptions','hmo','billing']],['Communication',['messages']],['More',['loyalty']]],
   staff:[['Today',['dashboard','appointments','checkin','queue','capacity']],['Patients & finance',['patients','billing','hmo']],['Communication',['inquiries','messages','followups','engagement']]],
   dentist:[['Today',['dashboard','schedule','queue']],['Clinical',['patients','treatment','prescriptions','followups']],['Communication',['messages']]],
   owner:[['Overview',['dashboard','analytics']],['Operations',['branches','team','capacity','hmo']],['Administration',['users','automation','engagement']]],
@@ -61,12 +64,20 @@ export function NotificationPanel({role,store,onClose,setPage}){
   const open=n=>{const destination=notificationDestination(state,session,n);if(destination&&mark(n.id)){setPage(destination.page,destination.context);onClose()}}
   return <Modal open title="Notifications" subtitle="Your updates and reminders" onClose={onClose} className="notification-dialog"><div className="notification-popover">
     <div className="notification-toolbar"><button onClick={()=>{const result=actions.markAllNotificationsRead();if(!result.ok)toast(result.message,'warning')}} disabled={!items.some(n=>!n.read)}>Mark my notifications read</button><button onClick={()=>setAll(v=>!v)}>{all?'Recent only':`View all (${items.length})`}</button></div>
-    <div className="notification-scroll">{visible.length?visible.map(n=><div className={`notification-row ${n.read?'':'unread'}`} key={n.id}><span className="notification-dot"/><div><b>{n.title}</b><p>{n.body}</p><small>{n.createdAt} • {n.legacy?'Historical demo record':n.channel}</small><div className="row-actions">{!n.read&&<button onClick={()=>mark(n.id)}>Mark read</button>}{notificationDestination(state,session,n)&&<button onClick={()=>open(n)}>View update</button>}</div></div></div>):<div className="notification-empty">You're all caught up.</div>}</div>
+    <div className="notification-scroll">{visible.length?visible.map(n=><div className={`notification-row ${n.read?'':'unread'}`} key={n.id}><span className="notification-dot"/><div><b>{!n.read&&<span className="sr-only">Unread: </span>}{n.title}</b><p>{n.body}</p><small>{n.createdAt} • {n.legacy?'Historical demo record':n.channel}</small><div className="row-actions">{!n.read&&<button onClick={()=>mark(n.id)}>Mark read</button>}{notificationDestination(state,session,n)&&<button onClick={()=>open(n)}>View update</button>}</div></div></div>):<div className="notification-empty">You're all caught up.</div>}</div>
   </div></Modal>
 }
 
-function ClinicAssistant({role}){
-  const [open,setOpen]=React.useState(false)
+// Patient docks the trigger in the top bar (AssistantToggle) so it never floats over page content; other roles keep the floating button.
+function AssistantToggle({open,onToggle}){
+  return <button type="button" id="clinic-assistant-toggle" className="top-icon-btn" aria-expanded={open} aria-controls="clinic-assistant-panel" aria-label={open?"Close clinic help":"Open clinic help"} onClick={onToggle}><Icon name="robot" size={20}/></button>
+}
+function ClinicAssistant({role,docked=false,open:controlledOpen,onOpenChange}){
+  const [innerOpen,setInnerOpen]=React.useState(false)
+  const open=docked?controlledOpen:innerOpen, setOpen=docked?onOpenChange:setInnerOpen
+  const panel=React.useRef(null)
+  React.useEffect(()=>{if(docked&&open)panel.current?.focus()},[docked,open])
+  const closeToTrigger=()=>{setOpen(false);document.getElementById('clinic-assistant-toggle')?.focus()}
   const [answer,setAnswer]=React.useState('')
   const quick=role==='patient'?['How do I book?','What do I need for HMO?','How does the queue work?']:['Show workflow help','Explain this dashboard','How are alerts prioritized?']
   const reply=q=>{
@@ -81,8 +92,8 @@ function ClinicAssistant({role}){
     setAnswer(map[q]||'I can help with clinic navigation and workflow questions. Clinical diagnosis and treatment decisions always stay with a dentist.')
   }
   return <>
-    <button className="assistant-fab" onClick={()=>setOpen(v=>!v)} aria-expanded={open} aria-label={open?"Close clinic help":"Open clinic help"}><Icon name="robot" size={22}/></button>
-    {open&&<div className="assistant-panel"><div className="assistant-head"><div className="assistant-avatar"><Icon name="robot" size={19}/></div><div><b>Clinic Assistant</b><small>Clinic navigation & workflow help</small></div><button className="icon-btn" aria-label="Close clinic help" onClick={()=>setOpen(false)}><Icon name="x" size={16}/></button></div><div className="assistant-body"><div className="assistant-bubble">Hi! I can help you navigate the clinic system. I won’t diagnose conditions or make treatment decisions.</div>{answer&&<div className="assistant-bubble answer">{answer}</div>}<div className="assistant-quick">{quick.map(q=><button key={q} onClick={()=>reply(q)}>{q}</button>)}</div></div></div>}
+    {!docked&&<button className="assistant-fab" onClick={()=>setOpen(v=>!v)} aria-expanded={open} aria-label={open?"Close clinic help":"Open clinic help"}><Icon name="robot" size={22}/></button>}
+    {open&&<div className="assistant-panel" {...(docked?{id:'clinic-assistant-panel',ref:panel,tabIndex:-1,role:'region','aria-label':'Clinic Assistant',onKeyDown:event=>{if(event.key==='Escape'){event.stopPropagation();closeToTrigger()}}}:{})}><div className="assistant-head"><div className="assistant-avatar"><Icon name="robot" size={19}/></div><div><b>Clinic Assistant</b><small>Clinic navigation & workflow help</small></div><button className="icon-btn" aria-label="Close clinic help" onClick={docked?closeToTrigger:()=>setOpen(false)}><Icon name="x" size={16}/></button></div><div className="assistant-body"><div className="assistant-bubble">Hi! I can help you navigate the clinic system. I won’t diagnose conditions or make treatment decisions.</div>{answer&&<div className="assistant-bubble answer">{answer}</div>}<div className="assistant-quick">{quick.map(q=><button key={q} onClick={()=>reply(q)}>{q}</button>)}</div></div></div>}
   </>
 }
 
@@ -91,12 +102,23 @@ export function Shell({ role, page, setPage, onLogout, activeBranch, setActiveBr
   const [mobileOpen,setMobileOpen]=React.useState(false)
   const [notificationsOpen,setNotificationsOpen]=React.useState(false)
   const [resetOpen,setResetOpen]=React.useState(false)
+  const [assistantOpen,setAssistantOpen]=React.useState(false)
   const session=store.session||sessionForRole(role,store.state)
   const account=store.state.users.find(u=>u.id===session?.userId)
   const name=account?.name||session?.name||info.label
   const initials=name.split(' ').map(x=>x[0]).filter(Boolean).slice(0,2).join('')
   const unread=visibleNotifications(store.state,session).filter(n=>!n.read).length
   const groups=navGroups(role).map(([title,items])=>[title,items.filter(([key])=>canAccessPage(store.state,session,key))]).filter(([,items])=>items.length)
+  const unreadMessages=role==='patient'?patientConversations(store.state,session).filter(c=>c.unread).length:0
+  const shellActions=React.useMemo(()=>({openNotifications:()=>setNotificationsOpen(true)}),[])
+  const firstPage=React.useRef(true)
+  // Patient page changes start at the top with focus on the main landmark. Deep-linked records focus themselves afterwards.
+  useLayoutEffectSafe(()=>{
+    if(role!=='patient')return
+    if(firstPage.current){firstPage.current=false;return}
+    window.scrollTo?.(0,0)
+    document.getElementById('main-content')?.focus({preventScroll:true})
+  },[page,role])
   const mobilePatientNav=[['dashboard','Home'],['appointments','Visits'],['book','Book'],['queue','Queue'],['messages','Messages']].filter(([key])=>canAccessPage(store.state,session,key))
   const selectPage=key=>{if(canAccessPage(store.state,session,key))setPage(key);setMobileOpen(false)}
   React.useEffect(()=>{
@@ -108,22 +130,22 @@ export function Shell({ role, page, setPage, onLogout, activeBranch, setActiveBr
   const navigation=<><div className="role-card"><span aria-hidden="true">{initials}</span><div><small>{info.label}</small><b>{name}</b><em>{role==='owner'?'Branch oversight':activeBranch}</em></div></div>
     <nav className="main-nav" aria-label={`${info.label} navigation`}>{groups.map(([title,items])=><div className="nav-group" key={title}><span className="nav-group-label">{title}</span>{items.map(([key,label])=><button type="button" key={key} aria-current={page===key?'page':undefined} className={page===key?'active':''} onClick={()=>selectPage(key)}><Icon name={NAV_ICONS[key]||'home'} size={18}/><span>{label}</span>{['loyalty','engagement'].includes(key)&&<small className="nav-proposed">Proposed</small>}</button>)}</div>)}</nav>
     <div className="sidebar-footer"><button onClick={()=>{setMobileOpen(false);setResetOpen(true)}}><Icon name="settings" size={16}/>Reset demo data</button><button onClick={onLogout}><Icon name="logout" size={16}/>Log out</button></div></>
-  return <div className={`app-shell role-${role}`}>
+  return <ShellActionsContext.Provider value={shellActions}><div className={`app-shell role-${role}`}>
     <a className="skip-link" href="#main-content">Skip to content</a>
     <aside className="sidebar"><div className="sidebar-brand"><Brand/></div>{navigation}</aside>
     <Modal open={mobileOpen} title="Your workspace" onClose={()=>setMobileOpen(false)} className="navigation-dialog"><div className="sidebar-brand"><Brand/></div>{navigation}</Modal>
     <div className="main-shell">
       <header className="topbar">
         <div className="topbar-left"><button className="mobile-menu icon-btn" aria-label="Open navigation" aria-haspopup="dialog" aria-expanded={mobileOpen} onClick={()=>setMobileOpen(true)}><Icon name="menu" size={21}/></button><div className="topbar-context"><span className="workspace-label">{info.label} workspace</span>{role==='owner'&&<label className="branch-scope"><span>Branch</span><select value={activeBranch} onChange={e=>setActiveBranch(e.target.value)}><option>All Branches</option>{store.state.branches.map(b=><option key={b.id}>{b.name}</option>)}</select></label>}{(role==='staff'||role==='dentist')&&<div className="branch-lock"><small>Assigned branch</small><b>{activeBranch}</b></div>}</div></div>
-        <div className="top-actions"><button className="top-icon-btn" aria-haspopup="dialog" aria-expanded={notificationsOpen} onClick={()=>setNotificationsOpen(true)} aria-label={`Notifications${unread?`, ${unread} unread`:''}`}><Icon name="bell" size={20}/>{unread>0&&<span aria-hidden="true" className="notification-count">{unread>99?'99+':unread}</span>}</button><div className="top-user"><span aria-hidden="true">{initials}</span><div><b>{name}</b><small>{info.label}</small></div></div></div>
+        <div className="top-actions">{role==='patient'&&<AssistantToggle open={assistantOpen} onToggle={()=>setAssistantOpen(v=>!v)}/>}<button className="top-icon-btn" aria-haspopup="dialog" aria-expanded={notificationsOpen} onClick={()=>setNotificationsOpen(true)} aria-label={`Notifications${unread?`, ${unread} unread`:''}`}><Icon name="bell" size={20}/>{unread>0&&<span aria-hidden="true" className="notification-count">{unread>99?'99+':unread}</span>}</button><div className="top-user"><span aria-hidden="true">{initials}</span><div><b>{name}</b><small>{info.label}</small></div></div></div>
       </header>
       <main id="main-content" tabIndex={-1} className="content">{children}</main>
     </div>
     {notificationsOpen&&<NotificationPanel role={role} store={store} setPage={setPage} onClose={()=>setNotificationsOpen(false)}/>}
-    {role==='patient'&&<nav className="patient-mobile-nav" aria-label="Patient shortcuts">{mobilePatientNav.map(([key,label])=><button key={key} aria-current={page===key?'page':undefined} className={page===key?'active':''} onClick={()=>selectPage(key)}><Icon name={NAV_ICONS[key]||'home'} size={20}/><span>{label}</span></button>)}</nav>}
+    {role==='patient'&&<nav className="patient-mobile-nav" aria-label="Patient shortcuts">{mobilePatientNav.map(([key,label])=><button key={key} aria-current={page===key?'page':undefined} className={page===key?'active':''} onClick={()=>selectPage(key)}><Icon name={NAV_ICONS[key]||'home'} size={20}/><span>{label}</span>{key==='messages'&&unreadMessages>0&&<span className="pt-nav-badge"><span aria-hidden="true">{unreadMessages}</span><span className="sr-only">, {unreadMessages} unread</span></span>}</button>)}</nav>}
     <Modal open={resetOpen} title="Reset demo workspace?" subtitle="This clears local demo changes for every role in this browser and restores the sample records." onClose={()=>setResetOpen(false)}><div className="row-actions"><Button variant="ghost" onClick={()=>setResetOpen(false)}>Keep my changes</Button><Button variant="danger" onClick={()=>{setResetOpen(false);resetDemo()}}>Reset demo data</Button></div></Modal>
-    <ClinicAssistant role={role}/>
-  </div>
+    {role==='patient'?<ClinicAssistant role={role} docked open={assistantOpen} onOpenChange={setAssistantOpen}/>:<ClinicAssistant role={role}/>}
+  </div></ShellActionsContext.Provider>
 }
 
 export function ToastStack({ toasts }) {

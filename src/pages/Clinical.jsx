@@ -3,6 +3,8 @@ import { ROLE_INFO } from '../data.js'
 import { Button, Card, Field, Modal, Notice, PageHeader, Status, Table, Tabs } from '../components.jsx'
 import { dateLabel, dentistName, displayTime, patientName } from '../logic.js'
 import { AppointmentForm } from './Scheduling.jsx'
+import { PatientPrescriptionsPage } from './PatientCare.jsx'
+import { PatientFollowupsPage } from './PatientVisits.jsx'
 
 import { visibleHmo, HMO_PROVIDERS } from '../phase3-contracts.js'
 import { visiblePrescriptions, prescriptionTasks, linkedTreatment, followupDisplayState } from '../phase2.js'
@@ -159,7 +161,7 @@ export function TreatmentPage({ store, context, setPage }) {
   </>
 }
 
-export function PrescriptionsPage({ role, store }) {
+export function PrescriptionsPage({ role, store, context }) {
   const { state, actions, toast }=store
   const session=store.session||sessionForRole(role,state)
   const eligible=prescriptionTasks(state,session)
@@ -176,6 +178,7 @@ export function PrescriptionsPage({ role, store }) {
     toast(authorize?'Prescription authorized.':'Prescription draft saved.','success')
   }
   const update=(index,key,value)=>setForm({...form,items:form.items.map((r,i)=>i===index?{...r,[key]:value}:r)})
+  if(role==='patient')return <PatientPrescriptionsPage store={store} context={context}/>
   return <>
     <PageHeader title={role==='patient'?'My Prescriptions':'Prescription tasks'} text="Prescriptions are available to the patient only after the treating dentist authorizes them."/>
     {role==='dentist'&&<Card title="Requested prescriptions"><Field label="Treatment"><select value={form.treatmentId} onChange={e=>select(e.target.value)}><option value="">Select treatment</option>{eligible.map(t=><option value={t.id} key={t.id}>{patientName(t.patientId,state.patients)} • {dateLabel(t.date)} • {t.procedure} • {t.id}</option>)}</select></Field>
@@ -192,12 +195,13 @@ export function PrescriptionsPage({ role, store }) {
   </>
 }
 
-export function FollowupsPage({ role, store }) {
+export function FollowupsPage({ role, store, setPage, context }) {
   const { state, toast }=store
   const session=store.session||sessionForRole(role,state)
   const visible=state.followups.filter(f=>inScope(f,session,state)&&(role!=='patient'||linkedTreatment(state,f)))
   const [booking,setBooking]=useState(null)
   const prefill=booking?{patientId:booking.patientId,branchId:booking.branchId,dentistId:booking.dentistId,date:booking.recommendedDate,service:'Follow-Up',source:'Follow-Up Task',notes:booking.reason}:{}
+  if(role==='patient')return <PatientFollowupsPage store={store} setPage={setPage} context={context}/>
   return <>
     <PageHeader title="Treatment Follow-Up Scheduling" text="Return visits requested by the treating dentist. Scheduling uses normal appointment availability and conflict checks."/>
     {role==='dentist'&&<Notice>Record the clinical follow-up requirement in the exact treatment encounter.</Notice>}

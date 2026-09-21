@@ -1,4 +1,4 @@
-import React, { useEffect, useId, useRef } from 'react'
+import React, { createContext, useEffect, useId, useRef } from 'react'
 import { statusTone } from './logic.js'
 
 const ICON_PATHS={
@@ -141,6 +141,19 @@ export function Modal({ open, title, subtitle, onClose, children, wide=false, cl
     <div className="modal-head"><div><h2 id={titleId}>{title}</h2>{subtitle&&<p id={subtitleId}>{subtitle}</p>}</div><button type="button" className="icon-btn" aria-label={`Close ${title}`} onClick={onClose}><Icon name="x" size={19}/></button></div>
     <div className="modal-body">{children}</div>
   </dialog>
+}
+
+// Lets a page open shell-owned overlays (for example Notifications) without owning their state.
+export const ShellActionsContext=createContext({openNotifications:null})
+
+// Accessible replacement for native window.confirm: names the consequence and starts on the safe action.
+export function ConfirmDialog({ open, title, children, confirmLabel='Confirm', cancelLabel='Cancel', onConfirm, onCancel, tone='danger' }) {
+  const actions=useRef(null)
+  useEffect(()=>{if(open)actions.current?.querySelector('button')?.focus()},[open])
+  return <Modal open={open} title={title} onClose={onCancel}>
+    <div className="confirm-body">{children}</div>
+    <div className="row-actions confirm-actions" ref={actions}><Button variant="ghost" onClick={onCancel}>{cancelLabel}</Button><Button variant={tone==='danger'?'danger':'primary'} onClick={onConfirm}>{confirmLabel}</Button></div>
+  </Modal>
 }
 
 export function Timeline({ items=[] }) {
