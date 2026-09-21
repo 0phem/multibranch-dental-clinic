@@ -98,12 +98,16 @@ export const INITIAL_BRANCH_SERVICES = [
   ...['svc1','svc2','svc3','svc5','svc9','svc10','svc11'].map(serviceId=>({ id:`bs-b3-${serviceId}`, branchId:'b3', serviceId, active:true })),
 ]
 
+// ERD DENTIST_SERVICE_ASSIGNMENTS has its own `id` PK. The ID is derived from the Dentist/Service
+// pair (like `bs-<branchId>-<serviceId>` above) so seeds and legacy saved rows resolve identically.
+export const dentistServiceAssignmentId = (dentistId, serviceId) => `dsa-${dentistId}-${serviceId}`
+
 export const INITIAL_DENTIST_SERVICE_ASSIGNMENTS = [
-  ...['svc1','svc2','svc3','svc4','svc5','svc11'].map(serviceId=>({ dentistId:'d1', serviceId })),
-  ...['svc1','svc6','svc11'].map(serviceId=>({ dentistId:'d2', serviceId })),
-  ...['svc1','svc7','svc11'].map(serviceId=>({ dentistId:'d3', serviceId })),
-  ...['svc1','svc4','svc9','svc11'].map(serviceId=>({ dentistId:'d4', serviceId })),
-  ...['svc1','svc2','svc3','svc5','svc11'].map(serviceId=>({ dentistId:'d5', serviceId })),
+  ...['svc1','svc2','svc3','svc4','svc5','svc11'].map(serviceId=>({ id:dentistServiceAssignmentId('d1',serviceId), dentistId:'d1', serviceId })),
+  ...['svc1','svc6','svc11'].map(serviceId=>({ id:dentistServiceAssignmentId('d2',serviceId), dentistId:'d2', serviceId })),
+  ...['svc1','svc7','svc11'].map(serviceId=>({ id:dentistServiceAssignmentId('d3',serviceId), dentistId:'d3', serviceId })),
+  ...['svc1','svc4','svc9','svc11'].map(serviceId=>({ id:dentistServiceAssignmentId('d4',serviceId), dentistId:'d4', serviceId })),
+  ...['svc1','svc2','svc3','svc5','svc11'].map(serviceId=>({ id:dentistServiceAssignmentId('d5',serviceId), dentistId:'d5', serviceId })),
 ]
 
 export const INITIAL_BRANCHES = [
