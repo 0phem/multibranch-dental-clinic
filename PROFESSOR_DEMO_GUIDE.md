@@ -6,11 +6,29 @@ For the Phase 4B checkpoint (domain baseline `dac864e`, through Phase 3.5; the P
 
 1. Run `npm test`, `npm run test:smoke` and `npm run build`; start `npm run dev`.
 2. Use illustrative data only. Reset demo data only if discarding existing local demo work is intended. Reset rebases pristine examples; refresh does not move saved history to today.
-3. Note the Manila clinic date/time, open branch, assigned Staff and logged-in Dentist. The role-entry buttons use fixed demo identities, not a general password-login service. Select a branch/Dentist reachable by those identities for the connected journey.
+3. Note the Manila clinic date/time, open branch, assigned Staff and logged-in Dentist. The Staff/Dentist/Owner role-entry buttons use fixed demo identities, not a general password-login service; the Patient tab additionally offers self-registration and email sign-in (a frontend demo account flow — no real password or verification). Select a branch/Dentist reachable by those identities for the connected journey.
 4. For live admission/treatment, use today's valid appointment and available assigned Dentist. If there is no valid remaining slot or the clinic is closed, show a future booking and explain admission is a separate current-day event. Use the deterministic smoke scenarios as evidence for the full chain; do not bypass time validation or pretend a historical encounter is current.
 5. Follow one Patient and exact appointment/queue/treatment/invoice IDs throughout. A fresh completed treatment supplies a usable invoice; historical seed charges may correctly require clinic review.
 
-## 1. Patient: book without payment
+## 1. Patient: register, sign in and book without payment
+
+To show the identity relationship live: on the Patient tab choose **Create an account**, fill first/last name,
+email, contact number, an optional date of birth and a preferred branch, then **Create account**. This atomically
+creates a `PERSON` + `PATIENT` + `USER` sharing the same person relationship. On the success panel, choose **Sign
+in** with that same email — sign-in resolves strictly from that `PERSON`/`PATIENT`/`USER` relationship, never from a
+typed Patient ID. A brand-new Patient (no appointment, care, prescription, invoice, follow-up or HMO case yet) lands
+on a simpler **first-use Home**: a greeting and a single "Need a visit?" card leading to **Start booking**, with no
+booking form embedded on Home. Once real history exists, the same Patient sees the full Journey Hub below on their
+next visit to Home — that is derived from real state each time, not a stored "onboarding" flag.
+
+Distinguish plainly what this demonstrates:
+- **Current frontend:** the created records live in this browser's persisted local application state. This
+  demonstrates the ERD-aligned relationship (shared `person_id`), not a finished authentication system.
+- **Future backend:** a real database transaction, real credentials, email verification, server-side authorization
+  and database uniqueness constraints. None of that exists yet. Do not call the current local storage a database.
+
+For the rest of this demo, either continue as the account just created, or log out and choose **Continue as
+Patient** for the seeded demo persona (Maria Santos) — her one-click sign-in is unchanged.
 
 Log in as the Patient. **Home** is the Patient Journey Hub: an active visit or queue place first, then today's visit or the next appointment, items that need something from the Patient, recent care, and quick access. On Home, Referral & Loyalty appears only as the last quick-access tile (it also has its own navigation entry under More).
 
@@ -110,7 +128,8 @@ The clinic already has digital booking, billing and records; paper prescriptions
 
 ## Patient demo limitations (documented, not hidden)
 
-- The demo login reaches only the seeded Patient (Maria Santos); second-Patient isolation is demonstrated by automated tests, not by a second browser login.
+- Self-registration is a frontend demo account flow: no password, no email verification, no server enforcement — the registration screen states this. A registered account survives reload (it is written to local storage), but the signed-in session itself is not; reopening the app returns to Login and needs signing in again, for every role, not only a newly registered Patient.
+- Second-Patient isolation can now be shown live by registering a second account, in addition to the existing automated-test coverage.
 - The Patient does not check in: Staff records arrival, so the live queue appears only after Staff admits the Patient. There is no Patient self-check-in, online payment, or Patient-started conversation.
 - Seeded operational dates rebase to the current Manila day only for pristine/reset data, so a live-queue demonstration needs today's seeded visit (or a fresh reset).
 - The demo Staff identity cannot open Engagement; use the Owner for the Referral & Loyalty administration steps.

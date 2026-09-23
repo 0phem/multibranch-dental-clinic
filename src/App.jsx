@@ -3,6 +3,7 @@ import { Notice } from './components.jsx'
 import React, { useEffect, useState } from 'react'
 import { ClinicProvider, useClinic } from './store.jsx'
 import { Login, Shell, ToastStack } from './layout.jsx'
+import { PatientRegister } from './pages/PatientRegister.jsx'
 import { DashboardPage } from './pages/Dashboards.jsx'
 import { AppointmentsPage, BookingPage, SchedulePage } from './pages/Scheduling.jsx'
 import { CheckInPage, QueuePage, CapacityPage } from './pages/PatientFlow.jsx'
@@ -20,19 +21,29 @@ function AppBody() {
   const [context,setContext]=useState(null)
   const setPage=(next,record=null)=>{if(role&&canAccessPage(store.state,store.session,next)){setContext(record);setPageState(next)}}
   const [activeBranch,setActiveBranch]=useState('All Branches')
+  const [showRegister,setShowRegister]=useState(false)
 
   const login=r=>{
     const session=store.setSession(r)
     if(!session?.active)return store.toast('This demo account is inactive.','warning')
     setRole(r); setContext(null);setPageState(START_PAGE[r]); setActiveBranch(store.state.branches.find(b=>b.id===session.branchId)?.name||'All Branches')
   }
-  const logout=()=>{store.setSession(null);setRole(null);setContext(null);setPageState('dashboard');setActiveBranch('All Branches')}
+  // Shared by the Login email form and the registration success step: resolves a real USER -> PATIENT
+  // relationship from the typed email (contracts.js:resolvePatientLogin), never a browser-supplied Patient ID.
+  const loginPatientEmail=email=>{
+    const result=store.loginPatientByEmail(email)
+    if(result.ok){setRole('patient');setContext(null);setPageState(START_PAGE.patient);setActiveBranch('All Branches');setShowRegister(false)}
+    return result
+  }
+  const logout=()=>{store.setSession(null);setRole(null);setContext(null);setPageState('dashboard');setActiveBranch('All Branches');setShowRegister(false)}
   useEffect(()=>{if(role==='patient')setActiveBranch('All Branches')},[role])
 
   const storageWarnings=Object.values(store.persistenceErrors||{})
   if(storageWarnings.some(message=>message.includes('could not be read')))return <Notice title="Saved workspace needs recovery">{storageWarnings.join(' ')}</Notice>
 
-  if (!role) return <><Login onLogin={login}/><ToastStack toasts={store.toasts}/></>
+  if (!role) return <>{showRegister
+    ?<PatientRegister store={store} onCancel={()=>setShowRegister(false)} onSignIn={loginPatientEmail}/>
+    :<Login onLogin={login} onLoginPatientEmail={loginPatientEmail} onShowRegister={()=>setShowRegister(true)}/>}<ToastStack toasts={store.toasts}/></>
 
   if(!validSession(store.state,store.session))return <><Notice>Your account or branch access changed. Reopen your workspace or ask an administrator.</Notice><Login onLogin={login}/></>
 

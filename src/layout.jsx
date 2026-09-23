@@ -3,7 +3,7 @@ import { NAV, ROLE_INFO } from './data.js'
 import { visibleNotifications, notificationDestination } from './phase3-contracts.js'
 import { sessionForRole } from './contracts.js'
 import { canAccessPage } from './safeguards.js'
-import { Button, Icon, Modal, ShellActionsContext } from './components.jsx'
+import { Button, Field, Icon, Modal, Notice, ShellActionsContext } from './components.jsx'
 import { patientConversations } from './patient-view.js'
 
 const useLayoutEffectSafe=typeof window==='undefined'?React.useEffect:React.useLayoutEffect
@@ -29,11 +29,32 @@ function navGroups(role){
 // Authoritative clinic identity is the text "Dr. Dana E. Roxas" / "Dental Clinic", set beside the official compact
 // logo (decorative, so empty alt). Never redraw or recolor the logo. logo-with-name.png is a supplied asset whose
 // embedded wording differs from this identity, so it is intentionally not rendered.
-function Brand({className=''}){
+export function Brand({className=''}){
   return <div className={`brand ${className}`.trim()}><img className="clinic-logo" src="/images/logo.png" alt="" width="48" height="48"/><div><strong>Dr. Dana E. Roxas</strong><span>Dental Clinic</span></div></div>
 }
 
-export function Login({ onLogin }) {
+// Patient sign-in by email, resolved against a real USER -> PATIENT relationship (contracts.js:resolvePatientLogin).
+// The one-click demo persona (Maria) is unaffected and stays available alongside it.
+function PatientEmailSignIn({ onLoginPatientEmail, onShowRegister }) {
+  const [email,setEmail]=React.useState('')
+  const [error,setError]=React.useState('')
+  const submit=event=>{
+    event.preventDefault()
+    const result=onLoginPatientEmail(email)
+    if(!result.ok)setError(result.message)
+  }
+  return <div className="patient-email-login">
+    <div className="login-divider"><span>or sign in with your patient account</span></div>
+    <form onSubmit={submit} noValidate>
+      <Field label="Email"><input type="email" autoComplete="email" value={email} onChange={e=>{setEmail(e.target.value);setError('')}} placeholder="you@example.com"/></Field>
+      {error&&<Notice tone="warning" title="Couldn’t sign in">{error}</Notice>}
+      <Button type="submit" variant="soft" className="login-button">Sign in</Button>
+    </form>
+    <p className="login-register-link">New patient? <button type="button" className="text-link" onClick={onShowRegister}>Create an account</button></p>
+  </div>
+}
+
+export function Login({ onLogin, onLoginPatientEmail, onShowRegister }) {
   const [selected,setSelected]=React.useState('patient')
   const info=ROLE_INFO[selected]
   return <main className="login-shell">
@@ -48,6 +69,7 @@ export function Login({ onLogin }) {
         </button>)}
       </div>
       <Button className="login-button" icon="arrow" onClick={()=>onLogin(selected)}>Continue as {info.label}</Button>
+      {selected==='patient'&&onLoginPatientEmail&&<PatientEmailSignIn onLoginPatientEmail={onLoginPatientEmail} onShowRegister={onShowRegister}/>}
       <p className="prototype-disclaimer"><strong>Demo workspace</strong> Uses local browser data. No real payments, provider connections or email delivery.</p>
     </section>
     <aside className="login-visual" aria-label="Workspace overview"><span className="eyebrow">One continuous care journey</span><h2>A clearer day.<br/>For everyone.</h2><p>From the first appointment to the next visit, keep the right information with the right people.</p><ol className="login-journey"><li><b>Plan a visit</b><span>Appointments and arrival</span></li><li><b>Coordinate care</b><span>Queue and the clinical encounter</span></li><li><b>Keep in touch</b><span>Receipts, follow-up and communication</span></li></ol><small>Clinical decisions stay with the Dentist.</small></aside>

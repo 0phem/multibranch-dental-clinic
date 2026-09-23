@@ -240,6 +240,10 @@ dialog.notification-dialog { margin: var(--space-3) var(--space-3) auto auto; wi
 .selected-check { right: 6px; top: 6px; }
 .prototype-disclaimer { font-size: var(--font-xs); color: var(--muted); margin-bottom: 0; }
 .prototype-disclaimer strong { display: block; margin-bottom: var(--space-1); }
+.patient-email-login { margin-top: var(--space-4); }
+.login-divider { display: flex; align-items: center; gap: var(--space-3); margin: var(--space-4) 0 var(--space-3); color: var(--muted); font-size: var(--font-xs); }
+.login-divider::before, .login-divider::after { content: ''; flex: 1; height: 1px; background: var(--line); }
+.login-register-link { margin: var(--space-3) 0 0; font-size: var(--font-sm); color: var(--muted); }
 .login-visual { display: flex; background: #183d65; padding: clamp(32px, 5vw, 80px); gap: var(--space-6); }
 .login-visual h2 { font-size: clamp(2rem, 4vw, 3.5rem); line-height: 1.1; margin: 0; letter-spacing: -.03em; }
 .login-visual p { color: #d4e1f0; max-width: 420px; font-size: var(--font-lg); }
@@ -248,6 +252,22 @@ dialog.notification-dialog { margin: var(--space-3) var(--space-3) auto auto; wi
 .login-journey li { padding: var(--space-3) 0 var(--space-3) var(--space-3); }
 .login-journey b, .login-journey span { display: block; }
 .login-journey span { color: #c5d8ed; font-size: var(--font-md); margin-top: var(--space-1); }
+
+/* Patient self-registration: a single centered card (never the two-pane Login layout, which would leave an
+   empty column beside one form). Same design tokens/components as Login for visual consistency. */
+.register-shell { min-height: 100dvh; display: grid; place-items: center; padding: var(--space-6); }
+.register-panel { width: 100%; max-width: 560px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-xl); box-shadow: var(--shadow-sm); padding: var(--space-8); }
+.register-panel .login-copy-wrap { margin-top: 0; margin-bottom: var(--space-5); }
+.register-panel .form-grid { margin-bottom: var(--space-4); }
+.register-panel .prototype-disclaimer { margin-top: var(--space-5); }
+@media (max-width: 480px) { .register-panel { padding: var(--space-5); } }
+
+/* Shared restrained one-shot entrance (registration success, Patient first-use Home). Opacity/transform only, fast,
+   never loops, disabled by prefers-reduced-motion — content is fully readable with it off since nothing depends on it. */
+@media (prefers-reduced-motion: no-preference) {
+  .motion-in { animation: fade-in-up .32s cubic-bezier(.16,.84,.44,1) both; }
+}
+@keyframes fade-in-up { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 
 @media (max-width: 1024px) {
   .app-shell { grid-template-columns: minmax(0, 1fr); }

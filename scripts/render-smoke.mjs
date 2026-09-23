@@ -8,7 +8,7 @@ import React from 'react'
 import { renderToString } from 'react-dom/server'
 
 const require=createRequire(import.meta.url)
-const files=['components.jsx','store.jsx','layout.jsx','clock.js','contracts.js','workflow.js','phase2.js','phase3-contracts.js','orchestration.js','pages/Dashboards.jsx','pages/Scheduling.jsx','pages/PatientFlow.jsx','pages/Clinical.jsx','pages/FinanceCommunication.jsx','pages/Admin.jsx','pages/PatientLoyalty.jsx','loyalty.js','data.js']
+const files=['components.jsx','store.jsx','layout.jsx','clock.js','contracts.js','workflow.js','phase2.js','phase3-contracts.js','orchestration.js','pages/Dashboards.jsx','pages/Scheduling.jsx','pages/PatientFlow.jsx','pages/Clinical.jsx','pages/FinanceCommunication.jsx','pages/Admin.jsx','pages/PatientLoyalty.jsx','pages/PatientRegister.jsx','loyalty.js','registration.js','data.js']
 const result=await build({stdin:{contents:files.map(file=>`export * from './src/${file}';`).join('\n'),resolveDir:process.cwd()},bundle:true,write:false,platform:'node',format:'esm',plugins:[{name:'shared-react',setup(b){b.onResolve({filter:/^react$/},()=>({path:pathToFileURL(require.resolve('react')).href,external:true}))}}]})
 const m=await import('data:text/javascript;base64,'+Buffer.from(result.outputFiles[0].text).toString('base64'))
 m.setClockSource(()=>new Date('2026-09-19T02:08:00Z'))
@@ -393,3 +393,54 @@ const modulesHtml=renderToString(React.createElement(m.ModulesPage))
 assert.ok(modulesHtml.includes('Implemented prototype (approved enhancement)')&&modulesHtml.includes('limited preview; full implementation deferred')&&!/Proposed Enhancement|• PE/.test(modulesHtml),'module coverage distinguishes the implemented M24 from the approved-only M25')
 store={...store,state:fullState}
 console.log('PASS: Phase 4B.2 Referral & Loyalty — ledger-validated balance, request/pending/insufficient/review/empty states, Journey Hub entry point, aligned Engagement copy and Patient navigation')
+
+// Phase 4B.3A Patient identity: self-registration, user-derived sign-in and first-use Home. Registers into the SAME
+// history-laden state the earlier scenarios built for Maria/John, so isolation is checked against real data, not a
+// reset fixture.
+let regState=fullState
+const register=m.createRegistrationAction({getState:()=>regState,commit:patch=>{regState=m.normalizeClinicState({...regState,...patch})}})
+const renderPatientAs=(page,patientSession,context=null)=>{
+  const activeBranch=regState.branches.find(b=>b.id===patientSession.branchId)?.name||'All Branches'
+  return renderToString(React.createElement(m.Shell,{role:'patient',page,setPage:()=>{},onLogout:()=>{},activeBranch,setActiveBranch:()=>{},resetDemo:()=>{},store:{state:regState,session:patientSession}},React.createElement(m[pages[page]],{role:'patient',activeBranch,store:{state:regState,session:patientSession},context,setPage:()=>{}})))
+}
+const reg=register({firstName:'Jamie',lastName:'Cruz',phone:'0917 555 0001',email:'jamie.cruz@example.com',dob:'',preferredBranchId:'b1'},'smoke-register')
+assert.equal(reg.ok,true,reg.message)
+const {personId:newPersonId,patientId:newPatientId,userId:newUserId}=reg.record
+const newPerson=regState.persons.find(p=>p.id===newPersonId),newPatientRow=regState.patients.find(p=>p.id===newPatientId),newUserRow=regState.users.find(u=>u.id===newUserId)
+assert.equal(newPatientRow.personId,newPersonId);assert.equal(newUserRow.personId,newPersonId);assert.equal(newPatientRow.userId,newUserId)
+assert.equal(newUserRow.roleName,'Patient');assert.deepEqual(newUserRow.permissions,['patient-portal']);assert.equal(newUserRow.accountStatus,'Active')
+// Replay: the same command ID never creates a second account.
+assert.equal(register({firstName:'Someone',lastName:'Else',phone:'0917 000 7777',email:'other@example.com',preferredBranchId:'b1'},'smoke-register').unchanged,true)
+// A matching phone fails closed with neutral copy, discloses nothing, and creates nothing.
+const dup=register({firstName:'Someone',lastName:'Else',phone:'0917 555 0001',email:'dup@example.com',preferredBranchId:'b1'},'smoke-dup')
+assert.equal(dup.ok,false);assert.match(dup.message,/existing patient record may already match/);assert.doesNotMatch(dup.message,/Jamie|Cruz/)
+// Sign in by the normalized email — never a browser-supplied Patient/Person/User ID.
+const loginResult=m.resolvePatientLogin(regState,'  JAMIE.cruz@example.com  ')
+assert.equal(loginResult.ok,true);assert.equal(loginResult.session.patientId,newPatientId);assert.equal(loginResult.session.userId,newUserId)
+assert.equal(m.resolvePatientLogin(regState,'nobody@example.com').ok,false)
+assert.equal(m.sessionForUser(regState,'u1'),null,'an Owner account cannot enter the Patient sign-in path')
+// Maria's demo persona is unaffected.
+assert.equal(m.resolvePatientLogin(regState,'maria@example.com').ok,true)
+
+store={...store,state:regState}
+const newHome=renderPatientAs('dashboard',loginResult.session)
+assert.ok(newHome.includes('Need a visit?')&&newHome.includes('Start booking'),'a brand-new Patient sees first-use Home, not the booking form embedded')
+assert.ok(!/Needs your attention|Recent care/.test(mainOf(newHome)),'first-use Home omits the returning-Hub sections')
+assert.ok(!/PhaseOne|Phase Two|Phase Three|Maria|Santos|John|Dela Cruz/.test(newHome),'no other Patient’s data reaches a brand-new Patient’s Home')
+assert.ok(!newHome.includes('pt-first-use-aside'),'no Messages/Referral quick access is shown when neither exists yet')
+assert.ok(!render('dashboard','patient').includes('Jamie'),'Maria’s own Home shows nothing of the newly registered Patient')
+// A real booking (the shared command, not a flag) transitions the same Patient into the returning Journey Hub.
+const newAppt=m.createWorkflowActions({getState:()=>regState,getSession:()=>loginResult.session,commit:patch=>{regState=m.normalizeClinicState({...regState,...patch})}}).saveAppointment({patientId:newPatientId,branchId:'b1',dentistId:'d1',serviceId:'svc1',date:'2026-09-20',start:'11:00'})
+assert.equal(newAppt.ok,true,newAppt.message)
+store={...store,state:regState}
+const returningHome=renderPatientAs('dashboard',loginResult.session)
+assert.ok(returningHome.includes('Needs your attention')&&returningHome.includes('Recent care'),'a real appointment naturally returns the Patient to the full Journey Hub')
+// Login offers the Patient email sign-in and registration link only when wired, and still renders unchanged with no new props (existing brand smoke assertion above already covers that).
+const loginWithAuth=renderToString(React.createElement(m.Login,{onLogin:()=>{},onLoginPatientEmail:()=>({ok:false,message:'x'}),onShowRegister:()=>{}}))
+assert.ok(loginWithAuth.includes('sign in with your patient account')&&loginWithAuth.includes('Create an account'))
+assert.ok(!renderToString(React.createElement(m.Login,{onLogin:()=>{}})).includes('sign in with your patient account'),'the email sign-in block is absent unless the prop is supplied')
+const registerHtml=renderToString(React.createElement(m.PatientRegister,{store:{state:regState,actions:{registerPatient:()=>({ok:false,message:'x'})}},onCancel:()=>{},onSignIn:()=>({ok:false,message:'x'})}))
+assert.ok(registerHtml.includes('Create your patient account')&&registerHtml.includes('First name')&&registerHtml.includes('Preferred branch')&&registerHtml.includes('Demo workspace'))
+assert.ok(!/type="password"/i.test(registerHtml),'no password field')
+store={...store,state:fullState}
+console.log('PASS: Phase 4B.3A Patient identity — self-registration (atomic PERSON+PATIENT+USER, replay-safe, duplicate-safe), email sign-in, first-use Home vs returning Journey Hub, and isolation from other Patients')

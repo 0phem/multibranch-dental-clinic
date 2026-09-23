@@ -238,6 +238,24 @@ export function patientHome(state,session) {
   }
 }
 
+// First-use vs returning: derived from real canonical history, never a stored onboarding flag. A cancelled-only
+// appointment still counts as history (the Patient has been through the flow before), so it stays "returning".
+export function patientHomeMode(state,session) {
+  if(!patientContext(state,session))return null
+  const hasHistory=patientAppointments(state,session).length>0||patientCare(state,session).length>0||patientPrescriptions(state,session).length>0||
+    patientInvoices(state,session).length>0||patientFollowups(state,session).length>0||patientHmo(state,session).length>0
+  return hasHistory?'returning':'first-use'
+}
+
+// Only a canonical field the Patient record already has a legitimate home for is ever flagged; nothing invents
+// a requirement the model doesn't support. Currently: a missing contact number (Person.phone is legitimately
+// nullable in the ERD, and a self-registered account still requires it, so a gap here means a pre-existing record).
+export function patientProfileGaps(state,session) {
+  const ctx=patientContext(state,session)
+  if(!ctx)return []
+  return ctx.patient.phone?[]:[{field:'phone',message:'Add a contact number so the clinic can reach you about your visit.'}]
+}
+
 // M24 Referral & Loyalty. The balance shown is the ledger-validated one; a ledger the app cannot trust is reported as
 // "review" and never exposes a usable balance or a redemption control. No referral relationship or reward benefit is modeled.
 const LOYALTY_LABELS={'Qualified Visit':'Qualified visit','Qualified Referral':'Qualified referral','Referral Reward':'Referral reward','Redemption Request':'Reward request',Redemption:'Reward redeemed'}

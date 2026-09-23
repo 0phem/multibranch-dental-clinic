@@ -1,7 +1,7 @@
 import React, { useContext } from 'react'
 import { Button, Card, Empty, Icon, Notice, ShellActionsContext, Status } from '../components.jsx'
 import { dateLabel, displayTime } from '../logic.js'
-import { patientHome, queueSentence } from '../patient-view.js'
+import { patientHome, patientHomeMode, patientProfileGaps, queueSentence } from '../patient-view.js'
 import { DefinitionList, RecordCard } from '../patient-ui.jsx'
 
 const ATTENTION_ICON={hmo:'shield',followup:'followup',invoice:'receipt',prescription:'pill',message:'message',notification:'bell'}
@@ -26,10 +26,34 @@ function Hero({ hero, hasConversation, setPage }) {
   </>
 }
 
+// A brand-new Patient with no care history yet: simpler than the returning Journey Hub, no booking form embedded,
+// no fabricated metrics. Mode is derived from real appointment/care/prescription/invoice/follow-up/HMO state each
+// render — there is no stored "onboarding complete" flag to fall out of sync.
+function FirstUseHome({ home, gaps, setPage }) {
+  const quick=[
+    ...(home.hasConversation?[['messages','message','Messages',home.unreadMessages?`${home.unreadMessages} unread`:'Your conversations']]:[]),
+    ...(home.hasLoyalty?[['loyalty','gift','Referral & Loyalty','Your referral code and points']]:[]),
+  ]
+  return <div className="pt-first-use">
+    <section className="pt-first-use-hero motion-in" aria-labelledby="pt-hero-title">
+      <span className="pt-eyebrow">{`${home.greeting}, ${home.firstName}`}</span>
+      <h1 id="pt-hero-title">Need a visit?</h1>
+      <p>Choose a branch, service and time that works for you. Only real available times are shown, and nothing is charged when you book — billing happens after a completed visit.</p>
+      <div className="row-actions"><Button icon="plusCalendar" onClick={()=>setPage('book')}>Start booking</Button></div>
+    </section>
+    {gaps.length>0&&<Notice tone="info" title="Before your visit">{gaps.map(g=>g.message).join(' ')}</Notice>}
+    {quick.length>0&&<nav className="pt-home-aside pt-first-use-aside" aria-label="Quick access">
+      <ul className="pt-quick">{quick.map(([page,icon,label,hint])=><li key={page}><button type="button" onClick={()=>setPage(page)}><span aria-hidden="true"><Icon name={icon} size={20}/></span><span><b>{label}</b><small>{hint}</small></span><Icon name="chevron" size={16}/></button></li>)}</ul>
+    </nav>}
+  </div>
+}
+
 export function PatientHome({ store, setPage }) {
   const shell=useContext(ShellActionsContext)
   const home=patientHome(store.state,store.session)
+  const mode=patientHomeMode(store.state,store.session)
   if(!home)return <Notice tone="warning" title="We couldn’t confirm your account">Reopen your workspace, or ask the clinic to check your account access.</Notice>
+  if(mode==='first-use')return <FirstUseHome home={home} gaps={patientProfileGaps(store.state,store.session)} setPage={setPage}/>
   const quick=[
     ['book','plusCalendar','Book a visit','Choose a branch, service and time'],
     ['appointments','calendar','Appointments','Upcoming and past visits'],

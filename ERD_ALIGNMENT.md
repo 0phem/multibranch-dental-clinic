@@ -10,7 +10,7 @@ Reviewed against protected checkpoint `dac864e`, the [Data Dictionary](docs/arch
 | USERS | `users` linked by `personId` | Demo account status/permissions; no password authentication server |
 | ROLES / USER_ROLE_ASSIGNMENTS | Role catalog and user permissions/branch; live session checks | Flattened assignment model, not normalized multi-role rows; Owner exceptions documented in reconciliation |
 | STAFF_PROFILES | `staff`, `dentists`, with `personId`/`userId` | M1 creation synchronizes M3; Active account and operational Available remain separate |
-| PATIENTS | `patients` with `personId`, optional `userId` | Patient may exist without portal login; centralized chart, scoped operational access |
+| PATIENTS | `patients` with `personId`, optional `userId` | Patient may exist without portal login; `patients.userId` is a frontend compatibility denormalization (cross-checked against `personId` on every read), not a `PATIENTS.user_id` ERD column; centralized chart, scoped operational access |
 | BRANCHES / BRANCH_OPERATING_HOURS | `branches`, inline `open`/`close` | Canonical branch IDs; full per-weekday hours/holiday exceptions not represented |
 | SERVICES / BRANCH_SERVICES | `services`, `branchServices` | Canonical duration/fee/status and branch availability/optional overrides |
 | STAFF_SCHEDULES | Inline profile shifts and availability | No complete date-specific schedule/exception collection |
@@ -20,6 +20,15 @@ Reviewed against protected checkpoint `dac864e`, the [Data Dictionary](docs/arch
 | DENTIST_QUEUES / QUEUE_ENTRIES | `queue`, with per-Dentist/branch/day `queueId` | Container identity embedded rather than separate queue table; exact appointment/check-in/treatment links |
 | CAPACITY_EVENTS | Derived queue/capacity views and workflow events | No independent persisted aggregate snapshot table; estimates do not replace queue entries |
 | AUDIT_LOGS | `audit` alongside `workflowLog` | Local audit projection (recent audit list capped); not immutable server security evidence |
+
+**Identity model clarification (Phase 4B.3A):** `PERSONS` is the single shared identity hub. `USERS` and
+`PATIENTS` are two independent attachments to it, each carrying its own `person_id` foreign key — the ERD does not
+model `USERS` and `PATIENTS` as directly chained through each other. A Patient may exist with no `USER`/login at
+all. Patient self-registration (`src/registration.js`) atomically creates a `PERSON` + `PATIENT` + `USER` sharing
+that same `person_id`; the order PERSON → PATIENT → USER is the frontend's transaction order, not an approved
+`PERSON → USER → PATIENT` ERD foreign-key chain. The frontend's `patients.userId` field remains a compatibility
+denormalization (see the PATIENTS row above), never proposed as a `PATIENTS.user_id` ERD column. No ERD
+relationship, table or diagram/dictionary change is authorized by this clarification.
 
 ## Clinical and financial
 

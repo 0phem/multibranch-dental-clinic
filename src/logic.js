@@ -8,6 +8,11 @@ export const peso = new Intl.NumberFormat('en-PH', { style:'currency', currency:
 
 export const patientName = (patientId, patients) => patients.find(p=>p.id===patientId)?.name || patientId
 export const dentistName = (dentistId, dentists) => dentists.find(d=>d.id===dentistId)?.name || dentistId
+
+// Same duplicate-person signal Staff patient creation already uses (createPatientRecord): a matching phone, or a
+// matching first/last name plus date of birth. Never claims a match from typed identity alone with looser rules.
+export const possibleDuplicatePerson = (persons, {firstName, lastName, phone, dob}) =>
+  persons.some(p=>(phone&&p.phone===phone)||(p.firstName?.toLowerCase()===firstName.toLowerCase()&&p.lastName?.toLowerCase()===lastName.toLowerCase()&&p.dob===(dob||null)))
 export const serviceInfo = (idOrName, services=SERVICES) => services.find(s=>s.id===idOrName||s.name===idOrName) || { id:null, name:idOrName||'Unknown service', duration:30, baseFee:0, category:'General Dentistry', status:'Active' }
 
 export function toMinutes(value='00:00') {

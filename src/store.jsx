@@ -9,8 +9,9 @@ import {
 } from './data.js'
 import { uid, nowLabel } from './logic.js'
 import { clinicNow, rebaseDemoRecords } from './clock.js'
-import { normalizeClinicState, sessionForRole, persistableCollection } from './contracts.js'
+import { normalizeClinicState, sessionForRole, resolvePatientLogin, persistableCollection } from './contracts.js'
 import { createWorkflowActions } from './workflow.js'
+import { createRegistrationAction } from './registration.js'
 
 const ClinicContext=createContext(null)
 const STORAGE_PREFIX='dentalops-v4-'
@@ -162,25 +163,36 @@ export function ClinicProvider({ children }) {
     setWorkflowLog(xs=>[{id:uid('log'),at:nowLabel(),module,event,eventType:eventType||event,result,status},...xs])
   }
   const actions={}
+  const commit=patch=>{
+    // Advance immediately so repeated clicks before React renders see the commit.
+    stateRef.current=normalizeClinicState({...stateRef.current,...patch})
+    for(const [key,value] of Object.entries(patch))setters[`set${key[0].toUpperCase()}${key.slice(1)}`]?.(persistableCollection(key,value))
+  }
 
   Object.assign(actions,createWorkflowActions({
     getState:()=>stateRef.current,
     getSession:()=>sessionRef.current,
-    commit:patch=>{
-      // Advance immediately so repeated clicks before React renders see the commit.
-      stateRef.current=normalizeClinicState({...stateRef.current,...patch})
-      for(const [key,value] of Object.entries(patch))setters[`set${key[0].toUpperCase()}${key.slice(1)}`]?.(persistableCollection(key,value))
-    },
+    commit,
   }))
+  // Public registration boundary: no session exists yet, so it does not go through createWorkflowActions' run()
+  // (which requires validSession); it shares the same synchronous read/validate/commit discipline directly.
+  actions.registerPatient=createRegistrationAction({getState:()=>stateRef.current,commit})
 
   actionsRef.current=actions
+
+  // Patient email sign-in: resolves USER -> PERSON -> PATIENT from the typed email, never from a browser-supplied ID.
+  const loginPatientByEmail=email=>{
+    const result=resolvePatientLogin(stateRef.current,email)
+    if(result.ok){sessionRef.current=result.session;setSessionState(result.session)}
+    return result
+  }
 
   const resetDemo=()=>{
     Object.keys(localStorage).filter(k=>k.startsWith(STORAGE_PREFIX)).forEach(k=>localStorage.removeItem(k))
     window.location.reload()
   }
 
-  const value=useMemo(()=>({state,setters,actions,toast,log,workflow,resetDemo,toasts,session,setSession,persistenceErrors}),[persons,services,branchServices,dentistServiceAssignments,branches,dentists,staff,patients,appointments,queue,treatments,invoices,hmo,inquiries,conversations,notifications,prescriptions,followups,users,automations,workflowLog,campaigns,loyalty,audit,toasts,checkIns,session,clock,persistenceErrors])
+  const value=useMemo(()=>({state,setters,actions,toast,log,workflow,resetDemo,toasts,session,setSession,loginPatientByEmail,persistenceErrors}),[persons,services,branchServices,dentistServiceAssignments,branches,dentists,staff,patients,appointments,queue,treatments,invoices,hmo,inquiries,conversations,notifications,prescriptions,followups,users,automations,workflowLog,campaigns,loyalty,audit,toasts,checkIns,session,clock,persistenceErrors])
   return <ClinicContext.Provider value={value}>{children}</ClinicContext.Provider>
 }
 

@@ -56,6 +56,14 @@
 }
 @media (max-width: 480px) { .role-patient .pt-quick { grid-template-columns: minmax(0, 1fr); } }
 
+/* ---- First-use Home: a brand-new Patient with no care history. Deliberately simpler and single-column at every
+   width than the returning Journey Hub above; no booking form is embedded here. ---- */
+.role-patient .pt-first-use { max-width: 620px; margin-inline: auto; display: grid; gap: var(--space-5); align-content: start; }
+.role-patient .pt-first-use-hero { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-xl); padding: var(--space-6); display: grid; gap: var(--space-3); }
+.role-patient .pt-first-use-hero h1 { margin: 0 0 var(--space-2); font-size: var(--font-title); font-weight: var(--weight-heading); letter-spacing: -.025em; line-height: 1.2; color: var(--ink); }
+.role-patient .pt-first-use-hero p { margin: 0 0 var(--space-3); color: var(--text); font-size: var(--font-body); }
+.role-patient .pt-first-use-aside .pt-quick { grid-template-columns: minmax(0, 1fr); }
+
 /* ---- Choices (native radios), stepper, scheduler ---- */
 .role-patient .pt-choices { border: 0; padding: 0; margin: 0; min-width: 0; display: grid; gap: var(--space-2); }
 .role-patient .pt-choices legend { padding: 0; margin-bottom: var(--space-2); font-weight: var(--weight-strong); color: var(--ink); font-size: var(--font-body); }

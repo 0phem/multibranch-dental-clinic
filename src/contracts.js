@@ -18,6 +18,33 @@ export function sessionForRole(role, state) {
   const session={...info,role,branchId:user?.branchId??null,active:!!user&&(user.accountStatus||user.status)==='Active'}
   return {...session,active:validSession(state,session)}
 }
+
+// Derive a Patient session strictly from a resolved USER -> PATIENT relationship, never from a browser-supplied
+// Patient/Person ID. Fails closed (returns null) for a non-Patient account or an ambiguous/duplicate link, the same
+// way validSession would reject it; it never guesses which of several matching rows was intended.
+export function sessionForUser(state, userId) {
+  const user=state.users.find(u=>u.id===userId)
+  if(!user||(user.roleName||user.role)!=='Patient')return null
+  const rows=state.patients.filter(p=>p.userId===user.id&&p.personId===user.personId)
+  if(rows.length!==1)return null
+  const session={role:'patient',label:'Patient',subtitle:'Patient Portal',name:rows[0].name||'',userId:user.id,patientId:rows[0].id,branchId:user.branchId??null,active:!!user&&(user.accountStatus||user.status)==='Active'}
+  return {...session,active:validSession(state,session)}
+}
+
+// Patient demo sign-in by normalized email (D6). The email identifies the canonical PERSON, never a typed Patient/
+// User ID; account resolution and validity revalidate against current state exactly like sessionForUser/validSession.
+export function resolvePatientLogin(state, email) {
+  const normalized=typeof email==='string'?email.trim().toLowerCase():''
+  if(!normalized)return {ok:false,message:'Enter your email address.'}
+  const persons=state.persons.filter(p=>typeof p.email==='string'&&p.email.toLowerCase()===normalized)
+  if(persons.length!==1)return {ok:false,message:'We couldn’t find a Patient account for that email.'}
+  const users=state.users.filter(u=>u.personId===persons[0].id)
+  if(users.length!==1||(users[0].roleName||users[0].role)!=='Patient')return {ok:false,message:'We couldn’t find a Patient account for that email.'}
+  const session=sessionForUser(state,users[0].id)
+  if(!session)return {ok:false,message:'This account needs clinic review before you can sign in. Contact the clinic for help.'}
+  if(!session.active)return {ok:false,message:'This account is inactive. Contact the clinic for help.'}
+  return {ok:true,session}
+}
 export function inScope(record, session, state=null) {
   if(state&&!validSession(state,session))return false
   if (!session?.active || !record) return false
