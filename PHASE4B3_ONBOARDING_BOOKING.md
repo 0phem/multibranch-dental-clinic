@@ -149,7 +149,105 @@ uniqueness enforcement that this frontend can only approximate.
 - P1–P9 remain `POLICY DECISION REQUIRED` and untouched; the ERD structure is unchanged (no `PATIENTS.user_id`,
   `email_verified_at` or `privacy_consent_at` column was added).
 
+## Checkpoint 4B.3B — Scheduling domain & automatic Dentist assignment
+
+Scope of this checkpoint only: a deterministic scheduling domain (`src/scheduling.js`) underneath the future Patient
+booking redesign — automatic Dentist assignment, an open-time search, and the authoritative Patient booking-command
+support both need. **This checkpoint does not implement the final booking UI, Booking Drafts, a payment preference
+field, or any redesign of the existing Phase 4B.1 booking wizard**, which continues to use its existing manual
+Dentist-selection/default path unchanged.
+
+### Deterministic assignment algorithm (`assignDentist`)
+
+Answers "for this Patient, branch, service, date and time, which Dentist may legitimately perform this
+appointment?" with no fake AI, no randomness and no invented workload score:
+
+1. **Eligibility source:** the candidate pool is the exact same configured-service + branch-assignment +
+   active-account pool the booking wizard already used (`dentistsFor`, relocated unchanged from `patient-view.js` to
+   its proper domain home in `scheduling.js` and re-exported for existing callers). Each candidate is then
+   revalidated for the *exact* requested slot through the same authoritative `validateAppointment` every manual
+   booking already uses — branch/service/hours, Dentist shift, Dentist-conflict overlap, and the Patient's own
+   overlap check all apply identically. This composes the existing rules; it never invents a second, incompatible
+   eligibility system.
+2. **Workload metric:** eligible candidates are ranked by the total minutes of their own legitimately booked
+   (non-terminal) appointments on the exact requested date — reusing the same canonical `TERMINAL`
+   (`Completed`/`Cancelled`/`No-show`) status list every other command already uses, so a cancelled appointment
+   never inflates workload and a different date never contributes. `M15` `branchCapacity` (branch-level operational
+   visibility) is never consulted to rank Dentists.
+3. **Stable tie-break:** equal booked minutes break by ascending canonical Dentist ID, so identical state and
+   identical input always produce the identical Dentist regardless of array/display order.
+4. **Zero-eligible-Dentist behavior:** some real configured branch/service combinations (for example Branch C +
+   TMD/Orofacial Pain Consultation, or Branch B + Teeth Whitening) currently have zero Dentists authorized for that
+   service. `assignDentist` returns an explicit `{ok:false, dentistId:null}` result for that case — never an
+   exception, never a silent fallback to an unqualified Dentist, and never a silent fallback to another branch or
+   service.
+
+### Open-time search (`findOpenTimes`)
+
+A deterministic scheduling *search*, not AI: for a branch/service (and Patient), it inspects legitimate scheduling
+dates in chronological order within a technical window — `FIND_TIME_DEFAULT_WINDOW_DAYS = 14` — reusing the exact
+slot-interval rule `availableSlots` already owns rather than inventing a new one. The **14-day** window is a
+technical search default, not a clinic booking-limit policy (P1–P9 remain unresolved); a caller may search a
+different window later. Only a date/time with at least one legitimately eligible Dentist is returned, each slot
+carries the Dentist `assignDentist` would provisionally pick right now, results are capped by an explicit limit, and
+an unavailable combination returns an empty list honestly rather than fabricating a slot.
+
+### Provisional vs. authoritative confirmation
+
+A slot returned by `findOpenTimes`, or a Dentist shown by `assignDentist` before the Patient confirms, is only ever
+**provisional**. The authoritative Patient booking command (`saveAppointment` in `src/workflow.js`, extended with an
+explicit `options.autoAssign` mode) always recomputes eligibility and the deterministic assignment at confirmation
+time:
+
+- If the Dentist the Patient reviewed is still the freshly recomputed deterministic assignment, the booking
+  proceeds normally and the appointment records `assignmentMethod: 'auto'`.
+- If the reviewed Dentist is no longer available but a different Dentist could now be assigned, the command returns
+  a neutral "Availability changed. Review the updated appointment before confirming." result. **No silent Dentist
+  substitution ever happens**, and no appointment is created from that failed confirmation; a later Patient UI is
+  expected to show the newly proposed assignment and ask the Patient to confirm again.
+- If zero Dentist is eligible at confirmation time, the command fails the same way, with no appointment created.
+
+`options.autoAssign` only ever applies to a **new**, Patient-initiated booking with no follow-up relationship;
+Staff/Owner bookings, existing-appointment rescheduling and follow-up scheduling are completely unaffected and keep
+their existing explicit/pinned Dentist behavior (`assignmentMethod: 'selected'` on a newly created record that did
+not use automatic assignment). Command replay/idempotency is preserved: the assignment recomputation excludes the
+in-flight command's own prior record from both the overlap check and the workload count, so a rapid duplicate
+confirmation with the same command ID never creates a second appointment, and a genuinely new review-and-retry
+creates exactly one.
+
+### Assignment metadata & auditability
+
+A successfully auto-assigned new appointment persists `assignmentMethod: 'auto'`; an explicitly selected new
+appointment persists `assignmentMethod: 'selected'`. Existing appointments created before this checkpoint have no
+`assignmentMethod` field at all and remain fully readable — this checkpoint does not rewrite historical rows solely
+to add it. The workflow event for an auto-assigned booking additionally records `assignmentRuleVersion`
+(`SCHEDULING_RULE_VERSION` in `src/scheduling.js`, currently `'dentist-assignment-v1'`) as a stable technical
+identifier, so a later rule change is never silently attributed to an earlier one. No private per-candidate
+diagnostic data (the ranked candidate list `assignDentist` returns) is ever written into a workflow or audit event.
+
+### Frontend concurrency limitation & future backend boundary
+
+**Current frontend:** this remains the existing single-tab, last-write-wins browser-local state; `assignDentist`'s
+recompute-then-validate-then-commit sequence is not a database transaction and cannot itself prevent a genuine
+race between two browser tabs. **Future backend (not implemented, not authorized in this pass):** an authoritative
+backend must re-run the same recompute → lock/check scheduling state → validate → insert sequence inside one
+database transaction rather than trusting this browser's provisional result; the ERD-vNext field this checkpoint's
+`assignmentMethod` anticipates is `APPOINTMENTS.dentist_assignment_method` (see `ERD_ALIGNMENT.md`).
+
+## Known limitations (4B.3B)
+
+- This checkpoint is scheduling-domain-ready, not booking-UI-ready: the shipped Phase 4B.1 booking wizard still uses
+  its existing manual Dentist-selection/default path (`scheduleFormDefaults`/`nextScheduleForm` in
+  `patient-view.js`, unchanged) and does not yet offer automatic assignment or open-time search to the Patient.
+- No Patient Dentist preference or continuity-of-care preference is implemented; the architecture review has not
+  approved either.
+- `booking_method` on `APPOINTMENTS` is not redefined or overloaded by this checkpoint; a later booking UI phase
+  settles its manual-vs-find-time mapping explicitly.
+- Frontend concurrency remains single-tab/last-write-wins, as documented above.
+- Automatic assignment, Booking Drafts, a payment preference field and any booking-wizard redesign remain separate,
+  later checkpoints.
+
 ## Verification
 
-`git diff --check` clean. `npm test`, `npm run test:smoke` and `npm run build` results for this checkpoint are
+`git diff --check` clean. `npm test`, `npm run test:smoke` and `npm run build` results for each checkpoint are
 recorded in the implementation report delivered alongside this record.

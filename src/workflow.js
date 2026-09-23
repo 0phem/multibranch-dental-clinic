@@ -8,6 +8,7 @@ import { phase2Actions, procedureLines, linkedTreatment, money, validInvoice } f
 import { clinicNow, validDate } from './clock.js'
 import { encounterContext, inScope, isActiveQueue, isTodayQueue, TERMINAL } from './contracts.js'
 import { recalcQueue, uid, validateAppointment } from './logic.js'
+import { assignDentist, SCHEDULING_RULE_VERSION } from './scheduling.js'
 
 const fail=message=>({ok:false,message})
 const replace=(rows,record)=>rows.some(x=>x.id===record.id)?rows.map(x=>x.id===record.id?record:x):[...rows,record]
@@ -86,6 +87,20 @@ export function createWorkflowActions({getState,commit,getSession,clock=clinicNo
     if(existing&&(!['Pending','Confirmed'].includes(existing.status)||state.checkIns.some(c=>c.appointmentId===existing.id)||state.queue.some(q=>q.appointmentId===existing.id)||state.treatments.some(t=>t.appointmentId===existing.id)))return fail('An admitted or closed appointment cannot be rescheduled.')
     if(session.role==='patient'&&form.patientId!=null&&form.patientId!==session.patientId)return fail('This booking form belongs to another patient. Reopen your own appointment.')
     const request={...form,patientId:session.role==='patient'?session.patientId:form.patientId}
+    // Automatic Dentist assignment (Phase 4B.3B): only a NEW, explicitly-requested Patient booking with no
+    // follow-up relationship ever recomputes the Dentist here. Staff/Dentist/reschedule/follow-up flows are
+    // untouched and keep their explicit/pinned Dentist exactly as before.
+    const commandMatch=options.commandId?state.appointments.find(a=>a.commandId===options.commandId):null
+    const autoAssign=options.autoAssign===true&&session.role==='patient'&&!existing&&!options.followupId
+    let assignmentMethod=null
+    if(autoAssign){
+      if(!request.branchId||!request.serviceId||!request.date||!request.start)return fail('Enter valid appointment details.')
+      const assignment=assignDentist(state,request,now,commandMatch?commandMatch.id:null)
+      if(!assignment.ok)return fail('No Dentist is currently available for this service, branch and time. Try another time or branch.')
+      if(request.dentistId&&request.dentistId!==assignment.dentistId)return fail('Availability changed. Review the updated appointment before confirming.')
+      request.dentistId=assignment.dentistId
+      assignmentMethod='auto'
+    }
     if(!inScope(request,session,state))return fail('Choose your assigned branch and patient scope.')
     let followup=state.followups.find(f=>options.followupId?f.id===options.followupId:existing&&f.appointmentId===existing.id)
     if(followup&&!permitted(state,session,'followups'))return fail('Your account no longer has follow-up scheduling permission.')
@@ -98,18 +113,18 @@ export function createWorkflowActions({getState,commit,getSession,clock=clinicNo
       else if(!existing)return {ok:true,unchanged:true,record:linked}
     }
     if(existing&&followup&&followup.appointmentId!==existing.id)return fail('Follow-up cannot be attached to an unrelated appointment.')
-    const retry=options.commandId&&state.appointments.find(a=>a.commandId===options.commandId)
+    const retry=commandMatch
     if(retry&&(!inScope(retry,session,state)||['patientId','branchId','dentistId'].some(k=>retry[k]!==request[k])||existing&&retry.id!==existing.id))return fail('This booking command belongs to another encounter. Reopen the intended appointment.')
     if(retry&&!existing)return {ok:true,unchanged:true,record:retry}
     const result=validateAppointment(request,state,existing?.id,now)
     if(!result.valid)return {...fail(result.checks.filter(c=>!c.ok).map(c=>c.label).join('. ')),validation:result}
-    const record={...durable(existing||{}),id:existing?.id||uid('a'),commandId:options.commandId||null,appointmentNo:existing?.appointmentNo||`APT-${now.date.slice(0,4)}-${String(state.appointments.length+1).padStart(4,'0')}`,patientId:request.patientId,followupId:followup?.id||existing?.followupId||null,branchId:result.branch.id,dentistId:request.dentistId,serviceId:result.service.id,date:request.date,start:request.start,scheduledStart:`${request.date}T${request.start}`,duration:result.duration,notes:request.notes||'',status:'Confirmed',source:existing?.source||(followup?'Follow-Up Task':session.role==='patient'?'Patient Portal':'Front Desk')}
+    const record={...durable(existing||{}),id:existing?.id||uid('a'),commandId:options.commandId||null,appointmentNo:existing?.appointmentNo||`APT-${now.date.slice(0,4)}-${String(state.appointments.length+1).padStart(4,'0')}`,patientId:request.patientId,followupId:followup?.id||existing?.followupId||null,branchId:result.branch.id,dentistId:request.dentistId,serviceId:result.service.id,date:request.date,start:request.start,scheduledStart:`${request.date}T${request.start}`,duration:result.duration,notes:request.notes||'',status:'Confirmed',source:existing?.source||(followup?'Follow-Up Task':session.role==='patient'?'Patient Portal':'Front Desk'),...(existing?{}:{assignmentMethod:assignmentMethod||'selected'})}
     if(existing&&['patientId','branchId','dentistId','serviceId','date','start','duration','notes'].every(k=>existing[k]===record[k]))return {ok:true,unchanged:true,record:existing}
     record.revision=(existing?.revision||0)+1
     state.appointments=replace(state.appointments,record)
     if(followup)state.followups=replace(state.followups,{...followup,status:'Scheduled',appointmentId:record.id})
     const key=`appointment:${record.id}:${record.revision}`
-    event(key,'M6→M7',existing?'appointment.rescheduled':'appointment.created',`${record.appointmentNo} • ${result.branch.name}`,record.patientId,record.branchId)
+    event(key,'M6→M7',existing?'appointment.rescheduled':'appointment.created',`${record.appointmentNo} • ${result.branch.name}`,record.patientId,record.branchId,record.assignmentMethod==='auto'?{assignmentMethod:'auto',assignmentRuleVersion:SCHEDULING_RULE_VERSION}:{})
     notify(key,record.patientId,existing?'Appointment Rescheduled':'Appointment Confirmation',`Your ${result.service.name} visit is confirmed for ${record.date} at ${record.start} in ${result.branch.name}.`)
     return {ok:true,record:{...record,branch:result.branch.name,service:result.service.name}}
   })

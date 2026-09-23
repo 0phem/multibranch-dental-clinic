@@ -8,7 +8,7 @@ import React from 'react'
 import { renderToString } from 'react-dom/server'
 
 const require=createRequire(import.meta.url)
-const files=['components.jsx','store.jsx','layout.jsx','clock.js','contracts.js','workflow.js','phase2.js','phase3-contracts.js','orchestration.js','pages/Dashboards.jsx','pages/Scheduling.jsx','pages/PatientFlow.jsx','pages/Clinical.jsx','pages/FinanceCommunication.jsx','pages/Admin.jsx','pages/PatientLoyalty.jsx','pages/PatientRegister.jsx','loyalty.js','registration.js','data.js']
+const files=['components.jsx','store.jsx','layout.jsx','clock.js','contracts.js','workflow.js','phase2.js','phase3-contracts.js','orchestration.js','pages/Dashboards.jsx','pages/Scheduling.jsx','pages/PatientFlow.jsx','pages/Clinical.jsx','pages/FinanceCommunication.jsx','pages/Admin.jsx','pages/PatientLoyalty.jsx','pages/PatientRegister.jsx','loyalty.js','registration.js','scheduling.js','data.js']
 const result=await build({stdin:{contents:files.map(file=>`export * from './src/${file}';`).join('\n'),resolveDir:process.cwd()},bundle:true,write:false,platform:'node',format:'esm',plugins:[{name:'shared-react',setup(b){b.onResolve({filter:/^react$/},()=>({path:pathToFileURL(require.resolve('react')).href,external:true}))}}]})
 const m=await import('data:text/javascript;base64,'+Buffer.from(result.outputFiles[0].text).toString('base64'))
 m.setClockSource(()=>new Date('2026-09-19T02:08:00Z'))

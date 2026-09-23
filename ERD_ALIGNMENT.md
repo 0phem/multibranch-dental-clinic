@@ -30,6 +30,14 @@ that same `person_id`; the order PERSON → PATIENT → USER is the frontend's t
 denormalization (see the PATIENTS row above), never proposed as a `PATIENTS.user_id` ERD column. No ERD
 relationship, table or diagram/dictionary change is authorized by this clarification.
 
+**Scheduling assignment method (Phase 4B.3B):** the frontend now persists `assignmentMethod` (`'auto'` or
+`'selected'`) on a newly created `appointments` row (`src/scheduling.js`, `src/workflow.js`); the architecture
+review has approved an eventual ERD-vNext field this anticipates, conceptually `APPOINTMENTS.dentist_assignment_method`.
+Legacy rows created before this checkpoint carry no `assignmentMethod` at all and remain fully valid and readable in
+the current frontend without it. This is an approved future additive ERD alignment item; it does not modify the
+approved SVG ERD or data dictionary structure, and it is independent of the already-documented `booking_method`
+field, which this checkpoint does not redefine.
+
 ## Clinical and financial
 
 | Approved concept | Current frontend mapping | Simplification / integrity boundary |

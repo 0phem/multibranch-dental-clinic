@@ -5,6 +5,10 @@ import { availableSlots, dateLabel, nextAppointment, peso, queueWaitEstimate } f
 import { followupDisplayState, linkedTreatment, visibleInvoices, visiblePrescriptions } from './phase2.js'
 import { LOYALTY_PROGRAM, accountsOf, ledgerIssue, needMoreMessage } from './loyalty.js'
 import { HMO_PROVIDERS, notificationDestination, visibleConversations, visibleHmo, visibleNotifications } from './phase3-contracts.js'
+import { dentistsFor, servicesAt } from './scheduling.js'
+
+// Relocated to the scheduling domain (Phase 4B.3B); re-exported here so existing Patient-view callers are unaffected.
+export { dentistsFor, servicesAt }
 
 // Read-only Patient view models. Every selector revalidates the session, scopes to the exact Patient,
 // composes the established visible*/inScope selectors, mutates nothing and creates no workflow events.
@@ -295,15 +299,6 @@ export function resolveTarget(state,session,page,context) {
 }
 
 // ---- Scheduling helpers (same authoritative validator as the shared booking command) -----------------
-const activeAccount=(state,dentist)=>{const user=state.users.find(u=>u.id===dentist.userId);return !!user&&(user.accountStatus||user.status)==='Active'}
-export const servicesAt=(state,branchId)=>{
-  const offered=new Set(state.branchServices.filter(bs=>bs.branchId===branchId&&bs.active!==false).map(bs=>bs.serviceId))
-  return state.services.filter(s=>s.status==='Active'&&offered.has(s.id))
-}
-export const dentistsFor=(state,branchId,serviceId)=>{
-  const allowed=new Set(state.dentistServiceAssignments.filter(a=>a.serviceId===serviceId&&a.isAuthorized!==false).map(a=>a.dentistId))
-  return state.dentists.filter(d=>d.branchIds?.includes(branchId)&&d.available&&allowed.has(d.id)&&activeAccount(state,d))
-}
 export function scheduleFormDefaults(state,session,{appointment=null,followup=null}={}) {
   const ctx=patientContext(state,session)
   const source=appointment||followup
