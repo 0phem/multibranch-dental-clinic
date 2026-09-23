@@ -11,11 +11,15 @@ const useLayoutEffectSafe=typeof window==='undefined'?React.useEffect:React.useL
 const NAV_ICONS={
   dashboard:'home',book:'plusCalendar',appointments:'calendar',schedule:'calendar',checkin:'checkin',queue:'queue',capacity:'activity',
   patients:'users',treatment:'tooth',billing:'receipt',hmo:'shield',inquiries:'message',messages:'message',prescriptions:'pill',followups:'followup',
-  branches:'building',team:'users',analytics:'chart',users:'shield',automation:'settings',engagement:'sparkles',loyalty:'gift',modules:'file'
+  branches:'building',team:'users',analytics:'chart',users:'shield',automation:'settings',engagement:'sparkles',loyalty:'gift',modules:'file',me:'user'
 }
 
 const GROUPS={
-  patient:[['Overview',['dashboard']],['Visits',['book','appointments','queue','followups']],['Care & coverage',['prescriptions','hmo','billing']],['Communication',['messages']],['More',['loyalty']]],
+  // Primary Patient destinations only (Phase 4B.3C-1): Home/Book/Visits/Messages/Payments/Me. Queue is contextual
+  // (reached from Home's active-visit card, not a permanent nav item). HMO/Prescriptions/Follow-ups/Referral &
+  // Loyalty remain fully reachable pages (see `pages` in safeguards.js and Me's secondary links) — they are just
+  // not primary navigation destinations.
+  patient:[['Overview',['dashboard']],['Booking',['book','appointments']],['Communication',['messages']],['Account',['billing','me']]],
   staff:[['Today',['dashboard','appointments','checkin','queue','capacity']],['Patients & finance',['patients','billing','hmo']],['Communication',['inquiries','messages','followups','engagement']]],
   dentist:[['Today',['dashboard','schedule','queue']],['Clinical',['patients','treatment','prescriptions','followups']],['Communication',['messages']]],
   owner:[['Overview',['dashboard','analytics']],['Operations',['branches','team','capacity','hmo']],['Administration',['users','automation','engagement']]],
@@ -90,23 +94,24 @@ export function NotificationPanel({role,store,onClose,setPage}){
   </div></Modal>
 }
 
-// Patient docks the trigger in the top bar (AssistantToggle) so it never floats over page content; other roles keep the floating button.
-function AssistantToggle({open,onToggle}){
-  return <button type="button" id="clinic-assistant-toggle" className="top-icon-btn" aria-expanded={open} aria-controls="clinic-assistant-panel" aria-label={open?"Close clinic help":"Open clinic help"} onClick={onToggle}><Icon name="robot" size={20}/></button>
-}
-function ClinicAssistant({role,docked=false,open:controlledOpen,onOpenChange}){
+// Phase 4B.3C-1: the Patient assistant is a floating circular FAB using the approved compact clinic logo, exactly
+// like Staff/Dentist/Owner's floating button, but with strict controlled-open a11y behavior (focus enters the
+// panel on open, Escape/close returns focus to the FAB) since it is the Patient's own only trigger. CSS
+// (`patient.css`/`foundation.css`) positions `.assistant-fab.is-patient` above the mobile bottom navigation and,
+// via a `:has()` rule, above a sticky booking footer when one is present — see PHASE4B3_ONBOARDING_BOOKING.md.
+function ClinicAssistant({role,patient=false,open:controlledOpen,onOpenChange}){
   const [innerOpen,setInnerOpen]=React.useState(false)
-  const open=docked?controlledOpen:innerOpen, setOpen=docked?onOpenChange:setInnerOpen
+  const open=patient?controlledOpen:innerOpen, setOpen=patient?onOpenChange:setInnerOpen
   const panel=React.useRef(null)
-  React.useEffect(()=>{if(docked&&open)panel.current?.focus()},[docked,open])
-  const closeToTrigger=()=>{setOpen(false);document.getElementById('clinic-assistant-toggle')?.focus()}
+  React.useEffect(()=>{if(patient&&open)panel.current?.focus()},[patient,open])
+  const closeToTrigger=()=>{setOpen(false);document.getElementById('clinic-assistant-fab')?.focus()}
   const [answer,setAnswer]=React.useState('')
   const quick=role==='patient'?['How do I book?','What do I need for HMO?','How does the queue work?']:['Show workflow help','Explain this dashboard','How are alerts prioritized?']
   const reply=q=>{
     const map={
-      'How do I book?':'Open Book Appointment, choose a branch and service, then pick any validated available slot. Smart Schedule can also suggest options for you.',
+      'How do I book?':'Open Book, choose Smart Find or Manual booking, then pick any validated available slot. A Dentist is assigned automatically.',
       'What do I need for HMO?':'Your HMO case lists missing requirements. You can record document metadata; clinic staff checks local requirements. This app does not upload files or contact the provider.',
-      'How does the queue work?':'After Staff records your arrival, Queue & Wait shows your position and estimated wait from this workspace’s current data.',
+      'How does the queue work?':'After Staff records your arrival, your Home shows your position and an estimated wait from this workspace’s current data.',
       'Show workflow help':'Use the page actions for the current task. The system automatically handles cross-module handoffs where configured.',
       'Explain this dashboard':'This dashboard prioritizes the work and exceptions that need your attention right now.',
       'How are alerts prioritized?':'Operational alerts are surfaced by urgency, waiting time, HMO thresholds, failed automations, and role responsibility.'
@@ -114,8 +119,10 @@ function ClinicAssistant({role,docked=false,open:controlledOpen,onOpenChange}){
     setAnswer(map[q]||'I can help with clinic navigation and workflow questions. Clinical diagnosis and treatment decisions always stay with a dentist.')
   }
   return <>
-    {!docked&&<button className="assistant-fab" onClick={()=>setOpen(v=>!v)} aria-expanded={open} aria-label={open?"Close clinic help":"Open clinic help"}><Icon name="robot" size={22}/></button>}
-    {open&&<div className="assistant-panel" {...(docked?{id:'clinic-assistant-panel',ref:panel,tabIndex:-1,role:'region','aria-label':'Clinic Assistant',onKeyDown:event=>{if(event.key==='Escape'){event.stopPropagation();closeToTrigger()}}}:{})}><div className="assistant-head"><div className="assistant-avatar"><Icon name="robot" size={19}/></div><div><b>Clinic Assistant</b><small>Clinic navigation & workflow help</small></div><button className="icon-btn" aria-label="Close clinic help" onClick={docked?closeToTrigger:()=>setOpen(false)}><Icon name="x" size={16}/></button></div><div className="assistant-body"><div className="assistant-bubble">Hi! I can help you navigate the clinic system. I won’t diagnose conditions or make treatment decisions.</div>{answer&&<div className="assistant-bubble answer">{answer}</div>}<div className="assistant-quick">{quick.map(q=><button key={q} onClick={()=>reply(q)}>{q}</button>)}</div></div></div>}
+    <button id={patient?'clinic-assistant-fab':undefined} type="button" className={`assistant-fab ${patient?'is-patient':''}`.trim()} onClick={()=>setOpen(v=>!v)} aria-expanded={open} aria-controls={patient?'clinic-assistant-panel':undefined} aria-label={open?"Close clinic help":"Open clinic help"}>
+      {patient?<img src="/images/logo.png" alt="" width="26" height="26"/>:<Icon name="robot" size={22}/>}
+    </button>
+    {open&&<div className={`assistant-panel ${patient?'is-sheet':''}`.trim()} {...(patient?{id:'clinic-assistant-panel',ref:panel,tabIndex:-1,role:'region','aria-label':'Clinic Assistant',onKeyDown:event=>{if(event.key==='Escape'){event.stopPropagation();closeToTrigger()}}}:{})}><div className="assistant-head"><div className="assistant-avatar"><Icon name="robot" size={19}/></div><div><b>Clinic Assistant</b><small>Clinic navigation & workflow help</small></div><button className="icon-btn" aria-label="Close clinic help" onClick={patient?closeToTrigger:()=>setOpen(false)}><Icon name="x" size={16}/></button></div><div className="assistant-body"><div className="assistant-bubble">Hi! I can help you navigate the clinic system. I won’t diagnose conditions or make treatment decisions.</div>{answer&&<div className="assistant-bubble answer">{answer}</div>}<div className="assistant-quick">{quick.map(q=><button key={q} onClick={()=>reply(q)}>{q}</button>)}</div></div></div>}
   </>
 }
 
@@ -141,7 +148,9 @@ export function Shell({ role, page, setPage, onLogout, activeBranch, setActiveBr
     window.scrollTo?.(0,0)
     document.getElementById('main-content')?.focus({preventScroll:true})
   },[page,role])
-  const mobilePatientNav=[['dashboard','Home'],['appointments','Visits'],['book','Book'],['queue','Queue'],['messages','Messages']].filter(([key])=>canAccessPage(store.state,session,key))
+  // Exactly four primary mobile destinations (Phase 4B.3C-1): Home, Book, Visits, Me. Everything else (Messages,
+  // Payments, Queue, HMO, Prescriptions, Follow-ups, Referral & Loyalty) is reachable through Me/contextual links.
+  const mobilePatientNav=[['dashboard','Home'],['book','Book'],['appointments','Visits'],['me','Me']].filter(([key])=>canAccessPage(store.state,session,key))
   const selectPage=key=>{if(canAccessPage(store.state,session,key))setPage(key);setMobileOpen(false)}
   React.useEffect(()=>{
     const media=window.matchMedia('(min-width: 1025px)')
@@ -159,14 +168,14 @@ export function Shell({ role, page, setPage, onLogout, activeBranch, setActiveBr
     <div className="main-shell">
       <header className="topbar">
         <div className="topbar-left"><button className="mobile-menu icon-btn" aria-label="Open navigation" aria-haspopup="dialog" aria-expanded={mobileOpen} onClick={()=>setMobileOpen(true)}><Icon name="menu" size={21}/></button><div className="topbar-context"><span className="workspace-label">{info.label} workspace</span>{role==='owner'&&<label className="branch-scope"><span>Branch</span><select value={activeBranch} onChange={e=>setActiveBranch(e.target.value)}><option>All Branches</option>{store.state.branches.map(b=><option key={b.id}>{b.name}</option>)}</select></label>}{(role==='staff'||role==='dentist')&&<div className="branch-lock"><small>Assigned branch</small><b>{activeBranch}</b></div>}</div></div>
-        <div className="top-actions">{role==='patient'&&<AssistantToggle open={assistantOpen} onToggle={()=>setAssistantOpen(v=>!v)}/>}<button className="top-icon-btn" aria-haspopup="dialog" aria-expanded={notificationsOpen} onClick={()=>setNotificationsOpen(true)} aria-label={`Notifications${unread?`, ${unread} unread`:''}`}><Icon name="bell" size={20}/>{unread>0&&<span aria-hidden="true" className="notification-count">{unread>99?'99+':unread}</span>}</button><div className="top-user"><span aria-hidden="true">{initials}</span><div><b>{name}</b><small>{info.label}</small></div></div></div>
+        <div className="top-actions"><button className="top-icon-btn" aria-haspopup="dialog" aria-expanded={notificationsOpen} onClick={()=>setNotificationsOpen(true)} aria-label={`Notifications${unread?`, ${unread} unread`:''}`}><Icon name="bell" size={20}/>{unread>0&&<span aria-hidden="true" className="notification-count">{unread>99?'99+':unread}</span>}</button><div className="top-user"><span aria-hidden="true">{initials}</span><div><b>{name}</b><small>{info.label}</small></div></div></div>
       </header>
       <main id="main-content" tabIndex={-1} className="content">{children}</main>
     </div>
     {notificationsOpen&&<NotificationPanel role={role} store={store} setPage={setPage} onClose={()=>setNotificationsOpen(false)}/>}
     {role==='patient'&&<nav className="patient-mobile-nav" aria-label="Patient shortcuts">{mobilePatientNav.map(([key,label])=><button key={key} aria-current={page===key?'page':undefined} className={page===key?'active':''} onClick={()=>selectPage(key)}><Icon name={NAV_ICONS[key]||'home'} size={20}/><span>{label}</span>{key==='messages'&&unreadMessages>0&&<span className="pt-nav-badge"><span aria-hidden="true">{unreadMessages}</span><span className="sr-only">, {unreadMessages} unread</span></span>}</button>)}</nav>}
     <Modal open={resetOpen} title="Reset demo workspace?" subtitle="This clears local demo changes for every role in this browser and restores the sample records." onClose={()=>setResetOpen(false)}><div className="row-actions"><Button variant="ghost" onClick={()=>setResetOpen(false)}>Keep my changes</Button><Button variant="danger" onClick={()=>{setResetOpen(false);resetDemo()}}>Reset demo data</Button></div></Modal>
-    {role==='patient'?<ClinicAssistant role={role} docked open={assistantOpen} onOpenChange={setAssistantOpen}/>:<ClinicAssistant role={role}/>}
+    {role==='patient'?<ClinicAssistant role={role} patient open={assistantOpen} onOpenChange={setAssistantOpen}/>:<ClinicAssistant role={role}/>}
   </div></ShellActionsContext.Provider>
 }
 

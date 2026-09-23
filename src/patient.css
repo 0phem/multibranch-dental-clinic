@@ -27,9 +27,10 @@
 .role-patient .pt-details summary { cursor: pointer; min-height: var(--control-height); display: flex; align-items: center; font-weight: var(--weight-strong); color: var(--brand-3); }
 .role-patient .pt-details[open] summary { margin-bottom: var(--space-2); }
 
-/* ---- Journey Hub ---- */
-.role-patient .pt-home { display: grid; gap: var(--space-5); grid-template-columns: minmax(0, 1fr); }
-.role-patient .pt-home-main { display: grid; gap: var(--space-5); min-width: 0; }
+/* ---- Home: active visit/next appointment first, then compact quick actions, then only genuine
+   blocking/actionable state. A flat single-column stack at every width — deliberately not a sidebar/dashboard
+   split, so quick actions stay high in reading order instead of falling to the bottom on mobile (Phase 4B.3C-1). */
+.role-patient .pt-home { max-width: 820px; margin-inline: auto; display: grid; gap: var(--space-5); align-content: start; }
 .role-patient .pt-hero { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-xl); padding: var(--space-6); display: grid; gap: var(--space-3); }
 .role-patient .pt-hero-grid { display: grid; gap: var(--space-5); grid-template-columns: minmax(0, 1fr); }
 .role-patient .pt-hero h1 { margin: 0 0 var(--space-2); font-size: var(--font-title); font-weight: var(--weight-heading); letter-spacing: -.025em; line-height: 1.2; color: var(--ink); }
@@ -41,19 +42,15 @@
 .role-patient .pt-attention p { margin: var(--space-1) 0 0; color: var(--muted); font-size: var(--font-md); overflow-wrap: anywhere; }
 .role-patient .pt-attention-icon { display: grid; place-items: center; width: 36px; height: 36px; border-radius: var(--radius); background: var(--brand-soft); color: var(--brand-3); }
 .role-patient .pt-clear { display: flex; align-items: center; gap: var(--space-2); margin: 0; color: var(--green); font-weight: var(--weight-strong); }
-.role-patient .pt-home-aside { display: block; }
+.role-patient .pt-home-aside, .role-patient .pt-home-quick { display: block; }
 .role-patient .pt-quick { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.role-patient .pt-quick button { width: 100%; min-height: 64px; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: var(--space-3); text-align: left; padding: var(--space-3); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); color: var(--ink); cursor: pointer; }
+.role-patient .pt-quick button { width: 100%; min-height: 56px; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: var(--space-3); text-align: left; padding: var(--space-2) var(--space-3); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); color: var(--ink); cursor: pointer; }
 .role-patient .pt-quick button:hover { background: var(--surface-3); }
 .role-patient .pt-quick b, .role-patient .pt-quick small { display: block; overflow-wrap: anywhere; }
-.role-patient .pt-quick b { font-size: var(--font-md); }
-.role-patient .pt-quick small { color: var(--muted); font-size: var(--font-sm); }
-.role-patient .pt-quick button > span:first-child { display: grid; place-items: center; width: 36px; height: 36px; border-radius: var(--radius); background: var(--brand-soft); color: var(--brand-3); }
-@media (min-width: 768px) { .role-patient .pt-hero-grid { grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); } }
-@media (min-width: 1025px) {
-  .role-patient .pt-home { grid-template-columns: minmax(0, 1fr) 320px; align-items: start; }
-  .role-patient .pt-quick { grid-template-columns: minmax(0, 1fr); }
-}
+.role-patient .pt-quick b { font-size: var(--font-sm); }
+.role-patient .pt-quick small { color: var(--muted); font-size: var(--font-xs); }
+.role-patient .pt-quick button > span:first-child { display: grid; place-items: center; width: 32px; height: 32px; border-radius: var(--radius); background: var(--brand-soft); color: var(--brand-3); }
+@media (min-width: 768px) { .role-patient .pt-hero-grid { grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); } .role-patient .pt-home-quick .pt-quick { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 480px) { .role-patient .pt-quick { grid-template-columns: minmax(0, 1fr); } }
 
 /* ---- First-use Home: a brand-new Patient with no care history. Deliberately simpler and single-column at every
@@ -110,10 +107,32 @@
   .role-patient .pt-step .pt-step-name { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   .role-patient .pt-step > button, .role-patient .pt-step > div { position: relative; }
   .role-patient .pt-stage-footer { position: sticky; bottom: var(--pt-footer-bottom, 0); z-index: 5; background: var(--surface); border-top: 1px solid var(--line); margin-inline: calc(var(--space-4) * -1); padding: var(--space-3) var(--space-4); }
-  .role-patient .pt-scheduler:not(.is-modal) { --pt-footer-bottom: calc(72px + env(safe-area-inset-bottom)); }
+  .role-patient .pt-scheduler:not(.is-modal), .role-patient .pt-book-flow { --pt-footer-bottom: calc(72px + env(safe-area-inset-bottom)); }
 }
-@media (min-width: 768px) and (max-width: 1024px) { .role-patient .pt-scheduler:not(.is-modal) .pt-stage-footer { position: sticky; bottom: calc(72px + env(safe-area-inset-bottom)); background: var(--surface); border-top: 1px solid var(--line); padding: var(--space-3) 0; } }
+@media (min-width: 768px) and (max-width: 1024px) {
+  .role-patient .pt-scheduler:not(.is-modal) .pt-stage-footer, .role-patient .pt-book-flow .pt-stage-footer { position: sticky; bottom: calc(72px + env(safe-area-inset-bottom)); background: var(--surface); border-top: 1px solid var(--line); padding: var(--space-3) 0; }
+}
 .role-patient dialog .pt-scheduler .pt-stage-footer { bottom: 0; }
+
+/* ---- Book entry: Smart Find / Manual Booking mode choice, not an ordinary numbered step ---- */
+.role-patient .pt-book-modes { display: grid; gap: var(--space-4); grid-template-columns: minmax(0, 1fr); }
+.role-patient .pt-book-mode { display: grid; gap: var(--space-2); text-align: left; padding: var(--space-6); border: 1px solid var(--line-strong); border-radius: var(--radius-lg); background: var(--surface); cursor: pointer; }
+.role-patient .pt-book-mode:hover { border-color: var(--brand); background: var(--brand-soft); }
+.role-patient .pt-book-mode-eyebrow { color: var(--brand-3); font-size: var(--font-sm); font-weight: var(--weight-strong); }
+.role-patient .pt-book-mode h2 { margin: 0; font-size: var(--font-lg); color: var(--ink); }
+.role-patient .pt-book-mode p { margin: 0; color: var(--muted); font-size: var(--font-md); }
+@media (min-width: 768px) { .role-patient .pt-book-modes { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+.role-patient .pt-location-row { display: grid; gap: var(--space-2); justify-items: start; margin-bottom: var(--space-2); }
+
+/* Smart Find recommended schedules: several legitimate options, never a forced single result or a desktop table. */
+.role-patient .pt-book-options { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
+.role-patient .pt-book-options button { width: 100%; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3); min-height: var(--control-height); padding: var(--space-3) var(--space-4); border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--surface); color: var(--ink); cursor: pointer; text-align: left; }
+.role-patient .pt-book-options button:hover { border-color: var(--brand); background: var(--brand-soft); }
+.role-patient .pt-book-option-when { display: flex; align-items: baseline; gap: var(--space-2); }
+.role-patient .pt-book-option-meta { color: var(--muted); font-size: var(--font-sm); overflow-wrap: anywhere; }
+
+.role-patient .pt-action-required { display: grid; gap: var(--space-3); }
 
 /* ---- Queue ---- */
 .role-patient .pt-queue-live { display: grid; gap: var(--space-2); justify-items: start; }
@@ -178,7 +197,7 @@
 .role-patient .patient-mobile-nav button.active { color: var(--brand-3); background: var(--brand-soft); font-weight: var(--weight-strong); }
 .role-patient .pt-nav-badge { position: absolute; top: 2px; left: calc(50% + 6px); min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--red); color: #fff; font-size: .6875rem; font-weight: var(--weight-strong); display: grid; place-items: center; }
 @media (min-width: 769px) and (max-width: 1024px) {
-  .role-patient .patient-mobile-nav { display: grid; position: fixed; inset: auto 0 0; min-height: 72px; padding: var(--space-2) var(--space-4) calc(var(--space-2) + env(safe-area-inset-bottom)); grid-template-columns: repeat(5, minmax(0, 1fr)); background: var(--surface); border-top: 1px solid var(--line); z-index: 50; }
+  .role-patient .patient-mobile-nav { display: grid; position: fixed; inset: auto 0 0; min-height: 72px; padding: var(--space-2) var(--space-4) calc(var(--space-2) + env(safe-area-inset-bottom)); grid-template-columns: repeat(4, minmax(0, 1fr)); background: var(--surface); border-top: 1px solid var(--line); z-index: 50; }
   .role-patient .content { padding-bottom: 140px; }
   .role-patient .toast-stack { bottom: 150px; }
 }
@@ -194,12 +213,24 @@
 .role-patient .notification-count, .role-patient .pt-nav-badge { font-size: var(--font-xs); }
 .role-patient .tabs button > span { font-size: var(--font-xs); }
 
-/* ---- Assistant: the Patient trigger lives in the top bar, so nothing floats over content. The panel is a popover under the top bar
-   that ends above the bottom navigation (or the viewport edge on desktop). ---- */
+/* ---- Assistant (Phase 4B.3C-1): a floating circular FAB using the compact clinic logo, lower-right, safe-area
+   aware. `.assistant-fab.is-patient` reuses --pt-bottom-nav so it always clears the mobile bottom navigation; the
+   :has() rule additionally raises it above a sticky booking-step footer whenever one is present on the page
+   (proved by a browser geometry regression check, not visual guesswork — see the QA scripts). ---- */
 .role-patient { --pt-topbar: 76px; --pt-bottom-nav: 0px; }
 @media (max-width: 768px) { .role-patient { --pt-topbar: 72px; } }
 @media (max-width: 1024px) { .role-patient { --pt-bottom-nav: calc(72px + env(safe-area-inset-bottom)); } }
-.role-patient .assistant-panel { top: calc(var(--pt-topbar) + var(--space-2)); bottom: auto; right: var(--space-3); width: min(380px, calc(100vw - 24px)); max-height: calc(100dvh - var(--pt-topbar) - var(--pt-bottom-nav) - var(--space-6)); overflow: auto; }
+.role-patient .assistant-fab.is-patient { display: grid; place-items: center; overflow: hidden; padding: 0; right: var(--space-5); bottom: calc(var(--pt-bottom-nav) + var(--space-5)); }
+.role-patient .assistant-fab.is-patient img { width: 28px; height: 28px; border-radius: 50%; }
+/* A booking step's sticky footer is `position: sticky`, so its on-screen position depends on scroll/content height
+   and cannot be reliably cleared by a fixed pixel offset. Rather than guess, the FAB simply does not render while
+   a stage footer is present on the page at the widths where that footer becomes sticky — a deterministic
+   guarantee (verified by a browser geometry check) instead of fragile coordinate math. The FAB returns once the
+   Patient reaches Review (no stage footer there) or leaves the booking flow. */
+@media (max-width: 1024px) { .role-patient:has(.pt-stage-footer) .assistant-fab.is-patient { display: none; } }
+@media (max-width: 375px) { .role-patient .assistant-fab.is-patient { width: 44px; height: 44px; right: var(--space-4); } }
+.role-patient .assistant-panel.is-sheet { position: fixed; inset: auto 0 var(--pt-bottom-nav); top: auto; left: 0; right: 0; width: 100%; max-width: none; border-radius: var(--radius-xl) var(--radius-xl) 0 0; max-height: min(72dvh, calc(100dvh - var(--pt-bottom-nav) - var(--space-6))); }
+@media (min-width: 769px) { .role-patient .assistant-panel.is-sheet { inset: auto; left: auto; right: var(--space-5); bottom: calc(var(--pt-bottom-nav) + var(--space-5) + var(--control-height) + var(--space-3)); width: min(380px, calc(100vw - 24px)); border-radius: var(--radius-lg); max-height: calc(100dvh - var(--space-8)); } }
 .role-patient .assistant-panel:focus { outline: none; }
 
 /* ---- Keyboard focus must not land under the sticky top bar, the bottom navigation or the sticky booking actions.

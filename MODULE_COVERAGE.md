@@ -9,8 +9,8 @@ Domain baseline `dac864e` (through Phase 3.5); the Patient presentation and M24 
 | M3 — Dentist & Staff Management | Core / Partial | M1-synchronized profiles, branch assignment, specialization/license, shifts, availability and capability references | Inline shifts/assignments, not a complete dated roster/exception manager |
 | M4 — Patient Record Management | Core / Partial | Central PERSON/Patient identity; scoped search, registration, demographics and longitudinal clinical history | Authorized charts retain cross-branch clinical history; visit list is operationally scoped. General document cards are illustrative, not uploaded evidence |
 | M5 — Treatment Management | Core / Implemented frontend | Dentist My Queue → exact encounter → draft → actual procedure lines → completion | Dentist judgment only. No template catalog/amendment subsystem; completed records are protected |
-| M6 — Appointment Management | Core / Implemented frontend | Patient booking/Appointments and Staff worklist; book, reschedule, cancel with canonical context | No payment during booking; Patient cannot be reassigned by rescheduling; admitted reschedule blocked |
-| M7 — Scheduling / Conflict Prevention | Core / Implemented frontend | Manual selection and the Patient's Suggested times share branch/service/Dentist/shift/time/overlap validation | Suggestions reserve nothing until validated booking; no invented timing policy |
+| M6 — Appointment Management | Core / Implemented frontend | Patient Book (Smart Find / Manual booking, both automatically Dentist-assigned) and Staff worklist; book, reschedule, cancel with canonical context; Patient Booking Drafts save in-progress choices without reserving anything | No payment during booking; Patient cannot be reassigned by rescheduling; admitted reschedule blocked; a Booking Draft is never an appointment |
+| M7 — Scheduling / Conflict Prevention | Core / Implemented frontend | Deterministic automatic Dentist assignment (`assignDentist`) and open-time search (`findOpenTimes`) share the same branch/service/Dentist/shift/time/overlap validation as manual selection | Assignment/search reserve nothing until validated booking; no invented timing policy; no Patient Dentist free-choice |
 | M8 — Check-In | Core / Implemented frontend | Staff selects scheduled arrival or admits validated walk-in; timestamp, Check-In and queue handoff | Separate fast admission, not registration or treatment. No Patient self-Check-In command |
 | M9 — Queue Management | Core / Implemented frontend | Own Patient position; own Dentist queue; Staff Call/Ready/Away/Return/No-show and priority with reason/audit | Treatment completion controls clinical closure. Operational Owner exceptions are documented separately |
 | M10 — Wait Time / Capacity | Core / Implemented frontend estimates | Queue wait estimate, load/threshold and alternative-branch visibility | Aggregate estimates differ from individual queue order; no guaranteed case-specific duration |
@@ -39,7 +39,7 @@ Domain baseline `dac864e` (through Phase 3.5); the Patient presentation and M24 
 
 ## Role surfaces
 
-Patient: Home (Journey Hub), booking, appointments, Live Queue, Prescriptions, Follow-Ups, HMO, Messages, Receipts & Payments; Referral & Loyalty (M24).
+Patient: Home, Book (Smart Find / Manual booking), Visits, Live Queue (contextual), Messages, Payments, Me (profile view + secondary links to Prescriptions, Follow-Ups, HMO, Referral & Loyalty (M24)).
 
 Staff: operational worklists as allowed by current subrole and assigned branch. Receptionist, Dental Assistant, Cashier, HMO Coordinator and Patient Engagement Staff do not have interchangeable permission sets. See the [role matrix](DOCUMENTATION_RECONCILIATION.md#role-and-permission-clarifications).
 

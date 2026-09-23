@@ -324,7 +324,9 @@ test('scheduling.js exposes the required domain surface and contains no forbidde
 })
 test('workflow.js\'s scheduling integration contains no forbidden patterns',()=>{
   const src=read('src/workflow.js')
-  for(const forbidden of [/dentists\[0\]/,/branchCapacity/,/paymentPreference/,/bookingDraft/i])
+  // bookingDraft(s) is intentionally excluded here: Phase 4B.3C-1 implements Booking Drafts, and saveAppointment
+  // legitimately clears the session Patient's own draft on a successful new booking (see workflow.test.js).
+  for(const forbidden of [/dentists\[0\]/,/branchCapacity/,/paymentPreference/])
     assert.doesNotMatch(src,forbidden)
 })
 test('PHASE4B3_ONBOARDING_BOOKING.md documents the 4B.3B scheduling domain',()=>{

@@ -5,7 +5,7 @@ import {
   INITIAL_BRANCHES, INITIAL_DENTISTS, INITIAL_STAFF, INITIAL_PATIENTS, INITIAL_APPOINTMENTS, INITIAL_QUEUE,
   INITIAL_TREATMENTS, INITIAL_INVOICES, INITIAL_HMO, INITIAL_INQUIRIES, INITIAL_CONVERSATIONS,
   INITIAL_NOTIFICATIONS, INITIAL_PRESCRIPTIONS, INITIAL_FOLLOWUPS, INITIAL_USERS, INITIAL_AUTOMATIONS,
-  INITIAL_WORKFLOW_LOG, INITIAL_CAMPAIGNS, INITIAL_LOYALTY, INITIAL_AUDIT
+  INITIAL_WORKFLOW_LOG, INITIAL_CAMPAIGNS, INITIAL_LOYALTY, INITIAL_AUDIT, INITIAL_BOOKING_DRAFTS
 } from './data.js'
 import { uid, nowLabel } from './logic.js'
 import { clinicNow, rebaseDemoRecords } from './clock.js'
@@ -74,6 +74,7 @@ export function ClinicProvider({ children }) {
   const [loyalty,setLoyalty]=usePersist('loyalty',INITIAL_LOYALTY,reportPersistence,recoveryBlocked)
   const [audit,setAudit]=usePersist('audit',INITIAL_AUDIT,reportPersistence,recoveryBlocked)
   const [checkIns,setCheckIns]=usePersist('check-ins',[],reportPersistence,recoveryBlocked)
+  const [bookingDrafts,setBookingDrafts]=usePersist('booking-drafts',INITIAL_BOOKING_DRAFTS,reportPersistence,recoveryBlocked)
   const [toasts,setToasts]=useState([])
   const [session,setSessionState]=useState(null)
   const sessionRef=useRef(null)
@@ -120,7 +121,7 @@ export function ClinicProvider({ children }) {
     persons,services,branchServices,dentistServiceAssignments,branches,
     dentists:projectedDentists,staff:projectedStaff,patients:projectedPatients,appointments:projectedAppointments,
     queue,treatments,invoices,hmo,inquiries,conversations,notifications,prescriptions,followups,users:projectedUsers,
-    automations,workflowLog,campaigns,loyalty,audit,checkIns,clock,today:clock.date
+    automations,workflowLog,campaigns,loyalty,audit,checkIns,bookingDrafts,clock,today:clock.date
   })
   stateRef.current=state
   const migrationDone=useRef(false)
@@ -150,7 +151,8 @@ export function ClinicProvider({ children }) {
   const setters={
     setPersons,setServices,setBranchServices,setDentistServiceAssignments,setBranches,setDentists,setStaff,setPatients,
     setAppointments,setQueue,setTreatments,setInvoices,setHmo,setInquiries,setConversations,setNotifications,
-    setPrescriptions,setFollowups,setUsers,setAutomations,setWorkflowLog,setCampaigns,setLoyalty,setAudit,setCheckIns
+    setPrescriptions,setFollowups,setUsers,setAutomations,setWorkflowLog,setCampaigns,setLoyalty,setAudit,setCheckIns,
+    setBookingDrafts
   }
 
   const toast=(message,tone='default')=>{
@@ -192,7 +194,7 @@ export function ClinicProvider({ children }) {
     window.location.reload()
   }
 
-  const value=useMemo(()=>({state,setters,actions,toast,log,workflow,resetDemo,toasts,session,setSession,loginPatientByEmail,persistenceErrors}),[persons,services,branchServices,dentistServiceAssignments,branches,dentists,staff,patients,appointments,queue,treatments,invoices,hmo,inquiries,conversations,notifications,prescriptions,followups,users,automations,workflowLog,campaigns,loyalty,audit,toasts,checkIns,session,clock,persistenceErrors])
+  const value=useMemo(()=>({state,setters,actions,toast,log,workflow,resetDemo,toasts,session,setSession,loginPatientByEmail,persistenceErrors}),[persons,services,branchServices,dentistServiceAssignments,branches,dentists,staff,patients,appointments,queue,treatments,invoices,hmo,inquiries,conversations,notifications,prescriptions,followups,users,automations,workflowLog,campaigns,loyalty,audit,toasts,checkIns,bookingDrafts,session,clock,persistenceErrors])
   return <ClinicContext.Provider value={value}>{children}</ClinicContext.Provider>
 }
 

@@ -30,11 +30,28 @@ Distinguish plainly what this demonstrates:
 For the rest of this demo, either continue as the account just created, or log out and choose **Continue as
 Patient** for the seeded demo persona (Maria Santos) — her one-click sign-in is unchanged.
 
-Log in as the Patient. **Home** is the Patient Journey Hub: an active visit or queue place first, then today's visit or the next appointment, items that need something from the Patient, recent care, and quick access. On Home, Referral & Loyalty appears only as the last quick-access tile (it also has its own navigation entry under More).
+Log in as the Patient. **Home** (Phase 4B.3C-1) is active-care-first: an active visit or queue place first, then
+today's visit or the next appointment, a primary "Book a visit" action when neither applies, compact quick actions
+(Payments, Prescriptions, HMO, and Messages/Referral & Loyalty when they apply), and only genuinely blocking state
+under "Action required" — a Returned/Missing HMO item, an Open Dentist-requested follow-up, or an issued unpaid
+invoice. Ordinary notification-channel events (unread messages, a newly authorized prescription, the unread count)
+live in the Notification bell, not a giant Home card. Mobile navigation is exactly **Home, Book, Visits, Me**;
+Referral & Loyalty and HMO/Prescriptions/Follow-ups are reachable from Me.
 
-Open Book Appointment: **Branch → Service → Dentist preference → Date & Time → Review**. Date and time share a UI step but remain separate booking decisions. Show manual selection and **Show suggested times** (the earliest open times, in chronological order; nothing is called "best") using the same validator. An unavailable/conflicting option must not create a booking.
+Open **Book**: it opens with an explicit choice, **Smart Find** or **Manual booking** — never a numbered step.
+Smart Find asks branch (optionally via "Use my location," which honestly falls back to a plain branch picker since
+no branch has coordinates configured yet), then service, then shows several deterministic recommended options
+(date/time/branch/Dentist) at once — describe it plainly as deterministic scheduling, not AI. Manual booking is
+Branch → Service → Date → Time; **there is no Dentist-choice step in either mode** — the Dentist is assigned
+automatically by the same Phase 4B.3B deterministic domain, shown at Review as "Assigned based on service
+availability." Leaving the flow partway through saves a **Booking Draft** (a distinct, non-reserving record —
+BOOKING DRAFT != APPOINTMENT); reopening Book offers to resume it, revalidating the saved branch/service/time
+against current state rather than trusting it silently.
 
-Confirm a valid future start. Explain that the booked service provides context; the Dentist later chooses actual Performed Procedures. Nothing is charged during booking. In Appointments, optionally reschedule before admission, retaining Patient identity. Cancellation/rebooking can be shown before care; do not claim an unsupported minute-based cutoff.
+Confirm a valid future start. Explain that the booked service provides context; the Dentist later chooses actual
+Performed Procedures. Nothing is charged during booking — there is no payment step, deliberately, since the final
+treatment total is not known at booking time. In Visits, optionally reschedule before admission, retaining Patient
+identity. Cancellation/rebooking can be shown before care; do not claim an unsupported minute-based cutoff.
 
 Show the confirmation Notification. Patient does not perform Check-In in the current app. Switch to Staff for arrival.
 
@@ -81,13 +98,16 @@ Patient sees only own status, public outcome and required actions. Internal cont
 
 ## 6. Patient: results, Notifications and Messages
 
-Show Recent care on Home and the visit details in Appointments, the authorized Prescription, Follow-Up, issued itemized invoice/payment status/Receipt, and safe HMO information. Use the newly completed encounter, since unsupported historical Paid records are not valid Patient receipts.
+Show the completed visit's details in Visits (Past tab — care history lives there, not on Home), including its real
+payment status and, once Paid, actual payment method from the linked Payment. Also show the authorized
+Prescription, Follow-Up, issued itemized invoice/payment status/Receipt, and safe HMO information. Use the newly
+completed encounter, since unsupported historical Paid records are not valid Patient receipts.
 
 Open the global notification bell: own unread count, recent/full history, individual read and Mark All Read for this recipient only. Follow a relevant action; a stale or inaccessible destination is unavailable instead of exposing another record. Updates occur through shared local state, not cross-device transport.
 
 Open Messages separately. Use an explicit-participant conversation, record a reply and show its independent unread state. A role named Dentist does not grant access to every thread; Owner is not automatically a participant. Closed conversations reject replies. Do not describe failed-email retry as part of Messages.
 
-Open **Referral & Loyalty** (More). A Patient with no account sees a neutral empty state. To establish one, switch to Owner → Engagement (the demo Staff identity is a Receptionist without the engagement permission) and record a qualified activity: this creates the account and referral code. As the Patient, show the code, ledger-validated points and activity history; the reward request stays disabled below the prototype threshold and says how many points are missing. Request the reward (it becomes Pending), then as Owner choose **Process request**, and the Patient sees it Processed. State plainly that the 50-point threshold and other rules are team-designed prototype rules, no reward benefit is defined, and no referral relationship is tracked.
+Open **Referral & Loyalty** (Me). A Patient with no account sees a neutral empty state. To establish one, switch to Owner → Engagement (the demo Staff identity is a Receptionist without the engagement permission) and record a qualified activity: this creates the account and referral code. As the Patient, show the code, ledger-validated points and activity history; the reward request stays disabled below the prototype threshold and says how many points are missing. Request the reward (it becomes Pending), then as Owner choose **Process request**, and the Patient sees it Processed. State plainly that the 50-point threshold and other rules are team-designed prototype rules, no reward benefit is defined, and no referral relationship is tracked.
 
 Optionally show Staff Social Inquiries: record assigned inquiry/status, link the already-booked appointment, then show the traceable conversation. Repeating conversion reuses the links. No Facebook/email provider receives these records.
 
@@ -135,3 +155,5 @@ The clinic already has digital booking, billing and records; paper prescriptions
 - The demo Staff identity cannot open Engagement; use the Owner for the Referral & Loyalty administration steps.
 - Referral & Loyalty is a prototype: no reward benefit, value, expiry or referred-Patient tracking exists, and M25 campaigns send nothing.
 - The unresolved clinic policies (cancellation/reschedule cutoffs, earliest check-in, no-show threshold, override authority, amendments, conversation reopening, zero-fee settlement) are not assumed anywhere in the Patient screens.
+- Booking (Phase 4B.3C-1): no payment step exists at booking (no PayMongo, no deposit, no Cash/Card choice) — nothing is charged until a completed visit's invoice; Smart Find's location step always falls back to manual branch selection since no branch has real coordinates configured yet; there is no Patient Dentist preference — a Dentist is always assigned automatically; a Booking Draft is a frontend-local record only, not an ERD table.
+- Me is view-only: no profile field can be edited yet, and no OTP (real or fake) exists — editing is deferred to a future backend-verified phase.

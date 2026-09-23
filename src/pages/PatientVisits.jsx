@@ -3,8 +3,8 @@ import { Button, Card, ConfirmDialog, Empty, Field, Modal, Notice, PageHeader, S
 import { clinicDate } from '../clock.js'
 import { dateLabel, displayTime, uid } from '../logic.js'
 import {
-  appointmentActionState, appointmentGroups, dentistLabel, dentistsFor, hmoCaseView, hmoForAppointment, nextScheduleForm, patientContext, patientFollowups,
-  patientQueueView, patientVisitDetail, queueSentence, resolveTarget, scheduleFormDefaults, scheduleSlots, servicesAt, suggestTimes,
+  appointmentActionState, appointmentGroups, dentistLabel, dentistsFor, hmoCaseView, hmoForAppointment, invoiceView, nextScheduleForm, patientContext, patientFollowups,
+  patientInvoices, patientQueueView, patientVisitDetail, queueSentence, resolveTarget, scheduleFormDefaults, scheduleSlots, servicesAt, suggestTimes,
 } from '../patient-view.js'
 import { ChoiceGroup, DefinitionList, RecordCard, Stepper } from '../patient-ui.jsx'
 
@@ -102,16 +102,22 @@ export function PatientScheduler({ store, mode='book', appointment=null, followu
   </div>
 }
 
-export function PatientBookingPage({ store, setPage }) {
-  return <div className="pt-page is-wide">
-    <PageHeader kicker="Online booking" title="Book your visit" text="Choose what you need. Only times that are actually available are shown."/>
-    <PatientScheduler store={store} mode="book" setPage={setPage}/>
-  </div>
+// Payment fields come only from an actual linked, evidence-consistent Payment (`invoiceView`'s `receipt`) — never a
+// payment preference, and never shown at all unless a legitimate invoice for this exact visit exists.
+function paymentSummary(state,session,a) {
+  if(a.status!=='Completed')return null
+  const invoiceId=patientVisitDetail(state,session,a)?.links?.invoice
+  if(!invoiceId)return null
+  const invoice=patientInvoices(state,session).find(i=>i.id===invoiceId)
+  if(!invoice)return null
+  const view=invoiceView(state,invoice)
+  return {status:view.status,method:view.receipt?.method||null,invoiceId}
 }
 
 function AppointmentCard({ a, state, session, highlight, onReschedule, onCancel, setPage }) {
   const rules=appointmentActionState(a), hmo=hmoForAppointment(state,session,a)
   const detail=a.status==='Completed'?patientVisitDetail(state,session,a):null
+  const payment=paymentSummary(state,session,a)
   const links=detail?[['prescription','prescriptions','View prescription',id=>({entityId:id})],['invoice','billing','View invoice or receipt',id=>({entityId:id})],['followup','followups','View follow-up',id=>({entityId:id})],['hmo','hmo','View HMO case',id=>({hmoCaseId:id})]].filter(([key])=>detail.links[key]):[]
   const live=a.date===clinicDate()&&['Checked In','In Treatment'].includes(a.status)
   return <RecordCard id={`appt-${a.id}`} highlight={highlight} title={a.service} subtitle={`${dateLabel(a.date)} • ${displayTime(a.start)} • ${a.branch}`} status={a.status}
@@ -124,7 +130,8 @@ function AppointmentCard({ a, state, session, highlight, onReschedule, onCancel,
     <DefinitionList items={[{label:'Dentist',value:dentistLabel(state,a.dentistId)},{label:'Expected duration',value:a.duration?`${a.duration} minutes`:null},{label:'Reference',value:a.appointmentNo},{label:'Your note',value:a.notes}]}/>
     {rules.reason&&<p className="pt-hint">{rules.reason}</p>}
     {detail&&<details className="pt-details"><summary>Visit details</summary>
-      <DefinitionList items={[{label:'Procedure',value:detail.procedure},{label:'Services',value:detail.services.join(', ')},{label:'Dentist',value:detail.dentist}]}/>
+      <DefinitionList items={[{label:'Procedure',value:detail.procedure},{label:'Services',value:detail.services.join(', ')},{label:'Dentist',value:detail.dentist},
+        {label:'Payment status',value:payment?.status},{label:'Payment method',value:payment?.status==='Paid'?payment.method:null}]}/>
       {links.length>0&&<div className="row-actions">{links.map(([key,page,label,context])=><Button key={key} size="sm" variant="ghost" onClick={()=>setPage?.(page,context(detail.links[key]))}>{label}</Button>)}</div>}
     </details>}
   </RecordCard>
@@ -146,9 +153,9 @@ export function PatientAppointmentsPage({ store, setPage, context }) {
     toast(result.ok?'Appointment cancelled.':result.message,result.ok?'success':'warning')
   }
   return <div className="pt-page">
-    <PageHeader kicker="Your visits" title="Appointments" text="Your upcoming and previous visits across all clinic branches." aside={<Button icon="plusCalendar" onClick={()=>setPage?.('book')}>Book appointment</Button>}/>
+    <PageHeader kicker="Your visits" title="Visits" text="Your upcoming, past and cancelled visits across all clinic branches."/>
     <Tabs active={tab} onChange={setTab} tabs={[{key:'upcoming',label:'Upcoming',count:groups.upcoming.length},{key:'past',label:'Past',count:groups.past.length},{key:'cancelled',label:'Cancelled',count:groups.cancelled.length}]}/>
-    <div className="pt-list" aria-live="polite">{rows.length?rows.map(a=><AppointmentCard key={a.id} a={a} state={state} session={session} highlight={target===a.id} onReschedule={setReschedule} onCancel={setCancelling} setPage={setPage}/>):<div><Empty title={`No ${tab} appointments`} text={tab==='upcoming'?'When you book a visit, it appears here.':'There are no visits in this section.'}/>{tab==='upcoming'&&<Button icon="plusCalendar" onClick={()=>setPage?.('book')}>Book a visit</Button>}</div>}</div>
+    <div className="pt-list" aria-live="polite">{rows.length?rows.map(a=><AppointmentCard key={a.id} a={a} state={state} session={session} highlight={target===a.id} onReschedule={setReschedule} onCancel={setCancelling} setPage={setPage}/>):<Empty title={`No ${tab} visits`} text={tab==='upcoming'?'When you book a visit from Book, it appears here.':'There are no visits in this section.'}/>}</div>
     <Modal open={!!reschedule} title="Reschedule appointment" subtitle="Your new time must pass the same availability checks as a new booking." wide onClose={()=>setReschedule(null)}>{reschedule&&<PatientScheduler store={store} mode="reschedule" appointment={reschedule} inModal onDone={()=>setReschedule(null)}/>}</Modal>
     <ConfirmDialog open={!!cancelling} title="Cancel this appointment?" confirmLabel="Cancel appointment" cancelLabel="Keep appointment" onConfirm={confirmCancel} onCancel={()=>setCancelling(null)}>
       {cancelling&&<><p><b>{cancelling.service}</b></p><p>{dateLabel(cancelling.date)} at {displayTime(cancelling.start)} with {dentistLabel(state,cancelling.dentistId)} • {cancelling.branch}</p><p>The reserved time will be released.</p></>}

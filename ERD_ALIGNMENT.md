@@ -30,6 +30,14 @@ that same `person_id`; the order PERSON → PATIENT → USER is the frontend's t
 denormalization (see the PATIENTS row above), never proposed as a `PATIENTS.user_id` ERD column. No ERD
 relationship, table or diagram/dictionary change is authorized by this clarification.
 
+**Booking Drafts (Phase 4B.3C-1):** the frontend now persists a `bookingDrafts` collection (`src/booking-drafts.js`)
+of in-progress Patient booking-wizard choices (`mode`, `branchId`, `serviceId`, `date`, `start` only — never a
+committed Dentist selection, payment preference or referral code). BOOKING DRAFT != APPOINTMENT: a draft reserves
+no slot, consumes no Dentist capacity, and creates no `APPOINTMENTS`/`DENTIST_QUEUES` row. This is a future
+ERD-vNext candidate, conceptually a `BOOKING_DRAFTS` table (`patient_id` FK, the same optional fields, an
+updated-at timestamp), additive and Patient-scoped only. **No ERD SVG or data dictionary change is made in this
+pass** — this paragraph records the future mapping only.
+
 **Scheduling assignment method (Phase 4B.3B):** the frontend now persists `assignmentMethod` (`'auto'` or
 `'selected'`) on a newly created `appointments` row (`src/scheduling.js`, `src/workflow.js`); the architecture
 review has approved an eventual ERD-vNext field this anticipates, conceptually `APPOINTMENTS.dentist_assignment_method`.

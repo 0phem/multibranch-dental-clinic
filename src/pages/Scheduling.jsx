@@ -3,7 +3,8 @@ import { Button, Card, Field, Modal, Notice, PageHeader, Status, Table } from '.
 import { addMinutes, dateLabel, dentistName, displayTime, patientName, serviceInfo, uid, validateAppointment } from '../logic.js'
 
 import { clinicDate } from '../clock.js'
-import { PatientAppointmentsPage, PatientBookingPage } from './PatientVisits.jsx'
+import { PatientAppointmentsPage } from './PatientVisits.jsx'
+import { PatientBookingPage } from './PatientBook.jsx'
 import { inScope, patientInScope, sessionForRole } from '../contracts.js'
 
 function appointmentFormDefaults(state, prefill={}, session=null) {

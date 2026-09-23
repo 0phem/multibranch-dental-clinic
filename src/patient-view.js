@@ -5,7 +5,7 @@ import { availableSlots, dateLabel, nextAppointment, peso, queueWaitEstimate } f
 import { followupDisplayState, linkedTreatment, visibleInvoices, visiblePrescriptions } from './phase2.js'
 import { LOYALTY_PROGRAM, accountsOf, ledgerIssue, needMoreMessage } from './loyalty.js'
 import { HMO_PROVIDERS, notificationDestination, visibleConversations, visibleHmo, visibleNotifications } from './phase3-contracts.js'
-import { dentistsFor, servicesAt } from './scheduling.js'
+import { assignDentist, dentistsFor, servicesAt } from './scheduling.js'
 
 // Relocated to the scheduling domain (Phase 4B.3B); re-exported here so existing Patient-view callers are unaffected.
 export { dentistsFor, servicesAt }
@@ -221,6 +221,14 @@ export function patientAttention(state,session) {
   return items
 }
 
+// Phase 4B.3C-1 Home: only the subset of `patientAttention()` that is genuinely blocking/actionable before care or
+// a bill can proceed (a Returned/Missing HMO requirement, an Open Dentist-requested follow-up, an issued unpaid
+// invoice). An unread message, a newly authorized prescription and the unread-notification count are real events
+// too, but they belong to Notifications/Messages, not a giant Home alert — this never duplicates them here.
+export function patientActionRequired(state,session) {
+  return patientAttention(state,session).filter(item=>['hmo','followup','invoice'].includes(item.kind))
+}
+
 export function patientHome(state,session) {
   const ctx=patientContext(state,session)
   if(!ctx)return null
@@ -337,4 +345,30 @@ export function suggestTimes(state,form,ignoreId=null,limit=4,onlyDentistId=null
   return dentistsFor(state,form.branchId,form.serviceId).filter(d=>!onlyDentistId||d.id===onlyDentistId)
     .flatMap(d=>availableSlots({...form,dentistId:d.id},state,ignoreId).map(start=>({dentistId:d.id,dentist:d.name,start})))
     .sort((a,b)=>a.start.localeCompare(b.start)||a.dentist.localeCompare(b.dentist)).slice(0,limit)
+}
+
+// ---- Booking Drafts (Phase 4B.3C-1: BOOKING DRAFT != APPOINTMENT) --------------------------------------
+// The session Patient's own draft only — never a browser-supplied patientId. `state.bookingDrafts` is
+// session-Patient-scoped identically to every other Patient selector here (fail closed, no cross-Patient read).
+export function patientBookingDraft(state,session) {
+  if(!patientContext(state,session))return null
+  return (state.bookingDrafts||[]).find(d=>d.patientId===session.patientId)||null
+}
+
+// Revalidates a resumed draft's branch/service/slot against CURRENT canonical state — never trusts the saved
+// values as still true. `issues` explains in plain language what changed; the caller must show this and let the
+// Patient choose again rather than silently replacing a stale branch, service, date or time.
+export function draftStatus(state,session,draft) {
+  if(!patientContext(state,session)||!draft||draft.patientId!==session.patientId)return null
+  const branch=draft.branchId?state.branches.find(b=>b.id===draft.branchId&&b.status==='Open')||null:null
+  const service=branch&&draft.serviceId?servicesAt(state,branch.id).find(s=>s.id===draft.serviceId)||null:null
+  const issues=[]
+  if(draft.branchId&&!branch)issues.push('The branch you chose is no longer open. Choose another branch.')
+  if(draft.branchId&&branch&&draft.serviceId&&!service)issues.push('That service is no longer offered at this branch. Choose another service.')
+  let slotValid=null
+  if(branch&&service&&draft.date&&draft.start){
+    slotValid=assignDentist(state,{branchId:branch.id,serviceId:service.id,date:draft.date,start:draft.start,patientId:session.patientId}).ok
+    if(!slotValid)issues.push('Your saved time is no longer available. Choose another time.')
+  }
+  return {branch,service,date:draft.date||null,start:draft.start||null,mode:draft.mode||null,slotValid,issues,hasProgress:!!(draft.branchId||draft.serviceId||draft.date||draft.start)}
 }

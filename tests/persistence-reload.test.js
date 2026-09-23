@@ -50,9 +50,10 @@ function persistedCollections() {
 
 test('store persistence inventory is fully discovered',()=>{
   const keys=persistedCollections().map(([key])=>key)
-  assert.equal(keys.length,25)
+  assert.equal(keys.length,26)
   assert.ok(keys.includes('dentist-service-assignments'))
   assert.ok(keys.includes('check-ins'))
+  assert.ok(keys.includes('booking-drafts'))
 })
 
 test('fresh seed of every persisted collection saves and reloads without recovery (real browser failure path)',()=>{

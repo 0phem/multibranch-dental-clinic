@@ -9,6 +9,7 @@ import { clinicNow, validDate } from './clock.js'
 import { encounterContext, inScope, isActiveQueue, isTodayQueue, TERMINAL } from './contracts.js'
 import { recalcQueue, uid, validateAppointment } from './logic.js'
 import { assignDentist, SCHEDULING_RULE_VERSION } from './scheduling.js'
+import { bookingDraftActions } from './booking-drafts.js'
 
 const fail=message=>({ok:false,message})
 const replace=(rows,record)=>rows.some(x=>x.id===record.id)?rows.map(x=>x.id===record.id?record:x):[...rows,record]
@@ -122,6 +123,9 @@ export function createWorkflowActions({getState,commit,getSession,clock=clinicNo
     if(existing&&['patientId','branchId','dentistId','serviceId','date','start','duration','notes'].every(k=>existing[k]===record[k]))return {ok:true,unchanged:true,record:existing}
     record.revision=(existing?.revision||0)+1
     state.appointments=replace(state.appointments,record)
+    // A confirmed new Patient booking supersedes any in-progress Booking Draft for that Patient — cleared inside
+    // this same command's atomic commit, never a separate render-side step (Phase 4B.3C-1).
+    if(session.role==='patient'&&!existing)state.bookingDrafts=(state.bookingDrafts||[]).filter(d=>d.patientId!==record.patientId)
     if(followup)state.followups=replace(state.followups,{...followup,status:'Scheduled',appointmentId:record.id})
     const key=`appointment:${record.id}:${record.revision}`
     event(key,'M6→M7',existing?'appointment.rescheduled':'appointment.created',`${record.appointmentNo} • ${result.branch.name}`,record.patientId,record.branchId,record.assignmentMethod==='auto'?{assignmentMethod:'auto',assignmentRuleVersion:SCHEDULING_RULE_VERSION}:{})
@@ -327,7 +331,7 @@ export function createWorkflowActions({getState,commit,getSession,clock=clinicNo
     event(`patient:${record.id}`,'M4','patient.record.created',record.patientCode,record.id,preferredBranchId)
     return {ok:true,record:patientProjection(record,personRecord)}
   })
-  const commands={...administrationActions(run),...phase2Actions(run),...hmoActions(run),...communicationActions(run),...loyaltyActions(run),saveAppointment,cancelAppointment,checkInAppointment,admitWalkIn,updateQueue,saveTreatment,completeTreatment:(input,status='Completed')=>saveTreatment(input,status),createPatientRecord}
+  const commands={...administrationActions(run),...phase2Actions(run),...hmoActions(run),...communicationActions(run),...loyaltyActions(run),...bookingDraftActions(run),saveAppointment,cancelAppointment,checkInAppointment,admitWalkIn,updateQueue,saveTreatment,completeTreatment:(input,status='Completed')=>saveTreatment(input,status),createPatientRecord}
   const permissions={saveAppointment:'appointments',cancelAppointment:'appointments',checkInAppointment:'checkin',admitWalkIn:'checkin',updateQueue:'queue',saveTreatment:'treatment',completeTreatment:'treatment',createPatientRecord:'patient-demographics',reviewInvoice:'billing',issueInvoice:'billing',postPayment:'billing',savePrescription:'prescriptions',authorizePrescription:'prescriptions',recordLoyaltyActivity:'engagement',processLoyaltyRedemption:'engagement'}
   return Object.fromEntries(Object.entries(commands).map(([name,action])=>[name,(...args)=>permissions[name]&&!permitted(getState(),getSession(),permissions[name])?fail('Your current account or permission no longer allows this action. Reopen your workspace or ask an administrator.'):action(...args)]))
 }

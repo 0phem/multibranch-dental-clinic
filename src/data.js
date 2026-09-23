@@ -40,8 +40,8 @@ export const ROLE_INFO = {
 
 export const NAV = {
   patient: [
-    ['dashboard','Home'], ['book','Book Appointment'], ['appointments','Appointments'], ['queue','Live Queue'],
-    ['hmo','HMO Coverage'], ['messages','Messages'], ['billing','Receipts & Payments'], ['prescriptions','Prescriptions'], ['followups','Follow-Up Care'], ['loyalty','Referral & Loyalty']
+    ['dashboard','Home'], ['book','Book Appointment'], ['appointments','Visits'], ['queue','Live Queue'],
+    ['hmo','HMO Coverage'], ['messages','Messages'], ['billing','Receipts & Payments'], ['prescriptions','Prescriptions'], ['followups','Follow-Up Care'], ['loyalty','Referral & Loyalty'], ['me','Me']
   ],
   staff: [
     ['dashboard','Operations'], ['appointments','Appointments'], ['checkin','Check-In'], ['queue','Live Queue'], ['capacity','Capacity'],
@@ -131,6 +131,9 @@ export const INITIAL_STAFF = [
   { id:'s4', userId:'u5', personId:'per-s4', staffType:'Cashier', licenseNo:'—', specialization:'Billing', role:'Cashier', branch:'Branch C', shiftStart:'10:00', shiftEnd:'19:00', available:true },
   { id:'s5', userId:'u11', personId:'per-s5', staffType:'Patient Engagement Staff', licenseNo:'—', specialization:'Patient Engagement', role:'Patient Engagement Staff', branch:'All Branches', shiftStart:'09:00', shiftEnd:'18:00', available:true },
 ]
+
+// Phase 4B.3C-1 Booking Drafts (BOOKING DRAFT != APPOINTMENT): no seeded demo drafts.
+export const INITIAL_BOOKING_DRAFTS = []
 
 export const INITIAL_PATIENTS = [
   { id:'p1', personId:'per-p1', userId:'u12', patientCode:'PAT-0001', preferredBranch:'Branch A', hmo:'MediCare Plus', hmoMember:'MC-10082', allergies:'None', medicalHistory:'No significant medical history.', dentalHistory:'Routine prophylaxis; mild gingivitis noted previously.', emergencyContact:'Ana Santos • 0917 555 0909', consent:true },

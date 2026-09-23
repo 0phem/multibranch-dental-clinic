@@ -10,6 +10,7 @@ import { CheckInPage, QueuePage, CapacityPage } from './pages/PatientFlow.jsx'
 import { PatientsPage, TreatmentPage, PrescriptionsPage, FollowupsPage } from './pages/Clinical.jsx'
 import { BillingPage, HmoPage, InquiriesPage, MessagesPage } from './pages/FinanceCommunication.jsx'
 import { PatientLoyaltyPage } from './pages/PatientLoyalty.jsx'
+import { PatientMePage } from './pages/PatientMe.jsx'
 import { AnalyticsPage, AutomationPage, BranchesPage, EngagementPage, ModulesPage, TeamPage, UsersPage } from './pages/Admin.jsx'
 
 const START_PAGE={patient:'dashboard',staff:'dashboard',dentist:'dashboard',owner:'dashboard'}
@@ -73,6 +74,7 @@ function AppBody() {
     case 'automation': content=<AutomationPage store={store}/>; break
     case 'engagement': content=<EngagementPage role={role} store={store}/>; break
     case 'loyalty': content=<PatientLoyaltyPage store={store}/>; break
+    case 'me': content=<PatientMePage store={store} setPage={setPage}/>; break
     case 'modules': content=<ModulesPage/>; break
     default: content=<Notice>This screen is no longer available with your current permissions. <button onClick={()=>setPage('dashboard')}>Return home</button></Notice>;
   }

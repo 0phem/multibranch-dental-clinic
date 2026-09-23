@@ -247,6 +247,158 @@ database transaction rather than trusting this browser's provisional result; the
 - Automatic assignment, Booking Drafts, a payment preference field and any booking-wizard redesign remain separate,
   later checkpoints.
 
+## Checkpoint 4B.3C-1 — Patient core UX & booking experience
+
+Scope of this checkpoint: the frontend-only Patient experience redesign that can be done honestly without backend
+secrets or server authority — Home, Visits, navigation, the Book entry (Smart Find / Manual booking), Booking
+Drafts, the Clinic Assistant floating logo FAB and a view-only Me destination. **No PayMongo, no OTP, no profile
+editing, no referral discount/loyalty-economics change, no backend work.** Payment/referral integration and secure
+profile editing remain explicitly deferred to their own future domain/backend phases.
+
+### Home
+
+Returning Home is now: active visit/queue (only when today's operational state exists) → next appointment → a
+primary booking CTA when neither applies → compact quick actions → only genuinely blocking/actionable state
+("Action required": a Returned/Missing HMO requirement, an Open Dentist-requested follow-up, an issued unpaid
+invoice). The old large "Needs your attention" card (which duplicated ordinary Notifications-channel events —
+unread messages, a newly authorized prescription, the unread-notification count) and the "Recent care" card are
+both removed; `patientActionRequired()` in `patient-view.js` is the exact hmo/followup/invoice subset of the
+existing, unchanged `patientAttention()` selector, so nothing new is derived — only what Home shows was narrowed.
+Care history now lives entirely in Visits (Past tab). No "overdue"/"past due"/"payment deadline" language is used
+anywhere — no due-date policy exists, so an issued-unpaid invoice is described only as needing a look, never as
+late. First-use Home (`FirstUseHome`) is unchanged.
+
+### Visits
+
+Visits (`PatientAppointmentsPage`, `src/pages/PatientVisits.jsx`) no longer offers a "Book appointment" CTA in its
+header or its empty state — booking belongs exclusively to Book. Each completed visit's "Visit details" disclosure
+now also shows **Payment status** and, only when the linked invoice is `Paid` with evidence-consistent payment
+data (`paymentConsistent`, unchanged safeguard), **Payment method** — sourced from the actual `Payment`
+(`invoiceView(...).receipt.method`), never a payment preference (no such field exists in this pass) and never shown
+for a visit with no legitimate invoice.
+
+### Navigation
+
+Mobile primary navigation is exactly four items: **Home, Book, Visits, Me** (`mobilePatientNav` in `layout.jsx`).
+Desktop/tablet sidebar groups are **Overview** (Home), **Booking** (Book, Visits), **Communication** (Messages),
+**Account** (Payments, Me). Queue is contextual (reached from Home's active-visit card or Visits, not a permanent
+nav item) and Messages/HMO/Prescriptions/Follow-ups/Referral & Loyalty remain fully reachable pages (unchanged in
+`canAccessPage`'s Patient page list, which additionally gained `'me'`) — they are just not primary destinations.
+Referral & Loyalty is never in the primary mobile nav, matching the locked decision.
+
+### Book: Smart Find / Manual Booking
+
+`src/pages/PatientBook.jsx` (new; replaces the old single 5-step wizard's `mode='book'` path — reschedule and
+follow-up scheduling keep using the existing `PatientScheduler` in `PatientVisits.jsx` unchanged) opens with an
+explicit, equal-weight **Smart Find** / **Manual booking** choice, never a numbered step. Both modes use only the
+Phase 4B.3B scheduling domain (`assignDentist`, `findOpenTimes`) — there is no second scheduling implementation,
+and neither mode exposes a Patient Dentist chooser (the old wizard's "Preferred Dentist" step is gone from new
+bookings). Smart Find presents several deterministic options (branch/date/time/Dentist), never one forced result,
+and describes itself as "deterministic scheduling... Not AI" — no workload score, ranking rule or "best Dentist"
+language is ever shown to the Patient. Manual booking is Branch → Service → Date → Time, with the Dentist
+determined automatically by the same domain; Review shows "Assigned based on service availability," never the
+internal ranking rule.
+
+**Location / nearest branch:** Smart Find's branch step offers an explicit "Use my location" action (never
+requested automatically); on permission grant it calls `nearestBranch()` (`src/geo.js`, pure haversine math) against
+the canonical `Open` branch list. **Canonical `branches` records carry no `latitude`/`longitude` today** — confirmed
+absent from `INITIAL_BRANCHES` in `data.js` — so `nearestBranch()` always returns `null` right now, and the UI
+always falls back honestly to the plain branch picker that is shown below the location button regardless (denial,
+error, unsupported browser and "no coordinates" all resolve to the same honest fallback message, never a fabricated
+nearest result). No coordinate was invented anywhere in this pass. Once the client supplies real branch
+`latitude`/`longitude` (an approved future additive ERD field — see `ERD_ALIGNMENT.md`), `nearestBranch()` activates
+nearest-branch selection with no change to the Smart Find flow that calls it — proved by a unit test that adds
+synthetic coordinates and confirms the function starts returning a real nearest branch.
+
+**Review/confirm:** both modes converge on one Review step showing booking mode, branch, service, date, time and
+the provisional assigned Dentist (no payment, no referral/loyalty discount — out of scope this pass). Confirm calls
+`saveAppointment(..., {autoAssign:true})` with the exact Dentist Review displayed; the authoritative 4B.3B
+recompute either matches (one appointment is created) or fails closed with "Availability changed..." and creates
+nothing, leaving the Patient to review the freshly recomputed assignment and confirm again — the reviewed Dentist
+is never silently substituted. This is the same confirmation semantics 4B.3B already implemented; nothing new was
+added to `saveAppointment` for this beyond Booking Draft handling (below).
+
+### Booking Drafts
+
+**BOOKING DRAFT != APPOINTMENT.** `src/booking-drafts.js` (`saveBookingDraft`, `discardBookingDraft`, registered
+into `createWorkflowActions` like every other authenticated command) is a new frontend-local `bookingDrafts`
+collection (`INITIAL_BOOKING_DRAFTS = []` in `data.js`, persisted at `dentalops-v4-booking-drafts` through the
+existing `usePersist`/Saved Workspace Recovery path — no new persistence mechanism). Exactly one draft per Patient,
+upserted (never a second row); a draft may hold only `mode`, `branchId`, `serviceId`, `date`, `start` (an explicit
+allowlist — any other field, including a browser-supplied `dentistId`/`patientId`, fails the whole save closed,
+mirroring `registration.js`'s reserved-field discipline). **A draft never stores a committed Dentist selection** —
+the assigned Dentist is always recomputed fresh at Review/confirm time. A draft reserves no slot, consumes no
+Dentist capacity, creates no queue entry and no appointment number, and appears in no Staff/Dentist operational
+view (verified by test and by the `bookState.appointments`/`queue` length staying unchanged across a save).
+Identity is session-derived only, exactly like every other Patient command; a Patient can read/update/discard only
+their own draft, and a non-Patient or forged/deactivated session is rejected with no state change.
+
+On resume, `draftStatus()` (`patient-view.js`) revalidates the saved branch/service/slot against **current**
+canonical state — never trusts the saved values — and reports in plain language what changed (closed branch,
+dropped service, no-longer-available time); the Patient Book UI keeps valid upstream choices (e.g. a still-open
+branch) and clears only what actually changed, never silently substituting a new time or Dentist. No draft expiry
+was added. A successful new Patient booking clears that Patient's own draft **inside the same atomic `saveAppointment`
+commit** (a few added lines in the existing command, not a separate render-side step or a new orchestration
+command — the existing single-`commit()`-per-command architecture already makes this safe); a replayed confirmation
+command creates no duplicate appointment and does not re-clear an already-cleared draft. Staff/Owner bookings never
+touch a Patient's own draft.
+
+### Clinic Assistant
+
+The Patient assistant is now a floating circular FAB using the approved compact logo (`public/images/logo.png`,
+unmodified), replacing the Phase 4B.1 top-bar-docked trigger. This reopens the exact overlap problem 4B.1's final
+acceptance pass fixed once (the floating assistant covering the sticky booking Continue action). `.assistant-fab
+.is-patient`'s `bottom` reuses the existing `--pt-bottom-nav` variable so it always clears the mobile bottom
+navigation. For the sticky booking-step footer: a `position: sticky` element's on-screen position depends on
+scroll offset and content height above it, so no fixed pixel offset can reliably clear it in every state (verified
+empirically — an initial pixel-bump attempt still overlapped on a short step before it had scrolled/"stuck"). The
+robust fix is a `:has(.pt-stage-footer)` rule that makes the FAB **not render** (`display: none`) at the widths
+where that footer becomes sticky (≤1024px), returning automatically once the Patient reaches the mode-choice
+screen, Review (no stage footer there) or leaves the booking flow — a deterministic guarantee instead of fragile
+coordinate math, proved by a real browser geometry check (bounding rectangles of the FAB vs. the bottom nav, plus
+confirming the FAB is absent whenever a stage footer is present) rather than visual inspection. Controlled-open
+state (unchanged from the docked design): focus enters the panel on open, Escape/close returns focus to the FAB
+(`#clinic-assistant-fab`), and the panel is a full-width bottom sheet ≤768px or a popover near the FAB ≥769px.
+Staff/Dentist/Owner keep their unchanged floating robot-icon button.
+
+### Me
+
+`src/pages/PatientMe.jsx` is the new Me destination the four-item mobile nav needs. **View-only in this phase**:
+it reads the same canonical Person/Patient record every other Patient selector already uses (`patientContext`) —
+name, email, phone, date of birth, preferred branch — with no editable field and no OTP of any kind, fake or real.
+A short note explains that editing will be available once secure, verified changes are supported, leaving the
+architecture clear for OTP-backed editing to be added after the backend foundation exists, without pretending to
+have production security now. Me also exposes secondary links (Payments, HMO, Prescriptions, Follow-ups, and
+Referral & Loyalty when an account exists) so those pages stay directly reachable without occupying primary
+navigation.
+
+### Design system
+
+`Button` (`components.jsx`) gained an additive `width` prop (`'content'` default, `'full'` for a genuine
+single-column mobile form/step action) and a `.btn-full` CSS rule — no existing call site's rendered output
+changed unless it explicitly opts in. No parallel button component was created; no non-Patient page was refactored
+for stylistic purity.
+
+### Known limitations (4B.3C-1)
+
+- No PayMongo, no booking deposit, no Cash/Card choice at booking — the existing completed-treatment → invoice →
+  payment → receipt flow is unchanged; a fake sixth booking step was deliberately not added to match a visual step
+  count.
+- No OTP, no editable profile field — Me is view-only; real OTP-backed editing is future work.
+- No new referral capture or 10% discount, no loyalty-economics change; M24's existing prototype rules are
+  unchanged.
+- No Patient Dentist preference/continuity-of-care or free Dentist choice; automatic assignment only, per the
+  locked decision.
+- No branch coordinates exist yet; Smart Find's location step always resolves to the honest manual-picker fallback
+  until the client supplies real branch latitude/longitude.
+- `PatientScheduler`'s `mode==='book'` branches (reschedule/follow-up share the component with the old booking
+  wizard's Branch/Service/Dentist/Date/Time/Review steps) are no longer reachable with `mode='book'`, since Book
+  now renders `PatientBook.jsx` instead; reschedule and follow-up scheduling still use those branches unchanged, so
+  the component was intentionally left as-is rather than risk that unrelated, still-active flow.
+- P1–P9 remain `POLICY DECISION REQUIRED` and untouched; the ERD structure is unchanged (Booking Drafts are a
+  frontend-local collection only in this pass — no `BOOKING_DRAFTS` table was added to the approved ERD/data
+  dictionary).
+
 ## Verification
 
 `git diff --check` clean. `npm test`, `npm run test:smoke` and `npm run build` results for each checkpoint are

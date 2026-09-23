@@ -8,14 +8,14 @@ import React from 'react'
 import { renderToString } from 'react-dom/server'
 
 const require=createRequire(import.meta.url)
-const files=['components.jsx','store.jsx','layout.jsx','clock.js','contracts.js','workflow.js','phase2.js','phase3-contracts.js','orchestration.js','pages/Dashboards.jsx','pages/Scheduling.jsx','pages/PatientFlow.jsx','pages/Clinical.jsx','pages/FinanceCommunication.jsx','pages/Admin.jsx','pages/PatientLoyalty.jsx','pages/PatientRegister.jsx','loyalty.js','registration.js','scheduling.js','data.js']
+const files=['components.jsx','store.jsx','layout.jsx','clock.js','contracts.js','workflow.js','phase2.js','phase3-contracts.js','orchestration.js','pages/Dashboards.jsx','pages/Scheduling.jsx','pages/PatientFlow.jsx','pages/Clinical.jsx','pages/FinanceCommunication.jsx','pages/Admin.jsx','pages/PatientLoyalty.jsx','pages/PatientRegister.jsx','pages/PatientBook.jsx','pages/PatientMe.jsx','pages/PatientVisits.jsx','pages/PatientHome.jsx','loyalty.js','registration.js','scheduling.js','booking-drafts.js','geo.js','patient-view.js','data.js']
 const result=await build({stdin:{contents:files.map(file=>`export * from './src/${file}';`).join('\n'),resolveDir:process.cwd()},bundle:true,write:false,platform:'node',format:'esm',plugins:[{name:'shared-react',setup(b){b.onResolve({filter:/^react$/},()=>({path:pathToFileURL(require.resolve('react')).href,external:true}))}}]})
 const m=await import('data:text/javascript;base64,'+Buffer.from(result.outputFiles[0].text).toString('base64'))
 m.setClockSource(()=>new Date('2026-09-19T02:08:00Z'))
 let store
 function Capture(){store=m.useClinic();return null}
 renderToString(React.createElement(m.ClinicProvider,null,React.createElement(Capture)))
-const pages={dashboard:'DashboardPage',book:'BookingPage',appointments:'AppointmentsPage',schedule:'SchedulePage',checkin:'CheckInPage',queue:'QueuePage',capacity:'CapacityPage',patients:'PatientsPage',treatment:'TreatmentPage',billing:'BillingPage',hmo:'HmoPage',inquiries:'InquiriesPage',messages:'MessagesPage',prescriptions:'PrescriptionsPage',followups:'FollowupsPage',branches:'BranchesPage',team:'TeamPage',analytics:'AnalyticsPage',users:'UsersPage',automation:'AutomationPage',engagement:'EngagementPage',loyalty:'PatientLoyaltyPage'}
+const pages={dashboard:'DashboardPage',book:'BookingPage',appointments:'AppointmentsPage',schedule:'SchedulePage',checkin:'CheckInPage',queue:'QueuePage',capacity:'CapacityPage',patients:'PatientsPage',treatment:'TreatmentPage',billing:'BillingPage',hmo:'HmoPage',inquiries:'InquiriesPage',messages:'MessagesPage',prescriptions:'PrescriptionsPage',followups:'FollowupsPage',branches:'BranchesPage',team:'TeamPage',analytics:'AnalyticsPage',users:'UsersPage',automation:'AutomationPage',engagement:'EngagementPage',loyalty:'PatientLoyaltyPage',me:'PatientMePage'}
 let count=0
 function render(page,role='staff',context=null){
   const session=m.sessionForRole(role,store.state)
@@ -69,7 +69,8 @@ assert.equal(rx.ok,true,rx.message)
 assert.ok(!render('prescriptions','patient').includes('Phase Two medication'))
 assert.equal(actions.authorizePrescription({treatmentId:completed.record.id}).ok,true)
 assert.ok(render('prescriptions','patient').includes('Phase Two medication'))
-assert.ok(render('dashboard','patient').includes('Phase Two completed care'))
+// Phase 4B.3C-1: completed-visit summaries live on Visits (Past), not Home — Home stays active-care-first.
+assert.ok(render('appointments','patient',{entityId:ownQueue.appointmentId}).includes('Phase Two completed care'))
 assert.ok(render('followups','patient').includes('Phase Two return visit'))
 session=m.sessionForRole('staff',state)
 const invoice=state.invoices.find(i=>i.treatmentId===completed.record.id)
@@ -277,22 +278,27 @@ for(const page of patientPages){
   const html=render(page,'patient'),main=mainOf(html)
   assert.equal((main.match(/<h1[\s>]/g)||[]).length,1,`${page}: exactly one h1`)
   for(const control of staffControls)assert.ok(!html.includes(control),`${page}: no Staff control ${control}`)
-  assert.ok(!html.includes('assistant-fab'),`${page}: the Patient assistant never floats over content`)
-  assert.ok(html.includes('id="clinic-assistant-toggle"')&&html.includes('aria-controls="clinic-assistant-panel"')&&html.includes('aria-expanded="false"'),`${page}: the Patient assistant trigger lives in the top bar`)
+  assert.ok(html.includes('id="clinic-assistant-fab"')&&html.includes('assistant-fab is-patient')&&html.includes('aria-controls="clinic-assistant-panel"')&&html.includes('aria-expanded="false"'),`${page}: the Patient assistant is the floating logo FAB`)
   assert.ok(!html.includes('PhaseOne'),`${page}: no other Patient's data`)
   for(const tag of main.match(/<button\b[^>]*>/g)||[])assert.ok(/\stype="/.test(tag),`${page}: button declares a type ${tag}`)
 }
 const home=render('dashboard','patient')
 assert.ok(/Good (morning|afternoon|evening), Maria/.test(home))
-for(const text of ['Needs your attention','Recent care','Phase Two completed care','Quick access'])assert.ok(home.includes(text),text)
+// Phase 4B.3C-1 Home: no giant "Needs your attention" or "Recent care" sections; compact quick actions instead,
+// and care history moved to Visits (Past tab).
+assert.ok(!/Needs your attention|Recent care/.test(home),'Home no longer duplicates a giant attention/recent-care section')
+assert.ok(!home.includes('Phase Two completed care'),'completed-visit summaries no longer live on Home')
+assert.ok(home.includes('pt-home-quick'),'Home shows compact quick actions')
 assert.ok(!/keep this page updated|Recent notifications/.test(home))
-assert.ok(home.includes('Care &amp; coverage')&&home.includes('Visits'))
+assert.ok(home.includes('Booking')&&home.includes('Visits'),'Patient sidebar groups Booking/Visits')
 const upcomingVisit=state.appointments.find(a=>a.id===followBooking.record.id)
 const visit=state.appointments.find(a=>a.id===ownQueue.appointmentId)
 const appts=render('appointments','patient')
 assert.ok(appts.includes('Reschedule')&&appts.includes('Cancel appointment')&&appts.includes('aria-pressed'))
+assert.ok(!appts.includes('Book appointment'),'Visits offers no booking CTA — Book is the exclusive booking destination')
 const past=render('appointments','patient',{entityId:visit.id})
 assert.ok(past.includes('Visit details')&&past.includes('is-target')&&past.includes('Phase Two completed care'))
+assert.ok(past.includes('Payment status'),'Past visit shows real payment status from evidence, never a fabricated one')
 assert.ok(!past.includes('Rescheduled')&&!render('appointments','patient',{entityId:'nope'}).includes('is-target'))
 assert.ok(render('appointments','patient',{entityId:upcomingVisit.id}).includes('is-target'))
 const rxRecord=state.prescriptions.find(r=>r.status==='Authorized')
@@ -307,8 +313,8 @@ const hmoPage=render('hmo','patient',{hmoCaseId:hmoCase.id})
 assert.ok(hmoPage.includes('is-target')&&hmoPage.includes('Provider Approved')&&hmoPage.includes('is not approval from your HMO'))
 assert.ok(!/Internal|Record Provider Response/.test(hmoPage))
 const bookPage=render('book','patient')
-for(const text of ['class="pt-stepper"','aria-current="step"','type="radio"','<fieldset','Step 1 of 5'])assert.ok(bookPage.includes(text),text)
-assert.ok(!/Any available|Finding|Smart Scheduling validation/.test(bookPage))
+for(const text of ['Smart Find','Manual booking','pt-book-modes'])assert.ok(bookPage.includes(text),text)
+assert.ok(!/Any available|Finding|Smart Scheduling validation|AI-powered|Smart AI|best Dentist|recommended Dentist|Preferred Dentist/.test(bookPage),'Book entry names no Dentist chooser and no fake-AI language')
 const doneQueue=render('queue','patient')
 assert.ok(doneQueue.includes('Your visit is complete.')&&!/0 min|updates automatically/.test(doneQueue))
 assert.ok(/Unread: /.test(renderPanel('patient')))
@@ -362,7 +368,7 @@ const ready=render('loyalty','patient')
 for(const text of ['Referral &amp; Loyalty','A prototype program','not an established clinic policy','Your points','DANA-MARIA-01','Activity history','Oral prophylaxis','Qualified visit','Referral reward','+100 points'])assert.ok(ready.includes(text),`loyalty: ${text}`)
 assert.ok(/<b>120<\/b>/.test(ready),'the ledger-validated balance is shown')
 assert.ok(rewardButton(ready)&&!rewardDisabled(ready),'sufficient balance enables the request')
-assert.ok(!/Proposed|Rewards|assistant-fab|loy1|lh-|<input|<select|<textarea/.test(mainOf(ready)+ready.replace(mainOf(ready),'')),'no PE copy, no internal IDs, no editable points, no floating assistant')
+assert.ok(!/Proposed|Rewards|loy1|lh-|<input|<select|<textarea/.test(mainOf(ready)+ready.replace(mainOf(ready),'')),'no PE copy, no internal IDs, no editable points')
 assert.ok(!/discount|voucher|free treatment|referred by|people you referred|tier/i.test(mainOf(ready)),'no invented reward benefit or referral relationship')
 withState({loyalty:[account(30,[earning(30)])]})
 const low=render('loyalty','patient')
@@ -380,9 +386,9 @@ assert.ok(render('loyalty','patient').includes('No referral &amp; loyalty accoun
 const enrollHtml=render('engagement','owner')
 assert.ok(enrollHtml.includes('Maria Santos</option>')&&enrollHtml.includes('first qualified activity creates their loyalty account and referral code'),'Owner Engagement still offers a Patient with no loyalty account and explains that the first qualified activity creates it')
 assert.ok(!/recordLoyaltyActivity|Validate &amp; Apply/.test(render('loyalty','patient')),'the Patient page offers no enrollment control')
-assert.ok(!/href="[^"]*loyalty|Referral &amp; Loyalty<\/b>/.test((render('dashboard','patient').match(/<nav class="pt-home-aside"[\s\S]*?<\/nav>/)||[''])[0]),'Journey Hub offers no loyalty entry without an account')
+assert.ok(!/href="[^"]*loyalty|Referral &amp; Loyalty<\/b>/.test((render('dashboard','patient').match(/<nav class="pt-home-quick"[\s\S]*?<\/nav>/)||[''])[0]),'Home offers no loyalty quick action without an account')
 store={...store,state:fullState}
-assert.ok((render('dashboard','patient').match(/<nav class="pt-home-aside"[\s\S]*?<\/nav>/)||[''])[0].includes('Referral &amp; Loyalty'),'Journey Hub links to Referral & Loyalty when an account exists')
+assert.ok((render('dashboard','patient').match(/<nav class="pt-home-quick"[\s\S]*?<\/nav>/)||[''])[0].includes('Referral &amp; Loyalty'),'Home links to Referral & Loyalty when an account exists')
 assert.ok(!/nav-proposed|Rewards|Proposed/.test(render('dashboard','patient')),'Patient navigation carries no PE tag')
 // Staff/Owner Engagement keeps its page but its M24 controls are command-backed and its status copy is aligned.
 withState({loyalty:[account(60,[requestEntry,earning(60)]),{...account(10,[earning(30)]),id:'loy2',patientId:'p2',referralCode:'DANA-JOHN-01'}]})
@@ -425,16 +431,16 @@ assert.equal(m.resolvePatientLogin(regState,'maria@example.com').ok,true)
 store={...store,state:regState}
 const newHome=renderPatientAs('dashboard',loginResult.session)
 assert.ok(newHome.includes('Need a visit?')&&newHome.includes('Start booking'),'a brand-new Patient sees first-use Home, not the booking form embedded')
-assert.ok(!/Needs your attention|Recent care/.test(mainOf(newHome)),'first-use Home omits the returning-Hub sections')
+assert.ok(!/pt-home-quick|pt-action-required/.test(mainOf(newHome)),'first-use Home omits the returning-Home sections')
 assert.ok(!/PhaseOne|Phase Two|Phase Three|Maria|Santos|John|Dela Cruz/.test(newHome),'no other Patient’s data reaches a brand-new Patient’s Home')
 assert.ok(!newHome.includes('pt-first-use-aside'),'no Messages/Referral quick access is shown when neither exists yet')
 assert.ok(!render('dashboard','patient').includes('Jamie'),'Maria’s own Home shows nothing of the newly registered Patient')
-// A real booking (the shared command, not a flag) transitions the same Patient into the returning Journey Hub.
+// A real booking (the shared command, not a flag) transitions the same Patient into the returning Home.
 const newAppt=m.createWorkflowActions({getState:()=>regState,getSession:()=>loginResult.session,commit:patch=>{regState=m.normalizeClinicState({...regState,...patch})}}).saveAppointment({patientId:newPatientId,branchId:'b1',dentistId:'d1',serviceId:'svc1',date:'2026-09-20',start:'11:00'})
 assert.equal(newAppt.ok,true,newAppt.message)
 store={...store,state:regState}
 const returningHome=renderPatientAs('dashboard',loginResult.session)
-assert.ok(returningHome.includes('Needs your attention')&&returningHome.includes('Recent care'),'a real appointment naturally returns the Patient to the full Journey Hub')
+assert.ok(!returningHome.includes('Need a visit?')&&returningHome.includes('pt-home-quick')&&returningHome.includes('Your next visit.'),'a real appointment naturally returns the Patient to the full returning Home')
 // Login offers the Patient email sign-in and registration link only when wired, and still renders unchanged with no new props (existing brand smoke assertion above already covers that).
 const loginWithAuth=renderToString(React.createElement(m.Login,{onLogin:()=>{},onLoginPatientEmail:()=>({ok:false,message:'x'}),onShowRegister:()=>{}}))
 assert.ok(loginWithAuth.includes('sign in with your patient account')&&loginWithAuth.includes('Create an account'))
@@ -444,3 +450,75 @@ assert.ok(registerHtml.includes('Create your patient account')&&registerHtml.inc
 assert.ok(!/type="password"/i.test(registerHtml),'no password field')
 store={...store,state:fullState}
 console.log('PASS: Phase 4B.3A Patient identity — self-registration (atomic PERSON+PATIENT+USER, replay-safe, duplicate-safe), email sign-in, first-use Home vs returning Journey Hub, and isolation from other Patients')
+
+// Phase 4B.3C-1 Patient core UX & booking: Booking Drafts (never an appointment), Smart Find / Manual auto-assigned
+// booking through the real Phase 4B.3B domain, Me, the 4-item mobile nav and the floating logo assistant FAB.
+let bookState=fullState
+let bookSession=m.sessionForRole('patient',bookState)
+const bookActions=m.createWorkflowActions({getState:()=>bookState,getSession:()=>bookSession,commit:patch=>{bookState=m.normalizeClinicState({...bookState,...patch})}})
+const bookRegister=m.createRegistrationAction({getState:()=>bookState,commit:patch=>{bookState=m.normalizeClinicState({...bookState,...patch})}})
+const priyaReg=bookRegister({firstName:'Priya',lastName:'Cruz',phone:'0917 555 9911',email:'priya.smoke@example.com',preferredBranchId:'b1'},'smoke-priya-register')
+assert.equal(priyaReg.ok,true,priyaReg.message)
+const priyaSession=m.resolvePatientLogin(bookState,'priya.smoke@example.com').session
+
+// Draft: partial progress is upserted (one per Patient), reserves no slot, creates no appointment/queue entry.
+const beforeAppointments=bookState.appointments.length, beforeQueue=bookState.queue.length
+const draft1=bookActions.saveBookingDraft({mode:'manual',branchId:'b1'},'smoke-draft-1')
+assert.equal(draft1.ok,true,draft1.message)
+assert.equal(bookState.bookingDrafts.length,1)
+assert.equal(bookState.appointments.length,beforeAppointments,'a draft reserves no slot and creates no appointment')
+assert.equal(bookState.queue.length,beforeQueue,'a draft creates no queue entry')
+const draft2=bookActions.saveBookingDraft({serviceId:'svc1'},'smoke-draft-2')
+assert.equal(draft2.ok,true,draft2.message);assert.equal(draft2.record.branchId,'b1');assert.equal(draft2.record.serviceId,'svc1')
+assert.equal(bookState.bookingDrafts.length,1,'one draft per Patient, upserted not duplicated')
+assert.equal(draft2.record.dentistId,undefined,'a draft never stores a committed Dentist selection')
+// Idempotent no-op: resubmitting the identical patch changes nothing.
+const draftNoop=bookActions.saveBookingDraft({serviceId:'svc1'},'smoke-draft-3')
+assert.equal(draftNoop.unchanged,true)
+// Isolation: another real Patient never sees or can discard this draft.
+assert.equal(m.patientBookingDraft(bookState,priyaSession),null,"another Patient's draft is invisible")
+bookSession=priyaSession
+assert.equal(bookActions.discardBookingDraft('smoke-priya-discard').unchanged,true,"a Patient with no draft discarding is a safe no-op, never another Patient's draft")
+assert.equal(bookState.bookingDrafts.length,1,"Priya's discard did not remove Maria's draft")
+bookSession=m.sessionForRole('patient',bookState)
+
+// Stale-slot revalidation: a saved date/time that is no longer valid is reported, never silently replaced.
+const staleDraftSave=bookActions.saveBookingDraft({date:'2026-09-19',start:'07:00'},'smoke-draft-stale')
+assert.equal(staleDraftSave.ok,true,staleDraftSave.message)
+const staleStatus=m.draftStatus(bookState,bookSession,m.patientBookingDraft(bookState,bookSession))
+assert.equal(staleStatus.slotValid,false,'a past/invalid saved time is reported invalid on resume')
+assert.ok(staleStatus.issues.length>0&&!/undefined/.test(staleStatus.issues.join(' ')))
+
+// Zero-eligible-Dentist Smart Find case is honest, never a fabricated result (Branch C has no Dentist for TMD).
+assert.deepEqual(m.findOpenTimes(bookState,{branchId:'b3',serviceId:'svc10',patientId:'p1'},{}),[])
+// No fake nearest-branch result: canonical branches carry no coordinates in this pass.
+assert.equal(m.nearestBranch(bookState.branches,{lat:14.8,lng:120.9}),null,'coordinates unavailable → no fake nearest-branch result')
+
+// Confirm a real Smart-Find-style auto-assigned booking; the draft is cleared atomically by the same command.
+const smartConfirm=bookActions.saveAppointment({branchId:'b1',serviceId:'svc1',date:'2026-09-21',start:'11:00'},{commandId:'smoke-smart-confirm',autoAssign:true})
+assert.equal(smartConfirm.ok,true,smartConfirm.message)
+assert.equal(smartConfirm.record.assignmentMethod,'auto')
+assert.equal(bookState.bookingDrafts.length,0,'a successful confirmation removes the Patient’s draft in the same atomic command')
+// Replay of the same confirmation command creates no second appointment.
+const smartReplay=bookActions.saveAppointment({branchId:'b1',serviceId:'svc1',date:'2026-09-21',start:'11:00'},{commandId:'smoke-smart-confirm',autoAssign:true})
+assert.equal(smartReplay.unchanged,true)
+
+// Render checks: Home quick actions no longer include Book/Visits (already in primary nav); Me shows profile and
+// secondary links; mobile nav is exactly Home/Book/Visits/Me; the assistant is a floating logo FAB.
+store={...store,state:bookState}
+const renderBookAs=(page,patientSession)=>{
+  const activeBranch=bookState.branches.find(b=>b.id===patientSession.branchId)?.name||'All Branches'
+  return renderToString(React.createElement(m.Shell,{role:'patient',page,setPage:()=>{},onLogout:()=>{},activeBranch,setActiveBranch:()=>{},resetDemo:()=>{},store:{state:bookState,session:patientSession}},React.createElement(m[pages[page]],{role:'patient',activeBranch,store:{state:bookState,session:patientSession},context:null,setPage:()=>{}})))
+}
+const mePage=renderBookAs('me',bookSession)
+for(const text of ['Maria Santos','maria@example.com','Payments','HMO coverage','Prescriptions'])assert.ok(mePage.includes(text),`me: ${text}`)
+assert.ok(!/<input|<select|<textarea/.test(mainOf(mePage)),'Me is view-only in this phase — no editable field')
+const shellHtml=renderBookAs('dashboard',bookSession)
+const mobileNav=shellHtml.match(/<nav class="patient-mobile-nav"[\s\S]*?<\/nav>/)?.[0]||''
+const mobileNavLabels=[...mobileNav.matchAll(/<span>([^<]+)<\/span>/g)].map(x=>x[1])
+assert.deepEqual(mobileNavLabels,['Home','Book','Visits','Me'],'mobile primary navigation is exactly Home, Book, Visits, Me')
+assert.ok(!mobileNav.includes('>Queue<')&&!mobileNav.includes('>Messages<'),'Queue/Messages are contextual, not primary mobile nav items')
+assert.ok(shellHtml.includes('id="clinic-assistant-fab"')&&shellHtml.includes('src="/images/logo.png"'),'Patient assistant is the floating logo FAB')
+assert.ok(!shellHtml.includes('id="clinic-assistant-toggle"'),'the old top-bar assistant trigger is gone')
+store={...store,state:fullState}
+console.log('PASS: Phase 4B.3C-1 Patient core UX & booking — Booking Drafts (isolation, idempotency, stale-slot revalidation, atomic clear-on-confirm), zero-provider Smart Find, honest no-coordinates fallback, Me, 4-item mobile nav and the logo assistant FAB')

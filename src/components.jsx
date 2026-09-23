@@ -72,8 +72,10 @@ export function PageHeader({ title, text, modules=[], aside, kicker }) {
   </div>
 }
 
-export function Button({ children, variant='primary', size='md', className='', icon, type='button', ...props }) {
-  return <button type={type} className={`btn ${variant} ${size} ${className}`} {...props}>{icon&&<Icon name={icon} size={size==='sm'?15:17}/>}<span>{children}</span></button>
+// width: 'content' (default) sizes to its label; 'full' spans its container — reserved for a single-column
+// mobile form/step action where the button genuinely is the row, not a default for every Button.
+export function Button({ children, variant='primary', size='md', width='content', className='', icon, type='button', ...props }) {
+  return <button type={type} className={`btn ${variant} ${size} ${width==='full'?'btn-full':''} ${className}`.trim()} {...props}>{icon&&<Icon name={icon} size={size==='sm'?15:17}/>}<span>{children}</span></button>
 }
 
 export function Field({ label, children, hint, required=false, error }) {

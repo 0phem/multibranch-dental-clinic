@@ -115,6 +115,10 @@ export function normalizeClinicState(state) {
   const checkIns=[...(state.checkIns||[])]
   for (const q of queue) if(q.checkInId&&!checkIns.some(c=>c.id===q.checkInId)) checkIns.push({id:q.checkInId,queueEntryId:q.id,appointmentId:q.appointmentId||null,patientId:q.patientId,dentistId:q.dentistId,branchId:q.branchId,serviceId:q.serviceId,clinicDate:q.clinicDate,arrivedAt:q.arrivedAt||(q.clinicDate?`${q.clinicDate}T${q.checkedIn}:00+08:00`:null),status:TERMINAL.includes(q.status)?q.status:'Checked In',legacy:true})
   const normalized={...state,appointments,queue,checkIns,treatments:treatments.map(t=>({...t,queueEntryId:t.queueEntryId||queue.find(q=>q.treatmentId===t.id)?.id||null})),
+    // Phase 4B.3C-1 Booking Drafts: not part of the ERD-aligned collections above, so no branch/identity projection
+    // applies. Defaults a fixture/legacy state that never mentioned the collection to empty, same as any other
+    // never-initialized array; genuinely corrupt persisted data is still caught by the persistence recovery gate.
+    bookingDrafts:Array.isArray(state.bookingDrafts)?state.bookingDrafts:[],
     invoices:state.invoices.map(withBranch),
     followups:state.followups.map(f=>({...f,branchId:f.branchId||treatments.find(t=>t.id===f.treatmentId)?.branchId||appointments.find(a=>a.id===f.appointmentId)?.branchId||null})),
     patients:state.patients.map(p=>{const preferredBranchId=p.preferredBranchId||branchIdFor({branch:p.preferredBranch},branches);return {...identity(p),preferredBranchId,preferredBranch:branches.find(b=>b.id===preferredBranchId)?.name||'Unknown branch'}}),

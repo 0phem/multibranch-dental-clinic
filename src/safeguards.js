@@ -62,7 +62,7 @@ export function strictTimestamp(value) {
 }
 
 // UI route guard complements command/selector checks; no URL or context grants access.
-const pages={patient:['dashboard','book','appointments','queue','prescriptions','followups','hmo','messages','billing','loyalty'],staff:['dashboard','appointments','checkin','queue','capacity','patients','billing','hmo','inquiries','messages','followups','engagement'],dentist:['dashboard','schedule','queue','patients','treatment','prescriptions','followups','messages'],owner:['dashboard','analytics','branches','team','capacity','hmo','users','automation','engagement']}
+const pages={patient:['dashboard','book','appointments','queue','prescriptions','followups','hmo','messages','billing','loyalty','me'],staff:['dashboard','appointments','checkin','queue','capacity','patients','billing','hmo','inquiries','messages','followups','engagement'],dentist:['dashboard','schedule','queue','patients','treatment','prescriptions','followups','messages'],owner:['dashboard','analytics','branches','team','capacity','hmo','users','automation','engagement']}
 const pagePermission={appointments:'appointments',book:'appointments',checkin:'checkin',queue:'queue',patients:'patient-demographics',billing:'billing',hmo:'hmo',messages:'messages',followups:'followups',schedule:'schedule',treatment:'treatment',prescriptions:'prescriptions',engagement:'engagement',inquiries:'inquiries'}
 export function canAccessPage(state,session,page) {
   if(!validSession(state,session)||!pages[session.role]?.includes(page))return false
