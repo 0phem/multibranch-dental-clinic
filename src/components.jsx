@@ -149,10 +149,10 @@ export function Modal({ open, title, subtitle, onClose, children, wide=false, cl
 export const ShellActionsContext=createContext({openNotifications:null})
 
 // Accessible replacement for native window.confirm: names the consequence and starts on the safe action.
-export function ConfirmDialog({ open, title, children, confirmLabel='Confirm', cancelLabel='Cancel', onConfirm, onCancel, tone='danger' }) {
+export function ConfirmDialog({ open, title, children, confirmLabel='Confirm', cancelLabel='Cancel', onConfirm, onCancel, tone='danger', className='' }) {
   const actions=useRef(null)
   useEffect(()=>{if(open)actions.current?.querySelector('button')?.focus()},[open])
-  return <Modal open={open} title={title} onClose={onCancel}>
+  return <Modal open={open} title={title} onClose={onCancel} className={className}>
     <div className="confirm-body">{children}</div>
     <div className="row-actions confirm-actions" ref={actions}><Button variant="ghost" onClick={onCancel}>{cancelLabel}</Button><Button variant={tone==='danger'?'danger':'primary'} onClick={onConfirm}>{confirmLabel}</Button></div>
   </Modal>

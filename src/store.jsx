@@ -12,6 +12,7 @@ import { clinicNow, rebaseDemoRecords } from './clock.js'
 import { normalizeClinicState, sessionForRole, resolvePatientLogin, persistableCollection } from './contracts.js'
 import { createWorkflowActions } from './workflow.js'
 import { createRegistrationAction } from './registration.js'
+import { createIdentityBridge } from './identity-bridge.js'
 
 const ClinicContext=createContext(null)
 const STORAGE_PREFIX='dentalops-v4-'
@@ -179,6 +180,10 @@ export function ClinicProvider({ children }) {
   // Public registration boundary: no session exists yet, so it does not go through createWorkflowActions' run()
   // (which requires validSession); it shares the same synchronous read/validate/commit discipline directly.
   actions.registerPatient=createRegistrationAction({getState:()=>stateRef.current,commit})
+  // Backend Foundation 1B — TEMPORARY compatibility bridge (see identity-bridge.js). Translates a real,
+  // backend-authenticated identity (GET /api/me) into the shape the still-frontend-local pages/selectors
+  // already expect. Remove this wiring once the business modules it stands in for move to the backend.
+  actions.bridgeBackendIdentity=createIdentityBridge({getState:()=>stateRef.current,commit})
 
   actionsRef.current=actions
 
@@ -189,12 +194,17 @@ export function ClinicProvider({ children }) {
     return result
   }
 
+  // Adopts an already-resolved session object as-is (Backend Foundation 1B: the identity-bridge's Patient path
+  // produces an arbitrary sessionForUser()-shaped session, not one of the four fixed ROLE_INFO keys setSession
+  // understands). Staff/Dentist/Owner keep using setSession(role) unchanged.
+  const adoptSession=session=>{sessionRef.current=session;setSessionState(session)}
+
   const resetDemo=()=>{
     Object.keys(localStorage).filter(k=>k.startsWith(STORAGE_PREFIX)).forEach(k=>localStorage.removeItem(k))
     window.location.reload()
   }
 
-  const value=useMemo(()=>({state,setters,actions,toast,log,workflow,resetDemo,toasts,session,setSession,loginPatientByEmail,persistenceErrors}),[persons,services,branchServices,dentistServiceAssignments,branches,dentists,staff,patients,appointments,queue,treatments,invoices,hmo,inquiries,conversations,notifications,prescriptions,followups,users,automations,workflowLog,campaigns,loyalty,audit,toasts,checkIns,bookingDrafts,session,clock,persistenceErrors])
+  const value=useMemo(()=>({state,setters,actions,toast,log,workflow,resetDemo,toasts,session,setSession,adoptSession,loginPatientByEmail,persistenceErrors}),[persons,services,branchServices,dentistServiceAssignments,branches,dentists,staff,patients,appointments,queue,treatments,invoices,hmo,inquiries,conversations,notifications,prescriptions,followups,users,automations,workflowLog,campaigns,loyalty,audit,toasts,checkIns,bookingDrafts,session,clock,persistenceErrors])
   return <ClinicContext.Provider value={value}>{children}</ClinicContext.Provider>
 }
 

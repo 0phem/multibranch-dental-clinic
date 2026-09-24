@@ -1,48 +1,66 @@
-import React, { useRef, useState } from 'react'
+import React, { useState } from 'react'
 import { Brand } from '../layout.jsx'
-import { Button, Field, Notice } from '../components.jsx'
-import { uid } from '../logic.js'
+import { Button, Field, Notice, SectionLabel } from '../components.jsx'
+import { COUNTRY_CODES, DEFAULT_COUNTRY, normalizePhoneNumber } from '../phone.js'
 
-// Patient self-registration (M1/M4). This is the current FRONTEND DEMO account flow: the created Person, Patient
-// and User records live in this browser's local persisted state, not a server database. There is no password and
-// no verification email — a future backend enforces those with a real database transaction and authentication.
-const emptyForm={firstName:'',middleName:'',lastName:'',phone:'',email:'',dob:'',preferredBranchId:''}
+// Patient self-registration (M1/M4, Backend Foundation 1B). Submits to the real Laravel backend
+// (`POST /api/register` via the `onRegister` prop — see App.jsx/api-client.js), which creates a real
+// Person+Patient+User in PostgreSQL inside one transaction and auto-authenticates the new session. There is no
+// local "account created, now sign in" step here: once `onRegister` resolves ok, App.jsx's own session state
+// flips to authenticated and this screen simply unmounts in favor of first-use Home.
+//
+// No "Preferred branch" field: the current backend registration contract collects no branch preference (see
+// backend/README.md) — the frontend identity bridge defaults it locally, and this form does not invent one.
+// No "Middle name" field: the public form doesn't need it (persons.middle_name stays nullable in the ERD).
+const emptyForm={first_name:'',last_name:'',email:'',date_of_birth:'',password:'',password_confirmation:''}
 
-export function PatientRegister({ store, onCancel, onSignIn }) {
-  const { state, actions }=store
-  const openBranches=state.branches.filter(b=>b.status==='Open')
-  const [form,setForm]=useState({...emptyForm,preferredBranchId:openBranches[0]?.id||''})
-  const [error,setError]=useState('')
-  const [account,setAccount]=useState(null)
-  const [signInError,setSignInError]=useState('')
-  const command=useRef(uid('register'))
-  const update=(key,value)=>{setForm(f=>({...f,[key]:value}));setError('')}
+function PhoneField({ dial, localNumber, onLocalNumberChange, error }) {
+  const country=COUNTRY_CODES.find(c=>c.dial===dial)||DEFAULT_COUNTRY
+  return <Field label="Mobile number" required error={error}>
+    <div className="phone-field">
+      <select aria-label="Country code" className="phone-field-code" value={dial} onChange={()=>{}}>
+        {COUNTRY_CODES.map(c=><option key={c.dial} value={c.dial}>{c.dial} {c.label}</option>)}
+      </select>
+      <input type="tel" inputMode="numeric" aria-label="Mobile number" maxLength={country.digits}
+        placeholder={'9'.repeat(country.digits)} className="phone-field-number"
+        value={localNumber} onChange={e=>onLocalNumberChange(e.target.value.replace(/\D/g,'').slice(0,country.digits))}/>
+    </div>
+  </Field>
+}
 
-  const submit=event=>{
+export function PatientRegister({ onRegister, onCancel }) {
+  const [form,setForm]=useState(emptyForm)
+  const [phoneLocal,setPhoneLocal]=useState('')
+  const [errors,setErrors]=useState({})
+  const [formError,setFormError]=useState('')
+  const [submitting,setSubmitting]=useState(false)
+  const [showPassword,setShowPassword]=useState(false)
+  const update=(key,value)=>{
+    setForm(f=>({...f,[key]:value}))
+    setErrors(e=>(e[key]?{...e,[key]:undefined}:e))
+    setFormError('')
+  }
+  const updatePhone=value=>{setPhoneLocal(value);setErrors(e=>(e.phone?{...e,phone:undefined}:e));setFormError('')}
+
+  const submit=async event=>{
     event.preventDefault()
-    const outcome=actions.registerPatient({...form},command.current)
-    if(!outcome.ok){setError(outcome.message);return}
-    command.current=uid('register')
-    setAccount({email:form.email.trim().toLowerCase()})
+    if(submitting)return
+    const phone=normalizePhoneNumber(DEFAULT_COUNTRY.dial,phoneLocal)
+    if(!phone.ok){setErrors(e=>({...e,phone:phone.reason}));return}
+    setSubmitting(true)
+    setErrors({})
+    setFormError('')
+    const result=await onRegister({...form,phone:phone.e164})
+    setSubmitting(false)
+    if(result?.ok)return
+    if(result?.kind==='validation'){
+      const fieldErrors=Object.fromEntries(Object.entries(result.errors||{}).map(([key,messages])=>[key,messages?.[0]]))
+      setErrors(fieldErrors)
+      if(!Object.keys(fieldErrors).length)setFormError(result.message||'Enter valid registration details.')
+      return
+    }
+    setFormError(result?.message||'Something went wrong. Try again.')
   }
-  const signIn=()=>{
-    const outcome=onSignIn(account.email)
-    if(!outcome.ok)setSignInError(outcome.message)
-  }
-
-  if(account)return <main className="register-shell">
-    <section className="register-panel motion-in" aria-labelledby="register-done-title">
-      <Brand className="brand-login"/>
-      <div className="login-copy-wrap">
-        <div className="eyebrow">Account created</div>
-        <h1 id="register-done-title">You’re all set.</h1>
-        <p className="login-copy">Your patient account was created in this browser’s demo workspace. Sign in with <b>{account.email}</b> to continue.</p>
-      </div>
-      {signInError&&<Notice tone="warning" title="Couldn’t sign in">{signInError}</Notice>}
-      <Button className="login-button" icon="arrow" onClick={signIn}>Sign in as {account.email}</Button>
-      <p className="prototype-disclaimer"><strong>Demo workspace</strong> This account lives in this browser’s local storage to demonstrate the Person/Patient/User relationship, not a server database. A production system would enforce this with a database transaction, password authentication and email verification.</p>
-    </section>
-  </main>
 
   return <main className="register-shell">
     <section className="register-panel" aria-labelledby="register-title">
@@ -50,28 +68,29 @@ export function PatientRegister({ store, onCancel, onSignIn }) {
       <div className="login-copy-wrap">
         <div className="eyebrow">New patient</div>
         <h1 id="register-title">Create your patient account</h1>
-        <p className="login-copy">This creates your Person and Patient record and the account you’ll sign in with, linked by the same identity. It is not production authentication: there is no password, and no verification email is sent.</p>
+        <p className="login-copy">This creates your Person and Patient record and the account you’ll sign in with, linked by the same identity.</p>
       </div>
       <form onSubmit={submit} noValidate>
+        <SectionLabel>Patient information</SectionLabel>
         <div className="form-grid">
-          <Field label="First name" required><input value={form.firstName} onChange={e=>update('firstName',e.target.value)} autoComplete="given-name"/></Field>
-          <Field label="Middle name"><input value={form.middleName} onChange={e=>update('middleName',e.target.value)} autoComplete="additional-name"/></Field>
-          <Field label="Last name" required><input value={form.lastName} onChange={e=>update('lastName',e.target.value)} autoComplete="family-name"/></Field>
-          <Field label="Email" required hint="You’ll sign in with this."><input type="email" value={form.email} onChange={e=>update('email',e.target.value)} autoComplete="email"/></Field>
-          <Field label="Contact number" required><input type="tel" value={form.phone} onChange={e=>update('phone',e.target.value)} autoComplete="tel"/></Field>
-          <Field label="Date of birth" hint="Optional."><input type="date" value={form.dob} onChange={e=>update('dob',e.target.value)} autoComplete="bday"/></Field>
-          <div className="span-2"><Field label="Preferred branch" required>
-            {openBranches.length?<select value={form.preferredBranchId} onChange={e=>update('preferredBranchId',e.target.value)}>{openBranches.map(b=><option key={b.id} value={b.id}>{b.name}</option>)}</select>
-              :<input value="No branch is currently open" disabled/>}
-          </Field></div>
+          <Field label="First name" required error={errors.first_name}><input value={form.first_name} onChange={e=>update('first_name',e.target.value)} autoComplete="given-name"/></Field>
+          <Field label="Last name" required error={errors.last_name}><input value={form.last_name} onChange={e=>update('last_name',e.target.value)} autoComplete="family-name"/></Field>
+          <PhoneField dial={DEFAULT_COUNTRY.dial} localNumber={phoneLocal} onLocalNumberChange={updatePhone} error={errors.phone}/>
+          <Field label="Date of birth" hint="Optional." error={errors.date_of_birth}><input type="date" value={form.date_of_birth} onChange={e=>update('date_of_birth',e.target.value)} autoComplete="bday"/></Field>
         </div>
-        {error&&<Notice tone="warning" title="Couldn’t create your account">{error}</Notice>}
+        <SectionLabel>Account security</SectionLabel>
+        <div className="form-grid">
+          <div className="span-2"><Field label="Email" required hint="You’ll sign in with this." error={errors.email}><input type="email" value={form.email} onChange={e=>update('email',e.target.value)} autoComplete="email"/></Field></div>
+          <Field label="Password" required error={errors.password}><input type={showPassword?'text':'password'} value={form.password} onChange={e=>update('password',e.target.value)} autoComplete="new-password"/></Field>
+          <Field label="Confirm password" required error={errors.password_confirmation}><input type={showPassword?'text':'password'} value={form.password_confirmation} onChange={e=>update('password_confirmation',e.target.value)} autoComplete="new-password"/></Field>
+        </div>
+        <label className="show-password"><input type="checkbox" checked={showPassword} onChange={e=>setShowPassword(e.target.checked)}/> Show password</label>
+        {formError&&<Notice tone="warning" title="Couldn’t create your account">{formError}</Notice>}
         <div className="row-actions top-gap">
-          <Button type="submit" icon="arrow" disabled={!openBranches.length}>Create account</Button>
+          <Button type="submit" icon="arrow" disabled={submitting}>{submitting?'Creating account…':'Create account'}</Button>
           <Button type="button" variant="ghost" onClick={onCancel}>Back to sign in</Button>
         </div>
       </form>
-      <p className="prototype-disclaimer"><strong>Demo workspace</strong> Records are created in this browser’s local storage to demonstrate the approved Person/Patient/User relationship. No real password, verification or backend exists yet.</p>
     </section>
   </main>
 }

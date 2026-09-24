@@ -31,7 +31,10 @@ class RegisterPatientRequest extends FormRequest
             'middle_name' => ['nullable', 'string', 'max:100'],
             'last_name' => ['required', 'string', 'max:100'],
             'email' => ['required', 'email:rfc', 'max:255', 'unique:users,email'],
-            'phone' => ['required', 'string', 'max:30'],
+            // Normalized E.164-style Philippine mobile number only (+63 plus exactly 10 local digits, first
+            // digit not 0), matching the frontend's src/phone.js normalization exactly — backend validation
+            // never accepts anything the frontend's control couldn't have produced.
+            'phone' => ['required', 'regex:/^\+63[1-9][0-9]{9}$/'],
             'date_of_birth' => ['nullable', 'date', 'before_or_equal:today'],
             'password' => ['required', 'confirmed', Password::min(8)->letters()->numbers()],
 

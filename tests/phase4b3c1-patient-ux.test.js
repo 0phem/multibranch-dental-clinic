@@ -223,12 +223,41 @@ test('a 1-day findOpenTimes window returns only that date\'s legitimate times, m
 // ================================================================================================================
 // Source guards
 // ================================================================================================================
-test('mobile Patient navigation is exactly four items: Home, Book, Visits, Me',()=>{
+test('mobile Patient navigation is exactly four items: Home, Book, Visits, Menu (Me is no longer a primary destination)',()=>{
   const src=read('src/layout.jsx')
   const match=src.match(/const mobilePatientNav=(\[.*?\]\.filter)/)
   assert.ok(match,'mobilePatientNav literal found')
   const labels=[...match[1].matchAll(/'([A-Za-z]+)'\]/g)].map(x=>x[1])
-  assert.deepEqual(labels,['Home','Book','Visits','Me'])
+  assert.deepEqual(labels,['Home','Book','Visits'],'the array itself holds the three page destinations')
+  assert.doesNotMatch(match[1],/'me'/,'"me" is not a primary mobile-nav destination')
+  assert.match(src,/<span>Menu<\/span>/,'a fourth, static Menu trigger opens the Patient menu sheet')
+  assert.match(src,/export function PatientMenuSheet/,'the Menu sheet is its own component, reachable from the bottom nav')
+})
+
+// ================================================================================================================
+// Pass 1 Patient mobile UX remediation: single menu entry point, Patient-only assistant, confirmed logout.
+// ================================================================================================================
+test('Patient has exactly one menu entry point: the top-left workspace hamburger is gated away from Patient, unchanged for other roles',()=>{
+  const src=read('src/layout.jsx')
+  assert.match(src,/role!==['"]patient['"]&&<button className="mobile-menu/,'the top-left hamburger only renders for non-Patient roles')
+})
+test('the Clinic Assistant renders only for the Patient role — no fallback variant for Staff/Dentist/Owner',()=>{
+  const src=read('src/layout.jsx')
+  assert.match(src,/role==='patient'&&<ClinicAssistant/,'ClinicAssistant is rendered only when role is patient')
+  assert.doesNotMatch(src,/:<ClinicAssistant/,'no ternary fallback renders ClinicAssistant for another role')
+  assert.doesNotMatch(src,/function ClinicAssistant\(\{role/,'ClinicAssistant no longer takes a role/patient prop — it has exactly one shape now')
+})
+test('the Patient Menu is grouped into Bookings/Communications/Account, and no longer lists HMO/Prescriptions/Follow-ups/Referral & Loyalty (still reachable via Me → More)',()=>{
+  const src=read('src/layout.jsx')
+  assert.match(src,/MENU_GROUPS=\[/,'the Menu sheet uses a grouped, curated destination list')
+  for(const heading of ['Bookings','Communications','Account'])assert.match(src,new RegExp(`'${heading}'`),`Menu group: ${heading}`)
+  assert.doesNotMatch(src,/PATIENT_MENU_SECONDARY/,'the old flat secondary-list import is removed (orphaned by the grouped redesign)')
+})
+test('Patient logout requires explicit confirmation and never fires directly from the Menu sheet',()=>{
+  const src=read('src/layout.jsx')
+  assert.match(src,/onRequestLogout/,'the Menu sheet requests logout rather than calling onLogout directly')
+  assert.match(src,/<ConfirmDialog open=\{logoutConfirmOpen\}/,'Shell owns a real confirmation dialog for logout, not an immediate call')
+  assert.match(src,/tone="default"/,'the logout dialog uses the non-destructive tone — a session ends, Patient data is not deleted')
 })
 test('booking-drafts.js and geo.js contain no forbidden patterns',()=>{
   for(const file of ['src/booking-drafts.js','src/geo.js','src/pages/PatientBook.jsx']){

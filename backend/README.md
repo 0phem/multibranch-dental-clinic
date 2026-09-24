@@ -43,9 +43,14 @@ An `Inactive` account is rejected even if its role matches.
 
 ### Registration contract
 
-`POST /api/register` accepts `first_name`, `middle_name` (optional), `last_name`, `email`, `phone`,
-`date_of_birth` (optional), `password`, `password_confirmation`. Creates a `Person` → `Patient` → `User` (role
-`patient`, status `Active`) inside one DB transaction, then logs the new user in.
+`POST /api/register` accepts `first_name`, `middle_name` (optional — the public form doesn't collect it;
+`persons.middle_name` stays nullable), `last_name`, `email`, `phone`, `date_of_birth` (optional), `password`,
+`password_confirmation`. Creates a `Person` → `Patient` → `User` (role `patient`, status `Active`) inside
+one DB transaction, then logs the new user in.
+
+`phone` must be a normalized Philippine mobile number: `+63` followed by exactly 10 digits, the first of
+which is not `0` (e.g. `+639171234567`) — enforced by both the frontend's `src/phone.js` control and this
+same backend regex, so a request that bypasses the frontend still can't submit a malformed number.
 
 Reserved fields (`role`, `role_name`/`roleName`, `permissions`, `account_status`/`accountStatus`, `title`,
 `person_id`/`personId`, `patient_id`/`patientId`, `user_id`/`userId`, `id`) are rejected outright with a 422
@@ -61,14 +66,20 @@ generic message that does not disclose which existing record matched (mirrors th
 ### Login contract
 
 `POST /api/login` accepts `email`, `password`. An unknown email and a wrong password return the **same** 422
-message (anti-enumeration). An `Inactive` account gets a distinct message. A successful login regenerates the
-session ID (session-fixation protection).
+message (anti-enumeration); an `Inactive` account gets a distinct message. Both are returned as a normal
+Laravel 422 `{message, errors}` validation response, plus a machine-readable `code`
+(`invalid_credentials` / `inactive_account`, Backend Foundation 1B) so a frontend client can distinguish the
+two cases without string-matching the human-readable message. A successful login regenerates the session ID
+(session-fixation protection).
 
 ### `/api/me`
 
 Returns the authenticated identity via `App\Http\Resources\UserResource`: `id`, `person_id`, `patient_id`
-(when applicable), `name` (derived from the related Person — not a stored column), `email`, `role`, `title`,
-`account_status`. Never includes `password` or `remember_token`.
+(when applicable), `name` (derived from the related Person — not a stored column), `first_name`,
+`middle_name`, `last_name`, `phone`, `date_of_birth` (Backend Foundation 1B — already-stored, already-safe
+Person fields, exposed so a frontend identity bridge can build a real local Person projection instead of
+parsing `name`), `email`, `role`, `title`, `account_status`. Never includes `password` or `remember_token`.
+The same fields appear in the register/login response envelopes (`data.*`).
 
 ## Sanctum / CORS / CSRF for the future SPA
 

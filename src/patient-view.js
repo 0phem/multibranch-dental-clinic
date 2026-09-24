@@ -1,5 +1,5 @@
 import { validSession } from './safeguards.js'
-import { clinicNow, clinicDate } from './clock.js'
+import { clinicNow, clinicDate, maxBookingDate } from './clock.js'
 import { inScope, isActiveQueue, isTodayQueue, TERMINAL } from './contracts.js'
 import { availableSlots, dateLabel, nextAppointment, peso, queueWaitEstimate } from './logic.js'
 import { followupDisplayState, linkedTreatment, visibleInvoices, visiblePrescriptions } from './phase2.js'
@@ -57,13 +57,24 @@ export function appointmentGroups(state,session,today=clinicDate()) {
     cancelled:all.filter(a=>a.status==='Cancelled').reverse(),
   }
 }
-// Mirrors the established behavior: Reschedule/Cancel are offered for Pending/Confirmed visits that have not
-// been admitted. No cutoff, grace period or timing policy is introduced (P1/P2 remain unresolved).
-export function appointmentActionState(appointment,today=clinicDate()) {
-  if(['Confirmed','Pending'].includes(appointment.status)&&appointment.date>=today)return {canReschedule:true,canCancel:true,reason:''}
-  if(appointment.status==='Checked In')return {canReschedule:false,canCancel:false,reason:'Your arrival has been recorded, so this visit can’t be changed online.'}
-  if(appointment.status==='In Treatment')return {canReschedule:false,canCancel:false,reason:'This visit is in progress.'}
-  return {canReschedule:false,canCancel:false,reason:''}
+// Reschedule/Cancel are offered for Pending/Confirmed visits that have not been admitted. Cancellation adds
+// two Patient-specific rules (see workflow.js's cancelAppointment, the authoritative enforcement — this
+// selector only drives the UI's presentation of the same rule): a card appointment already marked paid
+// can't be cancelled online at all (cancelKind 'blocked-card-paid' — the button stays visible so the Patient
+// gets an explanation, never a silent disappearance); once the scheduled start has passed, online
+// cancellation is unavailable regardless of payment method. Reschedule itself has no separate cutoff here
+// (P2 remains otherwise unresolved) — only the cancellation timing above is this task's explicit rule.
+export function appointmentActionState(appointment,now=clinicNow()) {
+  const today=now.date
+  if(['Confirmed','Pending'].includes(appointment.status)&&appointment.date>=today){
+    const started=appointment.date<today||(appointment.date===today&&appointment.start<=now.time)
+    if(appointment.paymentMethod==='card'&&appointment.paymentStatus==='paid')return {canReschedule:true,canCancel:true,cancelKind:'blocked-card-paid',reason:''}
+    if(started)return {canReschedule:true,canCancel:false,cancelKind:'past-start',reason:'This appointment’s scheduled time has passed, so it can’t be cancelled online. Please contact the clinic for assistance.'}
+    return {canReschedule:true,canCancel:true,cancelKind:'normal',reason:''}
+  }
+  if(appointment.status==='Checked In')return {canReschedule:false,canCancel:false,cancelKind:null,reason:'Your arrival has been recorded, so this visit can’t be changed online.'}
+  if(appointment.status==='In Treatment')return {canReschedule:false,canCancel:false,cancelKind:null,reason:'This visit is in progress.'}
+  return {canReschedule:false,canCancel:false,cancelKind:null,reason:''}
 }
 
 // ---- Care, follow-up, records ------------------------------------------------------------------
@@ -335,6 +346,7 @@ export function nextScheduleForm(state,form,key,value,lock={}) {
     if(!dentists.some(d=>d.id===next.dentistId))next.dentistId=dentists[0]?.id||''
   }
   if(lock.branchId)next.branchId=lock.branchId
+  if(lock.serviceId)next.serviceId=lock.serviceId
   if(lock.dentistId)next.dentistId=lock.dentistId
   return next
 }
@@ -367,8 +379,11 @@ export function draftStatus(state,session,draft) {
   if(draft.branchId&&branch&&draft.serviceId&&!service)issues.push('That service is no longer offered at this branch. Choose another service.')
   let slotValid=null
   if(branch&&service&&draft.date&&draft.start){
-    slotValid=assignDentist(state,{branchId:branch.id,serviceId:service.id,date:draft.date,start:draft.start,patientId:session.patientId}).ok
-    if(!slotValid)issues.push('Your saved time is no longer available. Choose another time.')
+    // Threading the same 2-month horizon the shared saveAppointment command enforces means a stale,
+    // now-out-of-range draft date fails through the exact same path as an unavailable slot — no parallel
+    // horizon check needed here.
+    slotValid=assignDentist(state,{branchId:branch.id,serviceId:service.id,date:draft.date,start:draft.start,patientId:session.patientId},clinicNow(),null,maxBookingDate()).ok
+    if(!slotValid)issues.push(draft.date>maxBookingDate()?'Your saved date is beyond the two-month booking window. Choose another date.':'Your saved time is no longer available. Choose another time.')
   }
   return {branch,service,date:draft.date||null,start:draft.start||null,mode:draft.mode||null,slotValid,issues,hasProgress:!!(draft.branchId||draft.serviceId||draft.date||draft.start)}
 }

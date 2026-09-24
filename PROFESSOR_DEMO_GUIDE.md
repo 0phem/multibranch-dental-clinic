@@ -35,8 +35,13 @@ today's visit or the next appointment, a primary "Book a visit" action when neit
 (Payments, Prescriptions, HMO, and Messages/Referral & Loyalty when they apply), and only genuinely blocking state
 under "Action required" — a Returned/Missing HMO item, an Open Dentist-requested follow-up, or an issued unpaid
 invoice. Ordinary notification-channel events (unread messages, a newly authorized prescription, the unread count)
-live in the Notification bell, not a giant Home card. Mobile navigation is exactly **Home, Book, Visits, Me**;
-Referral & Loyalty and HMO/Prescriptions/Follow-ups are reachable from Me.
+live in the Notification bell, not a giant Home card. Mobile navigation is exactly **Home, Book, Visits, Menu**
+(Pass 1 remediation: Patient has exactly one menu entry point — the top-left workspace hamburger no longer
+renders for Patient; other roles keep it unchanged). The Menu sheet is grouped — **Bookings** (Book Appointment,
+Visits), **Communications** (Messages), **Account** (Receipts & Payments, My Profile) — with Logout visually
+separated at the bottom and requiring confirmation before it fires. HMO, Prescriptions, Follow-ups and Referral &
+Loyalty are intentionally not repeated in the Menu; they remain reachable via My Profile → More. The Clinic
+Assistant floating logo FAB is Patient-only — Staff/Dentist/Owner do not render it.
 
 Open **Book**: it opens with an explicit choice, **Smart Find** or **Manual booking** — never a numbered step.
 Smart Find asks branch (optionally via "Use my location," which honestly falls back to a plain branch picker since

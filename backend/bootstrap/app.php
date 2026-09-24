@@ -20,6 +20,17 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'role' => \App\Http\Middleware\EnsureUserHasRole::class,
         ]);
+
+        // Backend Foundation 1B bugfix: Laravel's ApplicationBuilder::withMiddleware() unconditionally
+        // pre-registers redirectGuestsTo(fn () => route('login')) before this callback runs at all, on the
+        // assumption a Blade 'login' route exists. This backend is API-only and defines no such route, so an
+        // unauthenticated request that doesn't itself send Accept: application/json (any plain browser
+        // navigation or bare `curl`) crashed with a 500 "Route [login] not defined" instead of a 401 — the
+        // crash happened while *constructing* the AuthenticationException, before shouldRenderJsonWhen below
+        // ever got a chance to decide how to render it. Overriding the redirect target to always return null
+        // removes the route() call entirely: the middleware then throws a plain AuthenticationException, which
+        // shouldRenderJsonWhen already renders as JSON for every /api/* request regardless of Accept header.
+        $middleware->redirectGuestsTo(fn () => null);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(

@@ -60,6 +60,13 @@
   --sidebar: 252px;
   --content-max: 1600px;
   --page-gutter: clamp(1rem, 2.5vw, 2rem);
+  /* Small motion system: reused everywhere instead of ad hoc durations. transform/opacity only — no layout
+     animation. Every rule that uses these is wrapped in prefers-reduced-motion:no-preference, so a reduced-
+     motion viewer gets the end state instantly and no control's meaning ever depends on an animation playing. */
+  --motion-instant: 120ms;
+  --motion-normal: 190ms;
+  --motion-sheet: 260ms;
+  --motion-ease: cubic-bezier(.16,.84,.44,1);
 }
 html { scroll-behavior: auto; }
 body { font-family: var(--font-ui); font-size: var(--font-body); }
@@ -142,6 +149,12 @@ button:disabled { opacity: .65; }
 .btn.soft { border-color: var(--line); }
 .btn.soft:hover { background: var(--surface-3); }
 .btn.ghost { color: var(--text); }
+.btn { transition: transform var(--motion-instant) var(--motion-ease), box-shadow var(--motion-normal) var(--motion-ease), background var(--motion-normal) var(--motion-ease), border-color var(--motion-normal) var(--motion-ease); }
+.btn:disabled { opacity: .6; cursor: not-allowed; }
+@media (prefers-reduced-motion: no-preference) {
+  .btn:active:not(:disabled) { transform: translateY(1px); }
+  .btn.primary:active:not(:disabled) { box-shadow: 0 2px 6px rgba(8,124,115,.14); }
+}
 /* Content-width by default (Button's own width prop, default 'content'); .btn-full is reserved for a single-column
    mobile form/step action where the button genuinely is the row, not a default for every button on the page. */
 .btn-full { width: 100%; justify-content: center; }
@@ -247,6 +260,15 @@ dialog.notification-dialog { margin: var(--space-3) var(--space-3) auto auto; wi
 .login-divider { display: flex; align-items: center; gap: var(--space-3); margin: var(--space-4) 0 var(--space-3); color: var(--muted); font-size: var(--font-xs); }
 .login-divider::before, .login-divider::after { content: ''; flex: 1; height: 1px; background: var(--line); }
 .login-register-link { margin: var(--space-3) 0 0; font-size: var(--font-sm); color: var(--muted); }
+.show-password { display: flex; align-items: center; gap: var(--space-2); font-size: var(--font-sm); color: var(--muted); margin: calc(var(--space-2) * -1) 0 var(--space-4); }
+
+/* One cohesive grouped control (country code + local number), not two floating fields. Only one country is
+   enabled today, but the select is a real, focusable control so a second country is additive later. */
+.phone-field { display: flex; align-items: stretch; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--surface); overflow: hidden; }
+.phone-field:focus-within { outline: var(--focus-ring); outline-offset: 1px; }
+.phone-field-code { flex: none; max-width: 148px; min-width: 0; border: 0; border-right: 1px solid var(--line); border-radius: 0; background: var(--surface-2); color: var(--text); min-height: var(--control-height); padding: 0 var(--space-2); font-size: var(--font-md); }
+.phone-field-number { flex: 1; min-width: 0; border: 0; border-radius: 0; background: transparent; min-height: var(--control-height); padding: var(--space-2) var(--space-3); font-size: var(--font-md); letter-spacing: .02em; }
+.phone-field-code:focus-visible, .phone-field-number:focus-visible { outline: none; }
 .login-visual { display: flex; background: #183d65; padding: clamp(32px, 5vw, 80px); gap: var(--space-6); }
 .login-visual h2 { font-size: clamp(2rem, 4vw, 3.5rem); line-height: 1.1; margin: 0; letter-spacing: -.03em; }
 .login-visual p { color: #d4e1f0; max-width: 420px; font-size: var(--font-lg); }

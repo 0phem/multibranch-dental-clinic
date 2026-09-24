@@ -160,12 +160,12 @@ test('care summary exposes only the approved Patient-visible subset',()=>{
 
 test('appointment actions mirror established behavior and explain admitted visits without inventing policy',()=>{
   const f=fixture(),a=book(f)
-  assert.deepEqual(view.appointmentActionState(a,'2026-09-19'),{canReschedule:true,canCancel:true,reason:''})
-  assert.equal(view.appointmentActionState({...a,date:'2026-09-18'},'2026-09-19').canCancel,false)
+  assert.deepEqual(view.appointmentActionState(a),{canReschedule:true,canCancel:true,cancelKind:'normal',reason:''})
+  assert.equal(view.appointmentActionState({...a,date:'2026-09-18'}).canCancel,false)
   const admitted=view.appointmentActionState({...a,status:'Checked In'})
   assert.equal(admitted.canReschedule,false);assert.match(admitted.reason,/arrival has been recorded/)
   assert.doesNotMatch(admitted.reason,/hour|minute|late|fee|penalt|deadline|cutoff/i)
-  for(const status of ['Completed','Cancelled','No-show'])assert.deepEqual(view.appointmentActionState({...a,status}),{canReschedule:false,canCancel:false,reason:''})
+  for(const status of ['Completed','Cancelled','No-show'])assert.deepEqual(view.appointmentActionState({...a,status}),{canReschedule:false,canCancel:false,cancelKind:null,reason:''})
 })
 
 test('appointment groups place visits in the established tabs',()=>{

@@ -313,7 +313,7 @@ const hmoPage=render('hmo','patient',{hmoCaseId:hmoCase.id})
 assert.ok(hmoPage.includes('is-target')&&hmoPage.includes('Provider Approved')&&hmoPage.includes('is not approval from your HMO'))
 assert.ok(!/Internal|Record Provider Response/.test(hmoPage))
 const bookPage=render('book','patient')
-for(const text of ['Smart Find','Manual booking','pt-book-modes'])assert.ok(bookPage.includes(text),text)
+for(const text of ['Smart Find','Manual Appointment','pt-book-modes'])assert.ok(bookPage.includes(text),text)
 assert.ok(!/Any available|Finding|Smart Scheduling validation|AI-powered|Smart AI|best Dentist|recommended Dentist|Preferred Dentist/.test(bookPage),'Book entry names no Dentist chooser and no fake-AI language')
 const doneQueue=render('queue','patient')
 assert.ok(doneQueue.includes('Your visit is complete.')&&!/0 min|updates automatically/.test(doneQueue))
@@ -353,8 +353,13 @@ for(const page of ['dashboard','book','appointments','queue','prescriptions','fo
   assert.ok(!html.includes('Phase Two')&&!html.includes(payment.receipt),`${page}: exposes nothing`)
 }
 store={...store,state:fullState}
-// The other roles keep the shell's floating assistant button unchanged.
-for(const role of ['staff','dentist','owner']){const html=render('dashboard',role);assert.ok(html.includes('assistant-fab')&&!html.includes('clinic-assistant-toggle'),`${role}: floating assistant unchanged`)}
+// Pass 1 remediation: the Clinic Assistant is Patient-only — Staff/Dentist/Owner render no assistant FAB at all,
+// and keep their existing top-left workspace-drawer hamburger trigger unchanged.
+for(const role of ['staff','dentist','owner']){
+  const html=render('dashboard',role)
+  assert.ok(!html.includes('assistant-fab')&&!html.includes('clinic-assistant-fab'),`${role}: no Patient Clinic Assistant`)
+  assert.ok(html.includes('mobile-menu icon-btn'),`${role}: keeps the existing top-left navigation trigger`)
+}
 console.log('PASS: Phase 4B.1 Patient Journey Hub, booking semantics, appointments, live queue, care records, HMO, receipts, Messages, deep links, isolation and fail-closed sessions')
 
 // Phase 4B.2 Referral & Loyalty (M24): the Patient page renders only supported information from real ledger state.
@@ -441,13 +446,21 @@ assert.equal(newAppt.ok,true,newAppt.message)
 store={...store,state:regState}
 const returningHome=renderPatientAs('dashboard',loginResult.session)
 assert.ok(!returningHome.includes('Need a visit?')&&returningHome.includes('pt-home-quick')&&returningHome.includes('Your next visit.'),'a real appointment naturally returns the Patient to the full returning Home')
-// Login offers the Patient email sign-in and registration link only when wired, and still renders unchanged with no new props (existing brand smoke assertion above already covers that).
-const loginWithAuth=renderToString(React.createElement(m.Login,{onLogin:()=>{},onLoginPatientEmail:()=>({ok:false,message:'x'}),onShowRegister:()=>{}}))
-assert.ok(loginWithAuth.includes('sign in with your patient account')&&loginWithAuth.includes('Create an account'))
-assert.ok(!renderToString(React.createElement(m.Login,{onLogin:()=>{}})).includes('sign in with your patient account'),'the email sign-in block is absent unless the prop is supplied')
-const registerHtml=renderToString(React.createElement(m.PatientRegister,{store:{state:regState,actions:{registerPatient:()=>({ok:false,message:'x'})}},onCancel:()=>{},onSignIn:()=>({ok:false,message:'x'})}))
-assert.ok(registerHtml.includes('Create your patient account')&&registerHtml.includes('First name')&&registerHtml.includes('Preferred branch')&&registerHtml.includes('Demo workspace'))
-assert.ok(!/type="password"/i.test(registerHtml),'no password field')
+// Login (Backend Foundation 1B): one real email+password form serves every role — backend /api/me determines
+// role, so there is no client role picker. "Create an account" is Patient-only and gated by the optional
+// onShowRegister prop, still rendering unchanged with none supplied (existing brand smoke assertion above
+// already covers Login's base render).
+const loginWithRegister=renderToString(React.createElement(m.Login,{onLogin:()=>{},onShowRegister:()=>{}}))
+assert.ok(loginWithRegister.includes('Create an account'))
+assert.ok(!renderToString(React.createElement(m.Login,{onLogin:()=>{}})).includes('Create an account'),'the Create-an-account link is absent unless onShowRegister is supplied')
+const registerHtml=renderToString(React.createElement(m.PatientRegister,{onRegister:()=>({ok:false,message:'x'}),onCancel:()=>{}}))
+assert.ok(registerHtml.includes('Create your patient account')&&registerHtml.includes('First name'))
+assert.ok(/type="password"/i.test(registerHtml),'a real password field is present (Backend Foundation 1B registers against the real backend)')
+assert.ok(registerHtml.includes('Confirm password'),'a confirm-password field is present')
+assert.ok(!registerHtml.includes('Preferred branch'),'no branch preference field — the real backend registration contract collects none yet')
+assert.ok(!registerHtml.includes('Demo workspace'),'registration no longer describes itself as browser-local demo storage')
+assert.ok(!registerHtml.includes('Middle name'),'no Middle Name field — the public form does not collect it')
+assert.ok(registerHtml.includes('phone-field')&&registerHtml.includes('+63')&&registerHtml.includes('Philippines'),'the country-code phone control is present, defaulting to +63 Philippines')
 store={...store,state:fullState}
 console.log('PASS: Phase 4B.3A Patient identity — self-registration (atomic PERSON+PATIENT+USER, replay-safe, duplicate-safe), email sign-in, first-use Home vs returning Journey Hub, and isolation from other Patients')
 
@@ -504,7 +517,8 @@ const smartReplay=bookActions.saveAppointment({branchId:'b1',serviceId:'svc1',da
 assert.equal(smartReplay.unchanged,true)
 
 // Render checks: Home quick actions no longer include Book/Visits (already in primary nav); Me shows profile and
-// secondary links; mobile nav is exactly Home/Book/Visits/Me; the assistant is a floating logo FAB.
+// secondary links; mobile nav is exactly Home/Book/Visits/Menu (Backend Foundation follow-up: "Me" is no longer
+// a permanent bottom-nav destination — the Menu sheet reaches it instead); the assistant is a floating logo FAB.
 store={...store,state:bookState}
 const renderBookAs=(page,patientSession)=>{
   const activeBranch=bookState.branches.find(b=>b.id===patientSession.branchId)?.name||'All Branches'
@@ -516,9 +530,27 @@ assert.ok(!/<input|<select|<textarea/.test(mainOf(mePage)),'Me is view-only in t
 const shellHtml=renderBookAs('dashboard',bookSession)
 const mobileNav=shellHtml.match(/<nav class="patient-mobile-nav"[\s\S]*?<\/nav>/)?.[0]||''
 const mobileNavLabels=[...mobileNav.matchAll(/<span>([^<]+)<\/span>/g)].map(x=>x[1])
-assert.deepEqual(mobileNavLabels,['Home','Book','Visits','Me'],'mobile primary navigation is exactly Home, Book, Visits, Me')
-assert.ok(!mobileNav.includes('>Queue<')&&!mobileNav.includes('>Messages<'),'Queue/Messages are contextual, not primary mobile nav items')
+assert.deepEqual(mobileNavLabels,['Home','Book','Visits','Menu'],'mobile primary navigation is exactly Home, Book, Visits, Menu')
+assert.ok(!mobileNav.includes('>Queue<')&&!mobileNav.includes('>Messages<')&&!mobileNav.includes('>Me<'),'Queue/Messages are contextual and Me is no longer a primary mobile nav item')
 assert.ok(shellHtml.includes('id="clinic-assistant-fab"')&&shellHtml.includes('src="/images/logo.png"'),'Patient assistant is the floating logo FAB')
 assert.ok(!shellHtml.includes('id="clinic-assistant-toggle"'),'the old top-bar assistant trigger is gone')
+// Pass 1: Patient has exactly one menu entry point — no top-left hamburger, only the bottom-right Menu trigger.
+assert.ok(!shellHtml.includes('mobile-menu icon-btn'),'Patient shell renders no top-left hamburger trigger')
+// The Menu sheet itself: grouped Bookings/Communications/Account sections, HMO/Prescriptions/Follow-up/Referral
+// & Loyalty intentionally absent here (still reachable via Me → More), Logout visually separated at the bottom.
+const menuSheet=renderToString(React.createElement(m.PatientMenuSheet,{open:true,onClose:()=>{},setPage:()=>{},name:'Maria Santos',unreadMessages:2,onRequestLogout:()=>{}}))
+for(const heading of ['Bookings','Communications','Account'])assert.ok(menuSheet.includes(heading),`Menu group heading: ${heading}`)
+for(const text of ['Book Appointment','Visits','Messages','Receipts &amp; Payments','My Profile'])assert.ok(menuSheet.includes(text),`Menu destination: ${text}`)
+for(const absent of ['HMO coverage','Prescriptions','Follow-up care','Referral &amp; Loyalty'])assert.ok(!menuSheet.includes(absent),`Menu no longer lists ${absent} (reachable via Me → More instead)`)
+assert.ok(menuSheet.includes('patient-menu-logout')&&menuSheet.includes('Log out'),'Menu: Logout is present')
+assert.ok(!menuSheet.includes('>Home<'),'Menu does not duplicate the primary Home bottom-nav destination')
+// Pass 1: logout requires confirmation via a real dialog, not an immediate call — Log out uses the normal
+// primary action style (a session ending, not data being destroyed), never the danger/red treatment.
+const logoutDialog=renderToString(React.createElement(m.ConfirmDialog,{open:true,title:'Log out?',tone:'default',confirmLabel:'Log out',cancelLabel:'Cancel',className:'patient-logout-dialog',onConfirm:()=>{},onCancel:()=>{}},'Are you sure you want to log out of your account?'))
+assert.ok(logoutDialog.includes('Log out?')&&logoutDialog.includes('Are you sure you want to log out of your account?'),'Logout dialog states the exact required copy')
+assert.ok(logoutDialog.includes('patient-logout-dialog'),'Logout dialog uses bottom-sheet-capable styling on mobile')
+const logoutConfirmButton=logoutDialog.match(/<button[^>]*>(?:(?!<\/button>)[\s\S])*Log out(?:(?!<\/button>)[\s\S])*<\/button>/)?.[0]||''
+assert.ok(logoutConfirmButton&&!/\bdanger\b/.test(logoutConfirmButton),'Log out uses the normal primary action style, not danger/red')
 store={...store,state:fullState}
-console.log('PASS: Phase 4B.3C-1 Patient core UX & booking — Booking Drafts (isolation, idempotency, stale-slot revalidation, atomic clear-on-confirm), zero-provider Smart Find, honest no-coordinates fallback, Me, 4-item mobile nav and the logo assistant FAB')
+console.log('PASS: Phase 4B.3C-1 Patient core UX & booking — Booking Drafts (isolation, idempotency, stale-slot revalidation, atomic clear-on-confirm), zero-provider Smart Find, honest no-coordinates fallback, Me, 4-item mobile nav (Home/Book/Visits/Menu), the Menu sheet and the logo assistant FAB')
+console.log('PASS: Pass 1 Patient mobile UX remediation — single Menu entry point (no top-left hamburger for Patient, unchanged for other roles), grouped Menu (Bookings/Communications/Account), Patient-only Clinic Assistant, confirmed logout with non-destructive styling')

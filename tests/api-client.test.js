@@ -1,0 +1,119 @@
+import test, { beforeEach } from 'node:test'
+import assert from 'node:assert/strict'
+import * as api from '../src/api-client.js'
+
+function jsonResponse(status, body) {
+  return { ok: status >= 200 && status < 300, status, json: async () => body }
+}
+
+let calls
+function mockFetch(sequence) {
+  let i = 0
+  globalThis.fetch = async (url, options) => {
+    calls.push({ url, options })
+    const response = sequence[Math.min(i, sequence.length - 1)]
+    i++
+    return response
+  }
+}
+
+beforeEach(() => {
+  calls = []
+  globalThis.document = { cookie: 'XSRF-TOKEN=abc%20123' }
+  api.__resetCsrfCacheForTests()
+})
+
+test('me() normalizes a successful response to {ok:true, data}', async () => {
+  mockFetch([jsonResponse(200, { data: { id: 1, role: 'patient' } })])
+  assert.deepEqual(await api.me(), { ok: true, data: { id: 1, role: 'patient' } })
+})
+
+test('me() reports 401 as kind unauthenticated, not a crash', async () => {
+  mockFetch([jsonResponse(401, {})])
+  assert.deepEqual(await api.me(), { ok: false, kind: 'unauthenticated' })
+})
+
+test('login() distinguishes invalid credentials from an inactive account via the backend code field', async () => {
+  mockFetch([jsonResponse(200, {}), jsonResponse(422, { message: 'x', errors: { email: ['x'] }, code: 'invalid_credentials' })])
+  const invalid = await api.login('a@example.com', 'wrong')
+  assert.equal(invalid.ok, false)
+  assert.equal(invalid.kind, 'invalid_credentials')
+
+  api.__resetCsrfCacheForTests()
+  mockFetch([jsonResponse(200, {}), jsonResponse(422, { message: 'inactive', errors: { email: ['inactive'] }, code: 'inactive_account' })])
+  const inactive = await api.login('a@example.com', 'pass')
+  assert.equal(inactive.kind, 'inactive_account')
+})
+
+test('a network failure never throws — it is reported as kind network', async () => {
+  globalThis.fetch = async () => { throw new TypeError('fetch failed') }
+  const result = await api.login('a@example.com', 'pass')
+  assert.equal(result.ok, false)
+  assert.equal(result.kind, 'network')
+})
+
+test('a 500 is reported as kind server, not exposed as raw HTTP detail', async () => {
+  mockFetch([jsonResponse(200, {}), { ok: false, status: 500, json: async () => ({ message: 'boom' }) }])
+  const result = await api.login('a@example.com', 'pass')
+  assert.equal(result.kind, 'server')
+})
+
+test('a 419 (stale CSRF token) refetches the cookie and retries the same request exactly once', async () => {
+  mockFetch([
+    jsonResponse(200, {}), // initial csrf-cookie fetch
+    { ok: false, status: 419, json: async () => ({}) }, // first attempt: stale token
+    jsonResponse(200, {}), // csrf-cookie refetch
+    jsonResponse(200, { data: { ok: true } }), // retried attempt succeeds
+  ])
+  const result = await api.login('a@example.com', 'pass')
+  assert.equal(result.ok, true)
+  assert.equal(calls.length, 4, 'exactly: csrf, POST(419), csrf, POST(200) — no extra calls')
+})
+
+test('two consecutive 419s do not retry a second time (no loop)', async () => {
+  mockFetch([
+    jsonResponse(200, {}),
+    { ok: false, status: 419, json: async () => ({}) },
+    jsonResponse(200, {}),
+    { ok: false, status: 419, json: async () => ({}) },
+  ])
+  const result = await api.login('a@example.com', 'pass')
+  assert.equal(result.ok, false)
+  assert.equal(calls.length, 4, 'never a third POST attempt')
+})
+
+test('mutating requests send X-XSRF-TOKEN decoded from the cookie', async () => {
+  mockFetch([jsonResponse(200, {}), jsonResponse(200, { data: { ok: true } })])
+  await api.login('a@example.com', 'pass')
+  const post = calls.find(c => c.options?.method === 'POST')
+  assert.equal(post.options.headers['X-XSRF-TOKEN'], 'abc 123')
+})
+
+test('GET requests never fetch a CSRF cookie first', async () => {
+  mockFetch([jsonResponse(200, { data: {} })])
+  await api.me()
+  assert.equal(calls.length, 1)
+})
+
+test('logout() reports backendConfirmed true only on a real 204 from the server', async () => {
+  mockFetch([jsonResponse(200, {}), { ok: true, status: 204, json: async () => null }])
+  assert.deepEqual(await api.logout(), { ok: true, backendConfirmed: true })
+})
+
+test('logout() never claims backendConfirmed on a network failure', async () => {
+  globalThis.fetch = async () => { throw new TypeError('offline') }
+  const result = await api.logout()
+  assert.equal(result.ok, false)
+  assert.equal(result.backendConfirmed, false)
+  assert.equal(result.kind, 'network')
+})
+
+test('register() passes through field-level validation errors (e.g. the duplicate-Patient case)', async () => {
+  mockFetch([jsonResponse(200, {}), jsonResponse(422, {
+    message: 'x',
+    errors: { phone: ['An existing patient record may already match these details.'] },
+  })])
+  const result = await api.register({ first_name: 'A' })
+  assert.equal(result.kind, 'validation')
+  assert.deepEqual(result.errors.phone, ['An existing patient record may already match these details.'])
+})

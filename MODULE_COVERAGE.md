@@ -39,7 +39,10 @@ Domain baseline `dac864e` (through Phase 3.5); the Patient presentation and M24 
 
 ## Role surfaces
 
-Patient: Home, Book (Smart Find / Manual booking), Visits, Live Queue (contextual), Messages, Payments, Me (profile view + secondary links to Prescriptions, Follow-Ups, HMO, Referral & Loyalty (M24)).
+Patient: Home, Book (Smart Find / Manual booking), Visits, Menu (Live Queue is contextual). Menu is grouped —
+Bookings (Book Appointment, Visits), Communications (Messages), Account (Receipts & Payments, My Profile) — with
+a confirmed Logout separated at the bottom; My Profile itself still lists Prescriptions, Follow-Ups, HMO and
+Referral & Loyalty (M24) under its own "More" section, unchanged.
 
 Staff: operational worklists as allowed by current subrole and assigned branch. Receptionist, Dental Assistant, Cashier, HMO Coordinator and Patient Engagement Staff do not have interchangeable permission sets. See the [role matrix](DOCUMENTATION_RECONCILIATION.md#role-and-permission-clarifications).
 

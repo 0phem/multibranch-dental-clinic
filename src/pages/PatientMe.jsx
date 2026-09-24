@@ -10,7 +10,9 @@ import { DefinitionList } from '../patient-ui.jsx'
 // everywhere else (`patientContext`), never a second copy of it.
 const NO_ACCOUNT=<Notice tone="warning" title="We couldn’t confirm your account">Reopen your workspace, or ask the clinic to check your account access.</Notice>
 
-const SECONDARY=[
+// Exported so the Patient mobile Menu sheet (layout.jsx) lists exactly these same destinations — one list,
+// not a duplicated copy that could drift.
+export const SECONDARY=[
   ['messages','message','Messages','Your conversations with the clinic'],
   ['billing','receipt','Payments','Issued invoices and receipts'],
   ['hmo','shield','HMO coverage','Documents and status'],

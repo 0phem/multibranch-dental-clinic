@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react'
-import { Status } from './components.jsx'
+import { Icon, Status } from './components.jsx'
 
 // Patient presentation components. They render supplied view models only and never touch application state.
 
@@ -25,14 +25,17 @@ export function RecordCard({ id, title, subtitle, status, children, actions, hig
   </article>
 }
 
-// Native radios: arrow keys, group semantics and form behavior come from the browser.
+// Native radios: arrow keys, group semantics and form behavior come from the browser. An option's optional
+// `icon` reuses the existing Icon set — never a new asset, never emoji mixed in with product icons.
 export function ChoiceGroup({ legend, hint, name, value, onChange, options, variant='cards', disabled=false, describedBy }) {
   return <fieldset className={`pt-choices ${variant==='slots'?'pt-slots':''}`.trim()} aria-describedby={describedBy}>
     <legend>{legend}</legend>
     {hint&&<p className="pt-hint">{hint}</p>}
-    <div className="pt-choice-grid">{options.map(option=><label className="pt-choice" key={option.value}>
+    <div className="pt-choice-grid">{options.map(option=><label className={`pt-choice ${value===option.value?'is-selected':''}`.trim()} key={option.value}>
       <input type="radio" name={name} value={option.value} checked={value===option.value} disabled={disabled||option.disabled} onChange={()=>onChange(option.value)}/>
+      {option.icon&&<span className="pt-choice-icon" aria-hidden="true"><Icon name={option.icon} size={20}/></span>}
       <span className="pt-choice-body"><b>{option.label}</b>{option.description&&<small>{option.description}</small>}</span>
+      <span className="pt-choice-check" aria-hidden="true"><Icon name="checkin" size={16}/></span>
     </label>)}</div>
   </fieldset>
 }

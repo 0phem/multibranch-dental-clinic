@@ -5,7 +5,7 @@ import { hmoActions, prepareHmoCase } from './hmo.js'
 import { loyaltyActions } from './loyalty.js'
 import { workflowContext, notificationEventKey, appendWorkflowEvent, appendNotification, notifyBranch } from './orchestration.js'
 import { phase2Actions, procedureLines, linkedTreatment, money, validInvoice } from './phase2.js'
-import { clinicNow, validDate } from './clock.js'
+import { clinicNow, validDate, maxBookingDate } from './clock.js'
 import { encounterContext, inScope, isActiveQueue, isTodayQueue, TERMINAL } from './contracts.js'
 import { recalcQueue, uid, validateAppointment } from './logic.js'
 import { assignDentist, SCHEDULING_RULE_VERSION } from './scheduling.js'
@@ -88,6 +88,13 @@ export function createWorkflowActions({getState,commit,getSession,clock=clinicNo
     if(existing&&(!['Pending','Confirmed'].includes(existing.status)||state.checkIns.some(c=>c.appointmentId===existing.id)||state.queue.some(q=>q.appointmentId===existing.id)||state.treatments.some(t=>t.appointmentId===existing.id)))return fail('An admitted or closed appointment cannot be rescheduled.')
     if(session.role==='patient'&&form.patientId!=null&&form.patientId!==session.patientId)return fail('This booking form belongs to another patient. Reopen your own appointment.')
     const request={...form,patientId:session.role==='patient'?session.patientId:form.patientId}
+    // Patient rescheduling changes only Date/Time. Branch, Service and Dentist are locked in the UI
+    // (PatientScheduler); this is the authoritative enforcement so a crafted request can't bypass that —
+    // hidden controls are not enforcement. Staff/Owner reschedule paths are untouched.
+    if(existing&&session.role==='patient'&&(request.branchId!==existing.branchId||request.serviceId!==existing.serviceId||request.dentistId!==existing.dentistId))return fail('Rescheduling can only change the date and time. Cancel and create a new booking to change branch, service or Dentist.')
+    // Patients may book/reschedule no more than two calendar months ahead. Follow-up scheduling (Dentist-
+    // recommended, not Patient browsing) is deliberately exempt.
+    const maxDate=session.role==='patient'&&!options.followupId?maxBookingDate(now.date):null
     // Automatic Dentist assignment (Phase 4B.3B): only a NEW, explicitly-requested Patient booking with no
     // follow-up relationship ever recomputes the Dentist here. Staff/Dentist/reschedule/follow-up flows are
     // untouched and keep their explicit/pinned Dentist exactly as before.
@@ -96,7 +103,7 @@ export function createWorkflowActions({getState,commit,getSession,clock=clinicNo
     let assignmentMethod=null
     if(autoAssign){
       if(!request.branchId||!request.serviceId||!request.date||!request.start)return fail('Enter valid appointment details.')
-      const assignment=assignDentist(state,request,now,commandMatch?commandMatch.id:null)
+      const assignment=assignDentist(state,request,now,commandMatch?commandMatch.id:null,maxDate)
       if(!assignment.ok)return fail('No Dentist is currently available for this service, branch and time. Try another time or branch.')
       if(request.dentistId&&request.dentistId!==assignment.dentistId)return fail('Availability changed. Review the updated appointment before confirming.')
       request.dentistId=assignment.dentistId
@@ -117,9 +124,15 @@ export function createWorkflowActions({getState,commit,getSession,clock=clinicNo
     const retry=commandMatch
     if(retry&&(!inScope(retry,session,state)||['patientId','branchId','dentistId'].some(k=>retry[k]!==request[k])||existing&&retry.id!==existing.id))return fail('This booking command belongs to another encounter. Reopen the intended appointment.')
     if(retry&&!existing)return {ok:true,unchanged:true,record:retry}
-    const result=validateAppointment(request,state,existing?.id,now)
+    const result=validateAppointment(request,state,existing?.id,now,true,maxDate)
     if(!result.valid)return {...fail(result.checks.filter(c=>!c.ok).map(c=>c.label).join('. ')),validation:result}
-    const record={...durable(existing||{}),id:existing?.id||uid('a'),commandId:options.commandId||null,appointmentNo:existing?.appointmentNo||`APT-${now.date.slice(0,4)}-${String(state.appointments.length+1).padStart(4,'0')}`,patientId:request.patientId,followupId:followup?.id||existing?.followupId||null,branchId:result.branch.id,dentistId:request.dentistId,serviceId:result.service.id,date:request.date,start:request.start,scheduledStart:`${request.date}T${request.start}`,duration:result.duration,notes:request.notes||'',status:'Confirmed',source:existing?.source||(followup?'Follow-Up Task':session.role==='patient'?'Patient Portal':'Front Desk'),...(existing?{}:{assignmentMethod:assignmentMethod||'selected'})}
+    // Booking-stage payment metadata: an intent recorded at confirm time, never a real charge. paymentStatus
+    // is hard-coded 'unpaid' by this command — it is never taken from client input, on a new booking or a
+    // reschedule, so "card paid" can never be faked here. On reschedule, both fields are inherited unchanged
+    // from the existing record ("preserve valid payment metadata"), never re-collected.
+    const paymentMethod=existing?(existing.paymentMethod??null):(['cash','card'].includes(form.paymentMethod)?form.paymentMethod:null)
+    const paymentStatus=existing?(existing.paymentStatus??null):(paymentMethod?'unpaid':null)
+    const record={...durable(existing||{}),id:existing?.id||uid('a'),commandId:options.commandId||null,appointmentNo:existing?.appointmentNo||`APT-${now.date.slice(0,4)}-${String(state.appointments.length+1).padStart(4,'0')}`,patientId:request.patientId,followupId:followup?.id||existing?.followupId||null,branchId:result.branch.id,dentistId:request.dentistId,serviceId:result.service.id,date:request.date,start:request.start,scheduledStart:`${request.date}T${request.start}`,duration:result.duration,notes:request.notes||'',status:'Confirmed',paymentMethod,paymentStatus,source:existing?.source||(followup?'Follow-Up Task':session.role==='patient'?'Patient Portal':'Front Desk'),...(existing?{}:{assignmentMethod:assignmentMethod||'selected'})}
     if(existing&&['patientId','branchId','dentistId','serviceId','date','start','duration','notes'].every(k=>existing[k]===record[k]))return {ok:true,unchanged:true,record:existing}
     record.revision=(existing?.revision||0)+1
     state.appointments=replace(state.appointments,record)
@@ -138,6 +151,13 @@ export function createWorkflowActions({getState,commit,getSession,clock=clinicNo
     if(!appointment||!['patient','staff','owner'].includes(session.role)||!inScope(appointment,session,state))return fail('Appointment is outside your scope.')
     if(appointment.status==='Cancelled')return {ok:true,unchanged:true}
     if(!['Pending','Confirmed','Checked In'].includes(appointment.status))return fail('This appointment can no longer be cancelled.')
+    // Patient-only cancellation rules, enforced here (not just button visibility) so no state change can
+    // ever happen for a blocked case. Staff/Owner cancellation is unchanged.
+    if(session.role==='patient'){
+      if(appointment.paymentMethod==='card'&&appointment.paymentStatus==='paid')return fail('This appointment has already been paid by card and cannot be cancelled online. Please contact the clinic for assistance.')
+      const started=appointment.date<now.date||(appointment.date===now.date&&appointment.start<=now.time)
+      if(started)return fail('This appointment’s scheduled time has passed, so it can’t be cancelled online. Please contact the clinic for assistance.')
+    }
     const queues=state.queue.filter(q=>q.appointmentId===id)
     if(queues.some(q=>encounterIssue(state,q,now))||state.checkIns.some(c=>c.appointmentId===id&&['patientId','dentistId','branchId'].some(k=>c[k]!==appointment[k])))return fail('Encounter links need clinic review before cancellation.')
     if(queues.some(q=>q.status==='In Treatment')||state.treatments.some(t=>t.appointmentId===id))return fail('An encounter with clinical documentation cannot be cancelled here.')

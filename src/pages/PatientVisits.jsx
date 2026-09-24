@@ -1,12 +1,14 @@
 import React, { useEffect, useId, useRef, useState } from 'react'
 import { Button, Card, ConfirmDialog, Empty, Field, Modal, Notice, PageHeader, Status, Tabs } from '../components.jsx'
-import { clinicDate } from '../clock.js'
+import { clinicDate, maxBookingDate } from '../clock.js'
 import { dateLabel, displayTime, uid } from '../logic.js'
 import {
   appointmentActionState, appointmentGroups, dentistLabel, dentistsFor, hmoCaseView, hmoForAppointment, invoiceView, nextScheduleForm, patientContext, patientFollowups,
   patientInvoices, patientQueueView, patientVisitDetail, queueSentence, resolveTarget, scheduleFormDefaults, scheduleSlots, servicesAt, suggestTimes,
 } from '../patient-view.js'
 import { ChoiceGroup, DefinitionList, RecordCard, Stepper } from '../patient-ui.jsx'
+
+const PAYMENT_LABEL={cash:'Cash — pay at the clinic',card:'Card — payment preference (not yet paid)'}
 
 const NO_ACCOUNT=<Notice tone="warning" title="We couldn’t confirm your account">Reopen your workspace, or ask the clinic to check your account access.</Notice>
 const STEPS=['Branch','Service','Dentist','Date & time','Review']
@@ -29,8 +31,11 @@ export function PatientScheduler({ store, mode='book', appointment=null, followu
   if(!form)return NO_ACCOUNT
 
   const ignoreId=mode==='reschedule'?appointment.id:null
-  const hmoLocked=mode==='reschedule'&&!!hmoForAppointment(state,session,appointment)
-  const lock=mode==='followup'?{branchId:followup.branchId,dentistId:followup.dentistId}:hmoLocked?{branchId:appointment.branchId}:{}
+  // Patient rescheduling changes only Date/Time — Branch, Service and Dentist are always locked (never only
+  // when an HMO case happens to be present), matching saveAppointment's authoritative enforcement of the
+  // same rule. Follow-up scheduling keeps its existing, separate branch/Dentist lock.
+  const rescheduleLocked=mode==='reschedule'
+  const lock=mode==='followup'?{branchId:followup.branchId,dentistId:followup.dentistId}:rescheduleLocked?{branchId:appointment.branchId,serviceId:appointment.serviceId,dentistId:appointment.dentistId}:{}
   const branches=state.branches.filter(b=>b.status==='Open'&&(!lock.branchId||b.id===lock.branchId))
   const services=servicesAt(state,form.branchId)
   const dentists=dentistsFor(state,form.branchId,form.serviceId).filter(d=>!lock.dentistId||d.id===lock.dentistId)
@@ -62,11 +67,14 @@ export function PatientScheduler({ store, mode='book', appointment=null, followu
   const summary=[
     mode==='reschedule'&&{label:'Current time',value:`${dateLabel(appointment.date)} · ${displayTime(appointment.start)}`},
     {label:'Branch',value:branch?.name},{label:'Service',value:service?.name},{label:'Dentist',value:dentist?.name},{label:'New time',value:when},
+    // Payment preference is never re-collected on reschedule — it's preserved unchanged from the original booking.
+    mode==='reschedule'&&{label:'Payment',value:PAYMENT_LABEL[appointment.paymentMethod]||null},
   ].filter(Boolean)
+  const RESCHEDULE_LOCK_NOTE='Rescheduling changes only the date and time. Branch, service and Dentist stay the same as your original appointment.'
   const helpers=[
-    lock.branchId?(mode==='followup'?'Your Dentist requested this follow-up, so the branch is set.':'This visit has an HMO case at its current branch, so the branch can’t be changed here.'):'You can change branches later if you need a different schedule.',
-    'Choose the service or visit type you’d like to schedule.',
-    lock.dentistId?'Your Dentist requested this follow-up, so the Dentist is set.':`Only Dentists at ${branch?.name||'this branch'} who provide ${service?.name||'this service'} are shown.`,
+    rescheduleLocked?RESCHEDULE_LOCK_NOTE:(lock.branchId?'Your Dentist requested this follow-up, so the branch is set.':'You can change branches later if you need a different schedule.'),
+    rescheduleLocked?RESCHEDULE_LOCK_NOTE:'Choose the service or visit type you’d like to schedule.',
+    rescheduleLocked?RESCHEDULE_LOCK_NOTE:(lock.dentistId?'Your Dentist requested this follow-up, so the Dentist is set.':`Only Dentists at ${branch?.name||'this branch'} who provide ${service?.name||'this service'} are shown.`),
     'Only times that pass the clinic’s availability checks are shown.',
     'Nothing is charged when you book. Billing is based on completed treatment after your visit.',
   ]
@@ -77,10 +85,10 @@ export function PatientScheduler({ store, mode='book', appointment=null, followu
       <section className="pt-stage" aria-labelledby={`${base}-title`}>
         <div className="pt-stage-copy"><p className="pt-eyebrow">{`Step ${step+1} of ${STEPS.length}`}</p><h2 id={`${base}-title`} ref={heading} tabIndex={-1}>{TITLES[step]}</h2><p>{helpers[step]}</p></div>
         {step===0&&<ChoiceGroup legend="Branch" name={`${base}-branch`} value={form.branchId} disabled={!!lock.branchId} onChange={value=>change('branchId',value)} options={branches.map(b=>({value:b.id,label:b.name,description:`${b.city} • ${displayTime(b.open)}–${displayTime(b.close)}`}))}/>}
-        {step===1&&(services.length?<ChoiceGroup legend="Service" name={`${base}-service`} value={form.serviceId} onChange={value=>change('serviceId',value)} options={services.map(s=>({value:s.id,label:s.name,description:`${s.category} • about ${s.duration} min`}))}/>:<Notice tone="warning" title="No services available">No services are currently available at this branch. Go back and choose another branch.</Notice>)}
+        {step===1&&(services.length?<ChoiceGroup legend="Service" name={`${base}-service`} value={form.serviceId} disabled={!!lock.serviceId} onChange={value=>change('serviceId',value)} options={services.map(s=>({value:s.id,label:s.name,description:`${s.category} • about ${s.duration} min`}))}/>:<Notice tone="warning" title="No services available">No services are currently available at this branch. Go back and choose another branch.</Notice>)}
         {step===2&&(dentists.length?<ChoiceGroup legend="Preferred Dentist" name={`${base}-dentist`} value={form.dentistId} disabled={!!lock.dentistId} onChange={value=>change('dentistId',value)} options={dentists.map(d=>({value:d.id,label:d.name,description:`${d.specialty} • ${displayTime(d.shiftStart)}–${displayTime(d.shiftEnd)}`}))}/>:<Notice tone="warning" title="No Dentist available">No Dentist is available for {service?.name||'this service'} at {branch?.name||'this branch'}. Go back and choose another service or branch.</Notice>)}
         {step===3&&<>
-          <Field label="Appointment date"><input type="date" min={clinicDate()} value={form.date} onChange={event=>change('date',event.target.value)}/></Field>
+          <Field label="Appointment date" hint={mode==='followup'?undefined:`You can book up to two months ahead (through ${dateLabel(maxBookingDate())}).`}><input type="date" min={clinicDate()} max={mode==='followup'?undefined:maxBookingDate()} value={form.date} onChange={event=>change('date',event.target.value)}/></Field>
           {slots.length?<ChoiceGroup legend={`Available times on ${dateLabel(form.date)}`} name={`${base}-time`} variant="slots" value={form.start} onChange={value=>change('start',value)} options={slots.map(t=>({value:t,label:displayTime(t)}))}/>:<Notice tone="warning" title="No open times">There are no open times with {dentist?.name||'this Dentist'} on {dateLabel(form.date)}. Try another date{lock.dentistId?'':', another Dentist'} or suggested times.</Notice>}
           <div className="pt-suggest">
             <Button variant="soft" icon="sparkles" onClick={()=>setSuggestions(suggestTimes(state,form,ignoreId,4,lock.dentistId))}>Show suggested times</Button>
@@ -122,12 +130,13 @@ function AppointmentCard({ a, state, session, highlight, onReschedule, onCancel,
   const live=a.date===clinicDate()&&['Checked In','In Treatment'].includes(a.status)
   return <RecordCard id={`appt-${a.id}`} highlight={highlight} title={a.service} subtitle={`${dateLabel(a.date)} • ${displayTime(a.start)} • ${a.branch}`} status={a.status}
     actions={<>
-      {rules.canReschedule&&<Button size="sm" variant="soft" onClick={()=>onReschedule(a)}>Reschedule</Button>}
-      {rules.canCancel&&<Button size="sm" variant="ghost" onClick={()=>onCancel(a)}>Cancel appointment</Button>}
       {live&&<Button size="sm" variant="soft" icon="queue" onClick={()=>setPage?.('queue')}>View live queue</Button>}
       {hmo&&<Button size="sm" variant="ghost" icon="shield" onClick={()=>setPage?.('hmo',{hmoCaseId:hmo.id})}>HMO case: {hmoCaseView(hmo).label}</Button>}
+      {rules.canReschedule&&<Button size="sm" variant="soft" onClick={()=>onReschedule(a)}>Reschedule</Button>}
+      {/* Blocked-card-paid stays visible on purpose — it explains why, rather than silently disappearing. */}
+      {rules.canCancel&&<Button size="sm" variant="danger" onClick={()=>onCancel(a,rules.cancelKind)}>Cancel appointment</Button>}
     </>}>
-    <DefinitionList items={[{label:'Dentist',value:dentistLabel(state,a.dentistId)},{label:'Expected duration',value:a.duration?`${a.duration} minutes`:null},{label:'Reference',value:a.appointmentNo},{label:'Your note',value:a.notes}]}/>
+    <DefinitionList items={[{label:'Dentist',value:dentistLabel(state,a.dentistId)},{label:'Expected duration',value:a.duration?`${a.duration} minutes`:null},{label:'Reference',value:a.appointmentNo},{label:'Payment',value:PAYMENT_LABEL[a.paymentMethod]||null},{label:'Your note',value:a.notes}]}/>
     {rules.reason&&<p className="pt-hint">{rules.reason}</p>}
     {detail&&<details className="pt-details"><summary>Visit details</summary>
       <DefinitionList items={[{label:'Procedure',value:detail.procedure},{label:'Services',value:detail.services.join(', ')},{label:'Dentist',value:detail.dentist},
@@ -143,23 +152,30 @@ export function PatientAppointmentsPage({ store, setPage, context }) {
   const targetTab=target?(groups.upcoming.some(a=>a.id===target)?'upcoming':groups.past.some(a=>a.id===target)?'past':'cancelled'):null
   const [tab,setTab]=useState(targetTab||'upcoming')
   const [reschedule,setReschedule]=useState(null)
-  const [cancelling,setCancelling]=useState(null)
+  const [cancelling,setCancelling]=useState(null) // {appointment, kind:'normal'|'blocked-card-paid'} | null
   useEffect(()=>{if(targetTab)setTab(targetTab)},[targetTab,target])
   if(!patientContext(state,session))return NO_ACCOUNT
   const rows=groups[tab]
+  const startCancel=(a,kind)=>setCancelling({appointment:a,kind})
   const confirmCancel=()=>{
-    const a=cancelling;setCancelling(null)
+    const a=cancelling.appointment;setCancelling(null)
     const result=actions.cancelAppointment(a.id)
     toast(result.ok?'Appointment cancelled.':result.message,result.ok?'success':'warning')
   }
   return <div className="pt-page">
     <PageHeader kicker="Your visits" title="Visits" text="Your upcoming, past and cancelled visits across all clinic branches."/>
     <Tabs active={tab} onChange={setTab} tabs={[{key:'upcoming',label:'Upcoming',count:groups.upcoming.length},{key:'past',label:'Past',count:groups.past.length},{key:'cancelled',label:'Cancelled',count:groups.cancelled.length}]}/>
-    <div className="pt-list" aria-live="polite">{rows.length?rows.map(a=><AppointmentCard key={a.id} a={a} state={state} session={session} highlight={target===a.id} onReschedule={setReschedule} onCancel={setCancelling} setPage={setPage}/>):<Empty title={`No ${tab} visits`} text={tab==='upcoming'?'When you book a visit from Book, it appears here.':'There are no visits in this section.'}/>}</div>
+    <div className="pt-list" aria-live="polite">{rows.length?rows.map(a=><AppointmentCard key={a.id} a={a} state={state} session={session} highlight={target===a.id} onReschedule={setReschedule} onCancel={startCancel} setPage={setPage}/>):<Empty title={`No ${tab} visits`} text={tab==='upcoming'?'When you book a visit from Book, it appears here.':'There are no visits in this section.'}/>}</div>
     <Modal open={!!reschedule} title="Reschedule appointment" subtitle="Your new time must pass the same availability checks as a new booking." wide onClose={()=>setReschedule(null)}>{reschedule&&<PatientScheduler store={store} mode="reschedule" appointment={reschedule} inModal onDone={()=>setReschedule(null)}/>}</Modal>
-    <ConfirmDialog open={!!cancelling} title="Cancel this appointment?" confirmLabel="Cancel appointment" cancelLabel="Keep appointment" onConfirm={confirmCancel} onCancel={()=>setCancelling(null)}>
-      {cancelling&&<><p><b>{cancelling.service}</b></p><p>{dateLabel(cancelling.date)} at {displayTime(cancelling.start)} with {dentistLabel(state,cancelling.dentistId)} • {cancelling.branch}</p><p>The reserved time will be released.</p></>}
+    <ConfirmDialog open={cancelling?.kind==='normal'} title="Cancel this appointment?" confirmLabel="Cancel appointment" cancelLabel="Keep appointment" tone="danger" onConfirm={confirmCancel} onCancel={()=>setCancelling(null)}>
+      {cancelling&&<><p><b>{cancelling.appointment.service}</b></p><p>{dateLabel(cancelling.appointment.date)} at {displayTime(cancelling.appointment.start)} with {dentistLabel(state,cancelling.appointment.dentistId)} • {cancelling.appointment.branch}</p><p>The reserved time will be released.</p></>}
     </ConfirmDialog>
+    {/* Card-paid block: an informative state only — no confirm/destructive action exists here, so no mutation
+        path is even reachable from this dialog. */}
+    <Modal open={cancelling?.kind==='blocked-card-paid'} title="This appointment can’t be cancelled online" onClose={()=>setCancelling(null)}>
+      <Notice tone="warning">This appointment has already been paid by card and cannot be cancelled online. Please contact the clinic for assistance.</Notice>
+      <div className="row-actions top-gap"><Button variant="soft" onClick={()=>setCancelling(null)}>Close</Button></div>
+    </Modal>
   </div>
 }
 

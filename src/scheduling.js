@@ -48,12 +48,12 @@ function bookedMinutes(state,dentistId,date,ignoreId=null) {
 // Eligible candidates are ranked by fewest legitimately booked minutes on the requested date, tied by ascending canonical
 // Dentist ID, so identical state + identical input always produces the identical Dentist regardless of array order.
 // Zero eligible Dentist is an explicit `{ok:false}` result, never an exception and never a fallback to any Dentist.
-export function assignDentist(state,form,now=clinicNow(),ignoreId=null) {
+export function assignDentist(state,form,now=clinicNow(),ignoreId=null,maxDate=null) {
   const empty={ok:false,dentist:null,dentistId:null,candidates:[],reason:'Enter valid appointment details.'}
   if(!isRecord(form)||!form.branchId||!form.serviceId||!form.date||!form.start)return empty
   const pool=dentistsFor(state,form.branchId,form.serviceId)
   const scored=pool
-    .map(dentist=>({dentist,valid:validateAppointment({...form,dentistId:dentist.id},state,ignoreId,now,false).valid,minutes:bookedMinutes(state,dentist.id,form.date,ignoreId)}))
+    .map(dentist=>({dentist,valid:validateAppointment({...form,dentistId:dentist.id},state,ignoreId,now,false,maxDate).valid,minutes:bookedMinutes(state,dentist.id,form.date,ignoreId)}))
     .filter(candidate=>candidate.valid)
     .sort((a,b)=>a.minutes-b.minutes||String(a.dentist.id).localeCompare(String(b.dentist.id)))
   const candidates=scored.map(c=>({dentistId:c.dentist.id,minutes:c.minutes}))

@@ -381,11 +381,17 @@ test('the reserved-field allowlist source guard exists and covers every privileg
   assert.match(reg,/Object\.keys\(form\)\.some\(key=>!ALLOWED_FIELDS\.has\(key\)\)/)
 })
 
-test('registration never implements a password field or a verification flow (only documents that they are absent)',()=>{
-  const reg=read('src/registration.js')+read('src/pages/PatientRegister.jsx')
+test('the old local-only registration.js demo path still implements no password field (kept as a pattern reference; Backend Foundation 1B moved real registration to PatientRegister.jsx)',()=>{
+  const reg=read('src/registration.js')
   assert.doesNotMatch(reg,/type=["']password["']/i)
   assert.doesNotMatch(reg,/passwordHash\s*[:=]/i)
-  assert.doesNotMatch(reg,/verifyEmail|sendVerification|verificationCode|emailVerifiedAt/i)
+})
+
+test('PatientRegister.jsx now collects a real password + confirmation for the real backend (Backend Foundation 1B) and never fabricates local email verification',()=>{
+  const page=read('src/pages/PatientRegister.jsx')
+  assert.match(page,/type=\{showPassword\?'text':'password'\}/,'a real password field is present')
+  assert.match(page,/password_confirmation/,'a confirm-password field is present')
+  assert.doesNotMatch(page,/verifyEmail|sendVerification|verificationCode|emailVerifiedAt/i)
 })
 
 test('the identity model documents PERSON as the shared hub, not a PERSON -> USER -> PATIENT foreign-key chain',()=>{
@@ -395,9 +401,9 @@ test('the identity model documents PERSON as the shared hub, not a PERSON -> USE
   assert.match(doc,/person_id/i)
 })
 
-test('Login guards the new Patient auth props so it still renders with none supplied (SSR compatibility)',()=>{
+test('Login (Backend Foundation 1B: one real email+password form for every role) guards its optional onShowRegister prop so it still renders with none supplied (SSR compatibility)',()=>{
   const login=read('src/layout.jsx')
-  assert.match(login,/selected==='patient'&&onLoginPatientEmail/)
+  assert.match(login,/onShowRegister&&<p className="login-register-link">/)
   assert.match(login,/export function Login/)
   assert.match(read('src/pages/PatientRegister.jsx'),/export function PatientRegister/)
 })

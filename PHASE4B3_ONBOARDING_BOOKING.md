@@ -279,12 +279,25 @@ for a visit with no legitimate invoice.
 
 ### Navigation
 
-Mobile primary navigation is exactly four items: **Home, Book, Visits, Me** (`mobilePatientNav` in `layout.jsx`).
-Desktop/tablet sidebar groups are **Overview** (Home), **Booking** (Book, Visits), **Communication** (Messages),
-**Account** (Payments, Me). Queue is contextual (reached from Home's active-visit card or Visits, not a permanent
-nav item) and Messages/HMO/Prescriptions/Follow-ups/Referral & Loyalty remain fully reachable pages (unchanged in
+Mobile primary navigation is exactly four items: **Home, Book, Visits, Menu** (`mobilePatientNav` in
+`layout.jsx`; "Me" was the original 4th item, replaced by Menu in this checkpoint). Desktop/tablet sidebar groups
+are **Overview** (Home), **Booking** (Book, Visits), **Communication** (Messages), **Account** (Payments, Me).
+Queue is contextual (reached from Home's active-visit card or Visits, not a permanent nav item) and
+Messages/HMO/Prescriptions/Follow-ups/Referral & Loyalty remain fully reachable pages (unchanged in
 `canAccessPage`'s Patient page list, which additionally gained `'me'`) — they are just not primary destinations.
 Referral & Loyalty is never in the primary mobile nav, matching the locked decision.
+
+**Pass 1 mobile UX remediation (post-4B.3C-1 QA correction)**: Patient now has exactly one menu entry point. The
+top-left workspace hamburger (`.mobile-menu` in `Shell`'s topbar, previously shared unconditionally by every
+role) no longer renders when `role==='patient'` — Staff/Dentist/Owner keep it unchanged. The bottom-right Menu
+sheet (`PatientMenuSheet`) was redesigned from a flat secondary-page list into three headed groups: **Bookings**
+(Book Appointment, Visits), **Communications** (Messages), **Account** (Receipts & Payments, My Profile), with
+Logout visually separated at the bottom. HMO, Prescriptions, Follow-ups and Referral & Loyalty are intentionally
+not repeated in the Menu — they stay reachable via My Profile's own "More" section, unchanged. Logout now requires
+explicit confirmation (a real dialog, never `window.confirm`) before the real backend logout call fires; the
+confirm action uses the normal primary action style, not a destructive/red one, since logging out ends a session
+without deleting any Patient data. The Clinic Assistant floating logo FAB is Patient-only: Staff/Dentist/Owner no
+longer render it at all (a real removal from the component tree, not a CSS hide).
 
 ### Book: Smart Find / Manual Booking
 

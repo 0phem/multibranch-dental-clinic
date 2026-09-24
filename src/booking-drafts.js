@@ -10,10 +10,13 @@ import { uid } from './logic.js'
 const fail=message=>({ok:false,message})
 const clean=value=>typeof value==='string'?value.trim():''
 const MODES=['smart','manual']
-const FIELDS=['mode','branchId','serviceId','date','start']
+const PAYMENT_METHODS=['cash','card']
+const FIELDS=['mode','branchId','serviceId','date','start','paymentMethod']
 
 // The only fields a draft save may ever contain. Anything else fails the whole request closed, the same
-// allowlist discipline `registration.js` already established for a public boundary.
+// allowlist discipline `registration.js` already established for a public boundary. paymentMethod is a
+// booking-stage intent only — never a payment confirmation, and never persisted anywhere but this draft
+// until saveAppointment records it on the confirmed appointment.
 function sanitizePatch(patch) {
   if(!isRecord(patch)||Object.keys(patch).some(key=>!FIELDS.includes(key)))return null
   const out={}
@@ -22,6 +25,7 @@ function sanitizePatch(patch) {
   if('serviceId' in patch){if(patch.serviceId!=null&&typeof patch.serviceId!=='string')return null;out.serviceId=patch.serviceId||null}
   if('date' in patch){if(patch.date&&!validDate(patch.date))return null;out.date=patch.date||null}
   if('start' in patch){if(patch.start&&!validTime(patch.start))return null;out.start=patch.start||null}
+  if('paymentMethod' in patch){if(patch.paymentMethod!=null&&!PAYMENT_METHODS.includes(patch.paymentMethod))return null;out.paymentMethod=patch.paymentMethod||null}
   return out
 }
 
@@ -34,7 +38,7 @@ export function bookingDraftActions(run) {
     const sanitized=sanitizePatch(patch)
     if(!sanitized)return fail('Enter valid booking progress.')
     const existing=(state.bookingDrafts||[]).find(d=>d.patientId===session.patientId)
-    const next={mode:existing?.mode??null,branchId:existing?.branchId??null,serviceId:existing?.serviceId??null,date:existing?.date??null,start:existing?.start??null,...sanitized}
+    const next={mode:existing?.mode??null,branchId:existing?.branchId??null,serviceId:existing?.serviceId??null,date:existing?.date??null,start:existing?.start??null,paymentMethod:existing?.paymentMethod??null,...sanitized}
     if(existing&&FIELDS.every(key=>existing[key]===next[key]))return {ok:true,unchanged:true,record:existing}
     const record={id:existing?.id||uid('draft'),patientId:session.patientId,...next,revision:(existing?.revision||0)+1,updatedAt:now.timestamp}
     state.bookingDrafts=existing?(state.bookingDrafts||[]).map(d=>d.id===existing.id?record:d):[record,...(state.bookingDrafts||[])]

@@ -63,7 +63,7 @@ export function overlap(startA, durationA, startB, durationB) {
   return a1 < b2 && b1 < a2
 }
 
-export function validateAppointment(form, state, ignoreId=null, now=clinicNow(), suggest=true) {
+export function validateAppointment(form, state, ignoreId=null, now=clinicNow(), suggest=true, maxDate=null) {
   form=isRecord(form)?form:{}
   const branch=state.branches.find(b=>form.branchId?b.id===form.branchId:b.name===form.branch)
   const dentist=state.dentists.find(d=>d.id===form.dentistId)
@@ -84,6 +84,9 @@ export function validateAppointment(form, state, ignoreId=null, now=clinicNow(),
   const account=state.users?.find(u=>u.id===dentist?.userId)
   check('dentist-active','Dentist currently available',dentist?.available&&account&&(account.accountStatus||account.status)==='Active')
   check('date','Date is not in the past',validDate(form.date)&&form.date>=now.date)
+  // Patient-only booking horizon (threaded in by saveAppointment); null for every other caller (Staff
+  // booking, existing tests) so this check is a no-op unless a caller explicitly opts in.
+  if(maxDate)check('date-horizon',`Date is within the booking horizon (through ${maxDate})`,validDate(form.date)&&form.date<=maxDate)
   check('time','Valid future start time',validTime(form.start)&&(form.date!==now.date||form.start>now.time))
   check('duration','Valid service duration',Number.isFinite(duration)&&duration>0)
   check('branch-hours','Within branch operating hours',branch&&validTime(branch.open)&&validTime(branch.close)&&start>=toMinutes(branch.open)&&end<=toMinutes(branch.close))

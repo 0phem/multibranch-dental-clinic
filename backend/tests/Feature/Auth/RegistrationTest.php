@@ -21,7 +21,7 @@ class RegistrationTest extends TestCase
             'middle_name' => null,
             'last_name' => 'Santos',
             'email' => 'Maria.Santos@Example.Com',
-            'phone' => '09171234567',
+            'phone' => '+639171234567',
             'date_of_birth' => '1995-05-20',
             'password' => 'Passw0rd!',
             'password_confirmation' => 'Passw0rd!',
@@ -35,6 +35,10 @@ class RegistrationTest extends TestCase
         $response->assertCreated();
         $response->assertJsonPath('data.role', 'patient');
         $response->assertJsonPath('data.email', 'maria.santos@example.com');
+        $response->assertJsonPath('data.first_name', 'Maria');
+        $response->assertJsonPath('data.last_name', 'Santos');
+        $response->assertJsonPath('data.phone', '+639171234567');
+        $response->assertJsonPath('data.date_of_birth', '1995-05-20');
         $response->assertJsonMissingPath('data.password');
 
         $person = Person::where('email', 'maria.santos@example.com')->firstOrFail();
@@ -62,7 +66,7 @@ class RegistrationTest extends TestCase
         $this->postJson('/api/register', $this->validPayload())->assertCreated();
 
         $response = $this->postJson('/api/register', $this->validPayload([
-            'phone' => '09179999999',
+            'phone' => '+639179999999',
             'first_name' => 'Different',
             'last_name' => 'Person',
             'date_of_birth' => '1990-01-01',
@@ -71,6 +75,28 @@ class RegistrationTest extends TestCase
         $response->assertStatus(422);
         $response->assertJsonValidationErrors('email');
         $this->assertSame(1, User::count());
+    }
+
+    public static function invalidPhoneProvider(): array
+    {
+        return [
+            '9 digits' => ['+63917123456'],
+            '11 digits' => ['+6391712345678'],
+            'leading zero after +63' => ['+6309171234567'],
+            'non-digit content' => ['+63917abc4567'],
+            'missing country code' => ['09171234567'],
+            'wrong country code' => ['+19171234567'],
+        ];
+    }
+
+    #[DataProvider('invalidPhoneProvider')]
+    public function test_registration_rejects_malformed_phone_numbers(string $phone): void
+    {
+        $response = $this->postJson('/api/register', $this->validPayload(['phone' => $phone]));
+
+        $response->assertStatus(422);
+        $response->assertJsonValidationErrors('phone');
+        $this->assertSame(0, User::count());
     }
 
     public function test_registration_rejects_duplicate_person_by_matching_phone(): void
