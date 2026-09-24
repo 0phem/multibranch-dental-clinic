@@ -1,5 +1,7 @@
 # Multi-Branch Dental Clinic Operation System
 
+Evidence labels, interview boundaries and Patient product rules: see CLAUDE_OPERATING_MODE.md (applies to every agent).
+
 ## Project
 
 React/Vite frontend for a multi-branch dental clinic operations platform.

@@ -6,6 +6,8 @@
 
 Always read and follow `AGENTS.md` before substantive work.
 
+Always read and follow `CLAUDE_OPERATING_MODE.md` before substantive work. It supplements `AGENTS.md` and this file with evidence labels, interview boundaries and Patient product rules, and applies to every agent.
+
 Claude Code and Codex/Astra must follow the same project architecture, business rules, workflow semantics, safeguards, branding rules, phase boundaries, testing discipline, and Git discipline.
 
 If this file appears to conflict with `AGENTS.md`, project documentation, tests, or established behavior, STOP and report the conflict rather than silently choosing one.
@@ -59,6 +61,7 @@ For current UI work, inspect:
 
 - `PHASE4A_UI_FOUNDATION.md`
 - `PHASE4B_PATIENT_EXPERIENCE.md`
+- `PHASE4B3_ONBOARDING_BOOKING.md`
 - `BRANDING_ALIGNMENT.md`
 - `.agents/skills/dentalops-production-ui/SKILL.md`
 
@@ -76,6 +79,8 @@ When deciding behavior, use this order:
 4. Phase safeguards and implementation notes
 5. Existing tested domain behavior
 6. UI presentation
+
+`CLAUDE_OPERATING_MODE.md` supplements `AGENTS.md` and this file with evidence labels, interview boundaries and Patient product rules; read and follow it alongside them. For what the clinic actually said, `docs/process/CLINIC_INTERVIEW_QA.md` (Q1–Q32) is authoritative, and the v1.1 process document under `docs/process/` (when present) is canonical documentation for module names, owners and scope — see `CLAUDE_OPERATING_MODE.md`'s "Three kinds of truth."
 
 Do not change approved business behavior merely because another implementation is easier.
 
