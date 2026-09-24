@@ -140,7 +140,7 @@ function AppBody() {
   let content
   switch(canAccessPage(store.state,store.session,page)?page:'unavailable'){
     case 'dashboard': content=<DashboardPage {...props}/>; break
-    case 'book': content=<BookingPage role={role} store={store} setPage={setPage}/>; break
+    case 'book': content=<BookingPage role={role} store={store} setPage={setPage} context={context}/>; break
     case 'appointments': content=<AppointmentsPage role={role} store={store} setPage={setPage} context={context}/>; break
     case 'schedule': content=<SchedulePage store={store}/>; break
     case 'checkin': content=<CheckInPage store={store}/>; break

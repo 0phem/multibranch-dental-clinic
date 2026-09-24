@@ -43,15 +43,21 @@ separated at the bottom and requiring confirmation before it fires. HMO, Prescri
 Loyalty are intentionally not repeated in the Menu; they remain reachable via My Profile → More. The Clinic
 Assistant floating logo FAB is Patient-only — Staff/Dentist/Owner do not render it.
 
-Open **Book**: it opens with an explicit choice, **Smart Find** or **Manual booking** — never a numbered step.
-Smart Find asks branch (optionally via "Use my location," which honestly falls back to a plain branch picker since
-no branch has coordinates configured yet), then service, then shows several deterministic recommended options
-(date/time/branch/Dentist) at once — describe it plainly as deterministic scheduling, not AI. Manual booking is
-Branch → Service → Date → Time; **there is no Dentist-choice step in either mode** — the Dentist is assigned
-automatically by the same Phase 4B.3B deterministic domain, shown at Review as "Assigned based on service
-availability." Leaving the flow partway through saves a **Booking Draft** (a distinct, non-reserving record —
-BOOKING DRAFT != APPOINTMENT); reopening Book offers to resume it, revalidating the saved branch/service/time
-against current state rather than trusting it silently.
+Open **Book**: it opens with an explicit choice, **Smart Find** (visually primary) or **Manual Appointment** —
+never a numbered step, and Manual stays fully available. Smart Find shows a "Use my location" control only when
+at least one branch has real coordinates (today none do, so it shows the branch list directly rather than a
+button that would only fail); after branch and service, it shows a flat **"Earliest available"** result (never
+"Recommended" — the engine finds real availability, it does not score preference) plus up to two "Other times",
+with "Show more times" opening a date-strip/time-chip explorer for the rest of its own automatic-discovery
+window — describe it plainly as real availability checking, never AI. Manual Appointment is Branch → Service →
+Date → Time → Payment; **there is no Dentist-choice step in either mode** — the Dentist is assigned automatically
+by the same scheduling domain, shown at Review as "Assigned based on service availability." Both modes include a
+Payment step (Cash/Card — a booking-time *preference* only, never a charge; selecting Card shows an inline note
+that it doesn't complete payment and that a genuinely-paid card booking can't later be cancelled online). Leaving
+the flow partway through saves a **Booking Draft** (a distinct, non-reserving record — BOOKING DRAFT !=
+APPOINTMENT); navigating away with a healthy draft shows a non-blocking "Booking saved. Resume anytime." toast,
+and Home offers a one-tap Resume booking when one exists; reopening Book revalidates the saved branch/service/
+time against current state rather than trusting it silently.
 
 Confirm a valid future start. Explain that the booked service provides context; the Dentist later chooses actual
 Performed Procedures. Nothing is charged during booking — there is no payment step, deliberately, since the final
@@ -155,7 +161,7 @@ The clinic already has digital booking, billing and records; paper prescriptions
 
 - Self-registration is a frontend demo account flow: no password, no email verification, no server enforcement — the registration screen states this. A registered account survives reload (it is written to local storage), but the signed-in session itself is not; reopening the app returns to Login and needs signing in again, for every role, not only a newly registered Patient.
 - Second-Patient isolation can now be shown live by registering a second account, in addition to the existing automated-test coverage.
-- The Patient does not check in: Staff records arrival, so the live queue appears only after Staff admits the Patient. There is no Patient self-check-in, online payment, or Patient-started conversation.
+- The Patient does not check in: Staff records arrival, so the live queue appears only after Staff admits the Patient. There is no Patient self-check-in, real online payment (Booking's Cash/Card step only records a preference, never a charge — see the Book walkthrough above), or Patient-started conversation.
 - Seeded operational dates rebase to the current Manila day only for pristine/reset data, so a live-queue demonstration needs today's seeded visit (or a fresh reset).
 - The demo Staff identity cannot open Engagement; use the Owner for the Referral & Loyalty administration steps.
 - Referral & Loyalty is a prototype: no reward benefit, value, expiry or referred-Patient tracking exists, and M25 campaigns send nothing.

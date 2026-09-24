@@ -16,12 +16,20 @@ export function haversineKm(a, b) {
   return 2*R*Math.asin(Math.min(1,Math.sqrt(sa)))
 }
 
+// Whether any Open branch carries real, finite coordinates — the single source of truth for "is a
+// location-based suggestion possible at all," reused by nearestBranch below and by the Smart Find UI to
+// decide whether to offer "Use my location" in the first place (Pass 2): if this is false, the button is
+// never shown rather than being shown and then honestly failing.
+export function hasUsableCoordinates(branches) {
+  return (branches||[]).some(b=>b.status==='Open'&&Number.isFinite(b.latitude)&&Number.isFinite(b.longitude))
+}
+
 // `branches` is the canonical Open-branch list; `coords` is `{lat,lng}` from the browser's geolocation API (or
 // null). Returns the nearest branch that actually carries numeric coordinates, or `null` when no coordinates are
 // available (today, always) or no `coords` was supplied (permission denied/unavailable) — never a guessed branch.
 export function nearestBranch(branches, coords) {
   if(!coords||!Number.isFinite(coords.lat)||!Number.isFinite(coords.lng))return null
+  if(!hasUsableCoordinates(branches))return null
   const eligible=(branches||[]).filter(b=>b.status==='Open'&&Number.isFinite(b.latitude)&&Number.isFinite(b.longitude))
-  if(!eligible.length)return null
   return [...eligible].sort((a,b)=>haversineKm(coords,{lat:a.latitude,lng:a.longitude})-haversineKm(coords,{lat:b.latitude,lng:b.longitude}))[0]
 }

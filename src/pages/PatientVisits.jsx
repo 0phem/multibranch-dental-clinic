@@ -8,7 +8,12 @@ import {
 } from '../patient-view.js'
 import { ChoiceGroup, DefinitionList, RecordCard, Stepper } from '../patient-ui.jsx'
 
-const PAYMENT_LABEL={cash:'Cash — pay at the clinic',card:'Card — payment preference (not yet paid)'}
+// Two honest, separate facts, never one combined string: the Patient's stated preference (cash/card) and
+// the real paymentStatus (always 'unpaid' today — nothing in this codebase can currently set 'paid'; see
+// workflow.js's saveAppointment — but derived from the actual field, not hard-coded, so this stays correct
+// once a real payment-evidence path exists).
+const PAYMENT_METHOD_LABEL={cash:'Cash',card:'Card'}
+const paymentSummaryItems=(method,status)=>method?[{label:'Payment preference',value:PAYMENT_METHOD_LABEL[method]||null},{label:'Payment status',value:status==='paid'?'Paid':'Not paid'}]:[]
 
 const NO_ACCOUNT=<Notice tone="warning" title="We couldn’t confirm your account">Reopen your workspace, or ask the clinic to check your account access.</Notice>
 const STEPS=['Branch','Service','Dentist','Date & time','Review']
@@ -68,7 +73,7 @@ export function PatientScheduler({ store, mode='book', appointment=null, followu
     mode==='reschedule'&&{label:'Current time',value:`${dateLabel(appointment.date)} · ${displayTime(appointment.start)}`},
     {label:'Branch',value:branch?.name},{label:'Service',value:service?.name},{label:'Dentist',value:dentist?.name},{label:'New time',value:when},
     // Payment preference is never re-collected on reschedule — it's preserved unchanged from the original booking.
-    mode==='reschedule'&&{label:'Payment',value:PAYMENT_LABEL[appointment.paymentMethod]||null},
+    ...(mode==='reschedule'?paymentSummaryItems(appointment.paymentMethod,appointment.paymentStatus):[]),
   ].filter(Boolean)
   const RESCHEDULE_LOCK_NOTE='Rescheduling changes only the date and time. Branch, service and Dentist stay the same as your original appointment.'
   const helpers=[
@@ -136,7 +141,7 @@ function AppointmentCard({ a, state, session, highlight, onReschedule, onCancel,
       {/* Blocked-card-paid stays visible on purpose — it explains why, rather than silently disappearing. */}
       {rules.canCancel&&<Button size="sm" variant="danger" onClick={()=>onCancel(a,rules.cancelKind)}>Cancel appointment</Button>}
     </>}>
-    <DefinitionList items={[{label:'Dentist',value:dentistLabel(state,a.dentistId)},{label:'Expected duration',value:a.duration?`${a.duration} minutes`:null},{label:'Reference',value:a.appointmentNo},{label:'Payment',value:PAYMENT_LABEL[a.paymentMethod]||null},{label:'Your note',value:a.notes}]}/>
+    <DefinitionList items={[{label:'Dentist',value:dentistLabel(state,a.dentistId)},{label:'Expected duration',value:a.duration?`${a.duration} minutes`:null},{label:'Reference',value:a.appointmentNo},...paymentSummaryItems(a.paymentMethod,a.paymentStatus),{label:'Your note',value:a.notes}]}/>
     {rules.reason&&<p className="pt-hint">{rules.reason}</p>}
     {detail&&<details className="pt-details"><summary>Visit details</summary>
       <DefinitionList items={[{label:'Procedure',value:detail.procedure},{label:'Services',value:detail.services.join(', ')},{label:'Dentist',value:detail.dentist},

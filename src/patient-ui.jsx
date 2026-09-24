@@ -26,7 +26,10 @@ export function RecordCard({ id, title, subtitle, status, children, actions, hig
 }
 
 // Native radios: arrow keys, group semantics and form behavior come from the browser. An option's optional
-// `icon` reuses the existing Icon set — never a new asset, never emoji mixed in with product icons.
+// `icon` reuses the existing Icon set — never a new asset, never emoji mixed in with product icons. An
+// option's optional `descriptionLabel` (a small micro-label, e.g. "Estimated time") renders above
+// `description`; an optional `meta` line (e.g. a category, or a payment-safety note) renders smaller and
+// more secondary still — both additive, undefined for every option that doesn't supply them.
 export function ChoiceGroup({ legend, hint, name, value, onChange, options, variant='cards', disabled=false, describedBy }) {
   return <fieldset className={`pt-choices ${variant==='slots'?'pt-slots':''}`.trim()} aria-describedby={describedBy}>
     <legend>{legend}</legend>
@@ -34,10 +37,58 @@ export function ChoiceGroup({ legend, hint, name, value, onChange, options, vari
     <div className="pt-choice-grid">{options.map(option=><label className={`pt-choice ${value===option.value?'is-selected':''}`.trim()} key={option.value}>
       <input type="radio" name={name} value={option.value} checked={value===option.value} disabled={disabled||option.disabled} onChange={()=>onChange(option.value)}/>
       {option.icon&&<span className="pt-choice-icon" aria-hidden="true"><Icon name={option.icon} size={20}/></span>}
-      <span className="pt-choice-body"><b>{option.label}</b>{option.description&&<small>{option.description}</small>}</span>
+      <span className="pt-choice-body">
+        <b>{option.label}</b>
+        {option.descriptionLabel&&<em className="pt-choice-desc-label">{option.descriptionLabel}</em>}
+        {option.description&&<small>{option.description}</small>}
+        {option.meta&&<small className="pt-choice-meta">{option.meta}</small>}
+      </span>
       <span className="pt-choice-check" aria-hidden="true"><Icon name="checkin" size={16}/></span>
     </label>)}</div>
   </fieldset>
+}
+
+// A compact, keyboard-accessible date radiogroup for the Smart Find availability explorer (Pass 2). Not
+// built on native radio inputs like ChoiceGroup — this needs an explicit ARIA roving-tabindex radiogroup
+// so Left/Right/Home/End can skip disabled (no-opening) dates, which native radio-group arrow behavior
+// cannot do. Renders only a supplied view model (`days`); computes no dates itself. Returns null when
+// nothing is selectable — an inert radiogroup with no real choice is worse than the caller's own honest
+// empty state.
+export function DateStrip({ legend='Choose a date', days, value, onChange }) {
+  const refs=useRef({})
+  const selectable=days.filter(day=>day.hasOpenings)
+  if(!selectable.length)return null
+  const focusable=value&&selectable.some(day=>day.date===value)?value:selectable[0].date
+  const focus=date=>{
+    const node=refs.current[date]
+    node?.focus()
+    node?.scrollIntoView?.({block:'nearest',inline:'nearest'})
+  }
+  const selectAndFocus=date=>{onChange(date);focus(date)}
+  const moveTo=(fromIndex,direction)=>{
+    let i=fromIndex
+    do{i+=direction}while(days[i]&&!days[i].hasOpenings)
+    if(days[i]&&days[i].hasOpenings)selectAndFocus(days[i].date)
+  }
+  const onKeyDown=(event,index)=>{
+    if(event.key==='ArrowRight'){event.preventDefault();moveTo(index,1)}
+    else if(event.key==='ArrowLeft'){event.preventDefault();moveTo(index,-1)}
+    else if(event.key==='Home'){event.preventDefault();selectAndFocus(selectable[0].date)}
+    else if(event.key==='End'){event.preventDefault();selectAndFocus(selectable[selectable.length-1].date)}
+    else if(event.key===' '||event.key==='Enter'){if(days[index].hasOpenings){event.preventDefault();selectAndFocus(days[index].date)}}
+  }
+  return <div className="pt-date-strip" role="radiogroup" aria-label={legend}>
+    {days.map((day,index)=><button key={day.date} type="button"
+      ref={el=>{refs.current[day.date]=el}}
+      role="radio" aria-checked={value===day.date}
+      aria-label={day.hasOpenings?undefined:`${day.fullLabel||day.date}, no openings`}
+      disabled={!day.hasOpenings}
+      tabIndex={day.date===focusable?0:-1}
+      className={`pt-date-chip ${value===day.date?'is-selected':''}`.trim()}
+      onClick={()=>day.hasOpenings&&selectAndFocus(day.date)}
+      onKeyDown={event=>onKeyDown(event,index)}
+    >{day.label}</button>)}
+  </div>
 }
 
 export function Stepper({ steps, current, reached, onSelect, label='Steps' }) {

@@ -327,7 +327,7 @@ assert.equal(actions.checkInAppointment(liveVisit.record.id).ok,true)
 store={...store,state}
 const liveQueue=render('queue','patient')
 assert.ok(liveQueue.includes('in line')&&liveQueue.includes('aria-live="polite"')&&liveQueue.includes('Estimated wait')&&!liveQueue.includes('PhaseOne'))
-assert.ok(render('dashboard','patient').includes('You’re checked in.')&&render('dashboard','patient').includes('View live queue'))
+assert.ok(render('dashboard','patient').includes('You’re checked in')&&render('dashboard','patient').includes('View live queue'))
 m.setClockSource(()=>new Date('2026-09-19T15:08:00Z'))
 // Messages: participant conversations only, and never a control that promises Patient-started messages.
 const messages=render('messages','patient')
@@ -445,7 +445,7 @@ const newAppt=m.createWorkflowActions({getState:()=>regState,getSession:()=>logi
 assert.equal(newAppt.ok,true,newAppt.message)
 store={...store,state:regState}
 const returningHome=renderPatientAs('dashboard',loginResult.session)
-assert.ok(!returningHome.includes('Need a visit?')&&returningHome.includes('pt-home-quick')&&returningHome.includes('Your next visit.'),'a real appointment naturally returns the Patient to the full returning Home')
+assert.ok(!returningHome.includes('Need a visit?')&&returningHome.includes('pt-home-quick')&&returningHome.includes('Upcoming visit'),'a real appointment naturally returns the Patient to the full returning Home')
 // Login (Backend Foundation 1B): one real email+password form serves every role — backend /api/me determines
 // role, so there is no client role picker. "Create an account" is Patient-only and gated by the optional
 // onShowRegister prop, still rendering unchanged with none supplied (existing brand smoke assertion above

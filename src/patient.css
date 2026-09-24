@@ -35,7 +35,10 @@
 .role-patient .pt-hero-grid { display: grid; gap: var(--space-5); grid-template-columns: minmax(0, 1fr); }
 .role-patient .pt-hero h1 { margin: 0 0 var(--space-2); font-size: var(--font-title); font-weight: var(--weight-heading); letter-spacing: -.025em; line-height: 1.2; color: var(--ink); }
 .role-patient .pt-hero p { margin: 0 0 var(--space-3); color: var(--text); font-size: var(--font-body); }
-.role-patient .pt-hero-card { background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius); padding: var(--space-4); align-self: start; }
+/* Pass 2: one flat hierarchy inside the hero (no nested card) — a strong date/time headline, a quieter
+   service/Dentist line, then a status+branch meta row. */
+.role-patient .pt-hero-sub { margin: 0 0 var(--space-2); color: var(--text); font-size: var(--font-body); }
+.role-patient .pt-hero-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); margin: 0 0 var(--space-3); color: var(--muted); font-size: var(--font-sm); }
 .role-patient .pt-attention { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-3); }
 .role-patient .pt-attention li { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--space-3); align-items: start; padding: var(--space-3) var(--space-4); border: 0; border-radius: var(--radius); background: var(--surface-2); }
 .role-patient .pt-attention li > .btn { grid-column: 2; justify-self: start; }
@@ -69,12 +72,14 @@
 /* The card visual (border/surface/selection) lives on the label itself — .is-selected is computed from real
    form state in JS, so it stays correct regardless of DOM order (icon/body/check are plain flex children,
    not dependent on being an adjacent CSS sibling of the hidden input). */
-.role-patient .pt-choice { position: relative; display: flex; align-items: center; gap: var(--space-3); min-width: 0; min-height: var(--control-height); padding: var(--space-3) var(--space-4); border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--surface); overflow-wrap: anywhere; cursor: pointer; transition: border-color var(--motion-normal) var(--motion-ease), background var(--motion-normal) var(--motion-ease), box-shadow var(--motion-normal) var(--motion-ease); }
+.role-patient .pt-choice { position: relative; display: flex; align-items: center; gap: var(--space-3); min-width: 0; min-height: var(--control-height); padding: var(--space-3) var(--space-4); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); overflow-wrap: anywhere; cursor: pointer; transition: border-color var(--motion-normal) var(--motion-ease), background var(--motion-normal) var(--motion-ease), box-shadow var(--motion-normal) var(--motion-ease); }
 .role-patient .pt-choice input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
 .role-patient .pt-choice-icon { flex: none; display: grid; place-items: center; width: 36px; height: 36px; border-radius: var(--radius-sm); background: var(--surface-2); color: var(--brand-3); transition: background var(--motion-normal) var(--motion-ease), color var(--motion-normal) var(--motion-ease); }
 .role-patient .pt-choice-body { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
 .role-patient .pt-choice-body b { color: var(--ink); font-size: var(--font-md); }
 .role-patient .pt-choice-body small { color: var(--muted); font-size: var(--font-sm); }
+.role-patient .pt-choice-desc-label { font-style: normal; color: var(--muted); font-size: var(--font-xs); text-transform: uppercase; letter-spacing: .04em; margin-top: 2px; }
+.role-patient .pt-choice-meta { color: var(--muted); }
 .role-patient .pt-choice-check { flex: none; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; color: transparent; background: transparent; border: 1.5px solid var(--line-strong); transition: background var(--motion-normal) var(--motion-ease), border-color var(--motion-normal) var(--motion-ease), color var(--motion-normal) var(--motion-ease); }
 .role-patient .pt-choice.is-selected { border-color: var(--brand); background: var(--brand-soft); box-shadow: 0 0 0 1px var(--brand); }
 .role-patient .pt-choice.is-selected .pt-choice-icon { background: var(--surface); color: var(--brand); }
@@ -125,11 +130,16 @@
 
 /* ---- Book entry: Smart Find / Manual Booking mode choice, not an ordinary numbered step ---- */
 .role-patient .pt-book-modes { display: grid; gap: var(--space-4); grid-template-columns: minmax(0, 1fr); }
-.role-patient .pt-book-mode { display: grid; gap: var(--space-2); text-align: left; padding: var(--space-6); border: 1px solid var(--line-strong); border-radius: var(--radius-lg); background: var(--surface); cursor: pointer; transition: border-color var(--motion-normal) var(--motion-ease), background var(--motion-normal) var(--motion-ease), box-shadow var(--motion-normal) var(--motion-ease); }
+.role-patient .pt-book-mode { display: grid; gap: var(--space-2); text-align: left; padding: var(--space-6); border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); cursor: pointer; transition: border-color var(--motion-normal) var(--motion-ease), background var(--motion-normal) var(--motion-ease), box-shadow var(--motion-normal) var(--motion-ease); }
 .role-patient .pt-book-mode:hover { border-color: var(--brand); background: var(--brand-soft); box-shadow: var(--shadow-sm); }
 .role-patient .pt-book-mode:has(:focus-visible) { outline: var(--focus-ring); outline-offset: 2px; }
 @media (prefers-reduced-motion: no-preference) { .role-patient .pt-book-mode:active { transform: scale(.995); } }
+/* Smart Find is the visually primary path (Pass 2) — a brand surface wash and slightly stronger shadow,
+   not a louder border; Manual stays a clear, fully-available secondary, never hidden. */
+.role-patient .pt-book-mode-primary { border-color: var(--brand); background: var(--brand-soft); box-shadow: var(--shadow-sm); }
+.role-patient .pt-book-mode-primary:hover { box-shadow: var(--shadow-md); }
 .role-patient .pt-book-mode-icon { display: grid; place-items: center; width: 40px; height: 40px; border-radius: var(--radius-sm); background: var(--brand-soft); color: var(--brand-3); font-size: 1.125rem; }
+.role-patient .pt-book-mode-primary .pt-book-mode-icon { background: var(--surface); }
 .role-patient .pt-book-mode-eyebrow { color: var(--brand-3); font-size: var(--font-sm); font-weight: var(--weight-strong); }
 .role-patient .pt-book-mode h2 { margin: 0; font-size: var(--font-lg); color: var(--ink); }
 .role-patient .pt-book-mode p { margin: 0; color: var(--muted); font-size: var(--font-md); }
@@ -148,12 +158,30 @@
 
 .role-patient .pt-location-row { display: grid; gap: var(--space-2); justify-items: start; margin-bottom: var(--space-2); }
 
-/* Smart Find recommended schedules: several legitimate options, never a forced single result or a desktop table. */
+/* Smart Find results: a flat "Earliest available"/"Other times" summary, several legitimate options, never
+   a forced single result or a desktop table. */
 .role-patient .pt-book-options { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
-.role-patient .pt-book-options button { width: 100%; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3); min-height: var(--control-height); padding: var(--space-3) var(--space-4); border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--surface); color: var(--ink); cursor: pointer; text-align: left; }
-.role-patient .pt-book-options button:hover { border-color: var(--brand); background: var(--brand-soft); }
+.role-patient .pt-book-options button, .role-patient .pt-book-option { width: 100%; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3); min-height: var(--control-height); padding: var(--space-3) var(--space-4); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); color: var(--ink); cursor: pointer; text-align: left; transition: border-color var(--motion-normal) var(--motion-ease), background var(--motion-normal) var(--motion-ease), box-shadow var(--motion-normal) var(--motion-ease); }
+.role-patient .pt-book-options button:hover, .role-patient .pt-book-option:hover { border-color: var(--brand); background: var(--brand-soft); }
+.role-patient .pt-book-options button:focus-visible, .role-patient .pt-book-option:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
+@media (prefers-reduced-motion: no-preference) { .role-patient .pt-book-options button:active, .role-patient .pt-book-option:active { transform: scale(.99); } }
 .role-patient .pt-book-option-when { display: flex; align-items: baseline; gap: var(--space-2); }
 .role-patient .pt-book-option-meta { color: var(--muted); font-size: var(--font-sm); overflow-wrap: anywhere; }
+.role-patient .pt-smart-results { display: grid; gap: var(--space-4); }
+.role-patient .pt-smart-earliest, .role-patient .pt-smart-other { display: grid; gap: var(--space-2); }
+.role-patient .pt-book-option.is-earliest { border-color: var(--brand); background: var(--brand-soft); box-shadow: var(--shadow-sm); }
+.role-patient .pt-book-option.is-earliest .pt-book-option-when b { font-size: var(--font-lg); }
+.role-patient .pt-smart-explorer { display: grid; gap: var(--space-4); }
+
+/* Smart Find availability explorer: a keyboard radiogroup date strip that owns its own horizontal scroll —
+   the page itself must never overflow because of it. */
+.role-patient .pt-date-strip { display: flex; gap: var(--space-2); overflow-x: auto; padding-bottom: var(--space-2); scroll-snap-type: x proximity; -webkit-overflow-scrolling: touch; }
+.role-patient .pt-date-chip { flex: none; scroll-snap-align: start; min-width: 64px; min-height: 56px; display: grid; place-items: center; padding: var(--space-2) var(--space-3); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); color: var(--ink); font-size: var(--font-sm); font-weight: var(--weight-medium); cursor: pointer; transition: border-color var(--motion-normal) var(--motion-ease), background var(--motion-normal) var(--motion-ease), color var(--motion-normal) var(--motion-ease); }
+.role-patient .pt-date-chip:hover:not(:disabled) { border-color: var(--brand-2); }
+.role-patient .pt-date-chip:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
+.role-patient .pt-date-chip.is-selected { border-color: var(--brand); background: var(--brand); color: #fff; }
+.role-patient .pt-date-chip:disabled { color: var(--muted); background: var(--surface-2); border-color: var(--line); opacity: .55; cursor: not-allowed; }
+@media (prefers-reduced-motion: no-preference) { .role-patient .pt-date-chip:active:not(:disabled) { transform: scale(.97); } }
 
 .role-patient .pt-action-required { display: grid; gap: var(--space-3); }
 
@@ -269,10 +297,12 @@ dialog.patient-logout-dialog { margin: auto 0 0; width: 100%; max-width: none; b
 .role-patient .assistant-fab.is-patient img { width: 28px; height: 28px; border-radius: 50%; }
 /* A booking step's sticky footer is `position: sticky`, so its on-screen position depends on scroll/content height
    and cannot be reliably cleared by a fixed pixel offset. Rather than guess, the FAB simply does not render while
-   a stage footer is present on the page at the widths where that footer becomes sticky — a deterministic
-   guarantee (verified by a browser geometry check) instead of fragile coordinate math. The FAB returns once the
-   Patient reaches Review (no stage footer there) or leaves the booking flow. */
-@media (max-width: 1024px) { .role-patient:has(.pt-stage-footer) .assistant-fab.is-patient { display: none; } }
+   a stage footer is present on the page — a deterministic guarantee (verified by a browser geometry check)
+   instead of fragile coordinate math. The FAB returns once the Patient reaches Review (no stage footer there)
+   or leaves the booking flow. Pass 2: this now applies at every width, not just ≤1024px — the FAB was
+   otherwise left unguarded at 1440px, where it could overlap the new date-strip/time-chip/service-card
+   surfaces during booking. */
+.role-patient:has(.pt-stage-footer) .assistant-fab.is-patient { display: none; }
 @media (max-width: 375px) { .role-patient .assistant-fab.is-patient { width: 44px; height: 44px; right: var(--space-4); } }
 .role-patient .assistant-panel.is-sheet { position: fixed; inset: auto 0 var(--pt-bottom-nav); top: auto; left: 0; right: 0; width: 100%; max-width: none; border-radius: var(--radius-xl) var(--radius-xl) 0 0; max-height: min(72dvh, calc(100dvh - var(--pt-bottom-nav) - var(--space-6))); }
 @media (min-width: 769px) { .role-patient .assistant-panel.is-sheet { inset: auto; left: auto; right: var(--space-5); bottom: calc(var(--pt-bottom-nav) + var(--space-5) + var(--control-height) + var(--space-3)); width: min(380px, calc(100vw - 24px)); border-radius: var(--radius-lg); max-height: calc(100dvh - var(--space-8)); } }

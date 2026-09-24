@@ -84,8 +84,8 @@ export function AppointmentForm({ role, store, prefill={}, ignoreId=null, onSave
   </div>
 }
 
-export function BookingPage({ role, store, setPage }) {
-  if(role==='patient')return <PatientBookingPage store={store} setPage={setPage}/>
+export function BookingPage({ role, store, setPage, context }) {
+  if(role==='patient')return <PatientBookingPage store={store} setPage={setPage} context={context}/>
   return <><PageHeader kicker="Scheduling" title="Create an appointment" text="Staff bookings use the same conflict-prevention and availability rules as patient self-booking."/><Card title="Appointment details"><AppointmentForm role={role} store={store}/></Card></>
 }
 

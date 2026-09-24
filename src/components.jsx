@@ -146,7 +146,7 @@ export function Modal({ open, title, subtitle, onClose, children, wide=false, cl
 }
 
 // Lets a page open shell-owned overlays (for example Notifications) without owning their state.
-export const ShellActionsContext=createContext({openNotifications:null})
+export const ShellActionsContext=createContext({openNotifications:null,registerPatientNavListener:null})
 
 // Accessible replacement for native window.confirm: names the consequence and starts on the safe action.
 export function ConfirmDialog({ open, title, children, confirmLabel='Confirm', cancelLabel='Cancel', onConfirm, onCancel, tone='danger', className='' }) {

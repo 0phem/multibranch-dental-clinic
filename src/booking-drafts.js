@@ -6,7 +6,9 @@ import { uid } from './logic.js'
 // capacity, creates no queue entry and no appointment number, and appears in no Staff/Dentist operational view —
 // it is a Patient-only scratch record of in-progress booking-wizard choices. Exactly one draft per Patient. It
 // never stores a committed Dentist selection (Dentist is always recomputed by the scheduling domain at Review/
-// confirm time), no payment preference and no referral code — those are explicitly out of scope for this pass.
+// confirm time) and no referral code — those stay out of scope. It DOES store a booking-stage payment
+// preference (`paymentMethod`, see FIELDS/PAYMENT_METHODS below) — never a payment confirmation, and never a
+// real charge; saveAppointment alone decides the actual (always-unpaid-at-booking) paymentStatus.
 const fail=message=>({ok:false,message})
 const clean=value=>typeof value==='string'?value.trim():''
 const MODES=['smart','manual']

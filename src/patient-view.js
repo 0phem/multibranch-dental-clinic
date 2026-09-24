@@ -1,5 +1,5 @@
 import { validSession } from './safeguards.js'
-import { clinicNow, clinicDate, maxBookingDate } from './clock.js'
+import { clinicNow, clinicDate, maxBookingDate, addDays } from './clock.js'
 import { inScope, isActiveQueue, isTodayQueue, TERMINAL } from './contracts.js'
 import { availableSlots, dateLabel, nextAppointment, peso, queueWaitEstimate } from './logic.js'
 import { followupDisplayState, linkedTreatment, visibleInvoices, visiblePrescriptions } from './phase2.js'
@@ -251,6 +251,11 @@ export function patientHome(state,session) {
   const today=groups.upcoming.find(a=>a.date===now.date)
   const next=nextAppointment(ctx.patientId,groups.upcoming)
   const conversations=patientConversations(state,session)
+  // A healthy, meaningful, issue-free draft only — never fabricated, never shown when the draft is stale
+  // (draftStatus already revalidates branch/service/slot against current canonical state).
+  const rawDraft=patientBookingDraft(state,session)
+  const draft=rawDraft?draftStatus(state,session,rawDraft):null
+  const resume=draft&&draft.hasProgress&&!draft.issues.length?{mode:draft.mode,branch:draft.branch?.name||null,service:draft.service?.name||null}:null
   return {
     greeting:greetingFor(now.time),firstName:ctx.firstName,
     hero:live?{kind:'queue',queue:live}:today?{kind:'today',appointment:summary(today)}:next?{kind:'next',appointment:summary(next)}:{kind:'none'},
@@ -258,6 +263,7 @@ export function patientHome(state,session) {
     care:patientCare(state,session).slice(0,3).map(c=>({...c,hasVisit:patientAppointments(state,session).some(a=>a.id===c.appointmentId)})),
     hasConversation:conversations.length>0,unreadMessages:conversations.filter(c=>c.unread).length,
     hasLoyalty:!!accountsOf(state,ctx.patientId)?.length,
+    resume,
   }
 }
 
@@ -381,9 +387,63 @@ export function draftStatus(state,session,draft) {
   if(branch&&service&&draft.date&&draft.start){
     // Threading the same 2-month horizon the shared saveAppointment command enforces means a stale,
     // now-out-of-range draft date fails through the exact same path as an unavailable slot — no parallel
-    // horizon check needed here.
-    slotValid=assignDentist(state,{branchId:branch.id,serviceId:service.id,date:draft.date,start:draft.start,patientId:session.patientId},clinicNow(),null,maxBookingDate()).ok
-    if(!slotValid)issues.push(draft.date>maxBookingDate()?'Your saved date is beyond the two-month booking window. Choose another date.':'Your saved time is no longer available. Choose another time.')
+    // horizon check needed here. `now` is captured once and reused for both the real validity check and
+    // the reason-specific message below — the authoritative clinic date, never a fresh browser-local one.
+    const now=clinicNow()
+    slotValid=assignDentist(state,{branchId:branch.id,serviceId:service.id,date:draft.date,start:draft.start,patientId:session.patientId},now,null,maxBookingDate()).ok
+    if(!slotValid){
+      if(draft.date<now.date)issues.push('Your saved date has passed. Choose another date.')
+      else if(draft.date>maxBookingDate())issues.push('Your saved date is beyond the two-month booking window. Choose another date.')
+      else issues.push('Your saved time is no longer available. Choose another time.')
+    }
   }
   return {branch,service,date:draft.date||null,start:draft.start||null,mode:draft.mode||null,slotValid,issues,hasProgress:!!(draft.branchId||draft.serviceId||draft.date||draft.start)}
+}
+
+// ---- Smart Find availability explorer helpers (Pass 2) — pure, render nothing, touch no state ----------
+
+// "Today"/"Tomorrow"/weekday+day-number, always from the two date strings supplied by the caller (the
+// authoritative clinic date and the date being labeled) — never a freshly-constructed, browser-local `new
+// Date()` used to determine "now."
+export function relativeDateLabel(date, today) {
+  if(date===today)return 'Today'
+  if(date===addDays(today,1))return 'Tomorrow'
+  const asDate=new Date(`${date}T00:00:00`)
+  return `${asDate.toLocaleDateString('en-PH',{weekday:'short'})} ${asDate.getDate()}`
+}
+
+// One entry per day across the exhaustive Smart Find search window, `hasOpenings` a proven fact (not a
+// guess) once `results` came from an uncapped/exhaustive findOpenTimes call — every day in the window was
+// genuinely searched, so there is no third "not checked" state to represent.
+export function buildDateStrip(results, startDate, windowDays) {
+  const opened=new Set((results||[]).map(r=>r.date))
+  return Array.from({length:windowDays},(_,offset)=>{
+    const date=addDays(startDate,offset)
+    return {date, label:relativeDateLabel(date,startDate), fullLabel:dateLabel(date), hasOpenings:opened.has(date)}
+  })
+}
+
+// Buckets real findOpenTimes results by time of day; Evening is only ever non-empty when a real slot
+// falls there — the caller decides whether to render an Evening heading at all based on that.
+export function groupSlotsByPeriod(results) {
+  const groups={morning:[],afternoon:[],evening:[]}
+  for(const result of results||[]){
+    const hour=Number(result.start.slice(0,2))
+    if(hour<12)groups.morning.push(result)
+    else if(hour<17)groups.afternoon.push(result)
+    else groups.evening.push(result)
+  }
+  return groups
+}
+
+// What (if anything) to tell the Patient when they navigate away from an in-progress booking. `null` means
+// say nothing (booking confirmed, still on the mode-choice screen, or no meaningful progress at all).
+// Navigation itself is never blocked here — a device-persistence failure doesn't destroy the in-memory
+// draft during ordinary in-app navigation (see workflow.js/store.jsx), so this only ever reports the truth
+// honestly, it never intercepts.
+export function bookingExitOutcome(stage, hasProgress, confirmed, persistenceError) {
+  if(confirmed||stage==='mode'||!hasProgress)return null
+  return persistenceError
+    ? {tone:'warning',message:'Your booking progress couldn’t be saved to this device. It may be lost if you reload or close the app.'}
+    : {tone:'default',message:'Booking saved. Resume anytime.'}
 }

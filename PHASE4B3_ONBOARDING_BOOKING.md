@@ -274,8 +274,10 @@ Visits (`PatientAppointmentsPage`, `src/pages/PatientVisits.jsx`) no longer offe
 header or its empty state — booking belongs exclusively to Book. Each completed visit's "Visit details" disclosure
 now also shows **Payment status** and, only when the linked invoice is `Paid` with evidence-consistent payment
 data (`paymentConsistent`, unchanged safeguard), **Payment method** — sourced from the actual `Payment`
-(`invoiceView(...).receipt.method`), never a payment preference (no such field exists in this pass) and never shown
-for a visit with no legitimate invoice.
+(`invoiceView(...).receipt.method`), and never shown for a visit with no legitimate invoice. Every appointment
+card also shows a separate **Payment preference**/**Payment status** pair (Pass 2 wording — see below), sourced
+from the booking-stage `paymentMethod`/`paymentStatus` fields; these two pairs are deliberately never merged —
+one is the Patient's stated preference at booking time, the other is real invoice/receipt evidence.
 
 ### Navigation
 
@@ -365,11 +367,13 @@ acceptance pass fixed once (the floating assistant covering the sticky booking C
 navigation. For the sticky booking-step footer: a `position: sticky` element's on-screen position depends on
 scroll offset and content height above it, so no fixed pixel offset can reliably clear it in every state (verified
 empirically — an initial pixel-bump attempt still overlapped on a short step before it had scrolled/"stuck"). The
-robust fix is a `:has(.pt-stage-footer)` rule that makes the FAB **not render** (`display: none`) at the widths
-where that footer becomes sticky (≤1024px), returning automatically once the Patient reaches the mode-choice
-screen, Review (no stage footer there) or leaves the booking flow — a deterministic guarantee instead of fragile
-coordinate math, proved by a real browser geometry check (bounding rectangles of the FAB vs. the bottom nav, plus
-confirming the FAB is absent whenever a stage footer is present) rather than visual inspection. Controlled-open
+robust fix is a `:has(.pt-stage-footer)` rule that makes the FAB **not render** (`display: none`) whenever a
+stage footer is present, returning automatically once the Patient reaches the mode-choice screen, Review (no
+stage footer there) or leaves the booking flow — a deterministic guarantee instead of fragile coordinate math,
+proved by a real browser geometry check (bounding rectangles of the FAB vs. the bottom nav, plus confirming the
+FAB is absent whenever a stage footer is present) rather than visual inspection. *(Pass 2 correction: this rule
+was originally capped at ≤1024px, leaving the FAB unguarded at 1440px against the new date-strip/service-card
+surfaces added there — it now applies at every width.)* Controlled-open
 state (unchanged from the docked design): focus enters the panel on open, Escape/close returns focus to the FAB
 (`#clinic-assistant-fab`), and the panel is a full-width bottom sheet ≤768px or a popover near the FAB ≥769px.
 Staff/Dentist/Owner keep their unchanged floating robot-icon button.
@@ -394,9 +398,10 @@ for stylistic purity.
 
 ### Known limitations (4B.3C-1)
 
-- No PayMongo, no booking deposit, no Cash/Card choice at booking — the existing completed-treatment → invoice →
-  payment → receipt flow is unchanged; a fake sixth booking step was deliberately not added to match a visual step
-  count.
+- No PayMongo, no booking deposit — the existing completed-treatment → invoice → payment → receipt flow is
+  unchanged. *(A later, separately-tracked pass added a Cash/Card booking-stage payment **preference** step —
+  see "Pass 2 — Booking experience remediation" below — never a charge, never a substitute for the real invoice
+  flow.)*
 - No OTP, no editable profile field — Me is view-only; real OTP-backed editing is future work.
 - No new referral capture or 10% discount, no loyalty-economics change; M24's existing prototype rules are
   unchanged.
@@ -411,6 +416,84 @@ for stylistic purity.
 - P1–P9 remain `POLICY DECISION REQUIRED` and untouched; the ERD structure is unchanged (Booking Drafts are a
   frontend-local collection only in this pass — no `BOOKING_DRAFTS` table was added to the approved ERD/data
   dictionary).
+
+## Pass 2 — Booking experience remediation
+
+A QA/architecture pass on the booking flow itself (Smart Find, Manual Appointment, Home's next-appointment card,
+Payment), following Pass 1's chrome fixes. No domain rule changed — this section documents both this pass's
+changes and three already-accepted rules that were implemented (and tested) in an earlier pass but never written
+down anywhere, closing that documentation gap now.
+
+**Project/Team Decision (confirmed by the team)** — none of the following three rules are clinic-interview
+claims (`docs/process/CLINIC_INTERVIEW_QA.md` does not address booking horizons, online-cancellation timing, or
+online-payment policy at all — see `CLAUDE_OPERATING_MODE.md`'s interview-boundaries section). None of them
+resolve the separate, still-open "Patient cancellation cutoff" (advance-notice window) question in `CLAUDE.md`'s
+Unresolved Policies list — they are narrower, already-shipped rules about *when relative to the appointment's own
+start time* an online action is allowed, not an advance-notice/grace-period policy:
+- **Patient booking/reschedule eligibility horizon**: today + 2 calendar months, inclusive (`maxBookingDate()`,
+  `src/clock.js`; enforced in `src/logic.js`'s `validateAppointment` and threaded through `saveAppointment`).
+- **A genuinely card-paid appointment**: Patient online cancellation is blocked (`src/workflow.js`'s
+  `cancelAppointment`) — currently unreachable in this frontend-only build (nothing here can yet set
+  `paymentStatus:'paid'`), ready for a real payment-evidence path.
+- **Cash, or card-but-unpaid, appointment**: Patient online cancellation is allowed only before the appointment's
+  scheduled start.
+
+**Smart Find window vs. Patient horizon** — two distinct, separately-sourced concepts, never conflated:
+`FIND_TIME_DEFAULT_WINDOW_DAYS` (`src/scheduling.js`, currently 14 days) is Smart Find's own automatic-discovery
+window; the 2-month horizon above is the Patient's overall eligibility ceiling. Smart Find's UI only ever claims
+to have searched its own window; Manual Appointment is the explicit, stated path to any eligible date beyond it
+and within the 2-month horizon.
+
+**Smart Find — one coherent view, exhaustive by construction.** The results step now shows a flat "Earliest
+available" (never "Recommended" — the engine finds availability, it does not score preference) + up to two
+"Other times", with "Show more times" transitioning into a date-strip + Morning/Afternoon/Evening-if-real
+time-chip explorer — the two views are never both rendered for the same results. The date strip's underlying
+`findOpenTimes` call uses `limit: Infinity` (not a raised-but-still-finite cap): since the function's own loop
+only stops early when the *result count* cap is hit, an unbounded limit guarantees every day in the window is
+genuinely searched — a day's "no openings" state is a proven fact, never an artifact of a truncated result list.
+No second scheduling engine was introduced anywhere in this pass.
+
+**Location** — the "Use my location" control (`LocationBranchStep`) now renders only when at least one Open
+branch actually carries real, finite coordinates (`hasUsableCoordinates`, `src/geo.js`) — today that's still
+always false (no coordinates seeded), so the branch list now shows directly with no misleading button/fallback
+text ever shown for a request that was never honestly attempted. Once real coordinates exist, the existing
+click-triggered, never-on-mount geolocation flow is unchanged.
+
+**Service selection** — cards show name, "Estimated time: About {duration} min" and category as a small
+secondary label; both `duration` and `category` are **project/canonical scheduling configuration**, not
+clinic-interview facts (the interview supplies prices for only 3 named services and explicitly does not supply
+other services' fees or durations) — documentation and UI copy never imply the clinic confirmed these values. No
+price is shown, no description is fabricated (no such field exists on the data model).
+
+**Payment** — the Card option's booking-time safety note ("Selecting Card does not complete payment. Once a card
+payment is successfully completed, this appointment can no longer be cancelled online.") is now inline and
+always visible before the Patient selects Card, not a modal. Accurate framing: the `saveAppointment` domain
+command (a frontend-only command — Backend Foundation 1A/1B covers auth only, not appointments) ignores any
+client-supplied `paymentStatus` and always normalizes a new booking to `'unpaid'`; there is no real card gateway
+or backend payment-evidence path yet. Visits now shows two separate, honestly-sourced facts — **Payment
+preference** (the Patient's stated cash/card choice) and **Payment status** — never merged into one string, and
+never confused with the separate, invoice-evidence-only **Payment method**/**Payment status** pair already shown
+for a completed, actually-paid visit.
+
+**Draft navigation** — a healthy, meaningful in-progress draft is already safely committed to in-memory
+application state the moment it's saved (`store.jsx`'s `commit`, synchronous, before any device-persistence write
+is even attempted), and that in-memory state survives ordinary in-app Patient navigation (page changes never
+unmount the state provider). Given that, in-app navigation with a healthy draft is never blocked — the Patient
+sees a plain "Booking saved. Resume anytime." toast and continues. A real device-persistence failure gets an
+equally honest, still non-blocking warning ("...couldn't be saved to this device. It may be lost if you reload or
+close the app.") — real device/tab loss is the only actual risk, and the toast says so rather than pretending to
+solve it. Neither toast fires for logout or session/auth loss (a new `ShellActionsContext` seam,
+`registerPatientNavListener`, is only ever invoked from real in-app page-navigation call sites — logout and
+session teardown never go through them).
+
+**Resume booking** — Patient Home now surfaces a compact "Resume booking" row (reusing the existing
+`DraftBanner` Notice+Button visual pattern) whenever a healthy, issue-free draft exists, positioned after the
+hero so it never competes visually with an active/upcoming appointment. Tapping it auto-resumes in one step
+(`setPage('book',{resume:true})`) instead of landing on the mode-choice screen a second time.
+
+**Home** — the next-appointment hero no longer repeats the same fields in a prose sentence and a separate nested
+card; both the `'queue'` and upcoming-appointment states are now one flat hierarchy (context label → strong
+date/time → service/Dentist → status/branch → actions). `patientHome`'s underlying priority logic is unchanged.
 
 ## Verification
 

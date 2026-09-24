@@ -163,7 +163,16 @@ export function Shell({ role, page, setPage, onLogout, activeBranch, setActiveBr
   const unread=visibleNotifications(store.state,session).filter(n=>!n.read).length
   const groups=navGroups(role).map(([title,items])=>[title,items.filter(([key])=>canAccessPage(store.state,session,key))]).filter(([,items])=>items.length)
   const unreadMessages=role==='patient'?patientConversations(store.state,session).filter(c=>c.unread).length:0
-  const shellActions=React.useMemo(()=>({openNotifications:()=>setNotificationsOpen(true)}),[])
+  // Lets a booking page observe an in-app Patient navigation (Pass 2: an honest "booking saved"/"couldn't
+  // be saved" toast) without Shell owning that page's state, and without ever blocking navigation itself —
+  // the listener is purely notified, its return value is never consulted. Logout goes through the
+  // separate `onLogout` prop below, never through this path, so it can never trigger the listener.
+  const patientNavListenerRef=React.useRef(null)
+  const shellActions=React.useMemo(()=>({
+    openNotifications:()=>setNotificationsOpen(true),
+    registerPatientNavListener:fn=>{patientNavListenerRef.current=fn},
+  }),[])
+  const notifyingSetPage=(key,record)=>{patientNavListenerRef.current?.(key,record);setPage(key,record)}
   const firstPage=React.useRef(true)
   // Patient page changes start at the top with focus on the main landmark. Deep-linked records focus themselves afterwards.
   useLayoutEffectSafe(()=>{
@@ -176,7 +185,7 @@ export function Shell({ role, page, setPage, onLogout, activeBranch, setActiveBr
   // nav destination — Profile and everything else (Messages, Payments, HMO, Prescriptions, Follow-ups,
   // Referral & Loyalty) live in the Menu sheet (PatientMenuSheet), reached through the 4th slot below.
   const mobilePatientNav=[['dashboard','Home'],['book','Book'],['appointments','Visits']].filter(([key])=>canAccessPage(store.state,session,key))
-  const selectPage=key=>{if(canAccessPage(store.state,session,key))setPage(key);setMobileOpen(false)}
+  const selectPage=key=>{if(canAccessPage(store.state,session,key))notifyingSetPage(key);setMobileOpen(false)}
   React.useEffect(()=>{
     const media=window.matchMedia('(min-width: 1025px)')
     const close=()=>{if(media.matches)setMobileOpen(false)}
@@ -202,7 +211,7 @@ export function Shell({ role, page, setPage, onLogout, activeBranch, setActiveBr
       {mobilePatientNav.map(([key,label])=><button key={key} aria-current={page===key?'page':undefined} className={page===key?'active':''} onClick={()=>selectPage(key)}><Icon name={NAV_ICONS[key]||'home'} size={20}/><span>{label}</span>{key==='messages'&&unreadMessages>0&&<span className="pt-nav-badge"><span aria-hidden="true">{unreadMessages}</span><span className="sr-only">, {unreadMessages} unread</span></span>}</button>)}
       <button type="button" aria-haspopup="dialog" aria-expanded={patientMenuOpen} onClick={()=>setPatientMenuOpen(true)}><Icon name="menu" size={20}/><span>Menu</span>{unreadMessages>0&&<span className="pt-nav-badge"><span aria-hidden="true">{unreadMessages}</span><span className="sr-only">, {unreadMessages} unread</span></span>}</button>
     </nav>}
-    {role==='patient'&&<PatientMenuSheet open={patientMenuOpen} onClose={()=>setPatientMenuOpen(false)} setPage={setPage} name={name} unreadMessages={unreadMessages} onRequestLogout={()=>setLogoutConfirmOpen(true)}/>}
+    {role==='patient'&&<PatientMenuSheet open={patientMenuOpen} onClose={()=>setPatientMenuOpen(false)} setPage={notifyingSetPage} name={name} unreadMessages={unreadMessages} onRequestLogout={()=>setLogoutConfirmOpen(true)}/>}
     <Modal open={resetOpen} title="Reset demo workspace?" subtitle="This clears local demo changes for every role in this browser and restores the sample records." onClose={()=>setResetOpen(false)}><div className="row-actions"><Button variant="ghost" onClick={()=>setResetOpen(false)}>Keep my changes</Button><Button variant="danger" onClick={()=>{setResetOpen(false);resetDemo()}}>Reset demo data</Button></div></Modal>
     {role==='patient'&&<ConfirmDialog open={logoutConfirmOpen} title="Log out?" tone="default" confirmLabel="Log out" cancelLabel="Cancel" className="patient-logout-dialog" onConfirm={()=>{setLogoutConfirmOpen(false);onLogout()}} onCancel={()=>setLogoutConfirmOpen(false)}>
       Are you sure you want to log out of your account?

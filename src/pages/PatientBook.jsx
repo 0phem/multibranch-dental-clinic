@@ -1,11 +1,11 @@
-import React, { useEffect, useId, useRef, useState } from 'react'
-import { Button, Field, Notice, PageHeader } from '../components.jsx'
+import React, { useContext, useEffect, useId, useMemo, useRef, useState } from 'react'
+import { Button, Field, Notice, PageHeader, ShellActionsContext } from '../components.jsx'
 import { clinicDate, maxBookingDate } from '../clock.js'
 import { dateLabel, displayTime, uid } from '../logic.js'
-import { assignDentist, findOpenTimes } from '../scheduling.js'
-import { nearestBranch } from '../geo.js'
-import { dentistLabel, draftStatus, patientBookingDraft, patientContext, servicesAt } from '../patient-view.js'
-import { ChoiceGroup, DefinitionList } from '../patient-ui.jsx'
+import { assignDentist, findOpenTimes, FIND_TIME_DEFAULT_WINDOW_DAYS } from '../scheduling.js'
+import { hasUsableCoordinates, nearestBranch } from '../geo.js'
+import { bookingExitOutcome, buildDateStrip, dentistLabel, draftStatus, groupSlotsByPeriod, patientBookingDraft, patientContext, servicesAt } from '../patient-view.js'
+import { ChoiceGroup, DateStrip, DefinitionList } from '../patient-ui.jsx'
 
 // Phase 4B.3C-1 Patient booking entry, extended with a booking-stage Payment step and the 2-calendar-month
 // horizon. Smart Find / Manual booking share one explicit choice; both use only the Phase 4B.3B scheduling
@@ -46,17 +46,17 @@ function BookProgress({ mode, stage }) {
 
 function ModeChoice({ onChoose }) {
   return <div className="pt-book-modes" role="group" aria-label="How would you like to book?">
-    <button type="button" className="pt-book-mode" onClick={()=>onChoose('smart')}>
+    <button type="button" className="pt-book-mode pt-book-mode-primary" onClick={()=>onChoose('smart')}>
       <span className="pt-book-mode-icon" aria-hidden="true">✦</span>
       <span className="pt-book-mode-eyebrow">Smart Find</span>
-      <h2>Show me the earliest valid options</h2>
-      <p>Deterministic scheduling — we check real availability and assign a Dentist automatically. Not AI.</p>
+      <h2>Find the earliest available visit</h2>
+      <p>We check real Dentist availability and open times automatically.</p>
     </button>
     <button type="button" className="pt-book-mode" onClick={()=>onChoose('manual')}>
       <span className="pt-book-mode-icon" aria-hidden="true">▤</span>
       <span className="pt-book-mode-eyebrow">Manual Appointment</span>
-      <h2>Choose my branch, service, date and time</h2>
-      <p>Pick exactly what works for you. A Dentist is still assigned automatically based on availability.</p>
+      <h2>Choose the branch, service, date and time yourself.</h2>
+      <p>A Dentist is still assigned automatically based on availability.</p>
     </button>
   </div>
 }
@@ -82,16 +82,17 @@ function LocationBranchStep({ state, branchId, onPick, onContinue, headingRef })
     )
   }
   const branch=openBranches.find(b=>b.id===branchId)
+  const locatable=hasUsableCoordinates(openBranches)
   return <>
     <StageHeader eyebrow="Smart Find · Step 1 of 4" title="Which branch works for you?" headingRef={headingRef}
-      help="You can use your location to suggest the nearest branch, or choose one yourself. Nothing is collected unless you choose to share it."/>
-    <div className="pt-location-row">
+      help={locatable?"You can use your location to suggest the nearest branch, or choose one yourself. Nothing is collected unless you choose to share it.":undefined}/>
+    {locatable&&<div className="pt-location-row">
       <Button variant="soft" icon="building" onClick={useLocation} disabled={locationState==='requesting'}>{locationState==='requesting'?'Finding your location…':'Use my location'}</Button>
       {locationState==='unavailable'&&<p className="pt-hint">We can’t determine your nearest branch right now — choose one below.</p>}
       {locationState==='denied'&&<p className="pt-hint">Location wasn’t shared — choose a branch below.</p>}
       {locationState==='unsupported'&&<p className="pt-hint">Your browser doesn’t support location — choose a branch below.</p>}
       {locationState==='found'&&branch&&<p className="pt-hint">Nearest branch: <b>{branch.name}</b>. You can change this below.</p>}
-    </div>
+    </div>}
     <ChoiceGroup legend="Branch" name="smart-branch" value={branchId} onChange={onPick}
       options={openBranches.map(b=>({value:b.id,label:b.name,description:`${b.city} • ${displayTime(b.open)}–${displayTime(b.close)}`}))}/>
     <div className="pt-stage-footer"><span/><Button icon="arrow" onClick={onContinue} disabled={!branchId}>Continue</Button></div>
@@ -103,25 +104,65 @@ function ServiceStep({ state, branchId, serviceId, onPick, onBack, onContinue, h
   return <>
     <StageHeader eyebrow={stepLabel} title="What can we help you with?" headingRef={headingRef}/>
     {services.length?<ChoiceGroup legend="Service" name="book-service" value={serviceId} onChange={onPick}
-      options={services.map(s=>({value:s.id,label:s.name,description:`${s.category} • about ${s.duration} min`}))}/>
+      options={services.map(s=>({value:s.id,label:s.name,descriptionLabel:'Estimated time',description:`About ${s.duration} min`,meta:s.category}))}/>
       :<Notice tone="warning" title="No services available">No services are currently available at this branch. Go back and choose another branch.</Notice>}
     <div className="pt-stage-footer"><Button variant="ghost" onClick={onBack}>Back</Button><Button icon="arrow" onClick={onContinue} disabled={!serviceId||!services.some(s=>s.id===serviceId)}>Continue</Button></div>
   </>
 }
 
-// Smart Find: several deterministic options across the technical search window, not one forced result.
+// Smart Find: one coherent view at a time — a flat "Earliest available"/"Other times" summary first, or
+// (after "Show more times") the full date-strip/time-chip explorer, never both simultaneously. Both views
+// read from the SAME exhaustive findOpenTimes call below — no second fetch, no second scheduling engine.
 function SmartScheduleStep({ state, session, form, onPick, onBack, headingRef }) {
-  const results=findOpenTimes(state,{branchId:form.branchId,serviceId:form.serviceId,patientId:session.patientId},{})
+  const [exploring,setExploring]=useState(false)
+  const [selectedDate,setSelectedDate]=useState(null)
   const branch=state.branches.find(b=>b.id===form.branchId)
+  const today=clinicDate()
+  // limit:Infinity makes this a genuinely exhaustive search of the whole authoritative window (proven by
+  // findOpenTimes's own loop condition, `offset<windowDays && results.length<limit` — with limit=Infinity
+  // the result-count check can never cut the day loop short) — every day is really searched, so a day's
+  // "no openings" state is a proven fact, never a guess from a truncated result list.
+  const results=useMemo(
+    ()=>findOpenTimes(state,{branchId:form.branchId,serviceId:form.serviceId,patientId:session.patientId},{limit:Number.POSITIVE_INFINITY}),
+    [state,form.branchId,form.serviceId,session.patientId,today],
+  )
+  const strip=useMemo(()=>buildDateStrip(results,today,FIND_TIME_DEFAULT_WINDOW_DAYS),[results,today])
+  const activeDate=selectedDate||results[0]?.date||null
+  const dayResults=activeDate?results.filter(r=>r.date===activeDate):[]
+  const grouped=groupSlotsByPeriod(dayResults)
+  const enterExplorer=()=>{setSelectedDate(results[0]?.date||null);setExploring(true)}
+  const timeGroups=[['Morning',grouped.morning],['Afternoon',grouped.afternoon],['Evening',grouped.evening]]
   return <>
-    <StageHeader eyebrow="Smart Find · Step 3 of 4" title="Here are the earliest valid options" headingRef={headingRef}
-      help="Every option already passed the clinic’s availability checks, including a Dentist who is free at that time."/>
-    {results.length?<ul className="pt-book-options">{results.map(option=><li key={`${option.date}-${option.start}`}>
-      <button type="button" onClick={()=>onPick(option)}>
-        <span className="pt-book-option-when"><b>{dateLabel(option.date)}</b><span>{displayTime(option.start)}</span></span>
-        <span className="pt-book-option-meta">{branch?.name} · {option.dentist}</span>
-      </button>
-    </li>)}</ul>:<Notice tone="warning" title="No open times right now">No legitimate open times were found for this service at this branch in the next two weeks. Go back and try another branch or service.</Notice>}
+    <StageHeader eyebrow="Smart Find · Step 3 of 4" title="Real availability, found for you" headingRef={headingRef}
+      help={`We checked ${branch?.name||'this branch'} for real Dentist availability across the next ${FIND_TIME_DEFAULT_WINDOW_DAYS} days.`}/>
+    {!results.length&&<Notice tone="warning" title="No open times right now">{`No legitimate open times were found for this service at this branch in the next ${FIND_TIME_DEFAULT_WINDOW_DAYS} days. Go back and try another branch or service.`}</Notice>}
+    {!!results.length&&!exploring&&<div className="pt-smart-results">
+      <div className="pt-smart-earliest">
+        <span className="pt-eyebrow">Earliest available</span>
+        <button type="button" className="pt-book-option is-earliest" onClick={()=>onPick(results[0])}>
+          <span className="pt-book-option-when"><b>{dateLabel(results[0].date)}</b><span>{displayTime(results[0].start)}</span></span>
+          <span className="pt-book-option-meta">{branch?.name} · Automatically matched to an available Dentist</span>
+        </button>
+      </div>
+      {results.length>1&&<div className="pt-smart-other">
+        <span className="pt-eyebrow">Other times</span>
+        <ul className="pt-book-options">{results.slice(1,3).map(option=><li key={`${option.date}-${option.start}`}>
+          <button type="button" onClick={()=>onPick(option)}>
+            <span className="pt-book-option-when"><b>{dateLabel(option.date)}</b><span>{displayTime(option.start)}</span></span>
+            <span className="pt-book-option-meta">{branch?.name} · {option.dentist}</span>
+          </button>
+        </li>)}</ul>
+      </div>}
+      {results.length>3&&<div className="row-actions top-gap"><Button variant="soft" onClick={enterExplorer}>Show more times</Button></div>}
+    </div>}
+    {!!results.length&&exploring&&<div className="pt-smart-explorer">
+      <DateStrip days={strip} value={activeDate} onChange={setSelectedDate}/>
+      {dayResults.length?timeGroups.map(([label,slots])=>slots.length>0&&<ChoiceGroup key={label} legend={label} name="smart-time" variant="slots"
+        value={form.date===activeDate?form.start:''}
+        onChange={value=>onPick(dayResults.find(r=>r.start===value))}
+        options={slots.map(r=>({value:r.start,label:displayTime(r.start)}))}/>)
+        :<Notice tone="warning" title="No open times on this date">Choose a different date above, or use Manual Appointment to look beyond this window.</Notice>}
+    </div>}
     <div className="pt-stage-footer"><Button variant="ghost" onClick={onBack}>Back</Button><span/></div>
   </>
 }
@@ -137,12 +178,14 @@ function DateStep({ form, onChange, onBack, onContinue, headingRef }) {
 
 function TimeStep({ state, session, form, onPick, onBack, headingRef }) {
   const results=findOpenTimes(state,{branchId:form.branchId,serviceId:form.serviceId,patientId:session.patientId},{startDate:form.date,windowDays:1,limit:50})
+  const grouped=groupSlotsByPeriod(results)
+  const timeGroups=[['Morning',grouped.morning],['Afternoon',grouped.afternoon],['Evening',grouped.evening]]
   return <>
     <StageHeader eyebrow="Manual booking · Step 4 of 5" title={`Available times on ${dateLabel(form.date)}`} headingRef={headingRef}
       help="Only times that pass the clinic’s availability checks are shown. A Dentist is assigned automatically."/>
-    {results.length?<ChoiceGroup legend={`Available times on ${dateLabel(form.date)}`} name="book-time" variant="slots" value={form.start}
+    {results.length?timeGroups.map(([label,slots])=>slots.length>0&&<ChoiceGroup key={label} legend={label} name="book-time" variant="slots" value={form.start}
       onChange={value=>onPick(results.find(r=>r.start===value))}
-      options={results.map(r=>({value:r.start,label:displayTime(r.start)}))}/>
+      options={slots.map(r=>({value:r.start,label:displayTime(r.start)}))}/>)
       :<Notice tone="warning" title="No open times">There are no open times on {dateLabel(form.date)}. Try another date.</Notice>}
     <div className="pt-stage-footer"><Button variant="ghost" onClick={onBack}>Back</Button><span/></div>
   </>
@@ -150,7 +193,7 @@ function TimeStep({ state, session, form, onPick, onBack, headingRef }) {
 
 const PAYMENT_OPTIONS=[
   {value:'cash',icon:'wallet',label:'Cash',description:'Pay at the clinic.'},
-  {value:'card',icon:'receipt',label:'Card',description:'Card payment preference — this does not mean payment has been completed yet.'},
+  {value:'card',icon:'receipt',label:'Card',description:'Card payment preference.',meta:'Selecting Card does not complete payment. Once a card payment is successfully completed, this appointment can no longer be cancelled online.'},
 ]
 // Booking-stage payment intent only — never a charge. paymentStatus is always set to 'unpaid' by the shared
 // saveAppointment command itself, regardless of which method is chosen here; nothing on this screen can ever
@@ -190,11 +233,13 @@ function ReviewStep({ state, mode, form, assignment, notes, onNotes, onBack, onC
   </>
 }
 
-export function PatientBookingPage({ store, setPage }) {
+export function PatientBookingPage({ store, setPage, context }) {
   const { state, actions, toast }=store
   const session=store.session
+  const shellActions=useContext(ShellActionsContext)
   const headingRef=useRef(null), moved=useRef(false)
   const commandId=useRef(uid('booking'))
+  const autoResumedRef=useRef(false)
   const [mode,setMode]=useState(null) // null | 'smart' | 'manual'
   const [stage,setStage]=useState('mode')
   const [form,setForm]=useState(emptyForm)
@@ -204,10 +249,10 @@ export function PatientBookingPage({ store, setPage }) {
   const [confirmed,setConfirmed]=useState(null)
   const [resumeDismissed,setResumeDismissed]=useState(false)
   useEffect(()=>{if(moved.current)headingRef.current?.focus();moved.current=true},[stage,confirmed])
-  if(!patientContext(state,session))return NO_ACCOUNT
 
   const draft=patientBookingDraft(state,session)
   const status=draft?draftStatus(state,session,draft):null
+  const persistenceError=store.persistenceErrors?.bookingDrafts||null
   const save=patch=>actions.saveBookingDraft(patch,draftCommandId())
   const change=(key,value)=>setForm(previous=>({...previous,[key]:value}))
 
@@ -232,6 +277,34 @@ export function PatientBookingPage({ store, setPage }) {
     setResumeDismissed(true)
   }
   const discardDraft=()=>{actions.discardBookingDraft(uid('draft-discard'));setResumeDismissed(true)}
+
+  // Lets Shell observe an in-app Patient navigation honestly — never blocks it. Logout and session/auth
+  // loss never call this listener at all (neither goes through setPage/selectPage), so no toast fires for
+  // them; a healthy draft gets the saved-toast, a real device-persistence failure gets an honest warning,
+  // and either way navigation always proceeds (see patient-view.js's bookingExitOutcome).
+  useEffect(()=>{
+    if(!shellActions?.registerPatientNavListener)return undefined
+    const listener=()=>{
+      const outcome=bookingExitOutcome(stage,!!status?.hasProgress,!!confirmed,persistenceError)
+      if(outcome)toast(outcome.message,outcome.tone)
+    }
+    shellActions.registerPatientNavListener(listener)
+    return ()=>shellActions.registerPatientNavListener(null)
+  },[shellActions,stage,status?.hasProgress,confirmed,persistenceError])
+
+  // A one-tap "Resume booking" from Home (setPage('book',{resume:true})) auto-resumes once, instead of
+  // landing on the Mode-choice screen and requiring a second manual click on DraftBanner. Guarded on the
+  // same `hasProgress` fact Home's own Resume-booking surface uses — a draft with only a branch chosen
+  // (no service yet) is still meaningfully resumable; requiring branch AND service here would silently
+  // fail to resume exactly the drafts Home just told the Patient it could resume.
+  useEffect(()=>{
+    if(context?.resume&&!autoResumedRef.current&&status?.hasProgress){
+      autoResumedRef.current=true
+      resumeDraft()
+    }
+  },[context?.resume,status?.hasProgress])
+
+  if(!patientContext(state,session))return NO_ACCOUNT
 
   // An upstream choice always invalidates every downstream one, in the persisted draft as well as local
   // state — mode → branch/service/date/time/payment; branch → service/date/time/payment; service →
