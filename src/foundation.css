@@ -260,13 +260,13 @@ dialog.notification-dialog { margin: var(--space-3) var(--space-3) auto auto; wi
 .login-divider { display: flex; align-items: center; gap: var(--space-3); margin: var(--space-4) 0 var(--space-3); color: var(--muted); font-size: var(--font-xs); }
 .login-divider::before, .login-divider::after { content: ''; flex: 1; height: 1px; background: var(--line); }
 .login-register-link { margin: var(--space-3) 0 0; font-size: var(--font-sm); color: var(--muted); }
-.show-password { display: flex; align-items: center; gap: var(--space-2); font-size: var(--font-sm); color: var(--muted); margin: calc(var(--space-2) * -1) 0 var(--space-4); }
+.show-password { display: flex; align-items: center; gap: var(--space-2); font-size: var(--font-sm); color: var(--muted); margin: var(--space-2) 0 var(--space-4); }
 
 /* One cohesive grouped control (country code + local number), not two floating fields. Only one country is
    enabled today, but the select is a real, focusable control so a second country is additive later. */
 .phone-field { display: flex; align-items: stretch; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--surface); overflow: hidden; }
 .phone-field:focus-within { outline: var(--focus-ring); outline-offset: 1px; }
-.phone-field-code { flex: none; max-width: 148px; min-width: 0; border: 0; border-right: 1px solid var(--line); border-radius: 0; background: var(--surface-2); color: var(--text); min-height: var(--control-height); padding: 0 var(--space-2); font-size: var(--font-md); }
+.phone-field-code { flex: 0 0 132px; width: 132px; max-width: 132px; min-width: 0; border: 0; border-right: 1px solid var(--line); border-radius: 0; background: var(--surface-2); color: var(--text); min-height: var(--control-height); padding: 0 var(--space-2); font-size: var(--font-md); }
 .phone-field-number { flex: 1; min-width: 0; border: 0; border-radius: 0; background: transparent; min-height: var(--control-height); padding: var(--space-2) var(--space-3); font-size: var(--font-md); letter-spacing: .02em; }
 .phone-field-code:focus-visible, .phone-field-number:focus-visible { outline: none; }
 .login-visual { display: flex; background: #183d65; padding: clamp(32px, 5vw, 80px); gap: var(--space-6); }
