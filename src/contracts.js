@@ -66,7 +66,7 @@ export function encounterContext(entry) {
 
 // Display projections must not become duplicate sources of identity or branch data.
 export function persistableCollection(key, rows) {
-  const identity=['name','firstName','middleName','lastName','email','phone','dob','sex','address']
+  const identity=['name','firstName','lastName','email','phone','dob','sex','address']
   const omitted={
     hmo:['branch','provider','pendingHours','missing','eligibility'],conversations:['unreadBy','assignedTo','assignedRole'],inquiries:['assigned'],appointments:['branch','service'],queue:['branch'],treatments:['branch'],invoices:['branch'],
     patients:[...identity,'preferredBranch'],dentists:[...identity,'branches','assistant'],
@@ -89,7 +89,7 @@ export function normalizeClinicState(state) {
   const identity=record=>{
     const person=state.persons.find(p=>p.id===record.personId)
     const {id,...fields}=person||{}
-    return {...record,...fields,name:person?[person.firstName,person.middleName,person.lastName].filter(Boolean).join(' '):record.name||record.id}
+    return {...record,...fields,name:person?[person.firstName,person.lastName].filter(Boolean).join(' '):record.name||record.id}
   }
   const withBranch=record=>{
     const branchId=branchIdFor(record,branches)

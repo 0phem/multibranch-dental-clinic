@@ -19,7 +19,7 @@ export function PatientsPage({ role, store, context, setPage }) {
   const [tab,setTab]=useState('summary')
   const [search,setSearch]=useState('')
   const [newOpen,setNewOpen]=useState(false)
-  const [newPatient,setNewPatient]=useState({firstName:'',middleName:'',lastName:'',dob:'',sex:'Female',phone:'',email:'',address:'',preferredBranch:'Branch A',hmo:'None',hmoMember:'—',allergies:'None',medicalHistory:'',dentalHistory:'',emergencyContact:'',consent:false,createPortalAccount:false})
+  const [newPatient,setNewPatient]=useState({firstName:'',lastName:'',dob:'',sex:'Female',phone:'',email:'',address:'',preferredBranch:'Branch A',hmo:'None',hmoMember:'—',allergies:'None',medicalHistory:'',dentalHistory:'',emergencyContact:'',consent:false,createPortalAccount:false})
   const patient=availablePatients.find(p=>p.id===selected)
   const visits=state.appointments.filter(a=>a.patientId===selected&&inScope(a,session,state)).sort((a,b)=>`${b.date}${b.start}`.localeCompare(`${a.date}${a.start}`))
   const treatments=state.treatments.filter(t=>t.patientId===selected).sort((a,b)=>b.date.localeCompare(a.date))
@@ -34,18 +34,18 @@ export function PatientsPage({ role, store, context, setPage }) {
   const createPatient=()=>{
     if(role!=='staff')return
     const result=actions.createPatientRecord({
-      person:{firstName:newPatient.firstName,middleName:newPatient.middleName,lastName:newPatient.lastName,dob:newPatient.dob,sex:newPatient.sex,phone:newPatient.phone,email:newPatient.email,address:newPatient.address},
+      person:{firstName:newPatient.firstName,lastName:newPatient.lastName,dob:newPatient.dob,sex:newPatient.sex,phone:newPatient.phone,email:newPatient.email,address:newPatient.address},
       patient:{preferredBranch:newPatient.preferredBranch,hmo:newPatient.hmo,hmoMember:newPatient.hmoMember,allergies:newPatient.allergies,medicalHistory:newPatient.medicalHistory,dentalHistory:newPatient.dentalHistory,emergencyContact:newPatient.emergencyContact,consent:newPatient.consent},
       createPortalAccount:newPatient.createPortalAccount
     })
     if(!result.ok)return toast(result.message,'warning')
     toast(result.record.userId?'Patient record and portal account created.':'Centralized patient record created.','success')
     setSelected(result.record.id);setNewOpen(false)
-    setNewPatient({firstName:'',middleName:'',lastName:'',dob:'',sex:'Female',phone:'',email:'',address:'',preferredBranch:'Branch A',hmo:'None',hmoMember:'—',allergies:'None',medicalHistory:'',dentalHistory:'',emergencyContact:'',consent:false,createPortalAccount:false})
+    setNewPatient({firstName:'',lastName:'',dob:'',sex:'Female',phone:'',email:'',address:'',preferredBranch:'Branch A',hmo:'None',hmoMember:'—',allergies:'None',medicalHistory:'',dentalHistory:'',emergencyContact:'',consent:false,createPortalAccount:false})
   }
   const tabs=[{key:'summary',label:'Summary'},{key:'visits',label:'Visit history',count:visits.length},{key:'clinical',label:'Clinical',count:treatments.length},{key:'hmo',label:'HMO',count:hmo.length},{key:'documents',label:'Documents'}]
   return <>
-    <PageHeader title="Centralized Patient Records" text="PERSONS is the single source of identity/contact data. Staff may maintain approved demographics; dentists see those fields read-only and edit only clinical information." modules={[4]} aside={role==='dentist'&&encounter&&['Called','Treatment Ready','In Treatment'].includes(encounter.status)?<Button onClick={()=>setPage('treatment',context)}>{encounter.treatmentId?'Continue Treatment':'Open Treatment'}</Button>:null}/>
+    <PageHeader title="Centralized Patient Records" text="Identity and contact details are shared across the patient record. Staff may maintain approved demographics; dentists see those fields read-only and edit only clinical information." modules={[4]} aside={role==='dentist'&&encounter&&['Called','Treatment Ready','In Treatment'].includes(encounter.status)?<Button onClick={()=>setPage('treatment',context)}>{encounter.treatmentId?'Continue Treatment':'Open Treatment'}</Button>:null}/>
     {!patient?<Notice>The selected patient is unavailable in your current scope. {availablePatients.length>0&&<Button onClick={()=>setSelected(availablePatients[0].id)}>Open an available patient</Button>}{role==='staff'&&<Button onClick={()=>setNewOpen(true)}>New Patient</Button>}</Notice>:<div className="records-layout">
       <Card className="patient-list" title="Patients" actions={role==='staff'?<Button size="sm" onClick={()=>setNewOpen(true)}>New Patient</Button>:null}><input className="search-input" aria-label="Search patients" placeholder="Search patient..." value={search} onChange={e=>setSearch(e.target.value)}/><div className="patient-list-scroll">{availablePatients.filter(p=>`${p.name} ${p.patientCode||''}`.toLowerCase().includes(search.trim().toLowerCase())).map(p=><button key={p.id} className={selected===p.id?'selected':''} onClick={()=>{setSelected(p.id);setTab('summary')}}><span className="avatar">{p.name.split(' ').map(x=>x[0]).slice(0,2).join('')}</span><div><b>{p.name}</b><small>{p.patientCode||p.id} • {p.preferredBranch} • {p.hmo}</small></div></button>)}</div></Card>
       <div>
@@ -60,7 +60,6 @@ export function PatientsPage({ role, store, context, setPage }) {
     </div>}
     <Modal open={newOpen} onClose={()=>setNewOpen(false)} title="Create patient record" subtitle="Identity/contact fields create one PERSON record; PATIENTS stores only patient-specific information." wide><div className="form-grid">
       <Field label="First name" required><input value={newPatient.firstName} onChange={e=>setNewPatient({...newPatient,firstName:e.target.value})}/></Field>
-      <Field label="Middle name" hint="Optional"><input value={newPatient.middleName} onChange={e=>setNewPatient({...newPatient,middleName:e.target.value})}/></Field>
       <Field label="Last name" required><input value={newPatient.lastName} onChange={e=>setNewPatient({...newPatient,lastName:e.target.value})}/></Field>
       <Field label="Phone" required><input value={newPatient.phone} onChange={e=>setNewPatient({...newPatient,phone:e.target.value})}/></Field>
       <Field label="Date of birth"><input type="date" value={newPatient.dob} onChange={e=>setNewPatient({...newPatient,dob:e.target.value})}/></Field>
@@ -84,14 +83,13 @@ function SummaryTab({ patient, role, onSave }) {
   const update=(k,v)=>setForm({...form,[k]:v})
   const staff=role==='staff', dentist=role==='dentist'
   const save=()=>onSave({
-    person:staff?{firstName:form.firstName,middleName:form.middleName,lastName:form.lastName,phone:form.phone,email:form.email,dob:form.dob,sex:form.sex,address:form.address}:{},
+    person:staff?{firstName:form.firstName,lastName:form.lastName,phone:form.phone,email:form.email,dob:form.dob,sex:form.sex,address:form.address}:{},
     patient:staff?{preferredBranch:form.preferredBranch,hmo:form.hmo,hmoMember:form.hmoMember,emergencyContact:form.emergencyContact,consent:form.consent}:{allergies:form.allergies,medicalHistory:form.medicalHistory,dentalHistory:form.dentalHistory}
   })
   return <Card title="Patient summary" subtitle={staff?'Staff maintains approved demographics/contact/HMO fields. Clinical history remains read-only.':'Patient identity/contact information is read-only for the dentist; only clinical fields can be updated.'}>
     <div className="form-grid">
-      <Field label="Patient code" hint="PATIENTS.patient_code"><input value={form.patientCode||form.id} disabled/></Field>
+      <Field label="Patient code"><input value={form.patientCode||form.id} disabled/></Field>
       <Field label="First name"><input value={form.firstName||''} disabled={dentist} onChange={e=>update('firstName',e.target.value)}/></Field>
-      <Field label="Middle name" hint="Optional"><input value={form.middleName||''} disabled={dentist} onChange={e=>update('middleName',e.target.value)}/></Field>
       <Field label="Last name"><input value={form.lastName||''} disabled={dentist} onChange={e=>update('lastName',e.target.value)}/></Field>
       <Field label="Preferred branch"><input value={form.preferredBranch||''} disabled={dentist} onChange={e=>update('preferredBranch',e.target.value)}/></Field>
       <Field label="Phone"><input value={form.phone||''} disabled={dentist} onChange={e=>update('phone',e.target.value)}/></Field>

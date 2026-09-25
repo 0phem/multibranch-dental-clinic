@@ -17,7 +17,7 @@ function InvoiceCharges({invoice,state}) {
 export function BillingPage({ role, store, context }) {
   const { state, actions, toast }=store
   const session=store.session||sessionForRole(role,state)
-  const visible=visibleInvoices(state,session)
+  const visible=visibleInvoices(state,session).filter(i=>role!=='staff'||i.branchId===session.branchId)
   const [reviewId,setReviewId]=useState(null),[payId,setPayId]=useState(null),[amount,setAmount]=useState('')
   const review=visible.find(i=>i.id===reviewId),pay=visible.find(i=>i.id===payId)
   const reviewInvoice=i=>{
@@ -37,8 +37,17 @@ export function BillingPage({ role, store, context }) {
   }
   if(role==='patient')return <PatientBillingPage store={store} context={context}/>
   return <>
-    <PageHeader title={role==='patient'?'Receipts & Payments':'Billing & Payments'} text="Itemized charges from completed treatment. Staff reviews the invoice before issuance and records full payment."/>
-    <Card title={role==='patient'?'My transactions':'Transactions'}>{!visible.length&&<Notice>No invoices available.</Notice>}{visible.map(i=><div className="clinical-history" key={i.id}><div><b>{i.invoiceNo||i.id} • {patientName(i.patientId,state.patients)}</b><p>{dateLabel(i.visitDate)} • {i.branch}</p><InvoiceCharges invoice={i} state={state}/><p>Payment: {i.paymentStatus} • {i.method}</p>{i.receipt&&<p>Receipt: {i.receipt}{i.payment?.simulation?' • Simulated electronic payment':''}<small className="block-muted">{i.paidAt} {i.payment&&`• Payment ${i.payment.id}`}</small></p>}</div><div><Status>{i.status}</Status>{role==='staff'&&!validInvoice(state,i)&&i.status!=='Paid'&&<Notice>Historical charges need clinic review; completed procedure links are unavailable.</Notice>}{role==='staff'&&validInvoice(state,i)&&<div className="row-actions">{['Draft','Review'].includes(i.status)&&<Button size="sm" onClick={()=>reviewInvoice(i)}>Review Invoice</Button>}{i.status==='Issued'&&<Button size="sm" onClick={()=>{setPayId(i.id);setAmount(String(i.total))}}>Record Payment</Button>}</div>}</div></div>)}</Card>
+    <PageHeader title="Billing & Payments" text="Branch-scoped charges from completed treatment. Staff reviews invoices before issuance and records full payment."/>
+    <Card title="Branch payment worklist" subtitle={role==='staff'?`Assigned branch: ${state.branches.find(b=>b.id===session.branchId)?.name||'Not assigned'}`:'All clinic branches'}>
+      {!visible.length&&<Notice>No payment records are available in your current scope.</Notice>}
+      <div className="billing-worklist">{visible.map(i=><details className="billing-worklist-item" key={i.id}>
+        <summary className="billing-worklist-row"><span className="billing-worklist-patient"><b>{patientName(i.patientId,state.patients)}</b><small>{i.invoiceNo||i.id}</small></span><strong>{peso.format(i.total)}</strong><Status>{i.status}</Status><time dateTime={i.visitDate}>{dateLabel(i.visitDate)}</time><span className="billing-worklist-chevron" aria-hidden="true">›</span></summary>
+        <div className="billing-worklist-detail"><p><b>Branch:</b> {state.branches.find(b=>b.id===i.branchId)?.name||i.branchId}</p><p><b>Payment:</b> {i.paymentStatus} {i.method&&i.method!=='—'?`• ${i.method}`:''}</p><InvoiceCharges invoice={i} state={state}/>{i.receipt&&<p><b>Receipt:</b> {i.receipt}{i.payment?.simulation?' • Simulated electronic payment':''}<small className="block-muted">{i.payment?.recordedAt||i.paidAt} • {peso.format(i.payment?.amount??i.total)}</small></p>}
+          {role==='staff'&&!validInvoice(state,i)&&i.status!=='Paid'&&<Notice>Historical charges need clinic review; completed procedure links are unavailable.</Notice>}
+          {role==='staff'&&validInvoice(state,i)&&<div className="row-actions">{['Draft','Review'].includes(i.status)&&<Button size="sm" onClick={()=>reviewInvoice(i)}>Review Invoice</Button>}{i.status==='Issued'&&<Button size="sm" onClick={()=>{setPayId(i.id);setAmount(String(i.total))}}>Record Payment</Button>}</div>}
+        </div>
+      </details>)}</div>
+    </Card>
     <Modal open={!!review} onClose={()=>setReviewId(null)} title="Review Invoice">{review&&<><p>{patientName(review.patientId,state.patients)} • {review.branch} • {dateLabel(review.visitDate)}</p><p>Treatment: {state.treatments.find(t=>t.id===review.treatmentId)?.procedure}</p><Status>{review.status}</Status><InvoiceCharges invoice={review} state={state}/><Button onClick={issue}>Issue Invoice</Button></>}</Modal>
     <Modal open={!!pay} onClose={()=>setPayId(null)} title="Record payment">{pay&&<><p>{pay.invoiceNo} • {patientName(pay.patientId,state.patients)} • {peso.format(pay.total)}</p><Notice>Cash is recorded by clinic staff. Card / Electronic is a simulation; no money is transferred.</Notice><Field label="Full payment amount" required><input type="number" min="0.01" step="0.01" value={amount} onChange={e=>setAmount(e.target.value)}/></Field><div className="payment-options"><Button onClick={()=>postPayment('Cash')}>Record Cash</Button><Button onClick={()=>postPayment('Electronic')}>Simulate Card / Electronic</Button></div></>}</Modal>
   </>
@@ -72,10 +81,10 @@ export function HmoPage({ role, activeBranch, store, context }) {
   const label=h=>h.legacy&&['Approved','Rejected','Returned'].includes(h.status)?`Historical recorded ${h.status}`:['Approved','Rejected','Returned'].includes(h.status)?`Provider ${h.status}`:h.status
   if(role==='patient')return <PatientHmoPage store={store} context={context}/>
   return <>
-    <PageHeader title={role==='patient'?'My HMO Coverage':role==='owner'?'HMO Overview':'HMO Verification & Tracking'} text="The clinic tracks requirements and externally received provider responses. Local document checks do not confirm provider eligibility or approval."/>
+    <PageHeader title={role==='patient'?'My HMO Coverage':role==='owner'?'HMO Overview':'HMO Cases'} text="Review patient cases, clinic-checked requirements, and externally received provider responses. Local checks do not confirm provider approval."/>
     {staff&&<div className="page-toolbar"><Button onClick={()=>setCreating(true)}>Prepare HMO Case</Button><Button variant="ghost" onClick={()=>report(actions.evaluateHmoTimers(),'Pending case timers checked.')}>Check overdue cases</Button></div>}
     {!visible.length?<Notice>No HMO cases are available in your scope.</Notice>:<div className="grid-2">
-      <Card title="HMO cases">{visible.map(h=><div className="clinical-history" key={h.id}><div><b>{role==='patient'?HMO_PROVIDERS.find(p=>p.id===h.providerId)?.name:patientName(h.patientId,state.patients)}</b><p>{state.branches.find(b=>b.id===h.branchId)?.name}</p><Status>{label(h)}</Status>{internal&&pendingHmo(h)&&<small className="block-muted">Pending {pendingHours(h,state.clock).toFixed(1)} hours</small>}</div><Button size="sm" variant="ghost" onClick={()=>setSelectedId(h.id)}>View case</Button></div>)}</Card>
+      <Card title="Case worklist" subtitle={role==='staff'?`Assigned branch: ${session.branchId||'Not assigned'}`:'Clinic-wide cases'}>{visible.map(h=><div className="clinical-history" key={h.id}><div><b>{role==='patient'?HMO_PROVIDERS.find(p=>p.id===h.providerId)?.name:patientName(h.patientId,state.patients)}</b><p>{state.branches.find(b=>b.id===h.branchId)?.name} • {h.submittedAt?'Submission recorded':'Not submitted'}</p><Status>{label(h)}</Status>{internal&&pendingHmo(h)&&<small className="block-muted">Pending {pendingHours(h,state.clock).toFixed(1)} hours</small>}</div><Button size="sm" variant="ghost" onClick={()=>setSelectedId(h.id)}>View case</Button></div>)}</Card>
       {selected&&<Card title={`${HMO_PROVIDERS.find(p=>p.id===selected.providerId)?.name||'HMO'} case`} subtitle={label(selected)}>
         <p>{patientName(selected.patientId,state.patients)} • {state.branches.find(b=>b.id===selected.branchId)?.name}</p>
         {internal&&(!validHmoContext(state,selected)||!hmoDataValid(selected,clinicNow()))&&<Notice tone="warning">Case relationships need clinic review before processing.</Notice>}

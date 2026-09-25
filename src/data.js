@@ -4,7 +4,7 @@ import { clinicDate } from './clock.js'
 export const TODAY = clinicDate()
 
 export const MODULES = [
-  { no: 1, name: 'User, Role & Access Management', owner: 'Licanda, Celin', area: 'Administration', roles: ['owner'] },
+  { no: 1, name: 'User Management', owner: 'Licanda, Celin', area: 'Administration', roles: ['owner'] },
   { no: 2, name: 'Multi-Branch Clinic Management', owner: 'Licanda, Celin', area: 'Administration', roles: ['owner'] },
   { no: 3, name: 'Dentist & Staff Management', owner: 'Licanda, Celin', area: 'Administration', roles: ['owner'] },
   { no: 4, name: 'Patient Records Management', owner: 'Ecal, Richmon', area: 'Clinical', roles: ['staff','dentist'] },
@@ -53,26 +53,26 @@ export const NAV = {
   ],
   owner: [
     ['dashboard','Executive Dashboard'], ['analytics','Analytics & Reports'], ['branches','Branches'], ['team','People & Team'], ['capacity','Capacity & Workload'],
-    ['hmo','HMO Overview'], ['users','Access & Roles'], ['automation','Automation Monitor'], ['engagement','Engagement']
+    ['hmo','HMO Overview'], ['users','User Management'], ['automation','Automation Monitor'], ['engagement','Engagement']
   ],
 }
 
 export const INITIAL_PERSONS = [
-  { id:'per-owner', firstName:'Dana', middleName:'', lastName:'Roxas', email:'dana.roxas@clinic.demo', phone:'0917 000 0001', dob:'1982-01-12', sex:'Female', address:'Bulacan' },
-  { id:'per-s1', firstName:'Alyssa', middleName:'', lastName:'Cruz', email:'alyssa.cruz@clinic.demo', phone:'0917 000 0002', dob:'1997-04-21', sex:'Female', address:'Bulacan' },
-  { id:'per-d1', firstName:'Miguel', middleName:'', lastName:'Reyes', email:'miguel.reyes@clinic.demo', phone:'0917 000 0101', dob:'1988-02-14', sex:'Male', address:'Bulacan' },
-  { id:'per-s2', firstName:'Marco', middleName:'', lastName:'Villanueva', email:'marco.v@clinic.demo', phone:'0917 000 0004', dob:'1994-06-18', sex:'Male', address:'Bulacan' },
-  { id:'per-s4', firstName:'Lea', middleName:'', lastName:'Mendoza', email:'lea.mendoza@clinic.demo', phone:'0917 000 0005', dob:'1995-03-08', sex:'Female', address:'Bulacan' },
-  { id:'per-d2', firstName:'Patricia', middleName:'', lastName:'Lim', email:'patricia.lim@clinic.demo', phone:'0917 000 0102', dob:'1989-09-20', sex:'Female', address:'Bulacan' },
-  { id:'per-d3', firstName:'Carlo', middleName:'', lastName:'Mendoza', email:'carlo.mendoza@clinic.demo', phone:'0917 000 0103', dob:'1986-12-03', sex:'Male', address:'Bulacan' },
-  { id:'per-d4', firstName:'Andrea', middleName:'', lastName:'Flores', email:'andrea.flores@clinic.demo', phone:'0917 000 0104', dob:'1990-07-17', sex:'Female', address:'Bulacan' },
-  { id:'per-d5', firstName:'Luis', middleName:'', lastName:'Navarro', email:'luis.navarro@clinic.demo', phone:'0917 000 0105', dob:'1987-05-09', sex:'Male', address:'Bulacan' },
-  { id:'per-s3', firstName:'Nina', middleName:'', lastName:'Torres', email:'nina.torres@clinic.demo', phone:'0917 000 0010', dob:'1998-08-11', sex:'Female', address:'Bulacan' },
-  { id:'per-s5', firstName:'Mika', middleName:'', lastName:'Ramos', email:'mika.ramos@clinic.demo', phone:'0917 000 0011', dob:'1996-10-25', sex:'Female', address:'Bulacan' },
-  { id:'per-p1', firstName:'Maria', middleName:'', lastName:'Santos', email:'maria@example.com', phone:'0917 123 4567', dob:'1998-05-17', sex:'Female', address:'Meycauayan, Bulacan' },
-  { id:'per-p2', firstName:'John', middleName:'', lastName:'Dela Cruz', email:'john@example.com', phone:'0918 221 9001', dob:'1994-11-02', sex:'Male', address:'Quezon City' },
-  { id:'per-p3', firstName:'Bianca', middleName:'', lastName:'Ramos', email:'bianca@example.com', phone:'0920 883 2104', dob:'2001-03-20', sex:'Female', address:'Manila' },
-  { id:'per-p4', firstName:'Paolo', middleName:'', lastName:'Garcia', email:'paolo@example.com', phone:'0916 444 0310', dob:'1988-08-09', sex:'Male', address:'Pasay City' },
+  { id:'per-owner', firstName:'Dana', lastName:'Roxas', email:'dana.roxas@clinic.demo', phone:'0917 000 0001', dob:'1982-01-12', sex:'Female', address:'Bulacan' },
+  { id:'per-s1', firstName:'Alyssa', lastName:'Cruz', email:'alyssa.cruz@clinic.demo', phone:'0917 000 0002', dob:'1997-04-21', sex:'Female', address:'Bulacan' },
+  { id:'per-d1', firstName:'Miguel', lastName:'Reyes', email:'miguel.reyes@clinic.demo', phone:'0917 000 0101', dob:'1988-02-14', sex:'Male', address:'Bulacan' },
+  { id:'per-s2', firstName:'Marco', lastName:'Villanueva', email:'marco.v@clinic.demo', phone:'0917 000 0004', dob:'1994-06-18', sex:'Male', address:'Bulacan' },
+  { id:'per-s4', firstName:'Lea', lastName:'Mendoza', email:'lea.mendoza@clinic.demo', phone:'0917 000 0005', dob:'1995-03-08', sex:'Female', address:'Bulacan' },
+  { id:'per-d2', firstName:'Patricia', lastName:'Lim', email:'patricia.lim@clinic.demo', phone:'0917 000 0102', dob:'1989-09-20', sex:'Female', address:'Bulacan' },
+  { id:'per-d3', firstName:'Carlo', lastName:'Mendoza', email:'carlo.mendoza@clinic.demo', phone:'0917 000 0103', dob:'1986-12-03', sex:'Male', address:'Bulacan' },
+  { id:'per-d4', firstName:'Andrea', lastName:'Flores', email:'andrea.flores@clinic.demo', phone:'0917 000 0104', dob:'1990-07-17', sex:'Female', address:'Bulacan' },
+  { id:'per-d5', firstName:'Luis', lastName:'Navarro', email:'luis.navarro@clinic.demo', phone:'0917 000 0105', dob:'1987-05-09', sex:'Male', address:'Bulacan' },
+  { id:'per-s3', firstName:'Nina', lastName:'Torres', email:'nina.torres@clinic.demo', phone:'0917 000 0010', dob:'1998-08-11', sex:'Female', address:'Bulacan' },
+  { id:'per-s5', firstName:'Mika', lastName:'Ramos', email:'mika.ramos@clinic.demo', phone:'0917 000 0011', dob:'1996-10-25', sex:'Female', address:'Bulacan' },
+  { id:'per-p1', firstName:'Maria', lastName:'Santos', email:'maria@example.com', phone:'0917 123 4567', dob:'1998-05-17', sex:'Female', address:'Meycauayan, Bulacan' },
+  { id:'per-p2', firstName:'John', lastName:'Dela Cruz', email:'john@example.com', phone:'0918 221 9001', dob:'1994-11-02', sex:'Male', address:'Quezon City' },
+  { id:'per-p3', firstName:'Bianca', lastName:'Ramos', email:'bianca@example.com', phone:'0920 883 2104', dob:'2001-03-20', sex:'Female', address:'Manila' },
+  { id:'per-p4', firstName:'Paolo', lastName:'Garcia', email:'paolo@example.com', phone:'0916 444 0310', dob:'1988-08-09', sex:'Male', address:'Pasay City' },
 ]
 
 export const INITIAL_SERVICES = [

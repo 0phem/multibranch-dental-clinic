@@ -28,7 +28,6 @@ class RegisterPatientRequest extends FormRequest
     {
         return [
             'first_name' => ['required', 'string', 'max:100'],
-            'middle_name' => ['nullable', 'string', 'max:100'],
             'last_name' => ['required', 'string', 'max:100'],
             'email' => ['required', 'email:rfc', 'max:255', 'unique:users,email'],
             // Normalized E.164-style Philippine mobile number only (+63 plus exactly 10 local digits, first

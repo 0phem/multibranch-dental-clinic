@@ -34,7 +34,7 @@ states the same current-frontend/future-backend distinction.
 
 `createRegistrationAction({getState, commit, clock})` returns `(form, commandId) => result`:
 
-- Collected fields: first name, middle name (optional), last name, phone (required, matching the existing
+- Historical design note: the earlier prototype collected first name, middle name (optional), last name, and phone. The current team identity decision removes middle name; the active contract collects first name, last name, and phone (required, matching the existing
   Staff-facing `createPatientRecord` behavior), a normalized email (required — the sign-in identifier), date of
   birth (optional, ERD-legitimate `NULL`), and a preferred/home branch (required; `PATIENTS` already has a
   legitimate field for it). **Not collected:** password, medical history, HMO data, payment data, loyalty data, or

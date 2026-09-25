@@ -31,6 +31,21 @@ function AuthUnavailable({ onRetry }) {
   </section></main>
 }
 
+function RefDataLoading() {
+  return <main className="login-shell"><section className="login-panel"><Brand className="brand-login"/><p role="status" className="login-copy">Loading clinic data…</p></section></main>
+}
+
+// Phase 2A: an honest, distinct screen for "reference data couldn't load" — never a silent fallback to
+// stale/empty branch/service/staff/dentist data (same non-negotiable rule the project already applies to
+// persistence failures elsewhere: never return empty collections and pretend they're real).
+function RefDataUnavailable({ onRetry }) {
+  return <main className="login-shell"><section className="login-panel">
+    <Brand className="brand-login"/>
+    <div className="login-copy-wrap"><h1>Couldn’t load clinic data</h1><p className="login-copy">Branch, service and staffing information couldn’t be loaded. Check your connection and try again.</p></div>
+    <button type="button" className="btn primary md" onClick={onRetry}><span>Try again</span></button>
+  </section></main>
+}
+
 function AppBody() {
   const store=useClinic()
   const [authPhase,setAuthPhase]=useState('checking')
@@ -132,6 +147,12 @@ function AppBody() {
       :<Login onLogin={login} onShowRegister={()=>{setAuthError('');setShowRegister(true)}}/>}
     <ToastStack toasts={store.toasts}/>
   </>
+
+  // Phase 2A: gate on reference data before validSession/branch lookups run — otherwise a still-loading
+  // (empty) branches collection could be misread as "your branch access changed" rather than "still
+  // loading." No fake loading timer: this reflects the real fetch in flight, nothing more.
+  if(store.refDataStatus==='loading'||store.refDataStatus==='idle')return <RefDataLoading/>
+  if(store.refDataStatus==='error')return <RefDataUnavailable onRetry={store.retryReferenceData}/>
 
   if(!validSession(store.state,store.session))return <><Notice>Your account or branch access changed. Reopen your workspace or ask an administrator.</Notice><Login onLogin={login}/></>
 

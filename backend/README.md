@@ -19,7 +19,7 @@ later checkpoint ("Backend Foundation 1B").
 `person_id` foreign key back to `PERSONS`. There is no `PATIENTS.user_id` and no `PERSON → USER → PATIENT`
 chain — a Person can exist with no User at all. This mirrors the frontend's ERD_ALIGNMENT.md identity model.
 
-- `persons` — first/middle/last name, unique nullable email, phone, date_of_birth, sex, address
+- `persons` — first/last name, unique nullable email, phone, date_of_birth, sex, address
 - `users` — `person_id` (unique FK), unique `email`, hashed `password`, `role`, `account_status`
   (`Active`/`Inactive`), nullable `title` (display-only Staff duty focus — never used for authorization)
 - `patients` — `person_id` (unique FK), unique `patient_code`, `consent`
@@ -43,8 +43,7 @@ An `Inactive` account is rejected even if its role matches.
 
 ### Registration contract
 
-`POST /api/register` accepts `first_name`, `middle_name` (optional — the public form doesn't collect it;
-`persons.middle_name` stays nullable), `last_name`, `email`, `phone`, `date_of_birth` (optional), `password`,
+`POST /api/register` accepts `first_name`, `last_name`, `email`, `phone`, `date_of_birth` (optional), `password`,
 `password_confirmation`. Creates a `Person` → `Patient` → `User` (role `patient`, status `Active`) inside
 one DB transaction, then logs the new user in.
 
@@ -76,7 +75,7 @@ two cases without string-matching the human-readable message. A successful login
 
 Returns the authenticated identity via `App\Http\Resources\UserResource`: `id`, `person_id`, `patient_id`
 (when applicable), `name` (derived from the related Person — not a stored column), `first_name`,
-`middle_name`, `last_name`, `phone`, `date_of_birth` (Backend Foundation 1B — already-stored, already-safe
+`last_name`, `phone`, `date_of_birth` (Backend Foundation 1B — already-stored, already-safe
 Person fields, exposed so a frontend identity bridge can build a real local Person projection instead of
 parsing `name`), `email`, `role`, `title`, `account_status`. Never includes `password` or `remember_token`.
 The same fields appear in the register/login response envelopes (`data.*`).

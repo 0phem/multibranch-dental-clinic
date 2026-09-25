@@ -16,7 +16,6 @@ class PersonFactory extends Factory
     {
         return [
             'first_name' => fake()->firstName(),
-            'middle_name' => null,
             'last_name' => fake()->lastName(),
             'email' => fake()->unique()->safeEmail(),
             'phone' => fake()->numerify('09#########'),

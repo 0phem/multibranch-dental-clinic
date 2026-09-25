@@ -7,7 +7,7 @@ This is a logical ERD. Exact SQL types, indexes, security policies, file-storage
 
 | Table | Purpose | Key integrity rule |
 |---|---|---|
-| PERSONS | Single source of human identity/contact data | Do not duplicate first/middle/last/email/phone across Patient and Staff screens |
+| PERSONS | Single source of human identity/contact data | Do not duplicate first/last/email/phone across Patient and Staff screens |
 | USERS | Authentication/account state | One user maps to one PERSON; password storage is backend-only hashed data |
 | ROLES | Role/subrole catalog | Role examples: PATIENT, DENTIST, OWNER_ADMIN, RECEPTIONIST, ASSISTANT, BILLING, HMO_COORDINATOR, ENGAGEMENT |
 | USER_ROLE_ASSIGNMENTS | RBAC + optional branch scope | Permissions come from role and scope, not UI hiding alone |
@@ -19,6 +19,15 @@ This is a logical ERD. Exact SQL types, indexes, security policies, file-storage
 | STAFF_SCHEDULES | Branch/date shift and availability state | Availability is based on assignment/shift/exception state |
 | DENTIST_SERVICE_ASSIGNMENTS | Services a dentist may perform | M7 filters valid dentists by service capability |
 | AUDIT_LOGS | Security/administrative audit | Emergency queue priority, access changes and sensitive manual overrides should be auditable |
+
+**Implementation status (Backend Phase 2A):** BRANCHES, SERVICES, BRANCH_SERVICES, STAFF_PROFILES and
+DENTIST_SERVICE_ASSIGNMENTS (plus an additional DENTIST_BRANCHES join this table doesn't separately list)
+are implemented as real PostgreSQL tables — see [ERD_ALIGNMENT.md](../../ERD_ALIGNMENT.md) and
+[BACKEND_INTEGRATION.md](../../BACKEND_INTEGRATION.md) for the current mapping and API surface.
+BRANCH_OPERATING_HOURS and STAFF_SCHEDULES remain logical-only (the implemented tables carry the same flat
+single-daily-hours/single-shift shape the frontend already had, not the fuller per-day/dated shape this
+dictionary describes) — ROLES, USER_ROLE_ASSIGNMENTS and every other table in this document remain
+logical-only, not yet implemented.
 
 ## Patient / Appointment / Queue
 

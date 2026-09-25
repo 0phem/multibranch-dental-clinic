@@ -9,12 +9,12 @@ Reviewed against protected checkpoint `dac864e`, the [Data Dictionary](docs/arch
 | PERSONS | `persons`; identity/contact projections | One person identity, display names derived; compatibility projections are not independent keys |
 | USERS | `users` linked by `personId` | Demo account status/permissions; no password authentication server |
 | ROLES / USER_ROLE_ASSIGNMENTS | Role catalog and user permissions/branch; live session checks | Flattened assignment model, not normalized multi-role rows; Owner exceptions documented in reconciliation |
-| STAFF_PROFILES | `staff`, `dentists`, with `personId`/`userId` | M1 creation synchronizes M3; Active account and operational Available remain separate |
+| STAFF_PROFILES | `staff`, `dentists`, with `personId`/`userId`. **Backend Phase 2A**: `staff_profiles`/`dentist_profiles` (PostgreSQL) are now the authoritative source for these two collections, bridged to the same legacy shape (see [BACKEND_INTEGRATION.md](BACKEND_INTEGRATION.md)) | M1 creation synchronizes M3; Active account and operational Available remain separate — Active specifically remains a transitional frontend-local input this phase, not yet backend-authoritative (see the Backend Phase 2A audit). New Dentist/Staff account creation is temporarily unavailable pending a later phase, since PERSONS/USERS creation itself stays frontend-local |
 | PATIENTS | `patients` with `personId`, optional `userId` | Patient may exist without portal login; `patients.userId` is a frontend compatibility denormalization (cross-checked against `personId` on every read), not a `PATIENTS.user_id` ERD column; centralized chart, scoped operational access |
-| BRANCHES / BRANCH_OPERATING_HOURS | `branches`, inline `open`/`close` | Canonical branch IDs; full per-weekday hours/holiday exceptions not represented |
-| SERVICES / BRANCH_SERVICES | `services`, `branchServices` | Canonical duration/fee/status and branch availability/optional overrides |
-| STAFF_SCHEDULES | Inline profile shifts and availability | No complete date-specific schedule/exception collection |
-| DENTIST_SERVICE_ASSIGNMENTS | `dentistServiceAssignments` | Shared scheduler and performed-procedure authorization |
+| BRANCHES / BRANCH_OPERATING_HOURS | `branches`, inline `open`/`close`. **Backend Phase 2A**: the `branches` table (PostgreSQL) is now authoritative | Canonical branch IDs; full per-weekday hours/holiday exceptions not represented. `latitude`/`longitude` columns exist but stay `NULL` — never populated with invented values |
+| SERVICES / BRANCH_SERVICES | `services`, `branchServices`. **Backend Phase 2A**: `services`/`branch_services` tables (PostgreSQL) are now authoritative | Canonical duration/fee/status and branch availability/optional overrides. `services.reference_fee_php` is project/demo/reference configuration, never clinic-confirmed pricing, regardless of whether a value happens to fall inside an interview-quoted range |
+| STAFF_SCHEDULES | Inline profile shifts and availability. **Backend Phase 2A**: the same flat `shift_start`/`shift_end`/`available` fields now live on `staff_profiles`/`dentist_profiles` (PostgreSQL) | No complete date-specific schedule/exception collection — this remains a frontend/backend gap alike, not newly introduced or newly closed by Phase 2A |
+| DENTIST_SERVICE_ASSIGNMENTS | `dentistServiceAssignments`. **Backend Phase 2A**: derived from the `dentist_service_assignments` table (PostgreSQL) via the Dentist read endpoint, not its own fetch | Shared scheduler and performed-procedure authorization |
 | APPOINTMENTS | `appointments` | Patient, branch, Dentist, service IDs; current validator; revision/retry context; immutable Patient on reschedule |
 | CHECK_IN_RECORDS | `checkIns` | Distinct arrival linked to appointment or walk-in, exact queue and clinic day |
 | DENTIST_QUEUES / QUEUE_ENTRIES | `queue`, with per-Dentist/branch/day `queueId` | Container identity embedded rather than separate queue table; exact appointment/check-in/treatment links |
@@ -97,3 +97,16 @@ M23 coordinates administrative handoffs after explicit actions. A completed Trea
 Canonical IDs win over display strings. Compatibility normalization can recover known direct links/unambiguous identities and explicit legacy check-in references, but does not guess encounters from Patient + Dentist + day or manufacture modern clinical/payment/provider evidence. Ambiguous recipients and participants confer no access. Saved historical dates never rebase on reload.
 
 These embedded structures preserve conceptual relationships without claiming every normalized ERD table exists in browser state. The backend must enforce foreign keys, branch/role scope, uniqueness, idempotency, versions and atomic updates independently. Real electronic payments require server/provider verification; current explicitly simulated Card/Electronic records do not satisfy that future integration requirement. Policy gaps and remaining differences are centrally recorded in [Documentation Reconciliation](DOCUMENTATION_RECONCILIATION.md).
+
+**Backend Phase 2A (core reference data):** `BRANCHES`, `SERVICES`, `BRANCH_SERVICES`, `STAFF_PROFILES` and
+`DENTIST_SERVICE_ASSIGNMENTS` (plus a `dentist_branches` join the ERD dictionary doesn't separately name)
+are the first ERD entities beyond identity (`PERSONS`/`USERS`/`PATIENTS`) to graduate from frontend-local
+state to real PostgreSQL tables, following the same identity-hub pattern already established there. A
+`legacy_ref` string column on each of these tables is a purely transitional bridge key, letting still-local
+collections (`appointments`, `queue`, `treatments`, etc.) keep resolving today's string IDs unchanged; it
+carries no business meaning and is retired once those collections migrate to real backend foreign keys in a
+later phase. `findOpenTimes`/`assignDentist` (M7) are unchanged — only their inputs are now
+backend-authoritative, not their execution. Linked account Active/Inactive status is explicitly *not*
+backend-authoritative yet (a transitional frontend-local input); closing that gap is a later identity
+migration, not part of this phase. See [BACKEND_INTEGRATION.md](BACKEND_INTEGRATION.md) for the running
+API surface.

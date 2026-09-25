@@ -6,6 +6,11 @@ export const COUNTRY_CODES = [
 ]
 export const DEFAULT_COUNTRY = COUNTRY_CODES[0]
 
+export function sanitizePhoneInput(value, dial=DEFAULT_COUNTRY.dial) {
+  const country=COUNTRY_CODES.find(c=>c.dial===dial)||DEFAULT_COUNTRY
+  return String(value||'').replace(/\D/g,'').slice(0,country.digits)
+}
+
 const onlyFormattingChars = value => value.replace(/[\s\-()]/g, '')
 
 // Strips cosmetic formatting (spaces, dashes, parentheses) — never actual digits — then requires exactly

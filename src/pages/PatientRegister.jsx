@@ -11,7 +11,7 @@ import { COUNTRY_CODES, DEFAULT_COUNTRY, normalizePhoneNumber } from '../phone.j
 //
 // No "Preferred branch" field: the current backend registration contract collects no branch preference (see
 // backend/README.md) — the frontend identity bridge defaults it locally, and this form does not invent one.
-// No "Middle name" field: the public form doesn't need it (persons.middle_name stays nullable in the ERD).
+// The identity form intentionally collects first and last name only.
 const emptyForm={first_name:'',last_name:'',email:'',date_of_birth:'',password:'',password_confirmation:''}
 
 function PhoneField({ dial, localNumber, onLocalNumberChange, error }) {

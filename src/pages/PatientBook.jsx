@@ -5,7 +5,7 @@ import { dateLabel, displayTime, uid } from '../logic.js'
 import { assignDentist, findOpenTimes, FIND_TIME_DEFAULT_WINDOW_DAYS } from '../scheduling.js'
 import { hasUsableCoordinates, nearestBranch } from '../geo.js'
 import { bookingExitOutcome, buildDateStrip, dentistLabel, draftStatus, groupSlotsByPeriod, patientBookingDraft, patientContext, servicesAt } from '../patient-view.js'
-import { ChoiceGroup, DateStrip, DefinitionList } from '../patient-ui.jsx'
+import { ChoiceGroup, DateStrip, DefinitionList, TimeSlotGroup } from '../patient-ui.jsx'
 
 // Phase 4B.3C-1 Patient booking entry, extended with a booking-stage Payment step and the 2-calendar-month
 // horizon. Smart Find / Manual booking share one explicit choice; both use only the Phase 4B.3B scheduling
@@ -113,8 +113,7 @@ function ServiceStep({ state, branchId, serviceId, onPick, onBack, onContinue, h
 // Smart Find: one coherent view at a time — a flat "Earliest available"/"Other times" summary first, or
 // (after "Show more times") the full date-strip/time-chip explorer, never both simultaneously. Both views
 // read from the SAME exhaustive findOpenTimes call below — no second fetch, no second scheduling engine.
-function SmartScheduleStep({ state, session, form, onPick, onBack, headingRef }) {
-  const [exploring,setExploring]=useState(false)
+function SmartScheduleStep({ state, session, form, onPick, onBack, onContinue, headingRef }) {
   const [selectedDate,setSelectedDate]=useState(null)
   const branch=state.branches.find(b=>b.id===form.branchId)
   const today=clinicDate()
@@ -130,64 +129,48 @@ function SmartScheduleStep({ state, session, form, onPick, onBack, headingRef })
   const activeDate=selectedDate||results[0]?.date||null
   const dayResults=activeDate?results.filter(r=>r.date===activeDate):[]
   const grouped=groupSlotsByPeriod(dayResults)
-  const enterExplorer=()=>{setSelectedDate(results[0]?.date||null);setExploring(true)}
   const timeGroups=[['Morning',grouped.morning],['Afternoon',grouped.afternoon],['Evening',grouped.evening]]
   return <>
     <StageHeader eyebrow="Smart Find · Step 3 of 4" title="Real availability, found for you" headingRef={headingRef}
       help={`We checked ${branch?.name||'this branch'} for real Dentist availability across the next ${FIND_TIME_DEFAULT_WINDOW_DAYS} days.`}/>
     {!results.length&&<Notice tone="warning" title="No open times right now">{`No legitimate open times were found for this service at this branch in the next ${FIND_TIME_DEFAULT_WINDOW_DAYS} days. Go back and try another branch or service.`}</Notice>}
-    {!!results.length&&!exploring&&<div className="pt-smart-results">
-      <div className="pt-smart-earliest">
-        <span className="pt-eyebrow">Earliest available</span>
-        <button type="button" className="pt-book-option is-earliest" onClick={()=>onPick(results[0])}>
-          <span className="pt-book-option-when"><b>{dateLabel(results[0].date)}</b><span>{displayTime(results[0].start)}</span></span>
-          <span className="pt-book-option-meta">{branch?.name} · Automatically matched to an available Dentist</span>
-        </button>
-      </div>
-      {results.length>1&&<div className="pt-smart-other">
-        <span className="pt-eyebrow">Other times</span>
-        <ul className="pt-book-options">{results.slice(1,3).map(option=><li key={`${option.date}-${option.start}`}>
-          <button type="button" onClick={()=>onPick(option)}>
-            <span className="pt-book-option-when"><b>{dateLabel(option.date)}</b><span>{displayTime(option.start)}</span></span>
-            <span className="pt-book-option-meta">{branch?.name} · {option.dentist}</span>
-          </button>
-        </li>)}</ul>
-      </div>}
-      {results.length>3&&<div className="row-actions top-gap"><Button variant="soft" onClick={enterExplorer}>Show more times</Button></div>}
-    </div>}
-    {!!results.length&&exploring&&<div className="pt-smart-explorer">
+    {!!results.length&&<div className="pt-smart-explorer">
+      <p className="pt-hint">Earliest available: {dateLabel(results[0].date)} at {displayTime(results[0].start)}</p>
       <DateStrip days={strip} value={activeDate} onChange={setSelectedDate}/>
-      {dayResults.length?timeGroups.map(([label,slots])=>slots.length>0&&<ChoiceGroup key={label} legend={label} name="smart-time" variant="slots"
-        value={form.date===activeDate?form.start:''}
-        onChange={value=>onPick(dayResults.find(r=>r.start===value))}
-        options={slots.map(r=>({value:r.start,label:displayTime(r.start)}))}/>)
+      {dayResults.length?timeGroups.map(([label,slots])=><TimeSlotGroup key={label} legend={label}
+        value={form.date===activeDate?form.start:''} onPick={value=>onPick(dayResults.find(r=>r.start===value))}
+        slots={slots.map(r=>({value:r.start,label:displayTime(r.start)}))}/>)
         :<Notice tone="warning" title="No open times on this date">Choose a different date above, or use Manual Appointment to look beyond this window.</Notice>}
     </div>}
-    <div className="pt-stage-footer"><Button variant="ghost" onClick={onBack}>Back</Button><span/></div>
+    <div className="pt-stage-footer"><Button variant="ghost" onClick={onBack}>Back</Button><Button icon="arrow" onClick={onContinue} disabled={!form.start||form.date!==activeDate}>Continue</Button></div>
   </>
 }
 
-function DateStep({ form, onChange, onBack, onContinue, headingRef }) {
+function DateStep({ state, session, form, onChange, onBack, onContinue, headingRef }) {
+  const today=clinicDate()
+  const results=useMemo(()=>findOpenTimes(state,{branchId:form.branchId,serviceId:form.serviceId,patientId:session.patientId},{startDate:today,windowDays:FIND_TIME_DEFAULT_WINDOW_DAYS,limit:Number.POSITIVE_INFINITY}),[state,form.branchId,form.serviceId,session.patientId,today])
+  const days=useMemo(()=>buildDateStrip(results,today,FIND_TIME_DEFAULT_WINDOW_DAYS),[results,today])
   return <>
     <StageHeader eyebrow="Manual booking · Step 3 of 5" title="Pick a date" headingRef={headingRef}
       help={`You can book up to two months ahead (through ${dateLabel(maxBookingDate())}).`}/>
-    <Field label="Appointment date"><input type="date" min={clinicDate()} max={maxBookingDate()} value={form.date} onChange={event=>onChange(event.target.value)}/></Field>
+    <div className="pt-manual-dates"><p className="pt-card-label">Available dates in the next two weeks</p><DateStrip days={days} value={form.date} onChange={onChange}/></div>
+    <Field label="Choose another date"><input type="date" min={today} max={maxBookingDate()} value={form.date} onChange={event=>onChange(event.target.value)}/></Field>
     <div className="pt-stage-footer"><Button variant="ghost" onClick={onBack}>Back</Button><Button icon="arrow" onClick={onContinue} disabled={!form.date}>Continue</Button></div>
   </>
 }
 
-function TimeStep({ state, session, form, onPick, onBack, headingRef }) {
+function TimeStep({ state, session, form, onPick, onBack, onContinue, headingRef }) {
   const results=findOpenTimes(state,{branchId:form.branchId,serviceId:form.serviceId,patientId:session.patientId},{startDate:form.date,windowDays:1,limit:50})
   const grouped=groupSlotsByPeriod(results)
   const timeGroups=[['Morning',grouped.morning],['Afternoon',grouped.afternoon],['Evening',grouped.evening]]
   return <>
     <StageHeader eyebrow="Manual booking · Step 4 of 5" title={`Available times on ${dateLabel(form.date)}`} headingRef={headingRef}
       help="Only times that pass the clinic’s availability checks are shown. A Dentist is assigned automatically."/>
-    {results.length?timeGroups.map(([label,slots])=>slots.length>0&&<ChoiceGroup key={label} legend={label} name="book-time" variant="slots" value={form.start}
-      onChange={value=>onPick(results.find(r=>r.start===value))}
-      options={slots.map(r=>({value:r.start,label:displayTime(r.start)}))}/>)
+    {results.length?timeGroups.map(([label,slots])=><TimeSlotGroup key={label} legend={label} value={form.start}
+      onPick={value=>onPick(results.find(r=>r.start===value))}
+      slots={slots.map(r=>({value:r.start,label:displayTime(r.start)}))}/>)
       :<Notice tone="warning" title="No open times">There are no open times on {dateLabel(form.date)}. Try another date.</Notice>}
-    <div className="pt-stage-footer"><Button variant="ghost" onClick={onBack}>Back</Button><span/></div>
+    <div className="pt-stage-footer"><Button variant="ghost" onClick={onBack}>Back</Button><Button icon="arrow" onClick={onContinue} disabled={!form.start||!results.some(r=>r.start===form.start)}>Continue</Button></div>
   </>
 }
 
@@ -220,7 +203,7 @@ function ReviewStep({ state, mode, form, assignment, notes, onNotes, onBack, onC
       {label:'Date',value:form.date?dateLabel(form.date):null},
       {label:'Time',value:form.start?displayTime(form.start):null},
       {label:'Assigned Dentist',value:assignment.ok?dentistLabel(state,assignment.dentistId):null},
-      {label:'Payment',value:PAYMENT_LABEL[form.paymentMethod]||null},
+      {label:'Payment Method',value:PAYMENT_LABEL[form.paymentMethod]||null},
     ]}/>
     {assignment.ok?<p className="pt-hint">Assigned based on service availability.</p>
       :<Notice tone="warning" title="No Dentist is currently available">This combination has no eligible Dentist right now. Go back and choose a different date, time or branch.</Notice>}
@@ -350,7 +333,8 @@ export function PatientBookingPage({ store, setPage, context }) {
         onPick={value=>{change('serviceId',value);save({serviceId:value,date:null,start:null,paymentMethod:null})}}
         onBack={()=>back('smart-branch')} onContinue={()=>setStage('smart-schedule')}/>}
       {stage==='smart-schedule'&&<SmartScheduleStep state={state} session={session} form={form} headingRef={headingRef}
-        onPick={option=>{setForm(previous=>({...previous,date:option.date,start:option.start}));save({date:option.date,start:option.start,paymentMethod:null});setStage('payment')}}
+        onPick={option=>{setForm(previous=>({...previous,date:option.date,start:option.start}));save({date:option.date,start:option.start,paymentMethod:null})}}
+        onContinue={()=>setStage('payment')}
         onBack={()=>back('smart-service')}/>}
       {stage==='manual-branch'&&<>
         <StageHeader eyebrow="Manual booking · Step 1 of 5" title="Which clinic works best for you?" headingRef={headingRef}/>
@@ -361,11 +345,12 @@ export function PatientBookingPage({ store, setPage, context }) {
       {stage==='manual-service'&&<ServiceStep state={state} branchId={form.branchId} serviceId={form.serviceId} headingRef={headingRef} stepLabel="Manual booking · Step 2 of 5"
         onPick={value=>{change('serviceId',value);save({serviceId:value,date:null,start:null,paymentMethod:null})}}
         onBack={()=>back('manual-branch')} onContinue={()=>setStage('manual-date')}/>}
-      {stage==='manual-date'&&<DateStep form={form} headingRef={headingRef}
+      {stage==='manual-date'&&<DateStep state={state} session={session} form={form} headingRef={headingRef}
         onChange={value=>{change('date',value);save({date:value,start:'',paymentMethod:null});change('start','')}}
         onBack={()=>back('manual-service')} onContinue={()=>setStage('manual-time')}/>}
       {stage==='manual-time'&&<TimeStep state={state} session={session} form={form} headingRef={headingRef}
-        onPick={option=>{setForm(previous=>({...previous,start:option.start}));save({start:option.start,paymentMethod:null});setStage('payment')}}
+        onPick={option=>{setForm(previous=>({...previous,start:option.start}));save({start:option.start,paymentMethod:null})}}
+        onContinue={()=>setStage('payment')}
         onBack={()=>back('manual-date')}/>}
       {stage==='payment'&&<PaymentStep mode={mode} form={form} headingRef={headingRef}
         onPick={value=>{change('paymentMethod',value);save({paymentMethod:value});setStage('review')}}

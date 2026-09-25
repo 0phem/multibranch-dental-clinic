@@ -1,8 +1,9 @@
-# Backend Integration (Foundation 1B)
+# Backend Integration (Foundation 1B + Phase 2A)
 
-Scope: authentication, registration, session restoration, logout and RBAC only. Every other business module
-(appointments, scheduling, queue, treatments, HMO, billing, prescriptions, messages, loyalty, marketing) is
-still frontend-local — see "Frontend-local boundary" below.
+Scope: authentication, registration, session restoration, logout and RBAC (Foundation 1B), plus branch/
+service/staff/dentist reference data (Phase 2A — see its own section below). Every other business module
+(appointments, scheduling execution, queue, treatments, HMO, billing, prescriptions, messages, loyalty,
+marketing) is still frontend-local — see "Frontend-local boundary" below.
 
 ## Running it locally
 
@@ -97,5 +98,55 @@ token) triggers exactly one automatic refetch-and-retry — never a loop.
 
 Everything below `App.jsx`'s auth gate — Dashboards, Scheduling, PatientFlow, Clinical, FinanceCommunication,
 Admin, HMO, Messages, Loyalty, etc. — is unchanged and still reads/writes the same `localStorage` collections
-it always has. The identity bridge exists only so those pages can keep working before their own data moves to
-PostgreSQL in a later checkpoint.
+it always has, **except** the six reference-data collections Phase 2A covers (below). The identity bridge
+exists only so those still-local pages can keep working before their own data moves to PostgreSQL in a later
+checkpoint.
+
+## Backend Phase 2A — branch/service/staff/dentist reference data
+
+Branches, Services, Branch-Services, Staff profiles, Dentist profiles and Dentist-Service eligibility are now
+PostgreSQL-authoritative. `src/reference-data-bridge.js` is the read/write translation layer — the direct
+continuation of the same `identity-bridge.js` pattern above, not a new architectural idea.
+
+**Read endpoints** (`auth:sanctum`, `GET`): `/api/branches`, `/api/services`, `/api/branch-services` (flat,
+complete — the bootstrap actually fetches this one, not the scoped `/api/branches/{branch}/services`
+convenience endpoint below), `/api/dentists`. `/api/staff` is role-gated `staff,dentist,owner` — Patient is
+denied server-side, and the frontend bootstrap never calls it for a Patient session either (least privilege
+at both layers). `/api/branches/{branch}/services` exists as a scoped convenience, currently unused by the
+bridge. Every route parameter (`{branch}`, `{staffProfile}`, `{dentistProfile}`) binds by a stable
+`legacy_ref` string (e.g. `b1`, `d1`), never the internal bigint primary key — the frontend never sees or
+sends a bigint ID for these resources.
+
+**Mutation endpoints** (`role:owner` only): `PATCH /api/branches/{branch}`, `POST /api/branch-services` (body
+`branch_ref`/`service_ref`/`active`), `PATCH /api/staff/{staffProfile}`, `PATCH /api/dentists/{dentistProfile}`
+(accepts an optional `branch_ids[]` replace-set). These wire the *existing* Owner Admin UI (`BranchesPage`,
+`TeamPage` in `src/pages/Admin.jsx`) — the API call happens first, and only the server-confirmed response is
+adopted into local state (`adoptBranchFromServer`/`adoptBranchServiceFromServer`/`adoptPersonnelFromServer`
+in `src/administration.js`, additive alongside the pre-existing `saveBranch`/`setBranchService`/
+`savePersonnel` — never re-validated locally against an already-server-confirmed payload). No create/delete
+endpoint exists for any of these — only what the current UI already does.
+
+**`legacy_ref` / `legacy_user_ref`** are purely transitional bridge keys (not business identifiers), letting
+still-local collections (`appointments`, `queue`, `treatments`, etc.) keep resolving today's string IDs
+unchanged. `legacy_user_ref` specifically lets a bridged Dentist/Staff record's `userId` field resolve
+against the still-local, unchanged `state.users` collection — account activity/status is **not**
+backend-authoritative this phase (see `MODULE_COVERAGE.md`'s M7 row).
+
+**M1 User Management** is a separate backend-authoritative account collection at `GET/POST /api/users`,
+`PATCH /api/users/{user}`, and `DELETE /api/users/{user}`. The Owner screen fetches it on demand through
+`src/user-management-bridge.js`; it never replaces transitional `state.users`. It can create only Patient
+accounts (atomic PERSON + PATIENT + USER creation), edit first/last/email/phone, display role read-only, and
+soft-delete login access while preserving the Person and linked records. Passwords are validated and hashed
+server-side and never returned or stored in frontend state. The API is Owner-only; Staff/Dentist/Owner creation,
+role reassignment, title/personnel editing, password editing, invites, reset and restore workflows are not
+available. Staff/Dentist creation remains disabled in the UI pending profile provisioning, and soft-deleted
+emails remain reserved by the existing unique constraints.
+
+**Demo/reference data seeding** (`BranchSeeder`, `ServiceSeeder`, `BranchServiceSeeder`, `StaffProfileSeeder`,
+`DentistProfileSeeder`, `DentistBranchSeeder`, `DentistServiceAssignmentSeeder`) follows the exact same
+`app()->isProduction()` refusal gate as `DemoAccountsSeeder` above — schema migrations themselves carry no
+such gate (structure must be identical in every environment; only demo/reference *data* is production-gated).
+`StaffProfileSeeder`/`DentistProfileSeeder` attach `s1`/`d1` to the *existing* real Person behind
+`staff.reception@example.test`/`dentist@example.test` (no new Person/User/credential); the other 8 roster
+members get a real `persons` row (name/contact only) with no linked `users` row at all — nothing to log in
+with.

@@ -15,8 +15,8 @@ const EMAIL_RE=/^[^\s@]+@[^\s@]+\.[^\s@]+$/
 // The only fields a public registration payload may ever contain. Anything else — role/roleName/permissions/
 // accountStatus/branchId, or a browser-supplied personId/patientId/userId/id/username/login — fails the whole
 // request closed rather than being silently stripped and ignored, so a privileged/identity field can never be
-// half-processed. Legitimate optional fields (middleName, dob) are still allowed absent or empty.
-const ALLOWED_FIELDS=new Set(['firstName','middleName','lastName','phone','email','dob','preferredBranchId'])
+// half-processed. Date of birth remains optional.
+const ALLOWED_FIELDS=new Set(['firstName','lastName','phone','email','dob','preferredBranchId'])
 
 export function createRegistrationAction({getState, commit, clock=clinicNow}) {
   return (form={}, commandId) => {
@@ -48,7 +48,7 @@ export function createRegistrationAction({getState, commit, clock=clinicNow}) {
     // Never claim an existing Patient from typed identity: the same duplicate signal Staff patient creation uses.
     if(possibleDuplicatePerson(state.persons,{firstName,lastName,phone,dob}))
       return fail('An existing patient record may already match these details. Please contact the clinic for account assistance.')
-    const person={id:uid('per'),firstName,middleName:clean(form.middleName),lastName,email,phone,dob,sex:'',address:'',registrationCommandId:id}
+    const person={id:uid('per'),firstName,lastName,email,phone,dob,sex:'',address:'',registrationCommandId:id}
     const patient={id:uid('p'),personId:person.id,userId:null,patientCode:`PAT-${String(state.patients.length+1).padStart(4,'0')}`,preferredBranchId:branch.id,hmo:'None',hmoMember:'—',allergies:'',medicalHistory:'',dentalHistory:'',emergencyContact:'',consent:false}
     const user={id:uid('u'),personId:person.id,username:email,login:email,roleName:'Patient',role:'Patient',branchId:null,accountStatus:'Active',status:'Active',permissions:['patient-portal'],lastLogin:'Never',registeredAt:now.timestamp}
     patient.userId=user.id

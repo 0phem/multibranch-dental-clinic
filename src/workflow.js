@@ -15,7 +15,7 @@ const fail=message=>({ok:false,message})
 const replace=(rows,record)=>rows.some(x=>x.id===record.id)?rows.map(x=>x.id===record.id?record:x):[...rows,record]
 const durable=record=>{const {branch,service,...value}=record;return value}
 const clean=value=>String(value||'').trim().replace(/\s+/g,' ')
-export const patientProjection=(patient,person)=>({...person,...patient,id:patient.id,personId:person.id,name:[person.firstName,person.middleName,person.lastName].filter(Boolean).join(' ')})
+export const patientProjection=(patient,person)=>({...person,...patient,id:patient.id,personId:person.id,name:[person.firstName,person.lastName].filter(Boolean).join(' ')})
 
 // Critical frontend commands read the latest synchronous store snapshot. Their
 // patches are committed together by ClinicProvider, outside React state updaters.
@@ -330,13 +330,13 @@ export function createWorkflowActions({getState,commit,getSession,clock=clinicNo
     if(!isRecord(input)||!isRecord(input.person)||!isRecord(input.patient))return fail('Enter patient and contact details.')
     if(session.role!=='staff'&&session.role!=='owner')return fail('Only Staff or Owner can create a patient record.')
     const {person,patient,createPortalAccount=false}=input
-    if(['firstName','middleName','lastName','phone','email','dob','sex','address'].some(k=>person[k]!=null&&typeof person[k]!=='string'))return fail('Enter valid patient identity and contact text.')
+    if(['firstName','lastName','phone','email','dob','sex','address'].some(k=>person[k]!=null&&typeof person[k]!=='string'))return fail('Enter valid patient identity and contact text.')
     if(person.dob&&(!validDate(person.dob)||person.dob>now.date))return fail('Enter a valid date of birth.')
     const firstName=clean(person.firstName),lastName=clean(person.lastName),phone=clean(person.phone),email=clean(person.email).toLowerCase()
     if(!firstName||!lastName||!phone)return fail('First name, last name, and phone are required.')
     if(state.persons.some(p=>(p.phone&&p.phone===phone)||(p.firstName?.toLowerCase()===firstName.toLowerCase()&&p.lastName?.toLowerCase()===lastName.toLowerCase()&&p.dob===person.dob)))return fail('A possible duplicate patient/person exists. Review the existing record.')
     if(createPortalAccount&&(!email||state.persons.some(p=>p.email?.toLowerCase()===email)))return fail('A unique email is required for a portal account.')
-    const personRecord={...person,id:uid('per'),firstName,lastName,middleName:clean(person.middleName),phone,email}
+    const personRecord={...person,id:uid('per'),firstName,lastName,phone,email}
     const preferredBranchId=session.role==='staff'?session.branchId:patient.preferredBranchId||state.branches.find(b=>b.name===patient.preferredBranch)?.id
     if(!state.branches.some(b=>b.id===preferredBranchId))return fail('Select a valid preferred branch.')
     const record={...patient,id:uid('p'),personId:personRecord.id,userId:null,patientCode:`PAT-${String(state.patients.length+1).padStart(4,'0')}`,preferredBranchId,consent:!!patient.consent}

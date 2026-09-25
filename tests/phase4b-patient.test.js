@@ -294,7 +294,7 @@ test('invoices appear only when issued with payment evidence and never expose in
   assert.equal(view.invoiceView(f.state,issued).receipt,null)
   const payment=ok(f.actions.postPayment(draft.id,'Electronic',issued.total))
   const [paid]=view.patientInvoices(f.state,maria(f));const shown=view.invoiceView(f.state,paid)
-  assert.equal(shown.receipt.number,paid.receipt);assert.equal(shown.receipt.simulated,true);assert.ok(payment)
+  assert.equal(shown.receipt.number,paid.receipt);assert.equal(shown.receipt.amount,paid.payment.amount);assert.equal(shown.receipt.status,'Completed');assert.equal(shown.receipt.method,'Electronic');assert.equal(shown.receipt.simulated,true);assert.ok(payment)
   assert.equal(shown.items.length,2);assert.deepEqual(Object.keys(shown.items[0]).sort(),['amount','key','name','quantity','unit'])
   assert.ok(!('payment' in shown)&&!('paymentId' in shown),'no separate payment record is exposed')
   assert.ok(!Object.keys(shown.receipt).some(key=>/payment/i.test(key)))

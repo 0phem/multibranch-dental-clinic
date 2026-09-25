@@ -22,7 +22,9 @@ export function PatientPrescriptionsPage({ store, context }) {
 
 export function PatientBillingPage({ store, context }) {
   const { state }=store, session=store.session
+  const [openReceiptId,setOpenReceiptId]=useState(null)
   if(!patientContext(state,session))return NO_ACCOUNT
+  const patient=patientContext(state,session).patient
   const target=resolveTarget(state,session,'billing',context)
   const items=patientInvoices(state,session).map(i=>invoiceView(state,i)).sort((a,b)=>String(b.date).localeCompare(String(a.date)))
   return <div className="pt-page">
@@ -30,7 +32,20 @@ export function PatientBillingPage({ store, context }) {
     <div className="pt-list">{items.length?items.map(inv=><RecordCard key={inv.id} id={`invoice-${inv.id}`} highlight={target===inv.id} title={inv.invoiceNo||'Invoice'} subtitle={`${dateLabel(inv.date)}${inv.branch?` • ${inv.branch}`:''}`} status={inv.status}>
       <ul className="pt-charges" aria-label="Itemized charges">{inv.items.map(item=><li key={item.key}><span><b>{item.name}</b><small>{item.quantity} × {money(item.unit)}</small></span><span>{money(item.amount)}</span></li>)}</ul>
       <div className="pt-total"><span>Total</span><b>{money(inv.total)}</b></div>
-      {inv.receipt&&<div className="pt-receipt"><h4>Receipt</h4><DefinitionList items={[{label:'Receipt number',value:inv.receipt.number},{label:'Payment method',value:inv.receipt.simulated?'Simulated electronic payment — no money was transferred':inv.receipt.method},{label:'Paid',value:formatStamp(inv.receipt.paidAt)}]}/></div>}
+      {inv.receipt&&<p className="pt-hint">Receipt available: {inv.receipt.number}</p>}
+      {inv.receipt&&<Button size="sm" variant="soft" aria-expanded={openReceiptId===inv.id} aria-controls={`receipt-${inv.id}`} onClick={()=>setOpenReceiptId(openReceiptId===inv.id?null:inv.id)}>{openReceiptId===inv.id?'Hide Receipt':'View Receipt'}</Button>}
+      {inv.receipt&&openReceiptId===inv.id&&<div className="pt-receipt" id={`receipt-${inv.id}`}><h4>Payment receipt</h4><p className="pt-hint">Dr. Dana E. Roxas Dental Clinic</p><DefinitionList items={[
+        {label:'Branch',value:inv.branch},
+        {label:'Patient',value:patient.name},
+        {label:'Service',value:inv.items.map(item=>item.name).join(', ')},
+        {label:'Appointment reference',value:state.appointments.find(a=>a.id===inv.appointmentId)?.appointmentNo||null},
+        {label:'Invoice',value:inv.invoiceNo},
+        {label:'Receipt reference',value:inv.receipt.number},
+        {label:'Amount paid',value:money(inv.receipt.amount)},
+        {label:'Payment method',value:inv.receipt.method},
+        {label:'Payment status',value:inv.receipt.status},
+        {label:'Payment date and time',value:formatStamp(inv.receipt.paidAt)},
+      ]}/>{inv.receipt.simulated&&<p className="pt-hint">This electronic payment is a simulation; no money was transferred.</p>}</div>}
     </RecordCard>):<Empty title="No invoices yet" text="Invoices appear here after the clinic issues them."/>}</div>
   </div>
 }

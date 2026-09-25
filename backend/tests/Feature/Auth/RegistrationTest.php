@@ -7,6 +7,7 @@ use App\Models\Person;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Schema;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
@@ -18,7 +19,6 @@ class RegistrationTest extends TestCase
     {
         return array_merge([
             'first_name' => 'Maria',
-            'middle_name' => null,
             'last_name' => 'Santos',
             'email' => 'Maria.Santos@Example.Com',
             'phone' => '+639171234567',
@@ -40,6 +40,7 @@ class RegistrationTest extends TestCase
         $response->assertJsonPath('data.phone', '+639171234567');
         $response->assertJsonPath('data.date_of_birth', '1995-05-20');
         $response->assertJsonMissingPath('data.password');
+        $response->assertJsonMissingPath('data.middle_name');
 
         $person = Person::where('email', 'maria.santos@example.com')->firstOrFail();
         $patient = Patient::where('person_id', $person->id)->firstOrFail();
@@ -49,6 +50,13 @@ class RegistrationTest extends TestCase
         $this->assertSame($person->id, $user->person_id);
         $this->assertSame('patient', $user->role->value);
         $this->assertSame('Active', $user->account_status);
+    }
+
+    public function test_persons_schema_uses_first_and_last_name_only(): void
+    {
+        $this->assertTrue(Schema::hasColumn('persons', 'first_name'));
+        $this->assertTrue(Schema::hasColumn('persons', 'last_name'));
+        $this->assertFalse(Schema::hasColumn('persons', 'middle_name'));
     }
 
     public function test_registration_hashes_password_and_normalizes_email(): void

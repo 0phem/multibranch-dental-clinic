@@ -19,7 +19,6 @@ class Person extends Model
 
     protected $fillable = [
         'first_name',
-        'middle_name',
         'last_name',
         'email',
         'phone',
@@ -45,8 +44,20 @@ class Person extends Model
         return $this->hasOne(Patient::class);
     }
 
+    // Phase 2A additions (see StaffProfile/DentistProfile migration comments) — a Person may have neither
+    // or one, but never both; enforced at the application layer, not a DB constraint spanning two tables.
+    public function staffProfile(): HasOne
+    {
+        return $this->hasOne(StaffProfile::class);
+    }
+
+    public function dentistProfile(): HasOne
+    {
+        return $this->hasOne(DentistProfile::class);
+    }
+
     public function fullName(): string
     {
-        return trim(collect([$this->first_name, $this->middle_name, $this->last_name])->filter()->implode(' '));
+        return trim(collect([$this->first_name, $this->last_name])->filter()->implode(' '));
     }
 }

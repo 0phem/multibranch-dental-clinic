@@ -112,3 +112,36 @@ export async function logout() {
 // Test-only: reset the module-level CSRF cache between test cases (Node's ESM module cache would otherwise
 // leak it across test files/cases that share this module instance).
 export function __resetCsrfCacheForTests() { resetCsrfCache() }
+
+// Phase 2A reference data (see the Phase 2A plan). Read functions: any authenticated role except
+// listStaff (Patient is denied server-side — the frontend bootstrap bridge simply never calls this for a
+// Patient session, see reference-data-bridge.js). Mutation functions always send legacy_ref-keyed
+// identifiers (route segments and branch_ref/service_ref body fields) — never an internal bigint id.
+export function listBranches() { return request('/api/branches') }
+export function listServices() { return request('/api/services') }
+export function listBranchServices() { return request('/api/branch-services') }
+export function listStaff() { return request('/api/staff') }
+export function listDentists() { return request('/api/dentists') }
+
+export function updateBranch(legacyRef, payload) {
+  return request(`/api/branches/${encodeURIComponent(legacyRef)}`, { method: 'PATCH', body: JSON.stringify(payload) })
+}
+
+export function setBranchService(payload) {
+  return request('/api/branch-services', { method: 'POST', body: JSON.stringify(payload) })
+}
+
+export function updateStaffProfile(legacyRef, payload) {
+  return request(`/api/staff/${encodeURIComponent(legacyRef)}`, { method: 'PATCH', body: JSON.stringify(payload) })
+}
+
+export function updateDentistProfile(legacyRef, payload) {
+  return request(`/api/dentists/${encodeURIComponent(legacyRef)}`, { method: 'PATCH', body: JSON.stringify(payload) })
+}
+
+// M1 User Management is deliberately separate from transitional state.users. These calls are on-demand
+// for the Owner screen and expose only the backend account collection.
+export function listUserAccounts() { return request('/api/users') }
+export function createUserAccountRemote(payload) { return request('/api/users', { method: 'POST', body: JSON.stringify(payload) }) }
+export function updateUserAccountRemote(id, payload) { return request(`/api/users/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(payload) }) }
+export function deleteUserAccountRemote(id) { return request(`/api/users/${encodeURIComponent(id)}`, { method: 'DELETE' }) }

@@ -87,8 +87,19 @@ export function DateStrip({ legend='Choose a date', days, value, onChange }) {
       className={`pt-date-chip ${value===day.date?'is-selected':''}`.trim()}
       onClick={()=>day.hasOpenings&&selectAndFocus(day.date)}
       onKeyDown={event=>onKeyDown(event,index)}
-    >{day.label}</button>)}
+    >{['Today','Tomorrow'].includes(day.dayLabel)&&<span className="pt-date-chip-context">{day.dayLabel}</span>}<span className="pt-date-chip-day">{new Date(`${day.date}T12:00:00`).toLocaleDateString('en-PH',{weekday:'short'})}</span><span className="pt-date-chip-number">{day.dayNumber||day.date.slice(-2)}</span></button>)}
   </div>
+}
+
+export function TimeSlotGroup({ legend, slots, value, onPick }) {
+  if(!slots.length)return null
+  return <section className="pt-time-period" aria-label={`${legend} appointment times`}>
+    <h3>{legend}</h3>
+    <div className="pt-time-grid">{slots.map(slot=><button type="button" key={slot.value}
+      className={`pt-time-slot ${value===slot.value?'is-selected':''}`.trim()}
+      aria-pressed={value===slot.value} disabled={slot.disabled}
+      onClick={()=>onPick(slot.value)}>{slot.label}</button>)}</div>
+  </section>
 }
 
 export function Stepper({ steps, current, reached, onSelect, label='Steps' }) {

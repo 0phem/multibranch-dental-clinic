@@ -29,7 +29,9 @@ class AuthenticatedSessionController extends Controller
             return $this->credentialFailure('inactive_account', 'This account is inactive. Contact the clinic for help.');
         }
 
-        Auth::login($user);
+        // The API uses Sanctum's stateful middleware, which may expose a request guard as the default
+        // facade guard. Login must always establish the real session-backed web guard.
+        Auth::guard('web')->login($user);
         $request->session()->regenerate();
 
         return response()->json([

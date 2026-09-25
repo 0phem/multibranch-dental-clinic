@@ -28,7 +28,6 @@ class RegisteredPatientController extends Controller
         $user = DB::transaction(function () use ($data) {
             $person = Person::create([
                 'first_name' => $data['first_name'],
-                'middle_name' => $data['middle_name'] ?? null,
                 'last_name' => $data['last_name'],
                 'email' => $data['email'],
                 'phone' => $data['phone'],

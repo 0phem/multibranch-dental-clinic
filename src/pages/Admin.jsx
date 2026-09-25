@@ -3,8 +3,11 @@ import { automationSnapshot } from '../orchestration.js'
 import React, { useMemo, useRef, useState } from 'react'
 import { MODULES, ROLE_INFO } from '../data.js'
 import { LOYALTY_PROGRAM, canManageLoyalty, ledgerIssue } from '../loyalty.js'
-import { Button, Card, Field, Modal, Notice, PageHeader, Progress, StatCard, Status, Table, Tabs } from '../components.jsx'
+import { Button, Card, ConfirmDialog, Field, Modal, Notice, PageHeader, Progress, StatCard, Status, Table, Tabs } from '../components.jsx'
 import { branchCapacity, dateLabel, dentistName, makeCsv, patientName, peso, uid } from '../logic.js'
+import { syncBranchUpdate, syncBranchServiceToggle, syncPersonnelUpdate } from '../reference-data-bridge.js'
+import { createUserAccountRemote, deleteUserAccountRemote, fetchUserAccounts, updateUserAccountRemote } from '../user-management-bridge.js'
+import { DEFAULT_COUNTRY, normalizePhoneNumber, sanitizePhoneInput } from '../phone.js'
 
 export function BranchesPage({ store }) {
   const { state, actions, toast }=store
@@ -12,26 +15,40 @@ export function BranchesPage({ store }) {
   const branch=state.branches.find(b=>b.id===selected)
   const [form,setForm]=useState(branch||{})
   React.useEffect(()=>setForm(branch||{}),[selected])
-  const save=()=>{const result=actions.saveBranch(selected,form);toast(result.ok?'Branch configuration saved.':result.message,result.ok?'success':'warning')}
+  // Phase 2A: branches/branchServices are backend-authoritative — the API call happens first, and only its
+  // confirmed response is adopted into local state (never an optimistic local success ahead of the
+  // server). See adoptBranchFromServer/adoptBranchServiceFromServer (administration.js) and the Phase 2A
+  // plan, section J/point 8.
+  const save=async()=>{
+    const result=await syncBranchUpdate(selected,form)
+    if(!result.ok)return toast(result.message||'Could not save branch changes.','warning')
+    const adopted=actions.adoptBranchFromServer(selected,result.record)
+    toast(adopted.ok?'Branch configuration saved.':adopted.message,adopted.ok?'success':'warning')
+  }
   const serviceActive=serviceId=>state.branchServices.some(bs=>bs.branchId===selected&&bs.serviceId===serviceId&&bs.active!==false)
-  const toggleService=serviceId=>{const result=actions.setBranchService(selected,serviceId,!serviceActive(serviceId));if(!result.ok)toast(result.message,'warning')}
+  const toggleService=async serviceId=>{
+    const result=await syncBranchServiceToggle(selected,serviceId,!serviceActive(serviceId))
+    if(!result.ok)return toast(result.message||'Could not update service availability.','warning')
+    const adopted=actions.adoptBranchServiceFromServer(selected,serviceId,result.record)
+    if(!adopted.ok)toast(adopted.message,'warning')
+  }
   return <>
     <PageHeader title="Multi-Branch Clinic Management" text="ERD-aligned branch identity plus the operating data required by scheduling, staffing, patient flow, and reporting." modules={[2]}/>
     <div className="grid-2 admin-config">
-      <Card title="Branches" subtitle="BRANCHES: id • branch_name • branch_code • city • branch_status">
+      <Card title="Branches" subtitle="Branch identity, location, hours, status, and capacity">
         <div className="branch-selector">{state.branches.map(b=><button key={b.id} className={selected===b.id?'selected':''} onClick={()=>setSelected(b.id)}><div><b>{b.name}</b><small>{b.branchCode} • {b.city}</small></div><Status>{b.status}</Status></button>)}</div>
       </Card>
       {branch&&<Card title={`Configure ${branch.name}`}><div className="form-grid">
         <Field label="Branch name"><input value={form.name||''} onChange={e=>setForm({...form,name:e.target.value})}/></Field>
-        <Field label="Branch code" hint="Maps to BRANCHES.branch_code"><input value={form.branchCode||''} onChange={e=>setForm({...form,branchCode:e.target.value})}/></Field>
-        <Field label="City" hint="Maps to BRANCHES.city"><input value={form.city||''} onChange={e=>setForm({...form,city:e.target.value})}/></Field>
+        <Field label="Branch code"><input value={form.branchCode||''} onChange={e=>setForm({...form,branchCode:e.target.value})}/></Field>
+        <Field label="City"><input value={form.city||''} onChange={e=>setForm({...form,city:e.target.value})}/></Field>
         <Field label="Branch status"><select value={form.status||'Open'} onChange={e=>setForm({...form,status:e.target.value})}><option>Open</option><option>Temporarily Closed</option><option>Inactive</option></select></Field>
         <Field label="Opening time"><input type="time" value={form.open||'09:00'} onChange={e=>setForm({...form,open:e.target.value})}/></Field>
         <Field label="Closing time"><input type="time" value={form.close||'18:00'} onChange={e=>setForm({...form,close:e.target.value})}/></Field>
         <Field label="Capacity threshold"><input type="number" min="40" max="100" value={form.threshold||80} onChange={e=>setForm({...form,threshold:Number(e.target.value)})}/></Field>
         <Field label="Phone"><input value={form.phone||''} onChange={e=>setForm({...form,phone:e.target.value})}/></Field>
         <Field label="Address"><textarea value={form.address||''} onChange={e=>setForm({...form,address:e.target.value})}/></Field>
-        <div className="span-2"><label className="field-label">Available services <small>BRANCH_SERVICES • scheduling reads this catalog directly</small></label><div className="permission-list">{state.services.filter(s=>s.status==='Active').map(service=><label className="check-control" key={service.id}><input type="checkbox" checked={serviceActive(service.id)} onChange={()=>toggleService(service.id)}/><span><b>{service.name}</b><small>{service.category} • {service.duration} min • {peso.format(service.baseFee)}</small></span></label>)}</div></div>
+        <div className="span-2"><label className="field-label">Available services <small>Branch services • scheduling reads this catalog directly</small></label><div className="permission-list">{state.services.filter(s=>s.status==='Active').map(service=><label className="check-control" key={service.id}><input type="checkbox" checked={serviceActive(service.id)} onChange={()=>toggleService(service.id)}/><span><b>{service.name}</b><small>{service.category} • {service.duration} min • {peso.format(service.baseFee)}</small></span></label>)}</div></div>
         <Button className="span-2" onClick={save}>Publish Branch Changes</Button>
       </div></Card>}
     </div>
@@ -61,40 +78,44 @@ export function TeamPage({ store }) {
     if(branchConflict(profile)) return 'Conflict'
     return profile.available?'Available':'Unavailable'
   }
-  const saveDentist=()=>{
-    const result=actions.savePersonnel('dentists',editDentist?.id,editDentist)
-    if(!result.ok)return toast(result.message,'warning')
+  // Phase 2A: dentist/staff profiles are backend-authoritative — same API-first, adopt-confirmed-response
+  // pattern as BranchesPage's save/toggleService above.
+  const saveDentist=async()=>{
+    const result=await syncPersonnelUpdate('dentists',editDentist?.id,editDentist)
+    if(!result.ok)return toast(result.message||'Could not save personnel changes.','warning')
+    const adopted=actions.adoptPersonnelFromServer('dentists',editDentist.id,result.record)
+    if(!adopted.ok)return toast(adopted.message,'warning')
     toast('Personnel changes saved.','success');setEditDentist(null)
   }
-  const saveStaff=()=>{
-    const result=actions.savePersonnel('staff',editStaff?.id,editStaff)
-    if(!result.ok)return toast(result.message,'warning')
+  const saveStaff=async()=>{
+    const result=await syncPersonnelUpdate('staff',editStaff?.id,editStaff)
+    if(!result.ok)return toast(result.message||'Could not save personnel changes.','warning')
+    const adopted=actions.adoptPersonnelFromServer('staff',editStaff.id,result.record)
+    if(!adopted.ok)return toast(adopted.message,'warning')
     toast('Personnel changes saved.','success');setEditStaff(null)
   }
 
   return <>
-    <PageHeader title="Dentist & Staff Management" text="Personnel records are synchronized from Users & Access. This screen manages the linked STAFF_PROFILES data plus operational shift and availability information used by scheduling and capacity workflows." modules={[3,15]}/>
+    <PageHeader title="Dentist & Staff Management" text="Personnel records are linked to account access. This screen manages Staff and Dentist profiles, operational shifts, branch assignments, and availability used by scheduling and capacity workflows." modules={[3,15]}/>
     <Notice tone="info" title="Account & personnel synchronization">Create the account first in <b>Access & Roles</b>. Dentist and staff accounts automatically receive a linked personnel profile here. <b>Active</b> comes from the account; <b>Available</b> reflects operational scheduling status.</Notice>
     <Tabs tabs={[{key:'dentists',label:'Dentists',count:state.dentists.length},{key:'staff',label:'Staff',count:state.staff.length}]} active={tab} onChange={setTab}/>
-    {tab==='dentists'?<Card title="Dentist profiles & availability" subtitle="STAFF_PROFILES: user_id • staff_type • license_no • specialization">
+    {tab==='dentists'?<Card title="Dentist profiles & availability" subtitle="License Number • Specialty • Linked Account • Operational availability">
       <Table rows={state.dentists} columns={[
         {key:'name',label:'Dentist'},
-        {key:'userId',label:'User ID'},
-        {key:'licenseNo',label:'License no.'},
-        {key:'specialty',label:'Specialization'},
+        {key:'userId',label:'Linked Account'},
+        {key:'licenseNo',label:'License Number'},
+        {key:'specialty',label:'Specialty'},
         {key:'branches',label:'Branch assignment',render:d=>d.branches.join(', ')},
         {key:'shift',label:'Shift',render:d=>`${d.shiftStart}–${d.shiftEnd}`},
         {key:'active',label:'Active',render:d=><Status>{accountStatus(d)}</Status>},
         {key:'availability',label:'Available',render:d=><Status>{availableStatus(d)}</Status>},
         {key:'action',label:'Action',render:d=><Button size="sm" variant="ghost" onClick={()=>setEditDentist({...d})}>Edit Profile</Button>}
       ]}/>
-    </Card>:<Card title="Clinic staff profiles" subtitle="Every row is linked back to a USERS account through user_id">
+    </Card>:<Card title="Clinic Staff profiles" subtitle="Every row is linked to its account when account access exists">
       <Table rows={state.staff} columns={[
         {key:'name',label:'Staff member'},
-        {key:'userId',label:'User ID'},
-        {key:'staffType',label:'Staff type'},
-        {key:'licenseNo',label:'License no.'},
-        {key:'specialization',label:'Specialization'},
+        {key:'userId',label:'Linked Account'},
+        {key:'staffType',label:'Staff title'},
         {key:'branch',label:'Branch'},
         {key:'shift',label:'Shift',render:s=>`${s.shiftStart}–${s.shiftEnd}`},
         {key:'active',label:'Active',render:s=><Status>{accountStatus(s)}</Status>},
@@ -106,9 +127,9 @@ export function TeamPage({ store }) {
     <Modal open={!!editDentist} onClose={()=>setEditDentist(null)} title="Edit dentist profile" subtitle="Account identity/status stays in Users & Access. This form maintains the linked personnel profile and operational assignment.">
       {editDentist&&<div className="form-grid">
         <Field label="User / display name" hint={`Linked user: ${editDentist.userId}`}><input value={editDentist.name} disabled/></Field>
-        <Field label="Staff type"><input value={editDentist.staffType||'Dentist'} disabled/></Field>
-        <Field label="License no."><input value={editDentist.licenseNo||''} onChange={e=>setEditDentist({...editDentist,licenseNo:e.target.value})}/></Field>
-        <Field label="Specialization"><input value={editDentist.specialty||''} onChange={e=>setEditDentist({...editDentist,specialty:e.target.value})}/></Field>
+        <Field label="Professional role"><input value={editDentist.staffType||'Dentist'} disabled/></Field>
+        <Field label="License Number"><input value={editDentist.licenseNo||''} onChange={e=>setEditDentist({...editDentist,licenseNo:e.target.value})}/></Field>
+        <Field label="Specialty"><input value={editDentist.specialty||''} onChange={e=>setEditDentist({...editDentist,specialty:e.target.value})}/></Field>
         <Field label="Branch"><select value={editDentist.branches[0]} onChange={e=>setEditDentist({...editDentist,branches:[e.target.value],branchIds:[state.branches.find(b=>b.name===e.target.value)?.id]})}>{state.branches.map(b=><option key={b.id}>{b.name}</option>)}</select></Field>
         <Field label="Assistant"><select value={editDentist.assistantStaffId||''} onChange={e=>setEditDentist({...editDentist,assistantStaffId:e.target.value||null})}><option value="">Unassigned</option>{state.staff.filter(s=>s.staffType==='Dental Assistant').map(a=><option key={a.id} value={a.id}>{a.name} • {a.branch}</option>)}</select></Field>
         <Field label="Shift start"><input type="time" value={editDentist.shiftStart} onChange={e=>setEditDentist({...editDentist,shiftStart:e.target.value})}/></Field>
@@ -119,12 +140,10 @@ export function TeamPage({ store }) {
       </div>}
     </Modal>
 
-    <Modal open={!!editStaff} onClose={()=>setEditStaff(null)} title="Edit staff profile" subtitle="This edits the linked STAFF_PROFILES record and the operational fields used by clinic scheduling.">
+    <Modal open={!!editStaff} onClose={()=>setEditStaff(null)} title="Edit staff profile" subtitle="Update the Staff title, branch assignment, shift, and operational availability used by scheduling.">
       {editStaff&&<div className="form-grid">
         <Field label="User / display name" hint={`Linked user: ${editStaff.userId}`}><input value={editStaff.name} disabled/></Field>
-        <Field label="Staff type"><input value={editStaff.staffType||''} onChange={e=>setEditStaff({...editStaff,staffType:e.target.value})}/></Field>
-        <Field label="License no."><input value={editStaff.licenseNo||''} onChange={e=>setEditStaff({...editStaff,licenseNo:e.target.value})}/></Field>
-        <Field label="Specialization"><input value={editStaff.specialization||''} onChange={e=>setEditStaff({...editStaff,specialization:e.target.value})}/></Field>
+        <Field label="Staff title"><input value={editStaff.staffType||''} onChange={e=>setEditStaff({...editStaff,staffType:e.target.value})}/></Field>
         <Field label="Branch"><select value={editStaff.branch} onChange={e=>setEditStaff({...editStaff,branch:e.target.value,branchId:state.branches.find(b=>b.name===e.target.value)?.id||null})}><option>All Branches</option>{state.branches.map(b=><option key={b.id}>{b.name}</option>)}</select></Field>
         <Field label="Shift start"><input type="time" value={editStaff.shiftStart} onChange={e=>setEditStaff({...editStaff,shiftStart:e.target.value})}/></Field>
         <Field label="Shift end"><input type="time" value={editStaff.shiftEnd} onChange={e=>setEditStaff({...editStaff,shiftEnd:e.target.value})}/></Field>
@@ -163,70 +182,90 @@ export function AnalyticsPage({ activeBranch, store }) {
 }
 
 export function UsersPage({ store }) {
-  const { state, actions, toast }=store
-  const empty={firstName:'',middleName:'',lastName:'',phone:'',username:'',email:'',roleName:'Receptionist',branchId:'b1',accountStatus:'Active'}
+  const { toast }=store
+  const empty={firstName:'',lastName:'',phone:'',email:'',role:'patient',password:'',passwordConfirmation:''}
   const [form,setForm]=useState(empty)
-  const permissionMap={
-    Patient:['patient-portal'],
-    Receptionist:['appointments','checkin','queue','patient-demographics','billing','hmo','messages','followups'],
-    Dentist:['schedule','queue','clinical-records','treatment','prescriptions','followups','messages'],
-    'Dental Assistant':['queue','clinical-records'],
-    'HMO Coordinator':['hmo','patient-demographics','messages'],
-    Cashier:['billing','patient-demographics'],
-    'Patient Engagement Staff':['inquiries','messages','engagement'],
-    'Owner / Admin':['all']
+  const [phoneLocal,setPhoneLocal]=useState('')
+  const [records,setRecords]=useState([])
+  const [loading,setLoading]=useState(true)
+  const [error,setError]=useState('')
+  const [submitting,setSubmitting]=useState(false)
+  const [edit,setEdit]=useState(null)
+  const [editPhoneLocal,setEditPhoneLocal]=useState('')
+  const [deleteTarget,setDeleteTarget]=useState(null)
+  const localPhone=value=>{
+    const digits=String(value||'').replace(/\D/g,'')
+    if(digits.startsWith('63'))return digits.slice(2,12)
+    if(digits.startsWith('0'))return digits.slice(1,11)
+    return digits.slice(0,DEFAULT_COUNTRY.digits)
   }
-  const staffRoles=new Set(['Receptionist','Dental Assistant','HMO Coordinator','Cashier','Patient Engagement Staff'])
-  const profileSync=u=>{
-    if(u.roleName==='Dentist') return state.dentists.some(d=>d.userId===u.id)?'Dentist profile linked':'Missing profile'
-    if(staffRoles.has(u.roleName)) return state.staff.some(s=>s.userId===u.id)?'Staff profile linked':'Missing profile'
-    if(u.roleName==='Patient') return state.patients.some(p=>p.userId===u.id)?'Patient record linked':'Missing patient link'
-    return 'Not required'
+  const load=async()=>{
+    setLoading(true);setError('')
+    const result=await fetchUserAccounts()
+    if(result.ok)setRecords(result.records)
+    else setError(result.message||'Could not load user accounts.')
+    setLoading(false)
   }
-  const add=()=>{
-    const result=actions.createUserAccount(form)
-    if(!result.ok)return toast(result.message,'warning')
-    toast(form.roleName==='Dentist'||staffRoles.has(form.roleName)?'Account created and linked personnel profile synchronized.':form.roleName==='Patient'?'Patient portal account and patient record linked.':'Account created.','success')
-    setForm(empty)
+  React.useEffect(()=>{load()},[])
+  const add=async()=>{
+    const phone=phoneLocal?normalizePhoneNumber(DEFAULT_COUNTRY.dial,phoneLocal):{ok:true,e164:''}
+    if(!phone.ok)return toast(phone.reason,'warning')
+    setSubmitting(true)
+    const result=await createUserAccountRemote({...form,phone:phone.e164})
+    setSubmitting(false)
+    if(!result.ok)return toast(result.message||'Could not create the Patient account.','warning')
+    setRecords(rows=>[...rows,result.record]);setForm(empty);setPhoneLocal('')
+    toast('Patient account created.','success')
   }
-  const toggle=u=>{
-    const result=actions.setUserStatus(u.id,(u.accountStatus||u.status)==='Active'?'Inactive':'Active')
-    if(!result.ok)return toast(result.message,'warning')
-    toast(`Account is now ${result.status}. Linked personnel availability was synchronized when applicable.`,'success')
+  const saveEdit=async()=>{
+    if(!edit)return
+    const phone=editPhoneLocal?normalizePhoneNumber(DEFAULT_COUNTRY.dial,editPhoneLocal):{ok:true,e164:''}
+    if(!phone.ok)return toast(phone.reason,'warning')
+    setSubmitting(true)
+    const result=await updateUserAccountRemote(edit.id,{...edit,phone:phone.e164})
+    setSubmitting(false)
+    if(!result.ok)return toast(result.message||'Could not save account information.','warning')
+    setRecords(rows=>rows.map(row=>row.id===edit.id?result.record:row));setEdit(null)
+    toast('Account information saved.','success')
   }
-  const branchScoped=!['Owner / Admin','Patient'].includes(form.roleName)
+  const remove=async()=>{
+    if(!deleteTarget)return
+    setSubmitting(true)
+    const result=await deleteUserAccountRemote(deleteTarget.id)
+    setSubmitting(false)
+    if(!result.ok){setDeleteTarget(null);return toast(result.message||'Could not delete this account.','warning')}
+    setRecords(rows=>rows.filter(row=>row.id!==deleteTarget.id));setDeleteTarget(null)
+    toast('User account deleted.','success')
+  }
   return <>
-    <PageHeader title="People & Access • User Accounts" text="PERSONS stores the single identity/contact record. USERS stores authentication/account state. Dentist/Staff/Patient profiles are linked automatically so the same person is not encoded twice." modules={[1,3,4]}/>
-    <Notice tone="info" title="Identity model">Identity and contact details are stored once and shared by the linked user, staff, dentist, or patient profile.</Notice>
+    <PageHeader title="User Management" text="Manage user accounts, roles, and account information." modules={[1]}/>
+    <Notice tone="info" title="Current scope">Patient accounts can be created here. Staff and Dentist account creation is unavailable until profile provisioning is migrated. Roles are read-only after creation.</Notice>
     <div className="grid-2 top-gap">
-      <Card title="Create user account" subtitle="Owner/Admin can create Patient, Dentist, Staff subrole, or Owner/Admin accounts">
+      <Card title="Create user account" subtitle="Create a Patient login with the clinic’s standard account security.">
         <div className="form-grid">
           <Field label="First name" required><input value={form.firstName} onChange={e=>setForm({...form,firstName:e.target.value})}/></Field>
-          <Field label="Middle name" hint="Optional"><input value={form.middleName} onChange={e=>setForm({...form,middleName:e.target.value})}/></Field>
           <Field label="Last name" required><input value={form.lastName} onChange={e=>setForm({...form,lastName:e.target.value})}/></Field>
-          <Field label="Phone"><input value={form.phone} onChange={e=>setForm({...form,phone:e.target.value})}/></Field>
-          <Field label="Username" required><input value={form.username} onChange={e=>setForm({...form,username:e.target.value})}/></Field>
+          <Field label="Mobile number" hint={`Enter 10 digits after ${DEFAULT_COUNTRY.dial}, for example 9171234567.`}><div className="phone-field"><span className="phone-field-code" aria-hidden="true">{DEFAULT_COUNTRY.dial}</span><input type="tel" inputMode="numeric" aria-label="Mobile number" className="phone-field-number" placeholder="9171234567" maxLength={DEFAULT_COUNTRY.digits} value={phoneLocal} onChange={e=>setPhoneLocal(sanitizePhoneInput(e.target.value))}/></div></Field>
           <Field label="Email" required><input type="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})}/></Field>
-          <Field label="Role"><select value={form.roleName} onChange={e=>setForm({...form,roleName:e.target.value,branchId:['Owner / Admin','Patient'].includes(e.target.value)?'':form.branchId||'b1'})}>{Object.keys(permissionMap).map(r=><option key={r}>{r}</option>)}</select></Field>
-          <Field label="Branch scope" hint={branchScoped?'Required for operational clinic roles':'Not applicable'}><select disabled={!branchScoped} value={branchScoped?form.branchId:''} onChange={e=>setForm({...form,branchId:e.target.value})}>{!branchScoped?<option value="">Not branch-bound</option>:state.branches.map(b=><option key={b.id} value={b.id}>{b.branchCode} • {b.name}</option>)}</select></Field>
-          <Field label="Account status"><select value={form.accountStatus} onChange={e=>setForm({...form,accountStatus:e.target.value})}><option>Active</option><option>Inactive</option></select></Field>
-          <Button className="span-2" onClick={add}>Create Linked Account</Button>
+          <Field label="Role"><select value={form.role} onChange={e=>setForm({...form,role:e.target.value})}><option value="patient">Patient</option><option value="staff" disabled>Staff (temporarily unavailable)</option><option value="dentist" disabled>Dentist (temporarily unavailable)</option></select></Field>
+          <Field label="Initial Password" required hint="At least 8 characters with letters and numbers."><input type="password" autoComplete="new-password" value={form.password} onChange={e=>setForm({...form,password:e.target.value})}/></Field>
+          <Field label="Confirm Password" required><input type="password" autoComplete="new-password" value={form.passwordConfirmation} onChange={e=>setForm({...form,passwordConfirmation:e.target.value})}/></Field>
+          <Button className="span-2" onClick={add} disabled={submitting}>{submitting?'Creating…':'Create Patient Account'}</Button>
         </div>
       </Card>
-      <Card title="Permission profiles"><div className="permission-list">{Object.entries(permissionMap).map(([role,perms])=><div key={role}><b>{role}</b><span>{perms.join(' • ')}</span></div>)}</div></Card>
+      <Card title="Account roles" subtitle="Roles are authorization categories. Staff job titles are maintained separately in personnel management."><div className="permission-list"><div><b>Patient</b><span>Patient portal access</span></div><div><b>Staff</b><span>Creation deferred pending profile provisioning</span></div><div><b>Dentist</b><span>Creation deferred pending profile provisioning</span></div></div></Card>
     </div>
-    <Card className="top-gap" title="Authorized users" subtitle="Identity is resolved from PERSONS; profile linkage shows which operational record shares that same person.">
-      <Table rows={state.users} columns={[
-        {key:'name',label:'Person'},
-        {key:'username',label:'Username',render:u=>u.username||u.login},
-        {key:'email',label:'Email'},
-        {key:'roleName',label:'Role',render:u=>u.roleName||u.role},
-        {key:'branch',label:'Branch scope'},
-        {key:'profile',label:'Linked profile',render:u=>profileSync({...u,roleName:u.roleName||u.role})},
-        {key:'status',label:'Account status',render:u=><Status>{u.accountStatus||u.status}</Status>},
-        {key:'action',label:'Action',render:u=>(u.roleName||u.role)!=='Owner / Admin'?<Button size="sm" variant={(u.accountStatus||u.status)==='Active'?'danger':'ghost'} onClick={()=>toggle(u)}>{(u.accountStatus||u.status)==='Active'?'Deactivate':'Activate'}</Button>:null}
-      ]}/>
+    <Card className="top-gap" title="User accounts" subtitle="Only real backend login accounts appear here.">
+      {loading?<p className="muted-copy" role="status">Loading user accounts…</p>:error?<Notice tone="warning" title="Couldn’t load user accounts">{error}<Button size="sm" variant="ghost" onClick={load}>Try again</Button></Notice>:<Table rows={records} caption="User accounts" columns={[
+        {key:'name',label:'Name'}, {key:'email',label:'Email'}, {key:'phone',label:'Phone',render:u=>u.phone||'—'},
+        {key:'role',label:'Role',render:u=>u.role==='owner'?'Owner':u.role==='dentist'?'Dentist':u.role==='staff'?'Staff':'Patient'},
+        {key:'action',label:'Actions',render:u=><div className="row-actions"><Button size="sm" variant="ghost" onClick={()=>{setEdit({...u});setEditPhoneLocal(localPhone(u.phone))}}>Edit</Button><Button size="sm" variant="danger" onClick={()=>setDeleteTarget(u)}>Delete</Button></div>}
+      ]}/>}
     </Card>
+    <Modal open={!!edit} onClose={()=>setEdit(null)} title="Edit user account" subtitle="Role and personnel information are read-only here.">
+      {edit&&<div className="form-grid"><Field label="First name" required><input value={edit.firstName} onChange={e=>setEdit({...edit,firstName:e.target.value})}/></Field><Field label="Last name" required><input value={edit.lastName} onChange={e=>setEdit({...edit,lastName:e.target.value})}/></Field><Field label="Email" required><input type="email" value={edit.email} onChange={e=>setEdit({...edit,email:e.target.value})}/></Field><Field label="Mobile number" hint={`Enter 10 digits after ${DEFAULT_COUNTRY.dial}, or leave blank.`}><div className="phone-field"><span className="phone-field-code" aria-hidden="true">{DEFAULT_COUNTRY.dial}</span><input type="tel" inputMode="numeric" aria-label="Mobile number" className="phone-field-number" placeholder="9171234567" maxLength={DEFAULT_COUNTRY.digits} value={editPhoneLocal} onChange={e=>setEditPhoneLocal(sanitizePhoneInput(e.target.value))}/></div></Field><Field label="Role" hint="Role cannot be changed from User Management."><input value={edit.role==='owner'?'Owner':edit.role==='dentist'?'Dentist':edit.role==='staff'?'Staff':'Patient'} readOnly disabled aria-label="Role"/></Field><Button className="span-2" onClick={saveEdit} disabled={submitting}>{submitting?'Saving…':'Save Account Information'}</Button></div>}
+    </Modal>
+    <ConfirmDialog open={!!deleteTarget} title="Delete user account" onCancel={()=>setDeleteTarget(null)} onConfirm={remove} confirmLabel="Delete account"><p>Delete access for <b>{deleteTarget?.name}</b>? The account will be removed from login while the person and clinical records remain preserved.</p></ConfirmDialog>
   </>
 }
 

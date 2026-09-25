@@ -68,7 +68,7 @@ export const visibleConversations=(state,session)=>(state.conversations||[]).fil
 // Migration is pure: recover only explicit IDs or an unambiguous named assignee.
 // Unknown legacy ownership remains inaccessible; no broad-role ownership is invented.
 export function normalizePhase3(state) {
-  const userName=u=>{const p=state.persons.find(p=>p.id===u.personId);return `${(u.roleName||u.role)==='Dentist'?'Dr. ':''}${[p?.firstName,p?.middleName,p?.lastName].filter(Boolean).join(' ')}`}
+  const userName=u=>{const p=state.persons.find(p=>p.id===u.personId);return `${(u.roleName||u.role)==='Dentist'?'Dr. ':''}${[p?.firstName,p?.lastName].filter(Boolean).join(' ')}`}
   const assignee=record=>{
     if(record.assignedUserId)return state.users.find(u=>u.id===record.assignedUserId)
     const matches=state.users.filter(u=>userName(u)===(record.assignedTo||record.assigned))

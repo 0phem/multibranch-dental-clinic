@@ -202,17 +202,13 @@ test('the first Smart Find result is labelled "Earliest available", never "Recom
   assert.match(src, /Earliest available/)
   assert.doesNotMatch(src, /Recommended/)
 })
-test('"Show more times" exists and the initial view is capped at 3 (1 earliest + up to 2 others)', () => {
-  const src = read('src/pages/PatientBook.jsx')
-  assert.match(src, /Show more times/)
-  assert.match(src, /results\.slice\(1,3\)/)
-})
-test('the flat summary and the date-strip explorer are mutually exclusive by construction — never both rendered for the same results', () => {
-  const src = read('src/pages/PatientBook.jsx')
-  // Complementary booleans on the same `exploring` flag guard each block: one requires it false, the
-  // other requires it true, so React can never mount both for the same render.
-  assert.match(src, /!!results\.length&&!exploring&&<div className="pt-smart-results">/)
-  assert.match(src, /!!results\.length&&exploring&&<div className="pt-smart-explorer">/)
+test('Smart Find searches the full window before rendering its date and time controls', () => {
+  const f=fixture()
+  const results=findOpenTimes(f.state,{branchId:'b1',serviceId:'svc1',patientId:'p1'},{limit:Number.POSITIVE_INFINITY})
+  const days=buildDateStrip(results,clinicNow().date,FIND_TIME_DEFAULT_WINDOW_DAYS)
+  assert.ok(days.some(day=>day.hasOpenings))
+  const first=results.find(result=>result.date===days.find(day=>day.hasOpenings).date)
+  assert.ok(first?.start)
 })
 test('the inline Card note states the exact required wording, with no modal introduced for it', () => {
   const src = read('src/pages/PatientBook.jsx')

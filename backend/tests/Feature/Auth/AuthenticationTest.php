@@ -134,7 +134,6 @@ class AuthenticationTest extends TestCase
     {
         $person = Person::factory()->create([
             'first_name' => 'Jamie',
-            'middle_name' => 'Q',
             'last_name' => 'Cruz',
             'phone' => '09171234567',
             'date_of_birth' => '1998-05-17',
@@ -149,10 +148,10 @@ class AuthenticationTest extends TestCase
         $this->getJson('/api/me')
             ->assertOk()
             ->assertJsonPath('data.first_name', 'Jamie')
-            ->assertJsonPath('data.middle_name', 'Q')
             ->assertJsonPath('data.last_name', 'Cruz')
             ->assertJsonPath('data.phone', '09171234567')
-            ->assertJsonPath('data.date_of_birth', '1998-05-17');
+            ->assertJsonPath('data.date_of_birth', '1998-05-17')
+            ->assertJsonMissingPath('data.middle_name');
     }
 
     public function test_logout_invalidates_the_session_so_me_requires_login_again(): void

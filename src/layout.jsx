@@ -120,14 +120,16 @@ function ClinicAssistant({open,onOpenChange}){
 // Patient mobile Menu (the bottom nav's 4th item, replacing "Me" as a permanent destination). Reuses Modal
 // for accessible dialog/focus-trap behavior; the CSS class alone makes it read as a bottom sheet on mobile,
 // not the Staff/Dentist/Owner-styled workspace drawer. Pass 1 remediation: a curated, grouped directory
-// (Bookings / Communications / Account) rather than a flat secondary-page list — HMO, Prescriptions,
-// Follow-ups and Referral & Loyalty are intentionally not repeated here; they remain reachable via My
-// Profile's own "More" section (`PatientMe.jsx`'s `SECONDARY`, unchanged). Logout is visually separated at
+// (Bookings / Communications / Account) rather than a flat secondary-page list. Logout is visually separated at
 // the bottom and only *requests* logout (see Shell's logout-confirmation dialog) — it never logs out directly.
 const MENU_GROUPS=[
   ['Bookings',[['book','plusCalendar','Book Appointment'],['appointments','calendar','Visits']]],
   ['Communications',[['messages','message','Messages']]],
-  ['Account',[['billing','receipt','Receipts & Payments'],['me','user','My Profile']]],
+  ['Account',[
+    ['billing','receipt','Receipts & Payments'],['hmo','shield','HMO coverage'],
+    ['prescriptions','pill','Prescriptions'],['followups','followup','Follow-up care'],
+    ['loyalty','gift','Referral & Loyalty'],['me','user','My Profile'],
+  ]],
 ]
 export function PatientMenuSheet({ open, onClose, setPage, name, unreadMessages=0, onRequestLogout }) {
   const go=page=>{onClose();setPage(page)}

@@ -12,15 +12,17 @@ const unchanged=(a,b)=>Object.entries(b).every(([k,v])=>JSON.stringify(a[k])===J
 export function administrationActions(run) {
   const createUserAccount=run(({state,session,now,event},form={})=>{
     if(session.role!=='owner'||!isRecord(form))return fail('Only Owner/Admin can create accounts.')
-    const username=clean(form.username).toLowerCase(),email=clean(form.email).toLowerCase(),roleName=form.roleName
-    if(!clean(form.firstName)||!clean(form.lastName)||!username||!email)return fail('First name, last name, username and email are required.')
+    // Email is the account/login identity — username/login mirror it, matching the convention already
+    // established for the real Patient path (registration.js, identity-bridge.js).
+    const email=clean(form.email).toLowerCase(),username=email,roleName=form.roleName
+    if(!clean(form.firstName)||!clean(form.lastName)||!email)return fail('First name, last name and email are required.')
     if(!Object.hasOwn(ROLE_PERMISSIONS,roleName))return fail('Choose a supported account role.')
     const branch=state.branches.find(b=>b.id===form.branchId),scoped=!['Patient','Owner / Admin'].includes(roleName)
     if(scoped&&!branch)return fail('Choose an existing branch for this account.')
     if(!['Active','Inactive'].includes(form.accountStatus||'Active'))return fail('Choose Active or Inactive account status.')
     if(form.dob&&(!validDate(form.dob)||form.dob>now.date))return fail('Enter a valid date of birth.')
     if(state.users.some(u=>clean(u.username||u.login).toLowerCase()===username)||state.persons.some(p=>clean(p.email).toLowerCase()===email))return fail('An account or person already uses this username/email. Review the existing record.')
-    const person={...selected(form,['phone','dob','sex','address']),id:uid('per'),firstName:clean(form.firstName),middleName:clean(form.middleName),lastName:clean(form.lastName),email}
+    const person={...selected(form,['phone','dob','sex','address']),id:uid('per'),firstName:clean(form.firstName),lastName:clean(form.lastName),email}
     const user={id:uid('u'),personId:person.id,username,login:username,roleName,role:roleName,branchId:scoped?branch.id:null,accountStatus:form.accountStatus||'Active',status:form.accountStatus||'Active',permissions:[...ROLE_PERMISSIONS[roleName]],lastLogin:'Never'}
     state.persons=[...state.persons,person];state.users=[...state.users,user]
     const profile={id:uid(roleName==='Dentist'?'d':'s'),personId:person.id,userId:user.id,staffType:roleName,licenseNo:'',shiftStart:branch?.open||'09:00',shiftEnd:branch?.close||'18:00',available:user.status==='Active'}
@@ -38,8 +40,8 @@ export function administrationActions(run) {
     if((user.accountStatus||user.status)===status)return {ok:true,unchanged:true,record:user,status}
     const record={...user,accountStatus:status,status,revision:(user.revision||0)+1}
     state.users=state.users.map(u=>u.id===id?record:u)
-    for(const key of ['dentists','staff'])state[key]=state[key].map(p=>p.userId===id?{...p,available:status==='Active'}:p)
-    event(`account:status:${id}:${record.revision}`,'M1→M3','access.user.status.changed',`Account ${status}`,null,user.branchId,{entityType:'user',entityId:id})
+    // Account status remains transitional; operational availability is independently backend-authoritative.
+    event(`account:status:${id}:${record.revision}`,'M1','access.user.status.changed',`Account ${status}`,null,user.branchId,{entityType:'user',entityId:id})
     return {ok:true,record,status}
   })
   const updatePatientRecord=run(({state,session,now,event},id,input={})=>{
@@ -47,7 +49,7 @@ export function administrationActions(run) {
     if(!patient||!['staff','dentist'].includes(session.role)||!patientInScope(patient,state,session)||!permitted(state,session,session.role==='staff'?'patient-demographics':'clinical-records')||!isRecord(input))return fail('Patient is outside your current permitted scope.')
     const person=state.persons.find(p=>p.id===patient.personId)
     if(!person||input.person!=null&&!isRecord(input.person)||input.patient!=null&&!isRecord(input.patient))return fail('Patient identity needs review.')
-    const personPatch=session.role==='staff'?selected(input.person||{},['firstName','middleName','lastName','phone','email','dob','sex','address']):{}
+    const personPatch=session.role==='staff'?selected(input.person||{},['firstName','lastName','phone','email','dob','sex','address']):{}
     const patientPatch=selected(input.patient||{},session.role==='staff'?['preferredBranchId','hmo','hmoMember','emergencyContact','consent']:['allergies','medicalHistory','dentalHistory'])
     if(Object.values(personPatch).some(v=>typeof v!=='string')||Object.entries(patientPatch).some(([k,v])=>k==='consent'?typeof v!=='boolean':typeof v!=='string'))return fail('Enter valid text and consent fields.')
     if(['firstName','lastName','phone'].some(k=>k in personPatch&&!clean(personPatch[k])))return fail('First name, last name and phone cannot be blank.')
@@ -97,5 +99,53 @@ export function administrationActions(run) {
     event(`personnel:${id}:${record.revision}`,'M3','personnel.updated','Personnel availability updated',null,ids[0],{entityType:collection,entityId:id})
     return {ok:true,record}
   })
-  return {createUserAccount,setUserStatus,updatePatientRecord,saveBranch,setBranchService,savePersonnel}
+  // ---- Phase 2A: adopt*FromServer — new, additive actions, alongside the 6 above (not a replacement for
+  // any of them). branches/services/branchServices/staff/dentists are backend-authoritative as of Phase
+  // 2A (see the Phase 2A plan, section J/point 8): once Owner's mutation UI has a server-confirmed
+  // response in hand, that response must be adopted directly, not re-validated against these functions'
+  // OWN independent local rules above — those rules were written before a real backend existed and are
+  // not provably identical to the backend's own validation. Re-running them against an already-confirmed
+  // payload risks silently rejecting or transforming data Postgres has already accepted, leaving React
+  // state divergent from the database. Each function here does only an existence check and a verbatim
+  // replace — no field-level validation — and is called exclusively by reference-data-bridge.js's
+  // write-side orchestration, never directly by UI code, never with unconfirmed/locally-constructed data.
+  const adoptBranchFromServer=run(({state,session},id,confirmedRecord)=>{
+    if(session.role!=='owner')return fail('Only Owner/Admin can update branches.')
+    if(!state.branches.some(b=>b.id===id))return fail('That branch no longer exists.')
+    state.branches=state.branches.map(b=>b.id===id?confirmedRecord:b)
+    return {ok:true,record:confirmedRecord}
+  })
+  const adoptBranchServiceFromServer=run(({state,session},branchId,serviceId,confirmedRecord)=>{
+    if(session.role!=='owner')return fail('Only Owner/Admin can update branch services.')
+    const exists=state.branchServices.some(b=>b.branchId===branchId&&b.serviceId===serviceId)
+    state.branchServices=exists
+      ?state.branchServices.map(b=>b.branchId===branchId&&b.serviceId===serviceId?confirmedRecord:b)
+      :[...state.branchServices,confirmedRecord]
+    return {ok:true,record:confirmedRecord}
+  })
+  const adoptPersonnelFromServer=run(({state,session},collection,id,confirmedRecord)=>{
+    if(session.role!=='owner')return fail('Only Owner/Admin can update personnel.')
+    const profile=state[collection].find(p=>p.id===id)
+    if(!['dentists','staff'].includes(collection)||!profile)return fail('That personnel profile no longer exists.')
+    state[collection]=state[collection].map(p=>p.id===id?confirmedRecord:p)
+    // `users.branchId` remains a transitional compatibility mirror used by the existing session and
+    // branch-scoped local modules. The server-confirmed personnel assignment is authoritative; reconcile
+    // the mirror only after adoption so a refreshed Staff/Dentist session cannot disagree with PostgreSQL.
+    const userId=confirmedRecord.userId||profile.userId
+    if(userId){
+      const user=state.users.find(u=>u.id===userId)
+      if(user){
+        const branchId=collection==='staff'
+          ?(confirmedRecord.branchId||null)
+          :((confirmedRecord.branchIds||[]).includes(user.branchId)?user.branchId:(confirmedRecord.branchIds||[])[0]||null)
+        state.users=state.users.map(u=>u.id===userId?{...u,branchId}:u)
+      }
+    }
+    return {ok:true,record:confirmedRecord}
+  })
+
+  return {
+    createUserAccount,setUserStatus,updatePatientRecord,saveBranch,setBranchService,savePersonnel,
+    adoptBranchFromServer,adoptBranchServiceFromServer,adoptPersonnelFromServer,
+  }
 }

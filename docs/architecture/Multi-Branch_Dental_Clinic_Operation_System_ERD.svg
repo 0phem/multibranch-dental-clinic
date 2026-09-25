@@ -51,10 +51,6 @@
 <text text-anchor="start" x="31" y="-2575.1" font-family="Arial" font-size="8.00">first_name</text>
 <text text-anchor="start" x="88" y="-2575.1" font-family="Arial" font-size="8.00" fill="#475569">varchar</text>
 <text text-anchor="start" x="155" y="-2575.4" font-family="Arial" font-size="7.00" fill="#64748b"> </text>
-<polygon fill="#ffffff" stroke="transparent" points="27,-2551.5 27,-2568.5 84,-2568.5 84,-2551.5 27,-2551.5"/>
-<text text-anchor="start" x="31" y="-2558.1" font-family="Arial" font-size="8.00">middle_name</text>
-<text text-anchor="start" x="88" y="-2558.1" font-family="Arial" font-size="8.00" fill="#475569">varchar</text>
-<text text-anchor="start" x="139" y="-2558.4" font-family="Arial" font-size="7.00" fill="#64748b">NULL</text>
 <polygon fill="#ffffff" stroke="transparent" points="27,-2534.5 27,-2551.5 84,-2551.5 84,-2534.5 27,-2534.5"/>
 <text text-anchor="start" x="31" y="-2541.1" font-family="Arial" font-size="8.00">last_name</text>
 <text text-anchor="start" x="88" y="-2541.1" font-family="Arial" font-size="8.00" fill="#475569">varchar</text>

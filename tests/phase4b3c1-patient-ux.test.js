@@ -247,10 +247,12 @@ test('the Clinic Assistant renders only for the Patient role — no fallback var
   assert.doesNotMatch(src,/:<ClinicAssistant/,'no ternary fallback renders ClinicAssistant for another role')
   assert.doesNotMatch(src,/function ClinicAssistant\(\{role/,'ClinicAssistant no longer takes a role/patient prop — it has exactly one shape now')
 })
-test('the Patient Menu is grouped into Bookings/Communications/Account, and no longer lists HMO/Prescriptions/Follow-ups/Referral & Loyalty (still reachable via Me → More)',()=>{
+test('the Patient Menu is the single navigation source for care and account destinations',()=>{
   const src=read('src/layout.jsx')
   assert.match(src,/MENU_GROUPS=\[/,'the Menu sheet uses a grouped, curated destination list')
   for(const heading of ['Bookings','Communications','Account'])assert.match(src,new RegExp(`'${heading}'`),`Menu group: ${heading}`)
+  for(const destination of ['hmo','prescriptions','followups','loyalty','me'])assert.ok(src.includes(`['${destination}'`),`Menu destination: ${destination}`)
+  assert.doesNotMatch(read('src/pages/PatientMe.jsx'),/aria-label="More"|SECONDARY/,'Profile does not duplicate navigation')
   assert.doesNotMatch(src,/PATIENT_MENU_SECONDARY/,'the old flat secondary-list import is removed (orphaned by the grouped redesign)')
 })
 test('Patient logout requires explicit confirmation and never fires directly from the Menu sheet',()=>{

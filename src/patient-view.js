@@ -14,7 +14,7 @@ export { dentistsFor, servicesAt }
 // composes the established visible*/inScope selectors, mutates nothing and creates no workflow events.
 
 // The store projects display names onto Dentists and users; fall back to the person record so views never depend on it.
-const personName=(state,personId)=>{const p=state.persons.find(x=>x.id===personId);return [p?.firstName,p?.middleName,p?.lastName].filter(Boolean).join(' ')}
+const personName=(state,personId)=>{const p=state.persons.find(x=>x.id===personId);return [p?.firstName,p?.lastName].filter(Boolean).join(' ')}
 export function dentistLabel(state,dentistId) {
   const d=state.dentists.find(x=>x.id===dentistId)
   if(!d)return ''
@@ -121,10 +121,11 @@ export function prescriptionView(state,r) {
     items:(Array.isArray(r.items)?r.items.filter(Boolean):[r]).map((item,index)=>({key:item.id||index,medication:item.medication||'',dosage:item.dosage||'',instructions:item.instructions||'',duration:item.duration||''}))}
 }
 export function invoiceView(state,i) {
-  return {id:i.id,invoiceNo:i.invoiceNo||'',status:i.status,date:i.visitDate,branch:i.branch||'',treatmentId:i.treatmentId,
+  const payment=i.payment&&typeof i.payment==='object'?i.payment:null
+  return {id:i.id,invoiceNo:i.invoiceNo||'',status:i.status,date:i.visitDate,branch:state.branches.find(b=>b.id===i.branchId)?.name||'',branchId:i.branchId,appointmentId:i.appointmentId||null,treatmentId:i.treatmentId,
     items:(Array.isArray(i.items)?i.items.filter(Boolean):[]).map((item,index)=>({key:item.id||index,name:state.services.find(s=>s.id===item.serviceId)?.name||item.name||'Service',quantity:item.quantity||1,unit:item.unitFee??item.amount,amount:item.amount})),
     total:i.total,
-    receipt:i.receipt?{number:i.receipt,method:i.payment?.method||(i.method&&i.method!=='—'?i.method:''),simulated:!!i.payment?.simulation,paidAt:i.paidAt||i.payment?.recordedAt||null}:null}
+    receipt:i.receipt?{number:i.receipt,amount:payment?.amount??i.total,status:payment?.status||i.paymentStatus,method:payment?.method||(i.method&&i.method!=='—'?i.method:''),simulated:!!payment?.simulation,paidAt:payment?.recordedAt||i.paidAt||null}:null}
 }
 export const money=value=>peso.format(Number(value)||0)
 
@@ -419,7 +420,9 @@ export function buildDateStrip(results, startDate, windowDays) {
   const opened=new Set((results||[]).map(r=>r.date))
   return Array.from({length:windowDays},(_,offset)=>{
     const date=addDays(startDate,offset)
-    return {date, label:relativeDateLabel(date,startDate), fullLabel:dateLabel(date), hasOpenings:opened.has(date)}
+    const dayLabel=relativeDateLabel(date,startDate)
+    const dayNumber=Number(date.slice(-2))
+    return {date, label:dayLabel, dayLabel, dayNumber, fullLabel:dateLabel(date), hasOpenings:opened.has(date)}
   })
 }
 

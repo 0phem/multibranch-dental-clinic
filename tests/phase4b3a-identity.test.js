@@ -376,7 +376,7 @@ test('registration is a distinct public boundary, not the authenticated command 
 test('the reserved-field allowlist source guard exists and covers every privileged field the test suite checks',()=>{
   const reg=read('src/registration.js')
   assert.match(reg,/ALLOWED_FIELDS/)
-  for(const field of ['firstName','middleName','lastName','phone','email','dob','preferredBranchId'])
+  for(const field of ['firstName','lastName','phone','email','dob','preferredBranchId'])
     assert.match(reg,new RegExp(`'${field}'`))
   assert.match(reg,/Object\.keys\(form\)\.some\(key=>!ALLOWED_FIELDS\.has\(key\)\)/)
 })

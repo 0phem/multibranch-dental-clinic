@@ -12,9 +12,27 @@ const files=['components.jsx','store.jsx','layout.jsx','clock.js','contracts.js'
 const result=await build({stdin:{contents:files.map(file=>`export * from './src/${file}';`).join('\n'),resolveDir:process.cwd()},bundle:true,write:false,platform:'node',format:'esm',plugins:[{name:'shared-react',setup(b){b.onResolve({filter:/^react$/},()=>({path:pathToFileURL(require.resolve('react')).href,external:true}))}}]})
 const m=await import('data:text/javascript;base64,'+Buffer.from(result.outputFiles[0].text).toString('base64'))
 m.setClockSource(()=>new Date('2026-09-19T02:08:00Z'))
+// Phase 2A: branches/services/branchServices/dentists/staff are backend-authoritative and populated only
+// by a live fetch (see src/store.jsx's reference-data bootstrap effect) — but renderToString runs
+// render-phase code only, so that fetch-on-mount effect never executes under SSR (no commit phase). This
+// test-only initialReferenceData prop (ClinicProvider, src/store.jsx) skips the fetch entirely and seeds
+// those collections synchronously instead, built here directly from data.js's own INITIAL_* exports (the
+// exact legacy shape already) rather than the API-response shape reference-data-bridge.js's mappers
+// expect — dentistServiceAssignments is derived internally from each dentist's `serviceIds`, so that field
+// is reconstructed here from INITIAL_DENTIST_SERVICE_ASSIGNMENTS to keep dentist-service eligibility real
+// in every smoke render, exactly as it would be from a genuine API response.
+const dentistServiceIds={}
+for(const a of m.INITIAL_DENTIST_SERVICE_ASSIGNMENTS)(dentistServiceIds[a.dentistId]??=[]).push(a.serviceId)
+const initialReferenceData={
+  branches:m.INITIAL_BRANCHES,
+  services:m.INITIAL_SERVICES,
+  branchServices:m.INITIAL_BRANCH_SERVICES,
+  staff:m.INITIAL_STAFF,
+  dentists:m.INITIAL_DENTISTS.map(d=>({...d,serviceIds:dentistServiceIds[d.id]||[]})),
+}
 let store
 function Capture(){store=m.useClinic();return null}
-renderToString(React.createElement(m.ClinicProvider,null,React.createElement(Capture)))
+renderToString(React.createElement(m.ClinicProvider,{initialReferenceData},React.createElement(Capture)))
 const pages={dashboard:'DashboardPage',book:'BookingPage',appointments:'AppointmentsPage',schedule:'SchedulePage',checkin:'CheckInPage',queue:'QueuePage',capacity:'CapacityPage',patients:'PatientsPage',treatment:'TreatmentPage',billing:'BillingPage',hmo:'HmoPage',inquiries:'InquiriesPage',messages:'MessagesPage',prescriptions:'PrescriptionsPage',followups:'FollowupsPage',branches:'BranchesPage',team:'TeamPage',analytics:'AnalyticsPage',users:'UsersPage',automation:'AutomationPage',engagement:'EngagementPage',loyalty:'PatientLoyaltyPage',me:'PatientMePage'}
 let count=0
 function render(page,role='staff',context=null){
@@ -154,7 +172,12 @@ for(const key of ['persons','patients','appointments','queue','treatments','invo
   persisted.set(`dentalops-v4-${storageKey}`,JSON.stringify(m.persistableCollection(key,state[key])))
 }
 globalThis.localStorage={getItem:key=>persisted.get(key)||null}
-renderToString(React.createElement(m.ClinicProvider,null,React.createElement(Capture)))
+// Phase 2A: 'dentists'/'staff' in the manually-populated localStorage map above are now inert (nothing
+// reads those keys anymore — see the first ClinicProvider render's comment) but are left in place rather
+// than removed, since writing to an unused key is harmless and this loop's real job (persons/patients/
+// appointments/etc. reload) is unaffected. initialReferenceData is still required here for the same reason
+// as the first render.
+renderToString(React.createElement(m.ClinicProvider,{initialReferenceData},React.createElement(Capture)))
 assert.ok(render('patients','staff',{patientId:patient.record.id}).includes('PhaseOne Patient'))
 assert.ok(render('schedule','dentist').includes('Branch A'))
 assert.ok(render('appointments').includes('Appointment management'))
@@ -459,7 +482,7 @@ assert.ok(/type="password"/i.test(registerHtml),'a real password field is presen
 assert.ok(registerHtml.includes('Confirm password'),'a confirm-password field is present')
 assert.ok(!registerHtml.includes('Preferred branch'),'no branch preference field — the real backend registration contract collects none yet')
 assert.ok(!registerHtml.includes('Demo workspace'),'registration no longer describes itself as browser-local demo storage')
-assert.ok(!registerHtml.includes('Middle name'),'no Middle Name field — the public form does not collect it')
+assert.ok(!registerHtml.includes('Middle name'),'no middle-name field — the public form collects first and last name only')
 assert.ok(registerHtml.includes('phone-field')&&registerHtml.includes('+63')&&registerHtml.includes('Philippines'),'the country-code phone control is present, defaulting to +63 Philippines')
 store={...store,state:fullState}
 console.log('PASS: Phase 4B.3A Patient identity — self-registration (atomic PERSON+PATIENT+USER, replay-safe, duplicate-safe), email sign-in, first-use Home vs returning Journey Hub, and isolation from other Patients')
@@ -516,16 +539,17 @@ assert.equal(bookState.bookingDrafts.length,0,'a successful confirmation removes
 const smartReplay=bookActions.saveAppointment({branchId:'b1',serviceId:'svc1',date:'2026-09-21',start:'11:00'},{commandId:'smoke-smart-confirm',autoAssign:true})
 assert.equal(smartReplay.unchanged,true)
 
-// Render checks: Home quick actions no longer include Book/Visits (already in primary nav); Me shows profile and
-// secondary links; mobile nav is exactly Home/Book/Visits/Menu (Backend Foundation follow-up: "Me" is no longer
-// a permanent bottom-nav destination — the Menu sheet reaches it instead); the assistant is a floating logo FAB.
+// Render checks: Home quick actions no longer include Book/Visits (already in primary nav); Me is profile-only;
+// the Menu sheet owns care/account destinations; mobile nav is exactly Home/Book/Visits/Menu; the assistant is a
+// floating logo FAB.
 store={...store,state:bookState}
 const renderBookAs=(page,patientSession)=>{
   const activeBranch=bookState.branches.find(b=>b.id===patientSession.branchId)?.name||'All Branches'
   return renderToString(React.createElement(m.Shell,{role:'patient',page,setPage:()=>{},onLogout:()=>{},activeBranch,setActiveBranch:()=>{},resetDemo:()=>{},store:{state:bookState,session:patientSession}},React.createElement(m[pages[page]],{role:'patient',activeBranch,store:{state:bookState,session:patientSession},context:null,setPage:()=>{}})))
 }
 const mePage=renderBookAs('me',bookSession)
-for(const text of ['Maria Santos','maria@example.com','Payments','HMO coverage','Prescriptions'])assert.ok(mePage.includes(text),`me: ${text}`)
+for(const text of ['Maria Santos','maria@example.com'])assert.ok(mePage.includes(text),`me: ${text}`)
+for(const text of ['Payments','HMO coverage','Prescriptions'])assert.ok(!mainOf(mePage).includes(text),`profile does not duplicate navigation: ${text}`)
 assert.ok(!/<input|<select|<textarea/.test(mainOf(mePage)),'Me is view-only in this phase — no editable field')
 const shellHtml=renderBookAs('dashboard',bookSession)
 const mobileNav=shellHtml.match(/<nav class="patient-mobile-nav"[\s\S]*?<\/nav>/)?.[0]||''
@@ -536,12 +560,11 @@ assert.ok(shellHtml.includes('id="clinic-assistant-fab"')&&shellHtml.includes('s
 assert.ok(!shellHtml.includes('id="clinic-assistant-toggle"'),'the old top-bar assistant trigger is gone')
 // Pass 1: Patient has exactly one menu entry point — no top-left hamburger, only the bottom-right Menu trigger.
 assert.ok(!shellHtml.includes('mobile-menu icon-btn'),'Patient shell renders no top-left hamburger trigger')
-// The Menu sheet itself: grouped Bookings/Communications/Account sections, HMO/Prescriptions/Follow-up/Referral
-// & Loyalty intentionally absent here (still reachable via Me → More), Logout visually separated at the bottom.
+// The Menu sheet itself: grouped Bookings/Communications/Account sections with the Patient's care and account
+// destinations in one place; Logout is visually separated at the bottom.
 const menuSheet=renderToString(React.createElement(m.PatientMenuSheet,{open:true,onClose:()=>{},setPage:()=>{},name:'Maria Santos',unreadMessages:2,onRequestLogout:()=>{}}))
 for(const heading of ['Bookings','Communications','Account'])assert.ok(menuSheet.includes(heading),`Menu group heading: ${heading}`)
-for(const text of ['Book Appointment','Visits','Messages','Receipts &amp; Payments','My Profile'])assert.ok(menuSheet.includes(text),`Menu destination: ${text}`)
-for(const absent of ['HMO coverage','Prescriptions','Follow-up care','Referral &amp; Loyalty'])assert.ok(!menuSheet.includes(absent),`Menu no longer lists ${absent} (reachable via Me → More instead)`)
+for(const text of ['Book Appointment','Visits','Messages','Receipts &amp; Payments','HMO coverage','Prescriptions','Follow-up care','Referral &amp; Loyalty','My Profile'])assert.ok(menuSheet.includes(text),`Menu destination: ${text}`)
 assert.ok(menuSheet.includes('patient-menu-logout')&&menuSheet.includes('Log out'),'Menu: Logout is present')
 assert.ok(!menuSheet.includes('>Home<'),'Menu does not duplicate the primary Home bottom-nav destination')
 // Pass 1: logout requires confirmation via a real dialog, not an immediate call — Log out uses the normal

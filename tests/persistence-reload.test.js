@@ -50,8 +50,17 @@ function persistedCollections() {
 
 test('store persistence inventory is fully discovered',()=>{
   const keys=persistedCollections().map(([key])=>key)
-  assert.equal(keys.length,26)
-  assert.ok(keys.includes('dentist-service-assignments'))
+  // Phase 2A: branches/services/branch-services/dentists/staff/dentist-service-assignments are
+  // backend-authoritative and deliberately no longer usePersist-backed (no localStorage for this slice,
+  // refetched fresh every session — see the Phase 2A plan, section J, and src/store.jsx's own comment
+  // above its reference-data useState declarations). 26 collections minus those 6 leaves 20.
+  assert.equal(keys.length,20)
+  assert.ok(!keys.includes('dentist-service-assignments'))
+  assert.ok(!keys.includes('branches'))
+  assert.ok(!keys.includes('services'))
+  assert.ok(!keys.includes('branch-services'))
+  assert.ok(!keys.includes('dentists'))
+  assert.ok(!keys.includes('staff'))
   assert.ok(keys.includes('check-ins'))
   assert.ok(keys.includes('booking-drafts'))
 })
@@ -249,14 +258,19 @@ test('recovery message names the assignment collection so the workspace notice a
   assert.ok(error.includes('could not be read'))
 })
 
-test('genuinely corrupt assignments block only that collection and leave every other saved collection readable',()=>{
+test('genuinely corrupt data in one persisted collection blocks only that collection and leaves every other saved collection readable',()=>{
+  // Phase 2A: dentist-service-assignments is no longer a usePersist-backed collection at all (see the
+  // count/exclusion test above), so it can no longer serve as this test's corruption target — 'users' is
+  // still genuinely persisted and takes the exact same generic row.id validation path in persistence.js
+  // (readCollection has no per-collection special-casing beyond the dentist-service-assignments key, which
+  // this test intentionally no longer exercises).
   const storage=memoryStorage()
   const collections=persistedCollections()
   for(const [key,initial] of collections)writeCollection(storage,`${PREFIX}${key}`,initial)
-  storage.map.set(KEY,JSON.stringify([{dentistId:'d1'}]))
+  storage.map.set(`${PREFIX}users`,JSON.stringify([{no:'id'}]))
   storage.writes.length=0
   const blocked=collections.filter(([key,initial])=>readCollection(storage,`${PREFIX}${key}`,initial).blocked).map(([key])=>key)
-  assert.deepEqual(blocked,['dentist-service-assignments'])
+  assert.deepEqual(blocked,['users'])
   assert.deepEqual(storage.writes,[])
 })
 

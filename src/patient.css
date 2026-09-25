@@ -175,13 +175,28 @@
 
 /* Smart Find availability explorer: a keyboard radiogroup date strip that owns its own horizontal scroll —
    the page itself must never overflow because of it. */
-.role-patient .pt-date-strip { display: flex; gap: var(--space-2); overflow-x: auto; padding-bottom: var(--space-2); scroll-snap-type: x proximity; -webkit-overflow-scrolling: touch; }
-.role-patient .pt-date-chip { flex: none; scroll-snap-align: start; min-width: 64px; min-height: 56px; display: grid; place-items: center; padding: var(--space-2) var(--space-3); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); color: var(--ink); font-size: var(--font-sm); font-weight: var(--weight-medium); cursor: pointer; transition: border-color var(--motion-normal) var(--motion-ease), background var(--motion-normal) var(--motion-ease), color var(--motion-normal) var(--motion-ease); }
+.role-patient .pt-date-strip { display: flex; gap: var(--space-3); max-width: 100%; overflow-x: auto; padding: var(--space-1) var(--space-1) var(--space-3); scroll-snap-type: x proximity; -webkit-overflow-scrolling: touch; }
+.role-patient .pt-date-chip { flex: 0 0 92px; scroll-snap-align: start; min-height: 108px; display: grid; place-items: center; align-content: center; gap: var(--space-1); padding: var(--space-3); border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--surface); color: var(--ink); cursor: pointer; transition: border-color var(--motion-normal) var(--motion-ease), background var(--motion-normal) var(--motion-ease), color var(--motion-normal) var(--motion-ease); }
+.role-patient .pt-date-chip-context { min-height: 1em; color: var(--brand-3); font-size: .625rem; font-weight: var(--weight-strong); text-transform: uppercase; letter-spacing: .02em; white-space: nowrap; }
+.role-patient .pt-date-chip-day { font-size: var(--font-sm); font-weight: var(--weight-strong); text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.role-patient .pt-date-chip-number { font-size: 1.75rem; line-height: 1; font-weight: var(--weight-heading); }
+.role-patient .pt-date-chip.is-selected .pt-date-chip-day { color: rgba(255,255,255,.8); }
+.role-patient .pt-date-chip.is-selected .pt-date-chip-context { color: #fff; }
 .role-patient .pt-date-chip:hover:not(:disabled) { border-color: var(--brand-2); }
 .role-patient .pt-date-chip:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 .role-patient .pt-date-chip.is-selected { border-color: var(--brand); background: var(--brand); color: #fff; }
 .role-patient .pt-date-chip:disabled { color: var(--muted); background: var(--surface-2); border-color: var(--line); opacity: .55; cursor: not-allowed; }
 @media (prefers-reduced-motion: no-preference) { .role-patient .pt-date-chip:active:not(:disabled) { transform: scale(.97); } }
+.role-patient .pt-manual-dates, .role-patient .pt-smart-explorer { min-width: 0; display: grid; gap: var(--space-3); }
+.role-patient .pt-manual-dates .pt-card-label { margin: 0; }
+.role-patient .pt-time-period { display: grid; gap: var(--space-3); padding-top: var(--space-3); border-top: 1px solid var(--line); }
+.role-patient .pt-time-period h3 { margin: 0; color: var(--ink); font-size: var(--font-md); }
+.role-patient .pt-time-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 112px), 1fr)); gap: var(--space-3); }
+.role-patient .pt-time-slot { min-height: 48px; padding: var(--space-2) var(--space-3); border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--surface); color: var(--ink); font-size: var(--font-md); font-weight: var(--weight-strong); white-space: nowrap; }
+.role-patient .pt-time-slot:hover:not(:disabled) { border-color: var(--brand); background: var(--brand-soft); }
+.role-patient .pt-time-slot.is-selected { border-color: var(--brand); background: var(--brand); color: #fff; }
+.role-patient .pt-time-slot:disabled { opacity: .5; background: var(--surface-2); cursor: not-allowed; }
+.role-patient .pt-time-slot:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 
 .role-patient .pt-action-required { display: grid; gap: var(--space-3); }
 

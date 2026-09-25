@@ -69,7 +69,7 @@ function bridgePatient(me, { getState, commit, clock }) {
   const email = cleanText(me.email).toLowerCase()
 
   const person = {
-    id: uid('per'), firstName, middleName: cleanText(me.middle_name), lastName, email,
+    id: uid('per'), firstName, lastName, email,
     phone: cleanText(me.phone), dob: cleanText(me.date_of_birth), sex: '', address: '',
     backendPersonId: me.person_id,
   }

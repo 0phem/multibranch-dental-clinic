@@ -1,8 +1,8 @@
 import { readCollection, writeCollection } from './persistence.js'
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import {
-  INITIAL_PERSONS, INITIAL_SERVICES, INITIAL_BRANCH_SERVICES, INITIAL_DENTIST_SERVICE_ASSIGNMENTS,
-  INITIAL_BRANCHES, INITIAL_DENTISTS, INITIAL_STAFF, INITIAL_PATIENTS, INITIAL_APPOINTMENTS, INITIAL_QUEUE,
+  INITIAL_PERSONS,
+  INITIAL_PATIENTS, INITIAL_APPOINTMENTS, INITIAL_QUEUE,
   INITIAL_TREATMENTS, INITIAL_INVOICES, INITIAL_HMO, INITIAL_INQUIRIES, INITIAL_CONVERSATIONS,
   INITIAL_NOTIFICATIONS, INITIAL_PRESCRIPTIONS, INITIAL_FOLLOWUPS, INITIAL_USERS, INITIAL_AUTOMATIONS,
   INITIAL_WORKFLOW_LOG, INITIAL_CAMPAIGNS, INITIAL_LOYALTY, INITIAL_AUDIT, INITIAL_BOOKING_DRAFTS
@@ -13,6 +13,7 @@ import { normalizeClinicState, sessionForRole, resolvePatientLogin, persistableC
 import { createWorkflowActions } from './workflow.js'
 import { createRegistrationAction } from './registration.js'
 import { createIdentityBridge } from './identity-bridge.js'
+import { fetchReferenceData, deriveDentistServiceAssignments } from './reference-data-bridge.js'
 
 const ClinicContext=createContext(null)
 const STORAGE_PREFIX='dentalops-v4-'
@@ -40,9 +41,21 @@ function usePersist(key, initial, report, recoveryBlocked) {
 }
 
 const cleanNamePart=value=>String(value||'').trim().replace(/\s+/g,' ')
-const fullName=person=>[person?.firstName,person?.middleName,person?.lastName].map(cleanNamePart).filter(Boolean).join(' ')
+const fullName=person=>[person?.firstName,person?.lastName].map(cleanNamePart).filter(Boolean).join(' ')
 
-export function ClinicProvider({ children }) {
+// Phase 2A: branches/services/branchServices/dentists/staff are backend-authoritative — see the Phase 2A
+// plan, section J. They are deliberately NOT usePersist-backed (no localStorage for this slice, refetched
+// fresh every session, mirroring how session/role are already never localStorage-cached) and are populated
+// only by fetchReferenceData(), gated on the current session's role, below. dentistServiceAssignments is
+// not its own fetched collection at all — it was always a *generated* array even in data.js, and stays
+// that way here, derived from the fetched dentists' serviceIds (see deriveDentistServiceAssignments).
+//
+// `initialReferenceData` is a test-only injection point (Phase 2A plan, section P/S2B): when supplied, the
+// five collections seed synchronously from it and the live fetch effect never fires. This exists because
+// render-smoke.mjs renders ClinicProvider via renderToString, which runs render-phase code only — a real
+// fetch-on-mount effect never executes under SSR, so the script needs a synchronous alternative rather than
+// silently seeing empty reference data.
+export function ClinicProvider({ children, initialReferenceData }) {
   const recoveryBlocked=useRef(false)
   const [persistenceErrors,setPersistenceErrors]=useState({})
   const reportPersistence=useCallback((key,message)=>setPersistenceErrors(previous=>{
@@ -51,12 +64,13 @@ export function ClinicProvider({ children }) {
   }),[])
 
   const [persons,setPersons]=usePersist('persons',INITIAL_PERSONS,reportPersistence,recoveryBlocked)
-  const [services,setServices]=usePersist('services',INITIAL_SERVICES,reportPersistence,recoveryBlocked)
-  const [branchServices,setBranchServices]=usePersist('branch-services',INITIAL_BRANCH_SERVICES,reportPersistence,recoveryBlocked)
-  const [dentistServiceAssignments,setDentistServiceAssignments]=usePersist('dentist-service-assignments',INITIAL_DENTIST_SERVICE_ASSIGNMENTS,reportPersistence,recoveryBlocked)
-  const [branches,setBranches]=usePersist('branches',INITIAL_BRANCHES,reportPersistence,recoveryBlocked)
-  const [dentists,setDentists]=usePersist('dentists',INITIAL_DENTISTS,reportPersistence,recoveryBlocked)
-  const [staff,setStaff]=usePersist('staff',INITIAL_STAFF,reportPersistence,recoveryBlocked)
+  const [services,setServices]=useState(initialReferenceData?.services??[])
+  const [branchServices,setBranchServices]=useState(initialReferenceData?.branchServices??[])
+  const [branches,setBranches]=useState(initialReferenceData?.branches??[])
+  const [dentists,setDentists]=useState(initialReferenceData?.dentists??[])
+  const [staff,setStaff]=useState(initialReferenceData?.staff??[])
+  const dentistServiceAssignments=useMemo(()=>deriveDentistServiceAssignments(dentists),[dentists])
+  const [refDataStatus,setRefDataStatus]=useState(initialReferenceData?'ready':'idle')
   const [patients,setPatients]=usePersist('patients',INITIAL_PATIENTS,reportPersistence,recoveryBlocked)
   const [appointments,setAppointments]=usePersist('appointments',INITIAL_APPOINTMENTS,reportPersistence,recoveryBlocked)
   const [queue,setQueue]=usePersist('queue',INITIAL_QUEUE,reportPersistence,recoveryBlocked)
@@ -85,6 +99,50 @@ export function ClinicProvider({ children }) {
   useEffect(()=>{const timer=setInterval(()=>{setClock(clinicNow());if(sessionRef.current?.role==='staff'){actionsRef.current?.evaluateHmoTimers();actionsRef.current?.evaluateOperationalReminders()}},15000);return ()=>clearInterval(timer)},[])
   const setSession=role=>{const next=role?sessionForRole(role,stateRef.current):null;sessionRef.current=next;setSessionState(next);if(next?.role==='staff'){actionsRef.current?.evaluateHmoTimers();actionsRef.current?.evaluateOperationalReminders()}return next}
 
+  // Phase 2A reference-data bootstrap (plan section H/J). Fires once a session exists, role-aware (Patient
+  // never triggers a /api/staff call — see fetchReferenceData). A logged-out session clears back to idle so
+  // the next login always refetches fresh, never stale cross-account data. Skipped entirely when
+  // initialReferenceData was supplied (render-smoke's synchronous test-only path, see ClinicProvider's
+  // own comment above).
+  const [refDataRetryToken,setRefDataRetryToken]=useState(0)
+  const retryReferenceData=()=>setRefDataRetryToken(t=>t+1)
+  useEffect(()=>{
+    if(initialReferenceData)return
+    if(!session?.role){
+      setRefDataStatus(current=>current==='idle'?current:'idle')
+      setBranches([]);setServices([]);setBranchServices([]);setDentists([]);setStaff([])
+      return
+    }
+    let cancelled=false
+    setRefDataStatus('loading')
+    fetchReferenceData(session.role).then(result=>{
+      if(cancelled)return
+      if(!result.ok){setRefDataStatus('error');return}
+      setBranches(result.data.branches)
+      setServices(result.data.services)
+      setBranchServices(result.data.branchServices)
+      setDentists(result.data.dentists)
+      setStaff(result.data.staff)
+      setRefDataStatus('ready')
+    })
+    return ()=>{cancelled=true}
+  },[session?.role,initialReferenceData,refDataRetryToken])
+
+  // Bugfix found during real-browser Phase 2A QA: sessionForRole(role,state) (contracts.js) computes
+  // session.active by calling validSession(state,session) internally, at the moment the session is first
+  // established (identity-bridge.js, synchronously inside login/checkSession). For Staff/Dentist,
+  // validSession checks state.staff/state.dentists — which are now backend-fetched and still empty at
+  // that exact moment, since the fetch above only starts once a session exists. The result: active got
+  // permanently frozen false, and every subsequent render kept failing validSession even after the fetch
+  // completed and state.staff/state.dentists were correctly populated — session itself was never
+  // recomputed. (Patient/Owner are unaffected: their validSession checks don't depend on these two
+  // collections.) Re-deriving the session once reference data is actually ready fixes this at its root,
+  // without touching validSession/sessionForRole's logic or any other role's behavior.
+  useEffect(()=>{
+    if(refDataStatus==='ready'&&sessionRef.current&&['staff','dentist'].includes(sessionRef.current.role)){
+      setSession(sessionRef.current.role)
+    }
+  },[refDataStatus])
 
   const personById=id=>persons.find(p=>p.id===id)
   const staffById=id=>staff.find(s=>s.id===id)
@@ -93,7 +151,7 @@ export function ClinicProvider({ children }) {
     const base=fullName(person)
     return {
       ...entity,
-      firstName:person?.firstName||'', middleName:person?.middleName||'', lastName:person?.lastName||'',
+      firstName:person?.firstName||'', lastName:person?.lastName||'',
       email:person?.email||'', phone:person?.phone||'', dob:person?.dob||'', sex:person?.sex||'', address:person?.address||'',
       name:doctor && base ? `Dr. ${base}` : base || entity.id,
     }
@@ -110,7 +168,7 @@ export function ClinicProvider({ children }) {
     const base=fullName(p)
     const role=u.roleName||u.role
     const name=role==='Dentist'&&base?`Dr. ${base}`:base||u.username
-    return {...u,name,email:p?.email||'',phone:p?.phone||'',firstName:p?.firstName||'',middleName:p?.middleName||'',lastName:p?.lastName||''}
+    return {...u,name,email:p?.email||'',phone:p?.phone||'',firstName:p?.firstName||'',lastName:p?.lastName||''}
   })
   const serviceById=id=>services.find(s=>s.id===id)
   const projectedAppointments=appointments.map(a=>{
@@ -127,7 +185,12 @@ export function ClinicProvider({ children }) {
   stateRef.current=state
   const migrationDone=useRef(false)
   useEffect(()=>{
-    if(migrationDone.current||recoveryBlocked.current)return
+    // Phase 2A: this effect re-derives branchId/serviceId cross-references on still-local records using
+    // the current branches/services/dentists/staff — which are empty until the reference-data fetch
+    // resolves (refDataStatus==='ready'). Running it earlier would null out every existing local
+    // appointment/queue/treatment's branchId/serviceId against an empty branches/dentists/services set —
+    // gating on refDataStatus prevents that (plan section S3 — legacy-ID cutover safety).
+    if(migrationDone.current||recoveryBlocked.current||refDataStatus!=='ready')return
     migrationDone.current=true
     // Persist recovered IDs once, before a later branch rename can lose a legacy
     // name-based relationship. Preserve unknown dates; do not fabricate encounters.
@@ -148,9 +211,9 @@ export function ClinicProvider({ children }) {
     setConversations(persistableCollection('conversations',state.conversations))
     setNotifications(state.notifications)
     setInquiries(persistableCollection('inquiries',state.inquiries))
-  },[])
+  },[refDataStatus])
   const setters={
-    setPersons,setServices,setBranchServices,setDentistServiceAssignments,setBranches,setDentists,setStaff,setPatients,
+    setPersons,setServices,setBranchServices,setBranches,setDentists,setStaff,setPatients,
     setAppointments,setQueue,setTreatments,setInvoices,setHmo,setInquiries,setConversations,setNotifications,
     setPrescriptions,setFollowups,setUsers,setAutomations,setWorkflowLog,setCampaigns,setLoyalty,setAudit,setCheckIns,
     setBookingDrafts
@@ -204,7 +267,7 @@ export function ClinicProvider({ children }) {
     window.location.reload()
   }
 
-  const value=useMemo(()=>({state,setters,actions,toast,log,workflow,resetDemo,toasts,session,setSession,adoptSession,loginPatientByEmail,persistenceErrors}),[persons,services,branchServices,dentistServiceAssignments,branches,dentists,staff,patients,appointments,queue,treatments,invoices,hmo,inquiries,conversations,notifications,prescriptions,followups,users,automations,workflowLog,campaigns,loyalty,audit,toasts,checkIns,bookingDrafts,session,clock,persistenceErrors])
+  const value=useMemo(()=>({state,setters,actions,toast,log,workflow,resetDemo,toasts,session,setSession,adoptSession,loginPatientByEmail,persistenceErrors,refDataStatus,retryReferenceData}),[persons,services,branchServices,dentistServiceAssignments,branches,dentists,staff,patients,appointments,queue,treatments,invoices,hmo,inquiries,conversations,notifications,prescriptions,followups,users,automations,workflowLog,campaigns,loyalty,audit,toasts,checkIns,bookingDrafts,session,clock,persistenceErrors,refDataStatus])
   return <ClinicContext.Provider value={value}>{children}</ClinicContext.Provider>
 }
 

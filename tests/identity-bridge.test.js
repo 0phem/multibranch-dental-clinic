@@ -25,6 +25,13 @@ test('the Owner demo account bridges to the existing local Owner identity (Dana 
   assert.equal(validSession(f.state, result.session), true, 'the bridged session must satisfy validSession, not just resemble one')
 })
 
+test('identity projections format names from first and last name only', () => {
+  const f = fixture()
+  const person = f.state.persons.find(p => p.id === 'per-owner')
+  assert.equal([person.firstName, person.lastName].filter(Boolean).join(' '), 'Dana Roxas')
+  assert.equal('middleName' in person, false)
+})
+
 test('the aligned Staff demo account bridges to Alyssa Cruz / u2', () => {
   const f = fixture()
   const result = f.bridge({ role: 'staff', email: 'staff.reception@example.test' })
@@ -79,7 +86,7 @@ test('a genuinely new backend Patient creates exactly one local Person/Patient/U
     persons: f.state.persons.length, patients: f.state.patients.length, users: f.state.users.length,
     appointments: f.state.appointments.length, treatments: f.state.treatments.length, invoices: f.state.invoices.length,
   }
-  const me = { id: 'be-1', person_id: 'be-p-1', role: 'patient', email: 'jamie.cruz@example.test', first_name: 'Jamie', middle_name: '', last_name: 'Cruz', phone: '0917 555 0001', date_of_birth: '1998-05-17' }
+  const me = { id: 'be-1', person_id: 'be-p-1', role: 'patient', email: 'jamie.cruz@example.test', first_name: 'Jamie', last_name: 'Cruz', phone: '0917 555 0001', date_of_birth: '1998-05-17' }
   const result = f.bridge(me)
   assert.equal(result.ok, true, JSON.stringify(result))
   assert.equal(f.state.persons.length, before.persons + 1)

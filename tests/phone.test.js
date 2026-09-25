@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { COUNTRY_CODES, DEFAULT_COUNTRY, normalizePhoneNumber, formatPhoneDisplay } from '../src/phone.js'
+import { COUNTRY_CODES, DEFAULT_COUNTRY, normalizePhoneNumber, sanitizePhoneInput, formatPhoneDisplay } from '../src/phone.js'
 
 test('the country-code table defaults to Philippines +63', () => {
   assert.equal(DEFAULT_COUNTRY.dial, '+63')
@@ -46,4 +46,11 @@ test('an unsupported dial code is rejected rather than pretending it is supporte
 
 test('formatPhoneDisplay renders "+63 9994936192"', () => {
   assert.equal(formatPhoneDisplay('+63', '9994936192'), '+63 9994936192')
+})
+
+test('Owner phone input keeps +63 fixed, accepts ten local digits, and ignores letters or an eleventh digit', () => {
+  assert.equal(sanitizePhoneInput('9171234567'), '9171234567')
+  assert.equal(sanitizePhoneInput('+63 91712345678'), '6391712345')
+  assert.equal(sanitizePhoneInput('91712a34567'), '9171234567')
+  assert.deepEqual(normalizePhoneNumber('+63', sanitizePhoneInput('9171234567')), { ok: true, digits: '9171234567', e164: '+639171234567' })
 })
