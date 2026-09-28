@@ -3,7 +3,6 @@ import * as api from './api-client.js'
 export function mapUserAccount(row) {
   return {
     id: row.id,
-    personId: row.person_id,
     name: row.name || [row.first_name, row.last_name].filter(Boolean).join(' '),
     firstName: row.first_name || '',
     lastName: row.last_name || '',

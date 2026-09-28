@@ -78,9 +78,14 @@ entry also re-checking that the backend's own role matches — email alone is ne
   local Patient (Maria Santos) — so logging in through the real backend still demonstrates her existing
   appointments/care history for a demo, instead of a second, empty duplicate Patient.
 - Any other backend Patient (i.e. a real registration) gets a general-purpose upsert: a minimal local
-  Person/Patient/User row is created on first login (keyed by the backend's own user id, so a second login
-  reuses it — never a duplicate), with genuinely empty history — no appointment, treatment, invoice or HMO case
-  is fabricated.
+  Person/Patient/User row is created on first login (keyed by the backend user's `public_id` and the
+  server-resolved `me.patient.id`, so a second login reuses it — never a duplicate), with genuinely empty history —
+  no appointment, treatment, invoice or HMO case is fabricated. A Patient account for which the server returns no
+  Patient record fails closed. A projection saved by an older build under the numeric backend user id is re-keyed
+  once to the public ids when exactly one local Patient projection has that login email; more than one fails
+  closed. This re-key is a temporary compatibility migration of browser data only (the server-returned Patient
+  public_id stays the authority); remove it once the remaining browser-local Patient-dependent collections have
+  moved to backend authority.
 
 ## Honest logout
 
@@ -133,7 +138,13 @@ against the still-local, unchanged `state.users` collection — account activity
 backend-authoritative this phase (see `MODULE_COVERAGE.md`'s M6 row, which now includes Smart Scheduling).
 
 **M1 User & Access Management** (the User Management screen) is a separate backend-authoritative account collection at `GET/POST /api/users`,
-`PATCH /api/users/{user}`, and `DELETE /api/users/{user}`. The Owner screen fetches it on demand through
+`PATCH /api/users/{user}`, and `DELETE /api/users/{user}`, where `{user}` and every returned `id` are the user's
+ULID `public_id` (the bigint stays internal). Owner-only `GET /api/users/{user}/branch-scopes` and
+`PUT /api/users/{user}/branch-scopes` (`{"branch_refs": ["b1", ...]}`, replaces the whole set; `[]` removes all
+access; repeated branches are rejected) manage a Staff account's authorization branch scopes in
+`user_branch_scopes` — zero, one or many branches, Staff accounts only, never derived from operational work
+assignment. A Staff account cannot change its own scopes. Scope changes are not audited yet: future M22 integration
+should audit branch-scope assignment and removal as security-sensitive events. The Owner screen fetches it on demand through
 `src/user-management-bridge.js`; it never replaces transitional `state.users`. It can create only Patient
 accounts (atomic PERSON + PATIENT + USER creation), edit first/last/email/phone, display role read-only, and
 soft-delete login access while preserving the Person and linked records. Passwords are validated and hashed

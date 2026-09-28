@@ -4,6 +4,7 @@ use App\Http\Controllers\AppointmentController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\RegisteredPatientController;
 use App\Http\Controllers\CurrentUserController;
+use App\Http\Controllers\UserBranchScopeController;
 use App\Http\Controllers\UserManagementController;
 use App\Http\Controllers\Rbac\RbacDemoController;
 use App\Http\Controllers\Reference\BranchController;
@@ -29,6 +30,10 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/', [UserManagementController::class, 'store']);
         Route::patch('/{user}', [UserManagementController::class, 'update']);
         Route::delete('/{user}', [UserManagementController::class, 'destroy']);
+        // Staff authorization branch scopes (user_branch_scopes). {user} binds on the ULID public_id. PUT replaces
+        // the whole set, so it is idempotent; an empty list removes all access.
+        Route::get('/{user}/branch-scopes', [UserBranchScopeController::class, 'show']);
+        Route::put('/{user}/branch-scopes', [UserBranchScopeController::class, 'update']);
     });
 
     // RBAC proof-of-concept endpoints only (Backend Foundation 1A). Deliberately separate from any future

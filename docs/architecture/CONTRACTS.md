@@ -41,8 +41,8 @@ review and an update to this file in the same change.
   resources carry a public ULID `public_id`; Laravel routes bind on it and API resources return it as `id`.
   `legacy_ref` remains only on the existing Phase 2A reference tables (branches, services, staff/dentist profiles)
   as a transitional bridge until the frontend collections that use old string IDs are migrated.
-  **Current:** the M1 user API (`/api/users`) still exposes the bigint user ID; it moves to `public_id` with the
-  Wave 1 identity work.
+  **Current:** users and patients carry `public_id` (Wave 1 identity work); `/api/me` and `/api/users` return and
+  bind only public ids.
 
 ## 2. Platform: time, money, API
 

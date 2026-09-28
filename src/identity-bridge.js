@@ -51,14 +51,39 @@ export function createIdentityBridge({ getState, commit, clock = clinicNow }) {
 }
 
 // Upserts a minimal local Person/Patient/User projection for a real, backend-authenticated Patient who has no
-// pre-existing local demo row. Idempotent by `backendUserId`: a second login from the same backend account
-// reuses the same local IDs rather than creating a duplicate. Creates identity only — no appointment,
-// treatment, invoice, HMO case or any other history is fabricated, exactly like a real registration today.
+// pre-existing local demo row. Which Patient the login owns is decided by the server (`me.patient`, resolved through
+// User -> Person -> Patient); an account with no server Patient record fails closed instead of being guessed.
+// Idempotent by the public ids (`backendUserId` = user public_id, `backendPatientId` = Patient public_id): a second
+// login from the same backend account reuses the same local IDs rather than creating a duplicate. Creates identity
+// only — no appointment, treatment, invoice, HMO case or any other history is fabricated.
 function bridgePatient(me, { getState, commit, clock }) {
-  const existingUser = getState().users.find(u => u.backendUserId === me.id)
-  if (existingUser) {
-    const session = sessionForUser(getState(), existingUser.id)
+  const serverPatientId = typeof me.patient?.id === 'string' ? me.patient.id : null
+  if (typeof me.id !== 'string' || !serverPatientId) return { ok: false, reason: 'no-patient-record' }
+  const sessionFor = user => {
+    const session = sessionForUser(getState(), user.id)
     return session ? { ok: true, session } : { ok: false, reason: 'stale-local-identity' }
+  }
+  const existingUser = getState().users.find(u => u.backendUserId === me.id)
+  if (existingUser) return sessionFor(existingUser)
+  // A local record already keyed to this server Patient under another account id is never reused or duplicated.
+  if (getState().users.some(u => u.backendPatientId === serverPatientId)) return { ok: false, reason: 'patient-already-linked' }
+
+  // TEMPORARY COMPATIBILITY MIGRATION — remove the legacy email-based local-record re-key after the remaining
+  // browser-local Patient-dependent collections have been migrated to backend authority. Nothing new may depend on it.
+  // One-time, deterministic re-key of a projection saved before the public-id cutover, when this bridge still stored
+  // the numeric backend user id. It runs only after the backend has authenticated the User and returned the
+  // authoritative Patient public_id, and it only re-labels this browser's own saved record with that server id: it
+  // never chooses the server Patient, never alters server relationships, and never guesses — exactly one old-format
+  // match is required and more than one fails closed.
+  const email = cleanText(me.email).toLowerCase()
+  const legacy = getState().users.filter(u => typeof u.backendUserId === 'number' && (u.roleName || u.role) === 'Patient'
+    && cleanText(u.login).toLowerCase() === email)
+  if (legacy.length > 1) return { ok: false, reason: 'ambiguous-legacy-identity' }
+  if (legacy.length === 1) {
+    const state = getState()
+    const { backendPersonId, ...rekeyed } = legacy[0]
+    commit({ users: state.users.map(u => u.id === legacy[0].id ? { ...rekeyed, backendUserId: me.id, backendPatientId: serverPatientId } : u) })
+    return sessionFor(legacy[0])
   }
 
   const state = getState()
@@ -66,19 +91,18 @@ function bridgePatient(me, { getState, commit, clock }) {
   const openBranch = state.branches.find(b => b.status === 'Open')
   const firstName = cleanText(me.first_name)
   const lastName = cleanText(me.last_name)
-  const email = cleanText(me.email).toLowerCase()
 
   const person = {
     id: uid('per'), firstName, lastName, email,
     phone: cleanText(me.phone), dob: cleanText(me.date_of_birth), sex: '', address: '',
-    backendPersonId: me.person_id,
   }
   // No branch preference exists in the current backend registration contract (see backend/README.md); the
   // first Open branch is a technical default for local operational compatibility only, never presented as a
   // stated Patient preference.
   const patient = {
     id: uid('p'), personId: person.id, userId: null,
-    patientCode: `PAT-${String(state.patients.length + 1).padStart(4, '0')}`,
+    // The server's patient_code, so the local projection shows the same clinic-facing code as the backend record.
+    patientCode: cleanText(me.patient.code) || `PAT-${String(state.patients.length + 1).padStart(4, '0')}`,
     preferredBranchId: openBranch?.id || null, hmo: 'None', hmoMember: '—', allergies: '', medicalHistory: '',
     dentalHistory: '', emergencyContact: '', consent: false,
   }
@@ -88,7 +112,7 @@ function bridgePatient(me, { getState, commit, clock }) {
     lastLogin: now.timestamp, registeredAt: now.timestamp,
     // Markers written only by this bridge; they make the upsert idempotent and are what makes this whole file
     // removable later without touching the canonical person_id/patient_id relationships they point back to.
-    backendUserId: me.id, backendPersonId: me.person_id,
+    backendUserId: me.id, backendPatientId: serverPatientId,
   }
   patient.userId = user.id
 

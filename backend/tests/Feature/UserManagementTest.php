@@ -45,12 +45,12 @@ class UserManagementTest extends TestCase
         $this->assertTrue(Hash::check('Passw0rd!', $user->password));
         $this->assertDatabaseHas('patients', ['person_id' => $user->person_id]);
 
-        $this->patchJson('/api/users/'.$user->id, [
+        $this->patchJson('/api/users/'.$user->public_id, [
             'first_name' => 'Jamie Updated', 'last_name' => 'Cruz', 'email' => 'jamie.updated@example.com', 'phone' => '+639189999999',
         ])->assertOk()->assertJsonPath('data.first_name', 'Jamie Updated');
         $this->assertDatabaseHas('persons', ['id' => $user->person_id, 'email' => 'jamie.updated@example.com']);
 
-        $this->deleteJson('/api/users/'.$user->id)->assertNoContent();
+        $this->deleteJson('/api/users/'.$user->public_id)->assertNoContent();
         $this->getJson('/api/users')->assertJsonMissing(['email' => 'jamie.updated@example.com']);
         $this->assertSoftDeleted('users', ['id' => $user->id]);
     }
@@ -106,8 +106,8 @@ class UserManagementTest extends TestCase
     {
         Sanctum::actingAs($this->owner());
         $user = $this->account(Role::Patient);
-        $this->patchJson('/api/users/'.$user->id, ['role' => 'owner'])->assertStatus(422)->assertJsonValidationErrors('role');
-        $this->patchJson('/api/users/'.$user->id, ['password' => 'NewPass1!', 'password_confirmation' => 'NewPass1!'])
+        $this->patchJson('/api/users/'.$user->public_id, ['role' => 'owner'])->assertStatus(422)->assertJsonValidationErrors('role');
+        $this->patchJson('/api/users/'.$user->public_id, ['password' => 'NewPass1!', 'password_confirmation' => 'NewPass1!'])
             ->assertStatus(422)->assertJsonValidationErrors('password');
     }
 
@@ -115,7 +115,7 @@ class UserManagementTest extends TestCase
     {
         $owner = $this->owner();
         Sanctum::actingAs($owner);
-        $this->deleteJson('/api/users/'.$owner->id)->assertStatus(422)->assertJsonValidationErrors('user');
+        $this->deleteJson('/api/users/'.$owner->public_id)->assertStatus(422)->assertJsonValidationErrors('user');
         $this->deleteJson('/api/users/999999')->assertNotFound();
         $this->assertDatabaseHas('users', ['id' => $owner->id, 'deleted_at' => null]);
     }
@@ -126,8 +126,8 @@ class UserManagementTest extends TestCase
         $secondOwner = $this->account(Role::Owner);
         Sanctum::actingAs($owner);
 
-        $this->deleteJson('/api/users/'.$secondOwner->id)->assertNoContent();
-        $this->deleteJson('/api/users/'.$owner->id)->assertStatus(422)->assertJsonValidationErrors('user');
+        $this->deleteJson('/api/users/'.$secondOwner->public_id)->assertNoContent();
+        $this->deleteJson('/api/users/'.$owner->public_id)->assertStatus(422)->assertJsonValidationErrors('user');
         $this->assertSoftDeleted('users', ['id' => $secondOwner->id]);
         $this->assertDatabaseHas('users', ['id' => $owner->id, 'deleted_at' => null]);
     }
@@ -137,7 +137,7 @@ class UserManagementTest extends TestCase
         $owner = $this->owner();
         $patient = $this->account(Role::Patient, ['email' => 'deleted@example.com', 'password' => Hash::make('Passw0rd!')]);
         Sanctum::actingAs($owner);
-        $this->deleteJson('/api/users/'.$patient->id)->assertNoContent();
+        $this->deleteJson('/api/users/'.$patient->public_id)->assertNoContent();
         auth()->forgetUser();
         // The real auth stack reports a soft-deleted account as invalid credentials (422).
         $this->postJson('/api/login', ['email' => 'deleted@example.com', 'password' => 'Passw0rd!'])->assertStatus(422);

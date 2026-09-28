@@ -73,11 +73,14 @@ two cases without string-matching the human-readable message. A successful login
 
 ### `/api/me`
 
-Returns the authenticated identity via `App\Http\Resources\UserResource`: `id`, `person_id`, `patient_id`
-(when applicable), `name` (derived from the related Person — not a stored column), `first_name`,
+Returns the authenticated identity via `App\Http\Resources\UserResource`: `id` (the user's ULID `public_id` —
+no internal person/patient/user bigint is returned), `name` (derived from the related Person — not a stored column), `first_name`,
 `last_name`, `phone`, `date_of_birth` (Backend Foundation 1B — already-stored, already-safe
 Person fields, exposed so a frontend identity bridge can build a real local Person projection instead of
-parsing `name`), `email`, `role`, `title`, `account_status`. Never includes `password` or `remember_token`.
+parsing `name`), `email`, `role`, `title`, `account_status`, `patient` (`{id, code}` — the account's own Patient
+record's `public_id` and `patient_code`, resolved server-side through the unique User → Person → Patient links, or
+`null`), and `branch_scopes` (the account's explicit authorization branch scopes as `{id, name}` using branch
+`legacy_ref`; Owner authority is global and does not depend on it). Never includes `password` or `remember_token`.
 The same fields appear in the register/login response envelopes (`data.*`).
 
 ## Sanctum / CORS / CSRF for the future SPA

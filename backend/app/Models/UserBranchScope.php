@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 // Authorization branch scope row — see the create_user_branch_scopes_table migration. Read by M6; maintained later by
 // M1's administrative workflow.
@@ -12,9 +13,13 @@ class UserBranchScope extends Model
 
     protected $fillable = ['user_id', 'branch_id'];
 
-    /** Branch ids the account is authorized for (empty = none). */
-    public static function branchIdsFor(User $user): array
+    public function user(): BelongsTo
     {
-        return static::where('user_id', $user->id)->pluck('branch_id')->all();
+        return $this->belongsTo(User::class);
+    }
+
+    public function branch(): BelongsTo
+    {
+        return $this->belongsTo(Branch::class);
     }
 }
