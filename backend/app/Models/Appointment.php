@@ -1,0 +1,88 @@
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Concerns\HasUlids;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+
+// APPOINTMENTS (M6) — see the create_appointments_table migration. The bigint id stays internal; routes bind and
+// resources expose the ULID public_id (CONTRACTS.md §1). Status changes happen only through AppointmentService's
+// named commands, never through a generic update.
+class Appointment extends Model
+{
+    use HasUlids;
+
+    public const ACTIVE_STATUSES = ['Pending', 'Confirmed', 'Checked In', 'In Treatment'];
+
+    public const TERMINAL_STATUSES = ['Completed', 'Cancelled', 'No-show'];
+
+    // timestamptz columns: always write an explicit offset so the database session time zone never matters.
+    protected $dateFormat = 'Y-m-d H:i:sP';
+
+    protected $guarded = ['id', 'public_id'];
+
+    protected function casts(): array
+    {
+        return [
+            'starts_at' => 'immutable_datetime',
+            'ends_at' => 'immutable_datetime',
+            'cancelled_at' => 'immutable_datetime',
+            'duration_minutes' => 'integer',
+            'revision' => 'integer',
+        ];
+    }
+
+    public function uniqueIds(): array
+    {
+        return ['public_id'];
+    }
+
+    public function getRouteKeyName(): string
+    {
+        return 'public_id';
+    }
+
+    public function patient(): BelongsTo
+    {
+        return $this->belongsTo(Patient::class);
+    }
+
+    public function branch(): BelongsTo
+    {
+        return $this->belongsTo(Branch::class);
+    }
+
+    public function service(): BelongsTo
+    {
+        return $this->belongsTo(Service::class);
+    }
+
+    public function dentist(): BelongsTo
+    {
+        return $this->belongsTo(DentistProfile::class, 'dentist_profile_id');
+    }
+
+    public function history(): HasMany
+    {
+        return $this->hasMany(AppointmentHistory::class)->orderBy('id');
+    }
+
+    public function scopeActive(Builder $query): Builder
+    {
+        return $query->whereIn('status', self::ACTIVE_STATUSES);
+    }
+
+    /** The authorization read scope (AppointmentPolicy::view expressed as a query). */
+    public function scopeVisibleTo(Builder $query, User $user): Builder
+    {
+        return match ($user->role->value) {
+            'owner' => $query,
+            'patient' => $query->where('patient_id', $user->patient?->id ?? 0),
+            'staff' => $query->whereIn('branch_id', UserBranchScope::select('branch_id')->where('user_id', $user->id)),
+            'dentist' => $query->whereHas('dentist', fn (Builder $q) => $q->where('person_id', $user->person_id)),
+        };
+    }
+}

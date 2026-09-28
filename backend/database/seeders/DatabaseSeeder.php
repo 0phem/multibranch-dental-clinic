@@ -25,5 +25,8 @@ class DatabaseSeeder extends Seeder
         $this->call(DentistProfileSeeder::class);
         $this->call(DentistBranchSeeder::class);
         $this->call(DentistServiceAssignmentSeeder::class);
+
+        // M6: explicit demo authorization scope for the demo Staff logins (after BranchSeeder).
+        $this->call(DemoStaffScopeSeeder::class);
     }
 }

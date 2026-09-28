@@ -114,7 +114,26 @@ true here.
 4. `php artisan test`
 
 `phpunit.xml` fixes `DB_CONNECTION=pgsql` and `DB_DATABASE=dental_clinic_test` directly (both safe, non-secret
-values); the machine-specific host/port/credentials come from the gitignored `.env.testing`.
+values); the machine-specific host/port/credentials come from the gitignored `.env.testing`. Running an artisan
+command against the test database outside PHPUnit therefore needs both set explicitly
+(`APP_ENV=testing DB_CONNECTION=pgsql DB_DATABASE=dental_clinic_test php artisan …`); otherwise Laravel falls
+back to its default SQLite connection.
+
+### PostgreSQL requirement: `btree_gist` (M6 appointments)
+
+The M6 appointments migration runs `CREATE EXTENSION IF NOT EXISTS btree_gist` and adds two exclusion
+constraints, so PostgreSQL itself refuses overlapping active appointments for the same Dentist or the same
+Patient, even when two requests validate at the same moment. `btree_gist` ships with PostgreSQL's standard
+contrib modules (Postgres.app, Homebrew, the official Docker image and the major managed services include it).
+Creating it needs a role allowed to `CREATE EXTENSION` (a superuser, the database owner on PostgreSQL 13+ for
+trusted extensions, or a managed service's admin role). If the migration role lacks that privilege, have an
+administrator run `CREATE EXTENSION btree_gist;` once in each database (`dental_clinic`, `dental_clinic_test`)
+before `php artisan migrate`. There is intentionally no application-only fallback: without the constraint two
+concurrent bookings could both succeed.
+
+`tests/Feature/Appointments/ConcurrentBookingTest.php` starts two real PHP processes with their own database
+connections, so it commits data and rebuilds `dental_clinic_test` (`migrate:fresh`) before and after itself. It
+refuses to run against any other database.
 
 Feature tests that exercise the session-cookie login/logout lifecycle send a `Referer: http://localhost:5173`
 header (see `tests/TestCase.php`) so Sanctum's stateful-SPA middleware recognizes them as frontend requests,

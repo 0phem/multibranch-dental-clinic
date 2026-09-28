@@ -150,3 +150,49 @@ such gate (structure must be identical in every environment; only demo/reference
 `staff.reception@example.test`/`dentist@example.test` (no new Person/User/credential); the other 8 roster
 members get a real `persons` row (name/contact only) with no linked `users` row at all — nothing to log in
 with.
+
+## Backend Wave 1 — M6 Appointment Booking & Smart Scheduling (backend only, not wired to React yet)
+
+The authoritative appointment backend exists, but the React app still books through its browser-local
+appointment commands (`src/workflow.js`, `src/scheduling.js`, booking drafts). Frontend cutover is a separate,
+reviewed pass; until then the frontend scheduler is the parity reference and a UX pre-check only.
+
+Tables: `appointments` (ULID `public_id`, FKs to `patients`/`branches`/`services`/`dentist_profiles`, `starts_at`/
+`ends_at` timestamptz, duration snapshot, status, source, assignment method, `revision`), append-only
+`appointment_history` (a trigger rejects UPDATE/DELETE) and `appointment_command_keys` (Idempotency-Key records).
+Shared prerequisites added for M6: `user_branch_scopes` (authorization branch scope: zero, one or many branches per
+account, unique per user/branch, separate from operational assignment; M6 only reads it and M1 will own its
+administration) and `patients.public_id` (ULID API identity, backfilled for existing rows; `patient_code` stays the
+clinic-facing code and the bigint id stays internal). PostgreSQL exclusion constraints (`btree_gist`, see
+`backend/README.md`) prevent concurrent Dentist or Patient overlaps.
+
+All routes require `auth:sanctum` and an Active account; `{appointment}` is the ULID public id and responses carry
+`patient.id` as the Patient public id — no internal bigint is accepted or returned. A Patient's own bookings are
+always derived from the authenticated account (any Patient identifier they send is refused); Staff/Owner name the
+Patient by `patient_id` (public id). Branch, service and Dentist are referenced by their transitional `legacy_ref`
+(`b1`, `svc1`, `d1`).
+
+| Method | Path | Roles | Notes |
+| --- | --- | --- | --- |
+| GET | `/api/appointments` | Patient (own), Staff (scope branch), Dentist (own assigned), Owner (all) | `?date=YYYY-MM-DD&status=`; paginated `{data, links, meta}` |
+| GET | `/api/appointments/{id}` | same scope as above | includes `history` |
+| GET | `/api/appointments/availability` | Patient, Staff (scope branch), Owner | `branch_ref, service_ref, date`, optional `patient_id` (Staff), `appointment_id` (reschedule) |
+| GET | `/api/appointments/recommendation` | Patient | Smart Scheduling: `service_ref`, optional `branch_ref` or `latitude`/`longitude`; reserves nothing |
+| POST | `/api/appointments` | Patient (self, auto-assigned Dentist), Staff (scope branch), Owner | optional `Idempotency-Key` header |
+| POST | `/api/appointments/{id}/reschedule` | Patient (own; date/time only), Staff (scope), Owner | requires `expected_revision`; stale → 409 `stale_revision` |
+| POST | `/api/appointments/{id}/cancel` | Patient (own; before start), Staff (scope), Owner | requires `expected_revision` |
+
+Errors: 422 `{message, errors, code}` (`schedule_invalid` also returns `failed_checks` and up to five
+`alternatives`; `idempotency_key_reused`, `appointment_not_reschedulable`, `appointment_not_cancellable`,
+`appointment_started`), 409 `stale_revision` / `schedule_conflict` (lost a concurrent race), 401/403.
+
+Rules applied server-side: Patient dates tomorrow through one calendar month after tomorrow (inclusive, Asia/Manila)
+on hourly start times; Staff/Owner not before now, on 30-minute start times; service-specific duration (branch
+override first); branch status/hours, branch service, Dentist branch/service/shift/availability, Dentist and Patient
+overlap; deterministic Dentist assignment (fewest booked minutes that day, then lowest Dentist profile id).
+Schedulability comes from M3 Dentist data only: a Dentist with no login (or an inactive one) is still bookable, while
+the Dentist's own portal access still requires an active login. (The browser prototype's `dentistsFor` still also
+requires an active account; that transitional difference goes away at cutover.) Not yet available: branch closures/holidays (no closure data exists — none is invented), branch
+coordinates (all NULL, so location ranking reports `location_ranking: "unavailable"`), payment-based cancellation
+rules (no backend payment data yet), follow-up-linked bookings, and a management endpoint for Staff scope (demo
+Staff logins are scoped to `b1` by `DemoStaffScopeSeeder`).

@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AppointmentController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\RegisteredPatientController;
 use App\Http\Controllers\CurrentUserController;
@@ -59,4 +60,17 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('/dentists', [DentistProfileController::class, 'index']);
     Route::patch('/dentists/{dentistProfile}', [DentistProfileController::class, 'update'])->middleware('role:owner');
+
+    // M6 Appointment Booking & Smart Scheduling. {appointment} binds on the ULID public_id. State changes are named
+    // commands only (no generic status PATCH); per-record access is decided by AppointmentPolicy. Dentists may read
+    // their own assigned appointments but cannot book, reschedule or cancel.
+    Route::prefix('appointments')->group(function () {
+        Route::get('/', [AppointmentController::class, 'index'])->middleware('role:patient,staff,dentist,owner');
+        Route::get('/availability', [AppointmentController::class, 'availability'])->middleware('role:patient,staff,owner');
+        Route::get('/recommendation', [AppointmentController::class, 'recommendation'])->middleware('role:patient');
+        Route::post('/', [AppointmentController::class, 'store'])->middleware('role:patient,staff,owner');
+        Route::get('/{appointment}', [AppointmentController::class, 'show'])->middleware('role:patient,staff,dentist,owner');
+        Route::post('/{appointment}/reschedule', [AppointmentController::class, 'reschedule'])->middleware('role:patient,staff,owner');
+        Route::post('/{appointment}/cancel', [AppointmentController::class, 'cancel'])->middleware('role:patient,staff,owner');
+    });
 });
