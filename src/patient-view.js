@@ -4,7 +4,7 @@ import { inScope, isActiveQueue, isTodayQueue, TERMINAL } from './contracts.js'
 import { availableSlots, dateLabel, nextAppointment, peso, queueWaitEstimate } from './logic.js'
 import { followupDisplayState, linkedTreatment, visibleInvoices, visiblePrescriptions } from './phase2.js'
 import { LOYALTY_PROGRAM, accountsOf, ledgerIssue, needMoreMessage } from './loyalty.js'
-import { HMO_PROVIDERS, notificationDestination, visibleConversations, visibleHmo, visibleNotifications } from './phase3-contracts.js'
+import { HMO_PROVIDERS, notificationDestination, patientProvidesRequirement, visibleConversations, visibleHmo, visibleNotifications } from './phase3-contracts.js'
 import { assignDentist, dentistsFor, servicesAt } from './scheduling.js'
 
 // Relocated to the scheduling domain (Phase 4B.3B); re-exported here so existing Patient-view callers are unaffected.
@@ -151,7 +151,8 @@ export function hmoCaseView(h) {
     stage:historical?'This outcome comes from an earlier record. It has not been verified as a provider response in this system.':HMO_STAGE[h.status]||`Status: ${h.status}`,
     checked:requirements.filter(r=>r.state==='Validated locally').length,total:requirements.length,
     submittedAt:h.submittedAt||null,respondedAt:h.providerRespondedAt||null,escalated:h.status==='Escalated',canProvide,
-    requirements:requirements.map(r=>({id:r.id,ruleId:r.ruleId,label:r.label,state:r.state,needsAction:canProvide&&r.state==='Missing',returned:h.status==='Returned'&&r.state==='Missing'})),
+    // needsAction is Patient-actionable only; a clinic-provided requirement is never presented as the Patient's task.
+    requirements:requirements.map(r=>{const clinicSide=!patientProvidesRequirement(r.ruleId);return {id:r.id,ruleId:r.ruleId,label:r.label,state:r.state,clinicSide,needsAction:canProvide&&r.state==='Missing'&&!clinicSide,returned:h.status==='Returned'&&r.state==='Missing'}}),
   }
 }
 

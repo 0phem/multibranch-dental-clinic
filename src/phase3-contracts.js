@@ -2,11 +2,13 @@ import { validSession, strictTimestamp, permitted, completedEncounter, paymentCo
 import { clinicNow } from './clock.js'
 
 export const HMO_PROVIDERS=[{id:'hmo-medicare',name:'MediCare Plus'},{id:'hmo-healthfirst',name:'HealthFirst'}]
+// providedBy says who normally supplies the document: the Patient, or the clinic (from the Dentist's visit).
 export const HMO_REQUIREMENT_RULES=[
-  {id:'hmo-card',label:'HMO Card'},
-  {id:'valid-id',label:'Valid ID'},
-  {id:'treatment-request',label:'Dentist treatment request'},
+  {id:'hmo-card',label:'HMO Card',providedBy:'patient'},
+  {id:'valid-id',label:'Valid ID',providedBy:'patient'},
+  {id:'treatment-request',label:'Dentist treatment request',providedBy:'clinic'},
 ]
+export const patientProvidesRequirement=ruleId=>HMO_REQUIREMENT_RULES.find(r=>r.id===ruleId)?.providedBy!=='clinic'
 export const HMO_PENDING_HOURS=12
 export const pendingHmo=h=>['Pending','Escalated'].includes(h.status)
 export const activeUser=user=>!!user&&(user.accountStatus||user.status)==='Active'
@@ -44,7 +46,7 @@ export function visibleHmo(state,session) {
     if(session.role==='owner')return !session.scopeBranchId||session.scopeBranchId===h.branchId
     if(session.role==='dentist')return state.treatments.some(t=>t.id===h.treatmentId&&t.dentistId===session.dentistId)||state.appointments.some(a=>a.id===h.appointmentId&&a.dentistId===session.dentistId)
     return false
-  }).map(h=>['staff','owner'].includes(session.role)?h:{id:h.id,legacy:!!h.legacy,patientId:h.patientId,branchId:h.branchId,treatmentId:h.treatmentId,appointmentId:h.appointmentId,providerId:h.providerId,status:h.status,providerOutcome:h.providerOutcome,submittedAt:h.submittedAt,providerRespondedAt:h.providerRespondedAt,requirements:h.requirements.map((r,index)=>r?{id:r.id,ruleId:r.ruleId,label:r.label,state:r.state}:{id:`invalid-${index}`,label:'Unknown requirement',state:'Needs clinic review'}),missing:h.missing})
+  }).map(h=>['staff','owner'].includes(session.role)?h:{id:h.id,legacy:!!h.legacy,patientId:h.patientId,branchId:h.branchId,treatmentId:h.treatmentId,appointmentId:h.appointmentId,providerId:h.providerId,treatment:h.treatment,status:h.status,providerOutcome:h.providerOutcome,submittedAt:h.submittedAt,providerRespondedAt:h.providerRespondedAt,requirements:h.requirements.map((r,index)=>r?{id:r.id,ruleId:r.ruleId,label:r.label,state:r.state}:{id:`invalid-${index}`,label:'Unknown requirement',state:'Needs clinic review'}),missing:h.missing})
 }
 export function ownsNotification(state,session,n) {
   if(!validSession(state,session)||n.recipientUserId!==session.userId||!activeUser(state.users.find(u=>u.id===session.userId)))return false

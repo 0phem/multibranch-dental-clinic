@@ -45,7 +45,7 @@ export const NAV = {
   ],
   staff: [
     ['dashboard','Operations'], ['appointments','Appointments'], ['checkin','Check-In'], ['queue','Live Queue'], ['capacity','Capacity'],
-    ['patients','Patient Records'], ['billing','Billing & Payments'], ['hmo','HMO Cases'], ['inquiries','Social Inquiries'], ['messages','Messages'], ['followups','Follow-Up Tasks'], ['engagement','Engagement']
+    ['patients','Patient Records'], ['billing','Billing & Payments'], ['hmo','HMO Management'], ['inquiries','Social Inquiries'], ['messages','Messages'], ['followups','Follow-Up Tasks'], ['engagement','Engagement']
   ],
   dentist: [
     ['dashboard','Clinical Home'], ['schedule','My Schedule'], ['queue','My Queue'], ['patients','Patient Records'], ['treatment','Treatment'],
@@ -53,7 +53,7 @@ export const NAV = {
   ],
   owner: [
     ['dashboard','Executive Dashboard'], ['analytics','Analytics & Reports'], ['branches','Branches'], ['team','People & Team'], ['capacity','Capacity & Workload'],
-    ['hmo','HMO Overview'], ['users','User Management'], ['automation','Automation Monitor'], ['engagement','Engagement']
+    ['hmo','HMO Management'], ['users','User Management'], ['automation','Automation Monitor'], ['engagement','Engagement']
   ],
 }
 

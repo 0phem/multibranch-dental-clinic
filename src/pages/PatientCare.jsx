@@ -61,6 +61,7 @@ function Requirement({ requirement:r, onProvide }) {
       <p className="pt-hint">No file is uploaded or stored. The clinic checks the document details; this is not approval from your HMO.</p>
     </div>}
     {r.state==='Provided'&&<p className="pt-hint">Recorded. The clinic will check this document.</p>}
+    {r.clinicSide&&r.state==='Missing'&&<p className="pt-hint">The clinic prepares this document. Nothing is needed from you.</p>}
   </li>
 }
 
@@ -74,13 +75,19 @@ export function PatientHmoPage({ store, context }) {
     toast(result.ok?'Document details recorded for the clinic to check.':result.message,result.ok?'success':'warning')
   }
   return <div className="pt-page">
-    <PageHeader kicker="Your coverage" title="My HMO Coverage" text="The clinic tracks the documents for your HMO request and any response your provider sends back."/>
+    <PageHeader kicker="Your coverage" title="HMO Coverage" text="The clinic tracks the documents for your HMO request and any response your provider sends back."/>
     <Notice tone="info">Checking your documents at the clinic is not approval from your HMO. Only a response from your provider counts as a provider decision.</Notice>
     <div className="pt-list">{cases.length?cases.map(h=>{
       const v=hmoCaseView(h), branch=state.branches.find(b=>b.id===h.branchId)?.name
+      const service=h.treatment||state.services.find(s=>s.id===state.appointments.find(a=>a.id===h.appointmentId)?.serviceId)?.name||state.treatments.find(t=>t.id===h.treatmentId)?.procedure
+      const missing=v.requirements.filter(r=>r.needsAction)
       return <RecordCard key={h.id} id={`hmo-${h.id}`} highlight={target===h.id} title={v.provider} subtitle={branch?`Branch: ${branch}`:undefined} status={v.label}>
         <p className={`pt-stage-line ${v.escalated?'is-attention':''}`.trim()}>{v.stage}</p>
+        {missing.length?<Notice tone="warning"><b>Action required</b><br/>Missing: {missing.map(r=>r.label).join(', ')}</Notice>:<Notice>No action required right now.</Notice>}
         <DefinitionList items={[
+          {label:'Provider',value:v.provider},
+          {label:'Treatment / service',value:service||null},
+          {label:'Status',value:v.label},
           {label:'Documents checked at the clinic',value:v.total?`${v.checked} of ${v.total}`:null},
           {label:'Submission',value:v.submittedAt?`Recorded ${formatStamp(v.submittedAt)}`:'Not yet submitted'},
           {label:'Provider response',value:v.respondedAt?`Recorded ${formatStamp(v.respondedAt)}`:'None recorded yet'},

@@ -114,7 +114,7 @@ console.log('PASS: Phase 2 procedures, prescription draft privacy/authorization,
 // Phase 3 operational flows: no real provider, delivery, or server transport.
 const hmoCase=state.hmo.find(h=>h.treatmentId===completed.record.id)
 assert.ok(hmoCase)
-assert.ok(render('hmo','patient').includes('My HMO Coverage'))
+assert.ok(render('hmo','patient').includes('HMO Coverage'))
 assert.ok(render('hmo','patient').includes('Record Document Metadata'))
 for(const requirement of hmoCase.requirements)assert.equal(actions.provideHmoRequirement(hmoCase.id,requirement.ruleId,{fileName:'clinic-document.pdf'}).ok,true)
 assert.equal(actions.submitHmoCase(hmoCase.id,{commandId:'smoke-submit',method:'Portal',note:'Internal submission note'}).ok,true)
