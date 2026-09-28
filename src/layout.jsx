@@ -11,7 +11,7 @@ const useLayoutEffectSafe=typeof window==='undefined'?React.useEffect:React.useL
 const NAV_ICONS={
   dashboard:'home',book:'plusCalendar',appointments:'calendar',schedule:'calendar',checkin:'checkin',queue:'queue',capacity:'activity',
   patients:'users',treatment:'tooth',billing:'receipt',hmo:'shield',inquiries:'message',messages:'message',prescriptions:'pill',followups:'followup',
-  branches:'building',team:'users',analytics:'chart',users:'shield',automation:'settings',engagement:'sparkles',loyalty:'gift',modules:'file',me:'user'
+  branches:'building',team:'users',analytics:'chart',users:'shield',automation:'settings',engagement:'sparkles',loyalty:'gift',me:'user'
 }
 
 const GROUPS={
@@ -150,11 +150,10 @@ export function PatientMenuSheet({ open, onClose, setPage, name, unreadMessages=
   </Modal>
 }
 
-export function Shell({ role, page, setPage, onLogout, activeBranch, setActiveBranch, resetDemo, store, children }) {
+export function Shell({ role, page, setPage, onLogout, activeBranch, setActiveBranch, store, children }) {
   const info=ROLE_INFO[role]
   const [mobileOpen,setMobileOpen]=React.useState(false)
   const [notificationsOpen,setNotificationsOpen]=React.useState(false)
-  const [resetOpen,setResetOpen]=React.useState(false)
   const [assistantOpen,setAssistantOpen]=React.useState(false)
   const [patientMenuOpen,setPatientMenuOpen]=React.useState(false)
   const [logoutConfirmOpen,setLogoutConfirmOpen]=React.useState(false)
@@ -196,7 +195,7 @@ export function Shell({ role, page, setPage, onLogout, activeBranch, setActiveBr
   },[])
   const navigation=<><div className="role-card"><span aria-hidden="true">{initials}</span><div><small>{info.label}</small><b>{name}</b><em>{role==='owner'?'Branch oversight':activeBranch}</em></div></div>
     <nav className="main-nav" aria-label={`${info.label} navigation`}>{groups.map(([title,items])=><div className="nav-group" key={title}><span className="nav-group-label">{title}</span>{items.map(([key,label])=><button type="button" key={key} aria-current={page===key?'page':undefined} className={page===key?'active':''} onClick={()=>selectPage(key)}><Icon name={NAV_ICONS[key]||'home'} size={18}/><span>{label}</span></button>)}</div>)}</nav>
-    <div className="sidebar-footer"><button onClick={()=>{setMobileOpen(false);setResetOpen(true)}}><Icon name="settings" size={16}/>Reset demo data</button><button onClick={onLogout}><Icon name="logout" size={16}/>Log out</button></div></>
+    <div className="sidebar-footer"><button onClick={onLogout}><Icon name="logout" size={16}/>Log out</button></div></>
   return <ShellActionsContext.Provider value={shellActions}><div className={`app-shell role-${role}`}>
     <a className="skip-link" href="#main-content">Skip to content</a>
     <aside className="sidebar"><div className="sidebar-brand"><Brand/></div>{navigation}</aside>
@@ -214,7 +213,6 @@ export function Shell({ role, page, setPage, onLogout, activeBranch, setActiveBr
       <button type="button" aria-haspopup="dialog" aria-expanded={patientMenuOpen} onClick={()=>setPatientMenuOpen(true)}><Icon name="menu" size={20}/><span>Menu</span>{unreadMessages>0&&<span className="pt-nav-badge"><span aria-hidden="true">{unreadMessages}</span><span className="sr-only">, {unreadMessages} unread</span></span>}</button>
     </nav>}
     {role==='patient'&&<PatientMenuSheet open={patientMenuOpen} onClose={()=>setPatientMenuOpen(false)} setPage={notifyingSetPage} name={name} unreadMessages={unreadMessages} onRequestLogout={()=>setLogoutConfirmOpen(true)}/>}
-    <Modal open={resetOpen} title="Reset demo workspace?" subtitle="This clears local demo changes for every role in this browser and restores the sample records." onClose={()=>setResetOpen(false)}><div className="row-actions"><Button variant="ghost" onClick={()=>setResetOpen(false)}>Keep my changes</Button><Button variant="danger" onClick={()=>{setResetOpen(false);resetDemo()}}>Reset demo data</Button></div></Modal>
     {role==='patient'&&<ConfirmDialog open={logoutConfirmOpen} title="Log out?" tone="default" confirmLabel="Log out" cancelLabel="Cancel" className="patient-logout-dialog" onConfirm={()=>{setLogoutConfirmOpen(false);onLogout()}} onCancel={()=>setLogoutConfirmOpen(false)}>
       Are you sure you want to log out of your account?
     </ConfirmDialog>}

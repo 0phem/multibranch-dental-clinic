@@ -9,7 +9,7 @@ import {
 } from './data.js'
 import { uid, nowLabel } from './logic.js'
 import { clinicNow, rebaseDemoRecords } from './clock.js'
-import { normalizeClinicState, sessionForRole, resolvePatientLogin, persistableCollection } from './contracts.js'
+import { normalizeClinicState, sessionForRole, persistableCollection } from './contracts.js'
 import { createWorkflowActions } from './workflow.js'
 import { createRegistrationAction } from './registration.js'
 import { createIdentityBridge } from './identity-bridge.js'
@@ -251,24 +251,12 @@ export function ClinicProvider({ children, initialReferenceData }) {
 
   actionsRef.current=actions
 
-  // Patient email sign-in: resolves USER -> PERSON -> PATIENT from the typed email, never from a browser-supplied ID.
-  const loginPatientByEmail=email=>{
-    const result=resolvePatientLogin(stateRef.current,email)
-    if(result.ok){sessionRef.current=result.session;setSessionState(result.session)}
-    return result
-  }
-
   // Adopts an already-resolved session object as-is (Backend Foundation 1B: the identity-bridge's Patient path
   // produces an arbitrary sessionForUser()-shaped session, not one of the four fixed ROLE_INFO keys setSession
   // understands). Staff/Dentist/Owner keep using setSession(role) unchanged.
   const adoptSession=session=>{sessionRef.current=session;setSessionState(session)}
 
-  const resetDemo=()=>{
-    Object.keys(localStorage).filter(k=>k.startsWith(STORAGE_PREFIX)).forEach(k=>localStorage.removeItem(k))
-    window.location.reload()
-  }
-
-  const value=useMemo(()=>({state,setters,actions,toast,log,workflow,resetDemo,toasts,session,setSession,adoptSession,loginPatientByEmail,persistenceErrors,refDataStatus,retryReferenceData}),[persons,services,branchServices,dentistServiceAssignments,branches,dentists,staff,patients,appointments,queue,treatments,invoices,hmo,inquiries,conversations,notifications,prescriptions,followups,users,automations,workflowLog,campaigns,loyalty,audit,toasts,checkIns,bookingDrafts,session,clock,persistenceErrors,refDataStatus])
+  const value=useMemo(()=>({state,setters,actions,toast,log,workflow,toasts,session,setSession,adoptSession,persistenceErrors,refDataStatus,retryReferenceData}),[persons,services,branchServices,dentistServiceAssignments,branches,dentists,staff,patients,appointments,queue,treatments,invoices,hmo,inquiries,conversations,notifications,prescriptions,followups,users,automations,workflowLog,campaigns,loyalty,audit,toasts,checkIns,bookingDrafts,session,clock,persistenceErrors,refDataStatus])
   return <ClinicContext.Provider value={value}>{children}</ClinicContext.Provider>
 }
 

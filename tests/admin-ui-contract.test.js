@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs'
 
 const source=readFileSync(new URL('../src/pages/Admin.jsx',import.meta.url),'utf8')
 const administration=readFileSync(new URL('../src/administration.js',import.meta.url),'utf8')
-const users=source.match(/export function UsersPage[\s\S]*?export function ModulesPage/)[0]
+const users=source.match(/export function UsersPage[\s\S]*?(?=\nexport function |$)/)[0]
 const team=source.match(/export function TeamPage[\s\S]*?export function AnalyticsPage/)[0]
 
 test('M1 User & Access Management: the User Management screen exposes canonical creation roles only',()=>{

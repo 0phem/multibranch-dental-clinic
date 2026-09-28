@@ -5,30 +5,29 @@ For the Phase 4B checkpoint (domain baseline `dac864e`, through Phase 3.5; the P
 ## Prepare the demonstration
 
 1. Run `npm test`, `npm run test:smoke` and `npm run build`; start `npm run dev`.
-2. Use illustrative data only. Reset demo data only if discarding existing local demo work is intended. Reset rebases pristine examples; refresh does not move saved history to today.
-3. Note the Manila clinic date/time, open branch, assigned Staff and logged-in Dentist. The Staff/Dentist/Owner role-entry buttons use fixed demo identities, not a general password-login service; the Patient tab additionally offers self-registration and email sign-in (a frontend demo account flow — no real password or verification). Select a branch/Dentist reachable by those identities for the connected journey.
+2. Use illustrative data only. There is no in-app demo reset; to start over, clear this site's browser storage in developer tools (pristine examples then rebase to today). Refresh does not move saved history to today.
+3. Start the Laravel backend too (see `backend/README.md` and `BACKEND_INTEGRATION.md`). A signed-out visitor sees only **Sign in** (with **Create an account** for new Patients); there are no role-entry buttons. Sign in with the appropriate local development account (`patient@example.test`, `staff.reception@example.test`, `dentist@example.test`, `owner@example.test`; seeded by `php artisan db:seed`, password per `backend/README.md`). The backend decides the role, and the user lands on that role's dashboard. To show another role, **Log out** and sign in with that role's account. Note the Manila clinic date/time, open branch, assigned Staff and logged-in Dentist, and select a branch/Dentist reachable by those identities for the connected journey.
 4. For live admission/treatment, use today's valid appointment and available assigned Dentist. If there is no valid remaining slot or the clinic is closed, show a future booking and explain admission is a separate current-day event. Use the deterministic smoke scenarios as evidence for the full chain; do not bypass time validation or pretend a historical encounter is current.
 5. Follow one Patient and exact appointment/queue/treatment/invoice IDs throughout. A fresh completed treatment supplies a usable invoice; historical seed charges may correctly require clinic review.
 
 ## 1. Patient: register, sign in and book without payment
 
-To show the identity relationship live: on the Patient tab choose **Create an account**, fill first/last name,
-email, contact number, an optional date of birth and a preferred branch, then **Create account**. This atomically
-creates a `PERSON` + `PATIENT` + `USER` sharing the same person relationship. On the success panel, choose **Sign
-in** with that same email — sign-in resolves strictly from that `PERSON`/`PATIENT`/`USER` relationship, never from a
-typed Patient ID. A brand-new Patient (no appointment, care, prescription, invoice, follow-up or HMO case yet) lands
+To show the identity relationship live: on the sign-in screen choose **Create an account**, fill first/last name,
+mobile number, an optional date of birth, email and a password, then **Create account**. The backend creates a
+`PERSON` + `PATIENT` + `USER` sharing the same person relationship in one transaction and signs the new Patient in
+directly — the account is resolved from that relationship, never from a typed Patient ID. A brand-new Patient (no appointment, care, prescription, invoice, follow-up or HMO case yet) lands
 on a simpler **first-use Home**: a greeting and a single "Need a visit?" card leading to **Start booking**, with no
 booking form embedded on Home. Once real history exists, the same Patient sees the full Journey Hub below on their
 next visit to Home — that is derived from real state each time, not a stored "onboarding" flag.
 
 Distinguish plainly what this demonstrates:
-- **Current frontend:** the created records live in this browser's persisted local application state. This
-  demonstrates the ERD-aligned relationship (shared `person_id`), not a finished authentication system.
-- **Future backend:** a real database transaction, real credentials, email verification, server-side authorization
-  and database uniqueness constraints. None of that exists yet. Do not call the current local storage a database.
+- **Current:** the account identity (Person, Patient, User, password) is stored by the Laravel backend in
+  PostgreSQL. Most clinic records (appointments, queue, treatment, billing, HMO) are still this browser's local
+  application state until each module's backend cutover. Email verification is not implemented.
+- **Future backend:** the remaining business modules move to server-authoritative storage module by module.
 
-For the rest of this demo, either continue as the account just created, or log out and choose **Continue as
-Patient** for the seeded demo persona (Maria Santos) — her one-click sign-in is unchanged.
+For the rest of this demo, either continue as the account just created, or log out and sign in as the seeded
+development Patient (`patient@example.test`).
 
 Log in as the Patient. **Home** (Phase 4B.3C-1) is active-care-first: an active visit or queue place first, then
 today's visit or the next appointment, a primary "Book a visit" action when neither applies, compact quick actions

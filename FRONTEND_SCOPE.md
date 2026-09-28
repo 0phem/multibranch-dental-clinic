@@ -41,7 +41,7 @@ Owner/Admin administers accounts/configuration and has oversight. Existing Phase
 
 Asia/Manila is the centralized clinic clock. Commands read time on execution; screens refresh periodically. Foreground Staff timer evaluation supports HMO follow-up, appointment reminders and queue-delay updates. Closing the app stops this work. Existing reminder windows are implementation foundations, not clinic cancellation/no-show policies.
 
-Collections persist in browser localStorage. Canonical IDs remain authoritative; recoverable legacy labels are compatibility inputs, not new relationship keys. Ambiguous ownership is withheld rather than converted to role-wide access. Only pristine/reset demo dates rebase; saved history does not move to today.
+Collections persist in browser localStorage. Canonical IDs remain authoritative; recoverable legacy labels are compatibility inputs, not new relationship keys. Ambiguous ownership is withheld rather than converted to role-wide access. Only pristine seed dates rebase; saved history does not move to today.
 
 Unreadable JSON/collection data is preserved: persistence/migration writes are blocked and the workspace presents recovery feedback. Write failures warn that changes remain only in the open workspace. This does not recover corrupted records automatically, provide backups, or guarantee atomic multi-collection saving. Reset intentionally discards local demo work.
 

@@ -39,7 +39,7 @@ Accounts use demo sessions and browser state. There is no server authentication/
 
 Names, branch labels, staffing, fees and records in seeds are illustrative, not client facts. The clinic already uses digital booking, billing and records; prescriptions are a paper-based exception. This project addresses workflow coordination, not an entirely manual clinic. The [reconciliation record](DOCUMENTATION_RECONCILIATION.md#client-context) preserves the supplied business context.
 
-Use **Reset demo data** only when intentionally discarding local demo changes. Saved historical dates do not advance on reload; pristine/reset demo seeds use the current Manila clinic date. Unreadable saved data is preserved and requires recovery rather than silent replacement.
+The application has no in-app demo reset. To start a local development workspace over, clear this site's browser storage (the `dentalops-v4-*` keys) in the browser's developer tools. Saved historical dates do not advance on reload; pristine seeds use the current Manila clinic date. Unreadable saved data is preserved and requires recovery rather than silent replacement.
 
 ## Documentation
 

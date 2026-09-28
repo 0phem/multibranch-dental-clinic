@@ -124,7 +124,7 @@ export function SchedulePage({ store }) {
   const [date,setDate]=useState(clinicDate)
   const rows=state.appointments.filter(a=>a.dentistId===did&&a.date===date&&a.status!=='Cancelled').sort((a,b)=>a.start.localeCompare(b.start))
   return <>
-    <PageHeader title="My Clinical Schedule" text="Dentist-facing schedule showing validated appointments and expected visit durations." modules={[3,6]} aside={<input className="compact-date" type="date" value={date} onChange={e=>setDate(e.target.value)}/>}/>
+    <PageHeader title="My Clinical Schedule" text="Dentist-facing schedule showing validated appointments and expected visit durations." aside={<input className="compact-date" type="date" value={date} onChange={e=>setDate(e.target.value)}/>}/>
     <Card title={`${dateLabel(date)} schedule`}>
       <div className="day-schedule">{rows.length?rows.map(a=><div className="schedule-slot" key={a.id}><div className="schedule-time"><b>{displayTime(a.start)}</b><small>{a.duration} min</small></div><div className="schedule-line"/><div className="schedule-visit"><div><strong>{patientName(a.patientId,state.patients)}</strong><span>{a.service}</span><small>{a.branch} • {a.notes||'No booking note'}</small></div><Status>{a.status}</Status></div></div>):<Notice>No appointments are scheduled for this date.</Notice>}</div>
     </Card>

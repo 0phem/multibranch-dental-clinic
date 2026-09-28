@@ -37,9 +37,6 @@ export function Icon({name,size=20,className=''}){
   return <svg className={`icon ${className}`} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{ICON_PATHS[name]||ICON_PATHS.home}</svg>
 }
 
-export function ModuleBadge({ no, enhancement=false }) {
-  return <span className="module-badge">M{no}{enhancement?' • Approved enhancement':''}</span>
-}
 
 export function Status({ children }) {
   const label=String(children)
@@ -65,7 +62,7 @@ export function StatCard({ label, value, hint, tone='teal', icon }) {
   </div>
 }
 
-export function PageHeader({ title, text, modules=[], aside, kicker }) {
+export function PageHeader({ title, text, aside, kicker }) {
   return <div className="page-header">
     <div className="page-title-block">{kicker&&<span className="page-kicker">{kicker}</span>}<h1>{title}</h1>{text&&<p>{text}</p>}</div>
     <div className="page-header-right">{aside}</div>

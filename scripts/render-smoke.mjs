@@ -38,12 +38,14 @@ let count=0
 function render(page,role='staff',context=null){
   const session=m.sessionForRole(role,store.state)
   const activeBranch=store.state.branches.find(b=>b.id===session.branchId)?.name||'All Branches'
-  return renderToString(React.createElement(m.Shell,{role,page,setPage:()=>{},onLogout:()=>{},activeBranch,setActiveBranch:()=>{},resetDemo:()=>{},store:{...store,session}},React.createElement(m[pages[page]],{role,activeBranch,store:{...store,session},context,setPage:()=>{}})))
+  return renderToString(React.createElement(m.Shell,{role,page,setPage:()=>{},onLogout:()=>{},activeBranch,setActiveBranch:()=>{},store:{...store,session}},React.createElement(m[pages[page]],{role,activeBranch,store:{...store,session},context,setPage:()=>{}})))
 }
 for(const [role,nav] of Object.entries(m.NAV))for(const [page] of nav){render(page,role);count++}
 renderToString(React.createElement(m.Login,{onLogin:()=>{}}))
-renderToString(React.createElement(m.ModulesPage))
-console.log(`PASS: ${count} initial role/page renders, Login, Module Coverage`)
+// Production shell: no demo-reset control and no presentation-only Module Coverage page for any role.
+for(const role of Object.keys(m.NAV)){const shell=render('dashboard',role);assert.ok(!/Reset demo|demo workspace/i.test(shell),`${role} shell exposes no demo reset`);assert.ok(shell.includes('Log out'),`${role} shell keeps Log out`)}
+assert.equal(m.ModulesPage,undefined,'the professor-facing Module Coverage page is removed')
+console.log(`PASS: ${count} initial role/page renders, Login, production shell without demo reset`)
 
 const providerStore=store
 let state=store.state
@@ -423,10 +425,8 @@ withState({loyalty:[account(60,[requestEntry,earning(60)]),{...account(10,[earni
 const engagement=render('engagement','owner')
 for(const text of ['Optional engagement programs','team-designed','Process request','Under review','Marketing &amp; Reactivation • M25'])assert.ok(engagement.includes(text),`engagement: ${text}`)
 assert.ok(!/Proposed Enhancement|\bPE\b|Engagement • PE/.test(engagement+render('dashboard','owner')+render('dashboard','staff')),'Owner and Staff carry no PE copy')
-const modulesHtml=renderToString(React.createElement(m.ModulesPage))
-assert.ok(modulesHtml.includes('Implemented prototype (PE)')&&modulesHtml.includes('PE — limited preview; full implementation deferred')&&(modulesHtml.match(/• Proposed Enhancement \(PE\)/g)||[]).length===2&&!/approved enhancement/i.test(modulesHtml),'module coverage labels only M24/M25 as PE and distinguishes the implemented M24 from the preview-only M25')
-// New canonical modules that are not built yet must never be claimed as represented.
-for(const text of ['Patient AI Chatbot Management','Limited preview: a rule-based Clinic Assistant','Planned: only HMO document metadata','Planned: clinic settings are still fixed','Planned: only a limited in-browser activity history'])assert.ok(modulesHtml.includes(text),`module coverage: ${text}`)
+// New canonical modules that are not built yet must never be claimed as represented (canonical module data).
+for(const text of ['Patient AI Chatbot Management','Limited preview: a rule-based Clinic Assistant','Planned: only HMO document metadata','Planned: clinic settings are still fixed','Planned: only a limited in-browser activity history'])assert.ok(m.MODULES.some(mod=>mod.coverageNote?.includes(text)||mod.name===text),`module coverage: ${text}`)
 store={...store,state:fullState}
 console.log('PASS: Phase 4B.2 Referral & Loyalty — ledger-validated balance, request/pending/insufficient/review/empty states, Journey Hub entry point, aligned Engagement copy and Patient navigation')
 
@@ -437,7 +437,7 @@ let regState=fullState
 const register=m.createRegistrationAction({getState:()=>regState,commit:patch=>{regState=m.normalizeClinicState({...regState,...patch})}})
 const renderPatientAs=(page,patientSession,context=null)=>{
   const activeBranch=regState.branches.find(b=>b.id===patientSession.branchId)?.name||'All Branches'
-  return renderToString(React.createElement(m.Shell,{role:'patient',page,setPage:()=>{},onLogout:()=>{},activeBranch,setActiveBranch:()=>{},resetDemo:()=>{},store:{state:regState,session:patientSession}},React.createElement(m[pages[page]],{role:'patient',activeBranch,store:{state:regState,session:patientSession},context,setPage:()=>{}})))
+  return renderToString(React.createElement(m.Shell,{role:'patient',page,setPage:()=>{},onLogout:()=>{},activeBranch,setActiveBranch:()=>{},store:{state:regState,session:patientSession}},React.createElement(m[pages[page]],{role:'patient',activeBranch,store:{state:regState,session:patientSession},context,setPage:()=>{}})))
 }
 const reg=register({firstName:'Jamie',lastName:'Cruz',phone:'0917 555 0001',email:'jamie.cruz@example.com',dob:'',preferredBranchId:'b1'},'smoke-register')
 assert.equal(reg.ok,true,reg.message)
@@ -547,7 +547,7 @@ assert.equal(smartReplay.unchanged,true)
 store={...store,state:bookState}
 const renderBookAs=(page,patientSession)=>{
   const activeBranch=bookState.branches.find(b=>b.id===patientSession.branchId)?.name||'All Branches'
-  return renderToString(React.createElement(m.Shell,{role:'patient',page,setPage:()=>{},onLogout:()=>{},activeBranch,setActiveBranch:()=>{},resetDemo:()=>{},store:{state:bookState,session:patientSession}},React.createElement(m[pages[page]],{role:'patient',activeBranch,store:{state:bookState,session:patientSession},context:null,setPage:()=>{}})))
+  return renderToString(React.createElement(m.Shell,{role:'patient',page,setPage:()=>{},onLogout:()=>{},activeBranch,setActiveBranch:()=>{},store:{state:bookState,session:patientSession}},React.createElement(m[pages[page]],{role:'patient',activeBranch,store:{state:bookState,session:patientSession},context:null,setPage:()=>{}})))
 }
 const mePage=renderBookAs('me',bookSession)
 for(const text of ['Maria Santos','maria@example.com'])assert.ok(mePage.includes(text),`me: ${text}`)

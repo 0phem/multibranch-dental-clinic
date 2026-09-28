@@ -37,7 +37,7 @@ const enough=f=>fixture({loyalty:[acct('p1',60)]})
 test('the 50-point threshold is one exported prototype constant, not a repeated magic number',()=>{
   assert.equal(LOYALTY_PROGRAM.redemptionThreshold,50)
   assert.ok(Object.isFrozen(LOYALTY_PROGRAM))
-  const engagement=readFileSync(new URL('../src/pages/Admin.jsx',import.meta.url),'utf8').match(/const applyLoyalty[\s\S]*?export function ModulesPage/)[0]
+  const engagement=readFileSync(new URL('../src/pages/Admin.jsx',import.meta.url),'utf8').match(/const applyLoyalty[\s\S]*$/)[0]
   const source=[readFileSync(new URL('../src/loyalty.js',import.meta.url),'utf8').replace(/\/\/.*$/gm,'').replace('redemptionThreshold:50',''),readFileSync(new URL('../src/patient-view.js',import.meta.url),'utf8'),readFileSync(new URL('../src/pages/PatientLoyalty.jsx',import.meta.url),'utf8'),engagement].join('\n')
   assert.doesNotMatch(source,/\b50\b/)
 })
@@ -635,7 +635,7 @@ test('an established account survives two persistence reloads with no false reco
 })
 
 test('the enrollment path is Staff/Owner-only in the UI: the Engagement Patient list is built from Patients, never from accounts, and the Patient page cannot enroll',()=>{
-  const engagement=read('src/pages/Admin.jsx').match(/export function EngagementPage[\s\S]*?export function ModulesPage/)[0]
+  const engagement=read('src/pages/Admin.jsx').match(/export function EngagementPage[\s\S]*$/)[0]
   assert.match(engagement,/const patients=state\.patients\.filter\(p=>canManageLoyalty\(state,session,p\.id\)\)/)
   assert.match(engagement,/\{patients\.map\(p=><option/)
   assert.doesNotMatch(engagement,/state\.loyalty\.map\(l=><option/)

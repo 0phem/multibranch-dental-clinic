@@ -1,7 +1,7 @@
 import { pendingHours } from '../phase3-contracts.js'
 import { automationSnapshot } from '../orchestration.js'
 import React, { useMemo, useRef, useState } from 'react'
-import { MODULES, ROLE_INFO } from '../data.js'
+import { ROLE_INFO } from '../data.js'
 import { eventModuleLabel, ruleTargetLabel } from '../module-map.js'
 import { LOYALTY_PROGRAM, canManageLoyalty, ledgerIssue } from '../loyalty.js'
 import { Button, Card, ConfirmDialog, Field, Modal, Notice, PageHeader, Progress, StatCard, Status, Table, Tabs } from '../components.jsx'
@@ -34,7 +34,7 @@ export function BranchesPage({ store }) {
     if(!adopted.ok)toast(adopted.message,'warning')
   }
   return <>
-    <PageHeader title="Multi-Branch Clinic Management" text="ERD-aligned branch identity plus the operating data required by scheduling, staffing, patient flow, and reporting." modules={[2]}/>
+    <PageHeader title="Multi-Branch Clinic Management" text="ERD-aligned branch identity plus the operating data required by scheduling, staffing, patient flow, and reporting."/>
     <div className="grid-2 admin-config">
       <Card title="Branches" subtitle="Branch identity, location, hours, status, and capacity">
         <div className="branch-selector">{state.branches.map(b=><button key={b.id} className={selected===b.id?'selected':''} onClick={()=>setSelected(b.id)}><div><b>{b.name}</b><small>{b.branchCode} • {b.city}</small></div><Status>{b.status}</Status></button>)}</div>
@@ -97,7 +97,7 @@ export function TeamPage({ store }) {
   }
 
   return <>
-    <PageHeader title="Dentist & Staff Management" text="Personnel records are linked to account access. This screen manages Staff and Dentist profiles, operational shifts, branch assignments, and availability used by scheduling and capacity workflows." modules={[3,10]}/>
+    <PageHeader title="Dentist & Staff Management" text="Personnel records are linked to account access. This screen manages Staff and Dentist profiles, operational shifts, branch assignments, and availability used by scheduling and capacity workflows."/>
     <Notice tone="info" title="Account & personnel synchronization">Create the account first in <b>Access & Roles</b>. Dentist and staff accounts automatically receive a linked personnel profile here. <b>Active</b> comes from the account; <b>Available</b> reflects operational scheduling status.</Notice>
     <Tabs tabs={[{key:'dentists',label:'Dentists',count:state.dentists.length},{key:'staff',label:'Staff',count:state.staff.length}]} active={tab} onChange={setTab}/>
     {tab==='dentists'?<Card title="Dentist profiles & availability" subtitle="License Number • Specialty • Linked Account • Operational availability">
@@ -173,7 +173,7 @@ export function AnalyticsPage({ activeBranch, store }) {
   ]
   const exportRows=state.branches.map(b=>{const c=branchCapacity(b.name,state);return {Branch:b.name,Workload:c.workload,Waiting:c.waiting,Booked:c.booked,EstimatedWait:c.estimate,Threshold:c.threshold}})
   return <>
-    <PageHeader title="Operational Reporting & Analytics" text="Cross-cutting KPI layer for queue, scheduling, workload, HMO, communication, and patient flow. Reports are filtered by branch and period before management review." modules={[21]} aside={<select className="compact-select" value={period} onChange={e=>setPeriod(e.target.value)}><option>Today</option><option>This Week</option><option>This Month</option></select>}/>
+    <PageHeader title="Operational Reporting & Analytics" text="Cross-cutting KPI layer for queue, scheduling, workload, HMO, communication, and patient flow. Reports are filtered by branch and period before management review." aside={<select className="compact-select" value={period} onChange={e=>setPeriod(e.target.value)}><option>Today</option><option>This Week</option><option>This Month</option></select>}/>
     <div className="cards-3">{metrics.map(m=><Card key={m.name} title={m.name}><div className="analytics-value">{m.value}</div><p className="muted-copy">{m.note}</p><span className="module-inline">{m.module}</span></Card>)}</div>
     <div className="grid-2 top-gap">
       <Card title="Branch workload report"><div className="branch-bars">{state.branches.filter(b=>activeBranch==='All Branches'||b.name===activeBranch).map(b=>{const c=branchCapacity(b.name,state);return <div key={b.id}><div className="bar-label"><span>{b.name}</span><b>{c.workload}%</b></div><Progress value={c.workload} threshold={c.threshold}/><small>{c.waiting} waiting • {c.booked} booked • ~{c.estimate} min wait</small></div>})}</div></Card>
@@ -239,7 +239,7 @@ export function UsersPage({ store }) {
     toast('User account deleted.','success')
   }
   return <>
-    <PageHeader title="User Management" text="Manage user accounts, roles, and account information." modules={[1]}/>
+    <PageHeader title="User Management" text="Manage user accounts, roles, and account information."/>
     <Notice tone="info" title="Current scope">Patient accounts can be created here. Staff and Dentist account creation is unavailable until profile provisioning is migrated. Roles are read-only after creation.</Notice>
     <div className="grid-2 top-gap">
       <Card title="Create user account" subtitle="Create a Patient login with the clinic’s standard account security.">
@@ -334,7 +334,7 @@ export function EngagementPage({ role, store }) {
     toast(result.unchanged?'This redemption was already processed.':'Redemption processed and loyalty balance updated.','success')
   }
   return <>
-    <PageHeader title="Patient Engagement" text="Referral & loyalty administration, and the preview of optional marketing and reactivation campaigns, kept separate from core clinic operations." modules={[24,25]}/>
+    <PageHeader title="Patient Engagement" text="Referral & loyalty administration, and the preview of optional marketing and reactivation campaigns, kept separate from core clinic operations."/>
     <Notice tone="info" title="Optional engagement programs">Referral & Loyalty (M24) is a team-designed prototype program for demonstration; it is not an established clinic program. Marketing & Reactivation (M25) has only a limited campaign-draft preview today, and full management is planned for a later phase. Neither blocks core care operations.</Notice>
     <Tabs tabs={[{key:'loyalty',label:'Referral & Loyalty • M24'},{key:'campaigns',label:'Marketing & Reactivation • M25'}]} active={tab} onChange={setTab}/>
     {tab==='loyalty'?<>
@@ -347,17 +347,5 @@ export function EngagementPage({ role, store }) {
       <div className="grid-2"><Card title="Campaign draft (preview)"><div className="form-grid"><Field label="Campaign name"><input value={campaign.name} onChange={e=>setCampaign({...campaign,name:e.target.value})}/></Field><Field label="Type"><select value={campaign.type} onChange={e=>setCampaign({...campaign,type:e.target.value})}><option>Reactivation</option><option>Feedback</option><option>Engagement</option></select></Field><Field label="Target patient group"><input value={campaign.audience} onChange={e=>setCampaign({...campaign,audience:e.target.value})}/></Field><Field label="Channel"><select value={campaign.channel} onChange={e=>setCampaign({...campaign,channel:e.target.value})}><option>SMS</option><option>Portal</option><option>Email</option></select></Field><Field label="Scheduled outreach"><input value={campaign.scheduled} onChange={e=>setCampaign({...campaign,scheduled:e.target.value})}/></Field><Button onClick={createCampaign}>Create Draft Campaign</Button></div></Card><Card title="Campaign boundaries"><Notice tone="info">Campaign management, targeting and consent rules are planned for a later phase; this draft form is a preview and sends nothing. Operational confirmations, queue notices, delay updates, and follow-up reminders stay separate from marketing and reactivation outreach.</Notice></Card></div>
       <Card className="top-gap" title="Campaigns"><Table rows={state.campaigns} columns={[{key:'name',label:'Campaign'},{key:'type',label:'Type'},{key:'audience',label:'Audience'},{key:'channel',label:'Channel'},{key:'scheduled',label:'Schedule'},{key:'responses',label:'Responses / feedback'},{key:'reactivated',label:'Reactivated'},{key:'status',label:'Status',render:c=><Status>{c.status}</Status>}]} /></Card>
     </>}
-  </>
-}
-
-export function ModulesPage() {
-  const [area,setArea]=useState('All')
-  const areas=['All',...new Set(MODULES.map(m=>m.area))]
-  const visible=MODULES.filter(m=>area==='All'||m.area===area)
-  return <>
-    <PageHeader title="25-Module UI Coverage" text="Professor-facing traceability view showing where every documented process is represented in the frontend prototype." modules={[]}/>
-    <div className="module-summary"><div><b>25</b><span>Documented modules</span></div><div><b>4</b><span>Main role experiences</span></div><div><b>2</b><span>Proposed Enhancements (PE)</span></div></div>
-    <div className="tabs top-gap">{areas.map(a=><button className={area===a?'active':''} key={a} onClick={()=>setArea(a)}>{a}</button>)}</div>
-    <div className="module-grid">{visible.map(m=><div className="module-tile" key={m.no}><div className="module-tile-top"><span className="module-badge">M{m.no}{m.pe?' • Proposed Enhancement (PE)':''}</span><span>{m.area}</span></div><strong>{m.name}</strong><small>Module owner: {m.owner}</small><div className="role-tags">{m.roles.map(r=><span key={r}>{r==='owner'?'Owner/Admin':r[0].toUpperCase()+r.slice(1)}</span>)}</div><div className="coverage-state">{m.pe?(m.implemented?'✓ Implemented prototype (PE)':m.preview?'PE — limited preview; full implementation deferred':'Proposed Enhancement (PE)'):m.coverageNote||'✓ Represented in final UI'}</div></div>)}</div>
   </>
 }

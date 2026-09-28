@@ -11,7 +11,7 @@ import { PatientsPage, TreatmentPage, PrescriptionsPage, FollowupsPage } from '.
 import { BillingPage, HmoPage, InquiriesPage, MessagesPage } from './pages/FinanceCommunication.jsx'
 import { PatientLoyaltyPage } from './pages/PatientLoyalty.jsx'
 import { PatientMePage } from './pages/PatientMe.jsx'
-import { AnalyticsPage, AutomationPage, BranchesPage, EngagementPage, ModulesPage, TeamPage, UsersPage } from './pages/Admin.jsx'
+import { AnalyticsPage, AutomationPage, BranchesPage, EngagementPage, TeamPage, UsersPage } from './pages/Admin.jsx'
 import * as api from './api-client.js'
 
 const START_PAGE={patient:'dashboard',staff:'dashboard',dentist:'dashboard',owner:'dashboard'}
@@ -183,12 +183,11 @@ function AppBody() {
     case 'engagement': content=<EngagementPage role={role} store={store}/>; break
     case 'loyalty': content=<PatientLoyaltyPage store={store}/>; break
     case 'me': content=<PatientMePage store={store} setPage={setPage}/>; break
-    case 'modules': content=<ModulesPage/>; break
     default: content=<Notice>This screen is no longer available with your current permissions. <button onClick={()=>setPage('dashboard')}>Return home</button></Notice>;
   }
 
   return <>
-    <Shell role={role} page={page} setPage={setPage} onLogout={logout} activeBranch={branch} setActiveBranch={setActiveBranch} resetDemo={store.resetDemo} store={store}>{storageWarnings.length>0&&<Notice tone="warning">{[...new Set(storageWarnings)].join(" ")}</Notice>}{content}</Shell>
+    <Shell role={role} page={page} setPage={setPage} onLogout={logout} activeBranch={branch} setActiveBranch={setActiveBranch} store={store}>{storageWarnings.length>0&&<Notice tone="warning">{[...new Set(storageWarnings)].join(" ")}</Notice>}{content}</Shell>
     <ToastStack toasts={store.toasts}/>
   </>
 }
