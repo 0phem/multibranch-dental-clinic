@@ -45,6 +45,7 @@ Always start with:
 
 For architecture or requirement work, also inspect:
 
+- `docs/architecture/CONTRACTS.md` (frozen shared cross-module contracts; changes need team review)
 - `FRONTEND_SCOPE.md`
 - `MODULE_COVERAGE.md`
 - `ERD_ALIGNMENT.md`

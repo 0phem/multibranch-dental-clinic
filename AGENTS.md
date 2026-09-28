@@ -54,6 +54,7 @@ Use these as project context:
 - BRANDING_ALIGNMENT.md (official clinic identity, assets and retained internal identifiers)
 - DOCUMENTATION_RECONCILIATION.md (current conflicts and unresolved policies)
 - docs/architecture/ERD_v2_Data_Dictionary.md
+- docs/architecture/CONTRACTS.md (frozen shared cross-module contracts; changes need team review)
 
 Approved requirements, module meanings and ERD concepts precede implementation evidence. If documentation conflicts with current tested behavior, classify and report the conflict rather than rewriting requirements to fit code. Historical phase notes retain their original context.
 
