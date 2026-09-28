@@ -17,7 +17,7 @@ This is a logical ERD. Exact SQL types, indexes, security policies, file-storage
 | BRANCH_SERVICES | Which services a branch offers + optional overrides | Booking only offers valid branch-service combinations |
 | STAFF_PROFILES | Operational dentist/staff profile | Created/synchronized from the account/person identity, not separately retyped |
 | STAFF_SCHEDULES | Branch/date shift and availability state | Availability is based on assignment/shift/exception state |
-| DENTIST_SERVICE_ASSIGNMENTS | Services a dentist may perform | M7 filters valid dentists by service capability |
+| DENTIST_SERVICE_ASSIGNMENTS | Services a dentist may perform | M6 Smart Scheduling filters valid dentists by service capability |
 | AUDIT_LOGS | Security/administrative audit | Emergency queue priority, access changes and sensitive manual overrides should be auditable |
 
 **Implementation status (Backend Phase 2A):** BRANCHES, SERVICES, BRANCH_SERVICES, STAFF_PROFILES and
@@ -90,7 +90,7 @@ logical-only, not yet implemented.
 | SYSTEM_EVENTS | Immutable-style operational event stream/reference | Used by M18, M21 and M23 for notifications, analytics and orchestration |
 | AUTOMATED_ACTIONS | Rule execution result | Must record success/failure; duplicate-trigger protection required |
 
-**M21 Operational Analytics** and **M22 Owner Dashboard** are intentionally not separate transaction tables. They are reporting/read layers that calculate or materialize approved KPIs from operational tables/events. A backend may later add materialized KPI snapshots for performance without changing the business model.
+**M21 Operational Analytics & Executive Intelligence** (which includes the Owner dashboard) is intentionally not a set of separate transaction tables. It is a reporting/read layer that calculates or materializes approved KPIs from operational tables/events. A backend may later add materialized KPI snapshots for performance without changing the business model.
 
 ## Cross-table constraints to enforce during backend work
 
@@ -101,7 +101,7 @@ logical-only, not yet implemented.
 5. Emergency priority changes require authorized user, reason and audit entry.
 6. Treatment completion is required before normal invoice generation.
 7. Prescription authorization is dentist-only.
-8. Follow-up creation records a clinical requirement; actual appointment still passes M6/M7 scheduling validation.
+8. Follow-up creation records a clinical requirement; actual appointment still passes M6 scheduling validation.
 9. HMO local completeness must never be represented as provider approval.
 10. Electronic payment status must be confirmed by the payment provider/backend before invoice is marked paid.
 11. System-generated notifications must link to an event and respect channel/privacy rules.

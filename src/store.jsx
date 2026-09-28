@@ -222,11 +222,12 @@ export function ClinicProvider({ children, initialReferenceData }) {
   const toast=(message,tone='default')=>{
     const id=uid('toast'); setToasts(xs=>[...xs,{id,message,tone}]); setTimeout(()=>setToasts(xs=>xs.filter(x=>x.id!==id)),3200)
   }
-  const log=(actor,action,module='M23')=>{
-    setAudit(xs=>[{id:uid('aud'),at:nowLabel(),actor,action,module},...xs].slice(0,150))
+  // `domain` is a stable module-map.js key, not a module number (see module-map.js).
+  const log=(actor,action,domain='automation')=>{
+    setAudit(xs=>[{id:uid('aud'),at:nowLabel(),actor,action,domain},...xs].slice(0,150))
   }
-  const workflow=(module,event,result,status='Success',eventType=null)=>{
-    setWorkflowLog(xs=>[{id:uid('log'),at:nowLabel(),module,event,eventType:eventType||event,result,status},...xs])
+  const workflow=(domain,event,result,status='Success',eventType=null)=>{
+    setWorkflowLog(xs=>[{id:uid('log'),at:nowLabel(),domain,event,eventType:eventType||event,result,status},...xs])
   }
   const actions={}
   const commit=patch=>{

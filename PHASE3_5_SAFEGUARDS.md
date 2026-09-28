@@ -2,6 +2,8 @@
 
 > Historical Phase 3.5 record. The work described below was subsequently committed as `dac864e`. Its audit and original no-commit scope remain historical; the current documentation and central unresolved-policy register are in [Documentation Reconciliation](DOCUMENTATION_RECONCILIATION.md).
 
+> Module numbering note (2026-09-28): module numbers below are those in force at the time. The canonical restructure and old → new mapping are in [Module Coverage](MODULE_COVERAGE.md) — for example, the former HMO M12/M13/M14 are now one M12, and the former Smart Scheduling M7 is part of M6.
+
 ## Checkpoint, scope and method
 
 Protected starting HEAD: `cfb59e2` — Complete Phase 3 HMO communications and orchestration. Starting working tree was clean. The actual baseline passed 184/184 tests, all render-smoke scenarios and the production Vite build.

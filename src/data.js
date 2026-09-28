@@ -3,32 +3,34 @@ import { clinicDate } from './clock.js'
 // Compatibility export for deferred modules; workflow code reads the live clinic clock.
 export const TODAY = clinicDate()
 
+// Canonical 25-module structure. `coverage` states what the frontend actually represents today:
+// 'represented' (default), 'partial', 'preview' or 'planned'. M24/M25 are Proposed Enhancements (PE).
 export const MODULES = [
-  { no: 1, name: 'User Management', owner: 'Licanda, Celin', area: 'Administration', roles: ['owner'] },
+  { no: 1, name: 'User & Access Management', owner: 'Licanda, Celin', area: 'Administration', roles: ['owner'] },
   { no: 2, name: 'Multi-Branch Clinic Management', owner: 'Licanda, Celin', area: 'Administration', roles: ['owner'] },
   { no: 3, name: 'Dentist & Staff Management', owner: 'Licanda, Celin', area: 'Administration', roles: ['owner'] },
   { no: 4, name: 'Patient Records Management', owner: 'Ecal, Richmon', area: 'Clinical', roles: ['staff','dentist'] },
   { no: 5, name: 'Treatment & Clinical Workflow Management', owner: 'Ecal, Richmon', area: 'Clinical', roles: ['dentist'] },
-  { no: 6, name: 'Core Appointment Booking & Schedule Management', owner: 'Alejo, Hart Jaztin A.', area: 'Scheduling', roles: ['patient','staff'] },
-  { no: 7, name: 'Smart Scheduling & Conflict Prevention', owner: 'Alejo, Hart Jaztin A.', area: 'Scheduling', roles: ['patient','staff','owner'] },
+  { no: 6, name: 'Appointment Booking & Smart Scheduling Management', owner: 'Alejo, Hart Jaztin A.', area: 'Scheduling', roles: ['patient','staff','owner'] },
+  { no: 7, name: 'Patient AI Chatbot Management', owner: 'Alejo, Hart Jaztin A.', area: 'Patient Assistance', roles: ['patient'], coverage: 'preview', coverageNote: 'Limited preview: a rule-based Clinic Assistant with fixed answers; the AI chatbot is not yet implemented' },
   { no: 8, name: 'Patient Check-In Management', owner: 'Alejo, Hart Jaztin A.', area: 'Patient Flow', roles: ['staff'] },
-  { no: 9, name: 'Smart Patient Queue Management', owner: 'Alejo, Hart Jaztin A.', area: 'Patient Flow', roles: ['patient','staff','dentist'] },
-  { no: 10, name: 'Waiting-Time & Patient Flow Capacity Management', owner: 'Alejo, Hart Jaztin A.', area: 'Patient Flow', roles: ['patient','staff','owner'] },
-  { no: 11, name: 'Billing & Payment Management', owner: 'Ecal, Richmon', area: 'Finance', roles: ['patient','staff'] },
-  { no: 12, name: 'HMO Verification & Documentation Management', owner: 'Delos Santos, Joevan', area: 'HMO', roles: ['staff','owner'] },
-  { no: 13, name: 'HMO Request & Approval Management', owner: 'Delos Santos, Joevan', area: 'HMO', roles: ['staff','owner'] },
-  { no: 14, name: 'HMO Follow-Up & Escalation Automation', owner: 'Delos Santos, Joevan', area: 'HMO', roles: ['staff','owner'] },
-  { no: 15, name: 'Staff Workload & Cross-Branch Capacity Automation', owner: 'Licanda, Celin', area: 'Operations', roles: ['staff','owner'] },
+  { no: 9, name: 'Patient Queue Management', owner: 'Alejo, Hart Jaztin A.', area: 'Patient Flow', roles: ['patient','staff','dentist'] },
+  { no: 10, name: 'Clinic Capacity, Waiting-Time & Workforce Management', owner: 'Alejo, Hart Jaztin A.', area: 'Patient Flow', roles: ['patient','staff','owner'] },
+  { no: 11, name: 'Billing, Payment & Receipt Management', owner: 'Ecal, Richmon', area: 'Finance', roles: ['patient','staff'] },
+  { no: 12, name: 'HMO Case, Coverage & Follow-Up Management', owner: 'Delos Santos, Joevan', area: 'HMO', roles: ['patient','staff','owner'] },
+  { no: 13, name: 'Service, Procedure & Pricing Management', owner: 'Licanda, Celin', area: 'Administration', roles: ['owner'], coverage: 'partial', coverageNote: 'Partly represented: service catalog and branch service availability; price versions and effective dates are planned' },
+  { no: 14, name: 'Patient Forms, Documents & Consent Management', owner: 'Delos Santos, Joevan', area: 'Documents', roles: ['patient','staff'], coverage: 'planned', coverageNote: 'Planned: only HMO document metadata is recorded today; no file storage, forms, consent records or extraction yet' },
+  { no: 15, name: 'Clinic Configuration & Business Rules Management', owner: 'Licanda, Celin', area: 'Administration', roles: ['owner'], coverage: 'planned', coverageNote: 'Planned: clinic settings are still fixed in the application today' },
   { no: 16, name: 'Social Media Inquiry Management', owner: 'Millar, John Yzhekiel', area: 'Communication', roles: ['staff'] },
   { no: 17, name: 'Unified Patient Messaging Management', owner: 'Millar, John Yzhekiel', area: 'Communication', roles: ['patient','staff','dentist'] },
-  { no: 18, name: 'Real-Time Patient Notification Management', owner: 'Millar, John Yzhekiel', area: 'Communication', roles: ['patient','staff'] },
-  { no: 19, name: 'Digital Prescription Management', owner: 'Ecal, Richmon', area: 'Clinical', roles: ['patient','dentist'] },
-  { no: 20, name: 'Treatment Follow-Up Scheduling Management', owner: 'Ecal, Richmon', area: 'Clinical', roles: ['patient','staff','dentist'] },
-  { no: 21, name: 'Operational Reporting & Analytics Management', owner: 'Delos Santos, Joevan', area: 'Analytics', roles: ['owner'] },
-  { no: 22, name: 'Owner Executive Dashboard & Business Intelligence', owner: 'Licanda, Celin', area: 'Analytics', roles: ['owner'] },
+  { no: 18, name: 'Real-Time Notification & Reminder Management', owner: 'Millar, John Yzhekiel', area: 'Communication', roles: ['patient','staff'] },
+  { no: 19, name: 'Digital Prescription & OCR-Assisted Management', owner: 'Ecal, Richmon', area: 'Clinical', roles: ['patient','dentist'], coverage: 'partial', coverageNote: 'Digital prescription is represented; OCR-assisted transcription is planned' },
+  { no: 20, name: 'Treatment Follow-Up & Recall Management', owner: 'Ecal, Richmon', area: 'Clinical', roles: ['patient','staff','dentist'] },
+  { no: 21, name: 'Operational Analytics & Executive Intelligence', owner: 'Delos Santos, Joevan', area: 'Analytics', roles: ['owner'] },
+  { no: 22, name: 'Audit Trail & Activity Monitoring Management', owner: 'Delos Santos, Joevan', area: 'Governance', roles: ['owner'], coverage: 'planned', coverageNote: 'Planned: only a limited in-browser activity history exists today; no tamper-resistant audit trail yet' },
   { no: 23, name: 'Integrated Workflow & Automation Control', owner: 'Delos Santos, Joevan', area: 'Automation', roles: ['owner'] },
-  { no: 24, name: 'Referral & Loyalty Management', owner: 'Millar, John Yzhekiel', area: 'Engagement', roles: ['patient','staff','owner'], enhancement: true, implemented: true },
-  { no: 25, name: 'Marketing, Reactivation & Patient Engagement Management', owner: 'Millar, John Yzhekiel', area: 'Engagement', roles: ['staff','owner'], enhancement: true, implemented: false, preview: true },
+  { no: 24, name: 'Referral & Loyalty Management', owner: 'Millar, John Yzhekiel', area: 'Engagement', roles: ['patient','staff','owner'], enhancement: true, pe: true, implemented: true },
+  { no: 25, name: 'Marketing, Reactivation & Patient Engagement Management', owner: 'Millar, John Yzhekiel', area: 'Engagement', roles: ['staff','owner'], enhancement: true, pe: true, implemented: false, preview: true },
 ]
 
 export const ROLE_INFO = {
@@ -220,20 +222,20 @@ export const INITIAL_USERS = [
 ]
 
 export const INITIAL_AUTOMATIONS = [
-  { id:'r1', event:'Appointment created / moved / cancelled', triggerEvent:'appointment.lifecycle.changed', targetModule:'M6 / M7 / M18', condition:'Valid appointment lifecycle change', action:'Reserve or release slot; update calendar; notify patient', owner:'Scheduling', enabled:true, isActive:true, lastResult:'Success' },
-  { id:'r2', event:'HMO pending timer updated', triggerEvent:'hmo.pending.timer.updated', targetModule:'M14', condition:'Pending > 12 hours', action:'Create follow-up task and notify HMO coordinator', owner:'HMO', enabled:true, isActive:true, lastResult:'Success' },
-  { id:'r3', event:'Queue or capacity updated', triggerEvent:'patientflow.capacity.updated', targetModule:'M10 / M15', condition:'Estimated wait > 35 min OR branch load > threshold', action:'Alert front desk/owner and show cross-branch capacity', owner:'Patient Flow', enabled:true, isActive:true, lastResult:'Success' },
-  { id:'r4', event:'Treatment completed', triggerEvent:'clinical.treatment.completed', targetModule:'M11 / M19 / M20', condition:'Dentist marks prescription/follow-up required', action:'Create billing, prescription, or follow-up task as applicable', owner:'Clinical', enabled:true, isActive:true, lastResult:'Success' },
-  { id:'r5', event:'New patient message', triggerEvent:'communication.message.received', targetModule:'M17', condition:'Patient or inquiry matched', action:'Route to responsible staff queue', owner:'Communication', enabled:true, isActive:true, lastResult:'Success' },
-  { id:'r6', event:'User account created / role updated', triggerEvent:'access.user.changed', targetModule:'M3', condition:'Role is Dentist or clinic Staff', action:'Create or synchronize linked STAFF_PROFILES record', owner:'Administration', enabled:true, isActive:true, lastResult:'Success' },
+  { id:'r1', event:'Appointment created / moved / cancelled', triggerEvent:'appointment.lifecycle.changed', targetDomains:['appointment','notification'], condition:'Valid appointment lifecycle change', action:'Reserve or release slot; update calendar; notify patient', owner:'Scheduling', enabled:true, isActive:true, lastResult:'Success' },
+  { id:'r2', event:'HMO pending timer updated', triggerEvent:'hmo.pending.timer.updated', targetDomains:['hmo'], condition:'Pending > 12 hours', action:'Create follow-up task and notify HMO coordinator', owner:'HMO', enabled:true, isActive:true, lastResult:'Success' },
+  { id:'r3', event:'Queue or capacity updated', triggerEvent:'patientflow.capacity.updated', targetDomains:['capacity'], condition:'Estimated wait > 35 min OR branch load > threshold', action:'Alert front desk/owner and show cross-branch capacity', owner:'Patient Flow', enabled:true, isActive:true, lastResult:'Success' },
+  { id:'r4', event:'Treatment completed', triggerEvent:'clinical.treatment.completed', targetDomains:['billing','prescription','followup'], condition:'Dentist marks prescription/follow-up required', action:'Create billing, prescription, or follow-up task as applicable', owner:'Clinical', enabled:true, isActive:true, lastResult:'Success' },
+  { id:'r5', event:'New patient message', triggerEvent:'communication.message.received', targetDomains:['messaging'], condition:'Patient or inquiry matched', action:'Route to responsible staff queue', owner:'Communication', enabled:true, isActive:true, lastResult:'Success' },
+  { id:'r6', event:'User account created / role updated', triggerEvent:'access.user.changed', targetDomains:['personnel'], condition:'Role is Dentist or clinic Staff', action:'Create or synchronize linked STAFF_PROFILES record', owner:'Administration', enabled:true, isActive:true, lastResult:'Success' },
 ]
 
 export const INITIAL_WORKFLOW_LOG = [
-  { id:'log0', at:'2026-09-19 10:16', module:'M1→M3', event:'User account created / role synchronized', result:'STAFF_PROFILES link confirmed for u10', status:'Success' },
-  { id:'log1', at:'2026-09-19 09:46', module:'M8→M9', event:'Patient checked in', result:'Queue entry q1 created', status:'Success' },
-  { id:'log2', at:'2026-09-19 08:10', module:'M14', event:'HMO threshold reached', result:'Follow-up task generated for h1', status:'Success' },
-  { id:'log3', at:'2026-09-18 16:41', module:'M16', event:'Inquiry responded', result:'Response history updated', status:'Success' },
-  { id:'log4', at:'2026-09-18 14:12', module:'M23', event:'Notification trigger', result:'SMS provider unavailable; responsible staff alerted for retry', status:'Failed' },
+  { id:'log0', at:'2026-09-19 10:16', domain:'identity→personnel', event:'User account created / role synchronized', result:'STAFF_PROFILES link confirmed for u10', status:'Success' },
+  { id:'log1', at:'2026-09-19 09:46', domain:'checkin→queue', event:'Patient checked in', result:'Queue entry q1 created', status:'Success' },
+  { id:'log2', at:'2026-09-19 08:10', domain:'hmo', event:'HMO threshold reached', result:'Follow-up task generated for h1', status:'Success' },
+  { id:'log3', at:'2026-09-18 16:41', domain:'inquiry', event:'Inquiry responded', result:'Response history updated', status:'Success' },
+  { id:'log4', at:'2026-09-18 14:12', domain:'automation', event:'Notification trigger', result:'SMS provider unavailable; responsible staff alerted for retry', status:'Failed' },
 ]
 
 export const INITIAL_CAMPAIGNS = [
@@ -249,7 +251,7 @@ export const INITIAL_LOYALTY = [
 ]
 
 export const INITIAL_AUDIT = [
-  { id:'aud1', at:'2026-09-19 08:06', actor:'Alyssa Cruz', action:'Replied to patient conversation c1', module:'M17' },
-  { id:'aud2', at:'2026-09-19 08:10', actor:'System', action:'Generated HMO follow-up for h1', module:'M14' },
-  { id:'aud3', at:'2026-09-19 09:46', actor:'Alyssa Cruz', action:'Checked in Maria Santos', module:'M8' },
+  { id:'aud1', at:'2026-09-19 08:06', actor:'Alyssa Cruz', action:'Replied to patient conversation c1', domain:'messaging' },
+  { id:'aud2', at:'2026-09-19 08:10', actor:'System', action:'Generated HMO follow-up for h1', domain:'hmo' },
+  { id:'aud3', at:'2026-09-19 09:46', actor:'Alyssa Cruz', action:'Checked in Maria Santos', domain:'checkin' },
 ]

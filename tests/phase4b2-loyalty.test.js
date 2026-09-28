@@ -29,7 +29,7 @@ const john=f=>f.role('patient',{userId:'u13',patientId:'p2',name:'John Dela Cruz
 const engaged=f=>{f.patch({users:f.state.users.map(u=>u.id==='u2'?{...u,permissions:[...u.permissions,'engagement']}:u)});f.role('staff')}
 const owner=f=>f.role('owner')
 const mine=(f,patientId='p1')=>f.state.loyalty.find(l=>l.patientId===patientId)
-const events=f=>f.state.workflowLog.filter(e=>e.module==='M24'&&e.status==='Success')
+const events=f=>f.state.workflowLog.filter(e=>e.domain==='loyalty'&&e.status==='Success')
 const enough=f=>fixture({loyalty:[acct('p1',60)]})
 
 // ---- Prototype program rule --------------------------------------------------------------------------
@@ -477,7 +477,7 @@ test('the Patient page invents no referral relationship, reward benefit or progr
   assert.match(page,/prototype/i)
 })
 
-test('M24 Patient copy no longer presents Proposed Enhancement / PE and navigation is aligned',()=>{
+test('M24 Patient copy carries no internal PE designation, navigation is aligned, and only M24/M25 are PE modules',()=>{
   assert.deepEqual(data.NAV.patient.find(([key])=>key==='loyalty'),['loyalty','Referral & Loyalty'])
   for(const role of ['staff','owner'])assert.deepEqual(data.NAV[role].find(([key])=>key==='engagement'),['engagement','Engagement'])
   assert.doesNotMatch(read('src/pages/PatientLoyalty.jsx'),/Proposed|\bPE\b|Rewards/)
@@ -485,7 +485,7 @@ test('M24 Patient copy no longer presents Proposed Enhancement / PE and navigati
   const m24=data.MODULES.find(m=>m.no===24),m25=data.MODULES.find(m=>m.no===25)
   assert.equal(m24.enhancement,true);assert.equal(m24.implemented,true)
   assert.equal(m25.enhancement,true);assert.notEqual(m25.implemented,true,'M25 is not fully implemented');assert.equal(m25.preview,true,'M25 has only its limited pre-existing preview')
-  assert.equal(data.MODULES.filter(m=>m.pe).length,0)
+  assert.deepEqual(data.MODULES.filter(m=>m.pe).map(m=>m.no),[24,25],'M24 and M25 are the Proposed Enhancements (PE)')
   assert.equal(data.MODULES.length,25,'no M26+')
 })
 
@@ -510,7 +510,7 @@ test('every M24 command is registered with the shared runner and the engagement 
   assert.match(workflow,/recordLoyaltyActivity:'engagement',processLoyaltyRedemption:'engagement'/)
   const loyalty=read('src/loyalty.js')
   assert.doesNotMatch(loyalty,/setters|setLoyalty|useState|window\./)
-  assert.equal([...loyalty.matchAll(/module:'M24'/g)].length,3)
+  assert.equal([...loyalty.matchAll(/domain:'loyalty'/g)].length,3)
 })
 
 // ---- Documentation -----------------------------------------------------------------------------------
@@ -518,12 +518,12 @@ test('every M24 command is registered with the shared runner and the engagement 
 const CURRENT_DOCS=['AGENTS.md','CLAUDE.md','README.md','MODULE_COVERAGE.md','FRONTEND_SCOPE.md','ERD_ALIGNMENT.md','DOCUMENTATION_RECONCILIATION.md','PROFESSOR_DEMO_GUIDE.md','.agents/skills/dentalops-production-ui/SKILL.md']
 const HISTORICAL_DOCS=['P0_IMPLEMENTATION_NOTES.md','P1_PRODUCTION_UI_REFRESH.md','PHASE1_IMPLEMENTATION_NOTES.md','PHASE2_IMPLEMENTATION_NOTES.md','PHASE3_IMPLEMENTATION_NOTES.md','PHASE3_5_SAFEGUARDS.md','PHASE4A_UI_FOUNDATION.md']
 
-test('current source-of-truth docs classify M24/M25 as Approved Frontend Enhancements, not Proposed',()=>{
+test('current source-of-truth docs classify M24/M25 as Proposed Enhancements (PE), with the earlier wording only as history',()=>{
   for(const path of CURRENT_DOCS){
     const text=read(path)
-    assert.match(text,/Approved Frontend Enhancement/,`${path} states the approved classification`)
-    for(const line of text.split('\n').filter(l=>/Proposed Enhancement|remain Proposed|\bPE\b/.test(l)))
-      assert.match(line,/previous|historical|formerly|earlier|until|were|was\b|no longer/i,`${path}: stale current-tense Proposed wording: ${line.slice(0,160)}`)
+    assert.match(text,/Proposed Enhancement(?:s)? \(PE\)/,`${path} states the canonical PE classification`)
+    for(const line of text.split('\n').filter(l=>/Approved Frontend Enhancement/.test(l)))
+      assert.match(line,/previous|historical|formerly|earlier|until|were|was\b|no longer/i,`${path}: stale current-tense Approved wording: ${line.slice(0,160)}`)
   }
 })
 

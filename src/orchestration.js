@@ -37,11 +37,12 @@ export function appendNotification(state,now,key,recipient,title,body,context={}
 export function notifyBranch(state,now,key,branchId,permission,title,body,context) {
   for(const user of state.users.filter(u=>activeUser(u)&&u.branchId===branchId&&u.permissions?.includes(permission)&&(u.roleName||u.role)!=='Dentist'))appendNotification(state,now,key,{userId:user.id,role:'staff'},title,body,{...context,branchId})
 }
-export function appendWorkflowEvent(state,session,now,key,module,type,result,context={},status='Success') {
+// `domain` is a stable key from module-map.js (e.g. 'hmo', 'treatment→billing'), never a module number.
+export function appendWorkflowEvent(state,session,now,key,domain,type,result,context={},status='Success') {
   if(state.workflowLog.some(e=>e.commandKey===key))return
   const id=`event:${key}`
-  state.workflowLog=[{id,commandKey:key,at:now.label,createdAt:now.timestamp,module,event:type,eventType:type,result,status,actorUserId:session.userId,...context},...state.workflowLog]
-  state.audit=[{id:uid('aud'),eventId:id,at:now.label,actor:session.name,actorUserId:session.userId,action:result,module},...state.audit].slice(0,150)
+  state.workflowLog=[{id,commandKey:key,at:now.label,createdAt:now.timestamp,domain,event:type,eventType:type,result,status,actorUserId:session.userId,...context},...state.workflowLog]
+  state.audit=[{id:uid('aud'),eventId:id,at:now.label,actor:session.name,actorUserId:session.userId,action:result,domain},...state.audit].slice(0,150)
 }
 export function automationSnapshot(state) {
   const events=state.workflowLog||[]

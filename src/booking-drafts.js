@@ -45,7 +45,7 @@ export function bookingDraftActions(run) {
     const record={id:existing?.id||uid('draft'),patientId:session.patientId,...next,revision:(existing?.revision||0)+1,updatedAt:now.timestamp}
     state.bookingDrafts=existing?(state.bookingDrafts||[]).map(d=>d.id===existing.id?record:d):[record,...(state.bookingDrafts||[])]
     return {ok:true,record}
-  },{name:'booking.draft.save',module:'M6'})
+  },{name:'booking.draft.save',domain:'appointment'})
 
   const discardBookingDraft=run(({state,session},commandId)=>{
     if(session.role!=='patient')return fail('Only a Patient can discard their own booking draft.')
@@ -55,7 +55,7 @@ export function bookingDraftActions(run) {
     if(!existing)return {ok:true,unchanged:true}
     state.bookingDrafts=(state.bookingDrafts||[]).filter(d=>d.id!==existing.id)
     return {ok:true}
-  },{name:'booking.draft.discard',module:'M6'})
+  },{name:'booking.draft.discard',domain:'appointment'})
 
   return {saveBookingDraft,discardBookingDraft}
 }

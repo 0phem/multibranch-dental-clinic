@@ -1,5 +1,7 @@
 # Phase 4B.3 — Patient onboarding & booking architecture
 
+> Module numbering note (2026-09-28): this record uses the module numbers in force at the time. Smart Scheduling & Conflict Prevention (then M7) is now a feature of M6; see [Module Coverage](MODULE_COVERAGE.md) for the canonical structure and old → new mapping.
+
 Built on `d1d2f85` (Finalize Phase 4B audit documentation) with a clean tree. This is the implementation record for
 the onboarding/booking architecture line of work; the planning pass that preceded it produced no file changes.
 

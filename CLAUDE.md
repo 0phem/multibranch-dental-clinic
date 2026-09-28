@@ -86,27 +86,32 @@ Do not change approved business behavior merely because another implementation i
 
 If the ERD, documentation, tests, and implementation disagree, identify the conflict instead of silently resolving it.
 
-## Approved module architecture
+## Canonical module architecture
 
-Preserve M1–M25.
+The canonical 25-module structure is listed in `MODULE_COVERAGE.md` (and `MODULES` in `src/data.js`). Preserve M1–M25 as defined there. The earlier structure — with Smart Scheduling as M7, HMO split across M12/M13/M14, workload as M15 and the Owner dashboard as M22 — is retired; `MODULE_COVERAGE.md` records the old → new mapping.
 
 Do not invent new business modules merely because technical infrastructure is added.
 
 Important separations include:
 
+- M6 Appointment Booking & Smart Scheduling: Smart Scheduling, conflict prevention, nearest-branch recommendation and automatic Dentist assignment are M6 features. Conflict validation stays deterministic, never AI.
+- M7 Patient AI Chatbot: Patient-only, read-only; it never diagnoses, prescribes, recommends treatment, books, pays or changes HMO state.
 - M8 Check-In
 - M9 Queue
-- M10 Wait / Capacity
-- M12 HMO requirements / local preparation
-- M13 HMO submission / provider response
-- M14 HMO follow-up / escalation
+- M10 Capacity, Waiting-Time & Workforce (includes the former workload/cross-branch capacity module)
+- M12 HMO Case, Coverage & Follow-Up: one case lifecycle (see HMO below)
+- M13 Service, Procedure & Pricing; M14 Forms, Documents & Consent; M15 Clinic Configuration & Business Rules
 - M17 Messages
 - M18 Notifications
-- M21 Analytics
-- M22 Owner Dashboard
+- M21 Analytics & Executive Intelligence (includes the former Owner dashboard module)
+- M22 Audit Trail & Activity Monitoring
 - M23 Workflow Automation
 
-M24 and M25 are Approved Frontend Enhancements (previously recorded as Proposed Enhancements). M24 (Referral & Loyalty) is an implemented prototype whose program rules (the 50-point redemption threshold, one Pending request at a time, each request processed once, the same-day duplicate-reward check) and validation rule (whole positive points) are team-designed prototype rules for demonstration, not historical clinic policy or an established clinic program; its writes go through the shared commands in `src/loyalty.js`. M25 (Marketing & Reactivation) is approved. A limited frontend preview/demo exists today (the Engagement campaign-draft form): it sends no real campaigns and still writes through the earlier raw campaign setter, which is known technical debt. Full Staff/Owner management behavior, a safe command architecture, marketing consent, targeting, delivery and analytics are deferred to a later role phase. Neither may block core care operations.
+Module numbers are presentation metadata. Recorded events and automation targets use stable domain keys (`src/module-map.js`); records written before the restructure are read through its fixed legacy table, never reinterpreted under the new numbering.
+
+OCR is not a module. Document storage and text/OCR extraction belong to M14; HMO-specific interpretation and Staff confirmation belong to M12; prescription extraction and Dentist authorization belong to M19. OCR output is always a draft, and only an explicit human confirmation may change domain state.
+
+M24 and M25 are Proposed Enhancements (PE) (formerly recorded as Approved Frontend Enhancements). M24 (Referral & Loyalty) is an implemented prototype whose program rules (the 50-point redemption threshold, one Pending request at a time, each request processed once, the same-day duplicate-reward check) and validation rule (whole positive points) are team-designed prototype rules for demonstration, not historical clinic policy or an established clinic program; its writes go through the shared commands in `src/loyalty.js`. For M25 (Marketing & Reactivation), a limited frontend preview/demo exists today (the Engagement campaign-draft form): it sends no real campaigns and still writes through the earlier raw campaign setter, which is known technical debt. Full Staff/Owner management behavior, a safe command architecture, marketing consent, targeting, delivery and analytics are deferred to a later role phase. Neither may block core care operations.
 
 Do not add M26+ or begin M25 management work unless explicitly authorized.
 
@@ -160,16 +165,17 @@ Clinical decision and scheduling are different responsibilities.
 
 ### HMO
 
-M12:
-local requirements and preparation
+M12 is one HMO case lifecycle:
 
-M13:
-submission and externally received provider outcome
+verification
+→ requirement completion
+→ external submission
+→ pending
+→ externally received provider response (Approved / Rejected / Returned)
+→ correction and resubmission where required
+→ timestamp-driven follow-up, contact and escalation
 
-M14:
-timestamp-driven follow-up, contact, and escalation
-
-Never collapse these meanings:
+These are sub-processes of one module. Never collapse their meanings:
 
 - local HMO preparation != provider approval
 - Escalated != Approved

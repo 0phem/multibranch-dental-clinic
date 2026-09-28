@@ -421,10 +421,12 @@ assert.ok(!/nav-proposed|Rewards|Proposed/.test(render('dashboard','patient')),'
 // Staff/Owner Engagement keeps its page but its M24 controls are command-backed and its status copy is aligned.
 withState({loyalty:[account(60,[requestEntry,earning(60)]),{...account(10,[earning(30)]),id:'loy2',patientId:'p2',referralCode:'DANA-JOHN-01'}]})
 const engagement=render('engagement','owner')
-for(const text of ['Approved frontend enhancements','team-designed','Process request','Under review','Marketing &amp; Reactivation • M25'])assert.ok(engagement.includes(text),`engagement: ${text}`)
+for(const text of ['Optional engagement programs','team-designed','Process request','Under review','Marketing &amp; Reactivation • M25'])assert.ok(engagement.includes(text),`engagement: ${text}`)
 assert.ok(!/Proposed Enhancement|\bPE\b|Engagement • PE/.test(engagement+render('dashboard','owner')+render('dashboard','staff')),'Owner and Staff carry no PE copy')
 const modulesHtml=renderToString(React.createElement(m.ModulesPage))
-assert.ok(modulesHtml.includes('Implemented prototype (approved enhancement)')&&modulesHtml.includes('limited preview; full implementation deferred')&&!/Proposed Enhancement|• PE/.test(modulesHtml),'module coverage distinguishes the implemented M24 from the approved-only M25')
+assert.ok(modulesHtml.includes('Implemented prototype (PE)')&&modulesHtml.includes('PE — limited preview; full implementation deferred')&&(modulesHtml.match(/• Proposed Enhancement \(PE\)/g)||[]).length===2&&!/approved enhancement/i.test(modulesHtml),'module coverage labels only M24/M25 as PE and distinguishes the implemented M24 from the preview-only M25')
+// New canonical modules that are not built yet must never be claimed as represented.
+for(const text of ['Patient AI Chatbot Management','Limited preview: a rule-based Clinic Assistant','Planned: only HMO document metadata','Planned: clinic settings are still fixed','Planned: only a limited in-browser activity history'])assert.ok(modulesHtml.includes(text),`module coverage: ${text}`)
 store={...store,state:fullState}
 console.log('PASS: Phase 4B.2 Referral & Loyalty — ledger-validated balance, request/pending/insufficient/review/empty states, Journey Hub entry point, aligned Engagement copy and Patient navigation')
 

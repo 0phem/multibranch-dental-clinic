@@ -254,7 +254,7 @@ Production navigation must NOT expose:
 - ERD terminology
 - implementation/debug concepts
 
-M24 and M25 are Approved Frontend Enhancements. Do not present either as a placeholder or merely proposed feature. Present M24 as the implemented prototype it is (team-designed, not an established clinic program) and M25 truthfully as approved with a limited preview and full implementation deferred; never present M25 as complete or as absent.
+M24 and M25 are Proposed Enhancements (PE) (formerly recorded as Approved Frontend Enhancements). Do not present either as a placeholder. Present M24 as the implemented prototype it is (team-designed, not an established clinic program) and M25 truthfully as a limited preview with full implementation deferred; never present M25 as complete or as absent. The PE classification is documentation/defense wording, not production-screen copy.
 
 Messages and Notifications are separate concepts.
 
@@ -399,7 +399,7 @@ Pair charts with clear labels/summary metrics.
 
 Use actual available state and meaningful labels, summaries and responsive charts. Do not fabricate trends or totals to fill layouts.
 
-The reconciliation records an existing Analytics conflict: period selection does not filter calculations consistently, and some communication metrics/capacity exports do not honor branch scope. Polished charts must not disguise this. Show only supported behavior or clearly identify unavailable/partial controls; do not silently claim filtering works or implement reporting/business changes outside authorized scope. M21/M22 are read projections, not duplicate operational stores; M23’s Automation Monitor remains read-oriented.
+The reconciliation records an existing Analytics conflict: period selection does not filter calculations consistently, and some communication metrics/capacity exports do not honor branch scope. Polished charts must not disguise this. Show only supported behavior or clearly identify unavailable/partial controls; do not silently claim filtering works or implement reporting/business changes outside authorized scope. M21 (analytics and the executive dashboard) is a read projection, not a duplicate operational store; M23’s Automation Monitor remains read-oriented.
 
 ## Interaction polish
 
@@ -441,7 +441,7 @@ Preserve all Phase 1–3.5 safeguards. Any supporting domain change needs explic
 
 Use **user action → shared command → validation → state transition → state-driven UI update**. Never replace domain actions with page-local direct collection mutation. Preserve recovery warnings and current safe errors, rather than disguising failures as success. Frontend safeguards do not provide authoritative backend security, cross-device synchronization or transactional locking; timers/reminders remain foreground-only.
 
-Preserve M8 admission, M9 queue and M10 capacity distinctions; M12 local preparation, M13 external-response tracking and M14 follow-up/escalation; and Dentist clinical decisions versus Staff operations. Existing explicit Owner administrative exceptions are described in reconciliation; do not expand oversight into clinical/payment/HMO authority.
+Preserve M8 admission, M9 queue and M10 capacity distinctions; the distinct M12 HMO sub-processes (local preparation, external-response tracking, follow-up/escalation); and Dentist clinical decisions versus Staff operations. Module numbers follow MODULE_COVERAGE.md's canonical structure. Existing explicit Owner administrative exceptions are described in reconciliation; do not expand oversight into clinical/payment/HMO authority.
 
 ### Known model and policy boundaries
 

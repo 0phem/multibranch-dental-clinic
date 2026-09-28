@@ -1,8 +1,12 @@
 # Documentation Reconciliation — Through Phase 3.5
 
-## Requirement update — M24/M25 classification (Phase 4B.2, 2026-09-21)
+## Requirement update — canonical 25-module restructure (2026-09-28)
 
-The client authorized the team to propose and demonstrate M24 Referral & Loyalty and M25 Marketing & Reactivation. Both are now **Approved Frontend Enhancements** rather than Proposed Enhancements. M24 is implemented as a team-designed prototype (its 50-point redemption threshold, one-Pending-request and process-once rules, same-day duplicate-reward check and whole-positive-points validation are team-designed prototype rules, not historical clinic policy or an established clinic program; Owner-editable configuration may be considered in a later Owner phase). M25 is approved with only a limited frontend preview today (the Engagement campaign-draft form; it sends nothing and still uses the earlier raw campaign setter, a known technical-debt item). Full management, a safe command architecture, consent, targeting, delivery and analytics are deferred to a later role phase, after marketing consent and targeting rules are designed. The ERD structure is unchanged. The sections below describe the state at the Phase 3.5 checkpoint and are otherwise historical; Phase 4B has since completed the Patient experience on top of it (see PHASE4B_PATIENT_EXPERIENCE.md).
+The team adopted a canonical 25-module structure; [Module Coverage](MODULE_COVERAGE.md) lists it with the old → new mapping. Smart Scheduling & Conflict Prevention (formerly M7) is now a feature of M6. The three HMO modules (formerly M12/M13/M14) are one lifecycle, M12 HMO Case, Coverage & Follow-Up — its safeguards are unchanged: local preparation is not provider approval, Escalated is neither approval nor rejection, and Returned cases can be corrected and resubmitted with history kept. Staff workload (formerly M15) is part of M10, and the Owner executive dashboard (formerly M22) is part of M21. Five numbers are reused for newly defined modules: M7 Patient AI Chatbot, M13 Service/Procedure/Pricing, M14 Forms/Documents/Consent (including future text/OCR extraction infrastructure, whose output is always a draft for human confirmation), M15 Clinic Configuration and M22 Audit Trail; none is fully built yet. M24 and M25 are officially Proposed Enhancements (PE). Because numbers were reused, recorded events now store stable domain keys, and records saved under the old numbering are read through a fixed legacy table (`src/module-map.js`). No business rule, workflow, ERD structure or scheduling/HMO behavior changed. Sections below that use the old numbers describe their original checkpoint.
+
+## Requirement update — M24/M25 classification (Phase 4B.2, 2026-09-21; superseded by the section above)
+
+The client authorized the team to propose and demonstrate M24 Referral & Loyalty and M25 Marketing & Reactivation. Both were then reclassified as **Approved Frontend Enhancements** (the canonical restructure has since designated them Proposed Enhancements (PE)). M24 is implemented as a team-designed prototype (its 50-point redemption threshold, one-Pending-request and process-once rules, same-day duplicate-reward check and whole-positive-points validation are team-designed prototype rules, not historical clinic policy or an established clinic program; Owner-editable configuration may be considered in a later Owner phase). M25 is approved with only a limited frontend preview today (the Engagement campaign-draft form; it sends nothing and still uses the earlier raw campaign setter, a known technical-debt item). Full management, a safe command architecture, consent, targeting, delivery and analytics are deferred to a later role phase, after marketing consent and targeting rules are designed. The ERD structure is unchanged. The sections below describe the state at the Phase 3.5 checkpoint and are otherwise historical; Phase 4B has since completed the Patient experience on top of it (see PHASE4B_PATIENT_EXPERIENCE.md).
 
 ## Checkpoint and purpose
 
@@ -91,7 +95,7 @@ Current checks read canonical users/persons/profiles, current permissions and br
 | Dental Assistant | Queue and clinical-records permissions in catalog; route/command role checks still apply. Not a treating Dentist or prescription author |
 | HMO Coordinator | HMO, Patient demographics and Messages within branch |
 | Cashier | Billing and Patient demographics within branch |
-| Patient Engagement Staff | Inquiries, Messages and Engagement; M24/M25 are Approved Frontend Enhancements (M25 has only a limited preview; full implementation deferred) |
+| Patient Engagement Staff | Inquiries, Messages and Engagement; M24/M25 are Proposed Enhancements (PE) (M25 has only a limited preview; full implementation deferred) |
 | Dentist | Schedule, own queue, scoped clinical records, exact Treatment/Prescription decisions, Follow-Ups and explicit-participant Messages. No Staff payment/HMO processing |
 | Owner/Admin | Account/configuration administration and oversight; `all` permission does not bypass domain role restrictions |
 
@@ -121,7 +125,7 @@ Patient records are centralized: an authorized chart can show longitudinal clini
 
 See [ERD Alignment](ERD_ALIGNMENT.md) for every mapping. The frontend splits STAFF_PROFILES into staff/dentists; flattens roles/branch assignments and hours/shifts; embeds performed procedures, invoice items/payment, prescription items, HMO requirements/tasks/history and conversation messages. Queue containers are represented by per-Dentist/branch/day IDs; capacity snapshots are not a separate persisted table. Clinical templates/general protected documents and full HMO policies/claims/provider-specific rules are not implemented subsystems.
 
-PATIENT_NOTIFICATIONS is generalized for individual operational Staff/Dentist recipients, with privacy still enforced. Workflow events/action results share a local ledger and descriptive rule catalog. M21/M22 remain read layers. Real payment verification, HMO integration and immutable server evidence remain backend responsibilities, not fabricated frontend success. The approved logical model remains intact, with C2 explicitly unresolved.
+PATIENT_NOTIFICATIONS is generalized for individual operational Staff/Dentist recipients, with privacy still enforced. Workflow events/action results share a local ledger and descriptive rule catalog. M21 (now including the Owner dashboard formerly numbered M22) remains a read layer. Real payment verification, HMO integration and immutable server evidence remain backend responsibilities, not fabricated frontend success. The approved logical model remains intact, with C2 explicitly unresolved.
 
 ## Policy decision register
 
@@ -166,7 +170,7 @@ Phase 4 preparation only:
 - Make all roles responsive across mobile/tablet/desktop: Patient mobile-first, Staff fast repetitive work, Dentist exact encounters, Owner oversight.
 - Preserve private drafts, receipt evidence, HMO decision boundaries, independent Messages/Notifications, current-state errors and recovery affordances in state-driven presentation.
 - Add browser/device, keyboard/focus, accessibility and interaction QA beyond SSR; improve production copy and performance (existing bundle warning).
-- Present M24 as an implemented prototype and M25 as approved with a limited preview and full implementation deferred; keep module coverage outside production navigation, and Automation Monitor read-oriented. Do not hide C1 reporting limitations through styling; resolve functionality under explicit implementation scope.
+- Present M24 as an implemented prototype and M25 as a limited preview with full implementation deferred; keep module coverage outside production navigation, and Automation Monitor read-oriented. Do not hide C1 reporting limitations through styling; resolve functionality under explicit implementation scope.
 
 No Phase 4 work, skill update, backend integration, policy activation, commit or push is part of this reconciliation. Documentation changes remain for review.
 

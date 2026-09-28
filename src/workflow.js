@@ -24,9 +24,9 @@ export function createWorkflowActions({getState,commit,getSession,clock=clinicNo
     const before=getState(), state={...before}, session=getSession(), now=clock()
     const user=before.users.find(u=>u.id===session?.userId)
     if(!validSession(before,session,now))return fail('An active clinic session is required.')
-    const event=(key,module,type,result,patientId,branchId,extra={},status='Success')=>{
+    const event=(key,domain,type,result,patientId,branchId,extra={},status='Success')=>{
       const context={...workflowContext(state,key),patientId,branchId,...extra}
-      appendWorkflowEvent(state,session,now,key,module,type,result,context,status)
+      appendWorkflowEvent(state,session,now,key,domain,type,result,context,status)
       if(type==='clinical.prescription.required'){
         const dentist=state.dentists.find(d=>d.id===context.dentistId)
         if(dentist)appendNotification(state,now,key,{userId:dentist.userId,role:'dentist',dentistId:dentist.id},'Prescription task','A requested prescription awaits your authorization.',{...context,eventType:type,eventKey:key})
@@ -49,7 +49,7 @@ export function createWorkflowActions({getState,commit,getSession,clock=clinicNo
       // Failed commands discard their business patch. Only the attempted failure
       // is recorded; existing Phase 1/2 failure return contracts remain intact.
       const failureState={...before}
-      appendWorkflowEvent(failureState,session,now,key,metadata.module,metadata.name,result.message,{entityType:typeof args[0]==='object'?(args[0]?.treatmentId?'treatment':args[0]?.appointmentId?'appointment':'workflow'):metadata.name.startsWith('hmo')?'hmo':metadata.name.startsWith('conversation')?'conversation':metadata.name.startsWith('inquiry')?'inquiry':'workflow',entityId},'Failed')
+      appendWorkflowEvent(failureState,session,now,key,metadata.domain,metadata.name,result.message,{entityType:typeof args[0]==='object'?(args[0]?.treatmentId?'treatment':args[0]?.appointmentId?'appointment':'workflow'):metadata.name.startsWith('hmo')?'hmo':metadata.name.startsWith('conversation')?'conversation':metadata.name.startsWith('inquiry')?'inquiry':'workflow',entityId},'Failed')
       if(failureState.workflowLog!==before.workflowLog)commit({workflowLog:failureState.workflowLog,audit:failureState.audit})
       return result
     }
@@ -58,7 +58,7 @@ export function createWorkflowActions({getState,commit,getSession,clock=clinicNo
       for(const treatment of completed){
         const handoff=prepareHmoCase(ctx,{treatmentId:treatment.id},{system:true})
         if(!handoff.ok){
-          event(`hmo:handoff:${treatment.id}`,'M5→M12','hmo.handoff.needs_review',handoff.message,treatment.patientId,treatment.branchId,{entityType:'treatment',entityId:treatment.id,treatmentId:treatment.id},'Warning')
+          event(`hmo:handoff:${treatment.id}`,'treatment→hmo','hmo.handoff.needs_review',handoff.message,treatment.patientId,treatment.branchId,{entityType:'treatment',entityId:treatment.id,treatmentId:treatment.id},'Warning')
           result.warnings=[...(result.warnings||[]),handoff.message]
         }
       }
@@ -141,7 +141,7 @@ export function createWorkflowActions({getState,commit,getSession,clock=clinicNo
     if(session.role==='patient'&&!existing)state.bookingDrafts=(state.bookingDrafts||[]).filter(d=>d.patientId!==record.patientId)
     if(followup)state.followups=replace(state.followups,{...followup,status:'Scheduled',appointmentId:record.id})
     const key=`appointment:${record.id}:${record.revision}`
-    event(key,'M6→M7',existing?'appointment.rescheduled':'appointment.created',`${record.appointmentNo} • ${result.branch.name}`,record.patientId,record.branchId,record.assignmentMethod==='auto'?{assignmentMethod:'auto',assignmentRuleVersion:SCHEDULING_RULE_VERSION}:{})
+    event(key,'appointment',existing?'appointment.rescheduled':'appointment.created',`${record.appointmentNo} • ${result.branch.name}`,record.patientId,record.branchId,record.assignmentMethod==='auto'?{assignmentMethod:'auto',assignmentRuleVersion:SCHEDULING_RULE_VERSION}:{})
     notify(key,record.patientId,existing?'Appointment Rescheduled':'Appointment Confirmation',`Your ${result.service.name} visit is confirmed for ${record.date} at ${record.start} in ${result.branch.name}.`)
     return {ok:true,record:{...record,branch:result.branch.name,service:result.service.name}}
   })
@@ -165,7 +165,7 @@ export function createWorkflowActions({getState,commit,getSession,clock=clinicNo
     state.queue=recalcQueue(state.queue.map(q=>q.appointmentId===id?{...durable(q),status:'Cancelled',currentState:'Cancelled',completedAt:now.timestamp}:q))
     state.checkIns=state.checkIns.map(c=>c.appointmentId===id?{...c,status:'Cancelled'}:c)
     closeFollowup(state,id,'Open')
-    event(`cancel:${id}`,'M6→M9','appointment.cancelled',`Cancelled ${appointment.appointmentNo}`,appointment.patientId,appointment.branchId)
+    event(`cancel:${id}`,'appointment→queue','appointment.cancelled',`Cancelled ${appointment.appointmentNo}`,appointment.patientId,appointment.branchId)
     notify(`cancel:${id}`,appointment.patientId,'Appointment Cancellation','Your appointment was cancelled and its queue entry closed.')
     return {ok:true}
   })
@@ -177,7 +177,7 @@ export function createWorkflowActions({getState,commit,getSession,clock=clinicNo
     state.checkIns=[...state.checkIns,{...context,id:checkInId,queueEntryId:id,clinicDate:now.date,arrivedAt:now.timestamp,status:'Checked In',type:context.appointmentId?'Scheduled':'Walk-in'}]
     state.queue=recalcQueue([...state.queue,record])
     if(context.appointmentId)state.appointments=state.appointments.map(a=>a.id===context.appointmentId?{...durable(a),status:'Checked In',checkInId,queueEntryId:id}:a)
-    event(`arrival:${id}`,'M8→M9','patient.checked_in',`Arrival recorded at ${state.branches.find(b=>b.id===context.branchId)?.name}`,context.patientId,context.branchId)
+    event(`arrival:${id}`,'checkin→queue','patient.checked_in',`Arrival recorded at ${state.branches.find(b=>b.id===context.branchId)?.name}`,context.patientId,context.branchId)
     notify(`arrival:${id}`,context.patientId,'Check-In Confirmation','Your arrival is recorded. You are in the clinic queue.')
     return {ok:true,record:state.queue.find(q=>q.id===id),context:encounterContext(record)}
   }
@@ -252,7 +252,7 @@ export function createWorkflowActions({getState,commit,getSession,clock=clinicNo
     }
     state.queue=recalcQueue(replace(state.queue,record))
     const key=`queue:${id}:${record.revision}`
-    event(key,'M9',priority?'queue.priority.changed':'queue.status.changed',priority?`${priority}: ${record.priorityReason}`:status,entry.patientId,entry.branchId)
+    event(key,'queue',priority?'queue.priority.changed':'queue.status.changed',priority?`${priority}: ${record.priorityReason}`:status,entry.patientId,entry.branchId)
     notify(key,entry.patientId,'Queue Update',priority?'Your queue priority has been updated.':`Your queue status is now ${status}.`)
     return {ok:true,record}
   })
@@ -311,18 +311,18 @@ export function createWorkflowActions({getState,commit,getSession,clock=clinicNo
         const amount=money(items.reduce((sum,p)=>sum+p.amount,0))
         const invoice={id:invoiceId,invoiceNo:`INV-${now.date.slice(0,4)}-${String(state.invoices.length+1).padStart(4,'0')}`,treatmentId:record.id,queueEntryId:entry.id,appointmentId:entry.appointmentId||null,patientId:record.patientId,branchId:record.branchId,visitDate:record.date,items,subtotal:amount,total:amount,netAmount:amount,status:'Draft',paymentStatus:'Unpaid',method:'—',receipt:null,createdBy:'System'}
         state.invoices=[invoice,...state.invoices]
-        event(`invoice:${record.id}`,'M5→M11','billing.draft.prepared',invoice.invoiceNo,record.patientId,record.branchId)
+        event(`invoice:${record.id}`,'treatment→billing','billing.draft.prepared',invoice.invoiceNo,record.patientId,record.branchId)
       }
       if(record.followupRequired&&!state.followups.some(f=>f.treatmentId===record.id)){
         state.followups=[{id:uid('f'),patientId:record.patientId,treatmentId:record.id,dentistId:record.dentistId,branchId:record.branchId,reason:record.followupReason||`Follow-up after ${record.procedure}`,recommendedDate:record.followupDate||'',interval:record.followupInterval||'',status:'Open',appointmentId:null,taskCreatedAt:now.label},...state.followups]
         notify(`followup:${record.id}`,record.patientId,'Follow-Up Required','Your dentist recommends a follow-up visit.')
-        event(`followup:${record.id}`,'M5→M20','clinical.followup.required',`Follow-up for ${record.id}`,record.patientId,record.branchId)
+        event(`followup:${record.id}`,'treatment→followup','clinical.followup.required',`Follow-up for ${record.id}`,record.patientId,record.branchId)
       }
-      if(record.prescriptionRequired&&!state.prescriptions.some(rx=>rx.treatmentId===record.id))event(`rx:${record.id}`,'M5→M19','clinical.prescription.required','Dentist authorization required',record.patientId,record.branchId)
+      if(record.prescriptionRequired&&!state.prescriptions.some(rx=>rx.treatmentId===record.id))event(`rx:${record.id}`,'treatment→prescription','clinical.prescription.required','Dentist authorization required',record.patientId,record.branchId)
       if(entry.appointmentId)closeFollowup(state,entry.appointmentId,'Completed')
       notify(`treatment:${record.id}`,record.patientId,'Visit Complete','Your treatment is complete. Staff will review the prepared bill.')
     }
-    event(`treatment:${record.id}:${record.revision}`,'M5→M23',status==='Completed'?'clinical.treatment.completed':'clinical.treatment.updated',`${record.id} • ${status}`,record.patientId,record.branchId)
+    event(`treatment:${record.id}:${record.revision}`,'treatment→automation',status==='Completed'?'clinical.treatment.completed':'clinical.treatment.updated',`${record.id} • ${status}`,record.patientId,record.branchId)
     return {ok:true,record,context:{...encounterContext(entry),treatmentId:record.id}}
   })
 
@@ -348,7 +348,7 @@ export function createWorkflowActions({getState,commit,getSession,clock=clinicNo
       state.users=[...state.users,{id:record.userId,personId:record.personId,username,login:username,roleName:'Patient',role:'Patient',branchId:null,accountStatus:'Active',status:'Active',permissions:['patient-portal'],lastLogin:'Never'}]
     }
     state.persons=[...state.persons,personRecord];state.patients=[...state.patients,record]
-    event(`patient:${record.id}`,'M4','patient.record.created',record.patientCode,record.id,preferredBranchId)
+    event(`patient:${record.id}`,'patient','patient.record.created',record.patientCode,record.id,preferredBranchId)
     return {ok:true,record:patientProjection(record,personRecord)}
   })
   const commands={...administrationActions(run),...phase2Actions(run),...hmoActions(run),...communicationActions(run),...loyaltyActions(run),...bookingDraftActions(run),saveAppointment,cancelAppointment,checkInAppointment,admitWalkIn,updateQueue,saveTreatment,completeTreatment:(input,status='Completed')=>saveTreatment(input,status),createPatientRecord}

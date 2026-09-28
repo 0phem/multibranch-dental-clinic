@@ -129,7 +129,7 @@ export function invoiceView(state,i) {
 }
 export const money=value=>peso.format(Number(value)||0)
 
-// ---- HMO: keep M12 (local preparation), M13 (provider outcome) and M14 (follow-up) distinct -------------
+// ---- HMO (M12): keep local preparation, provider outcome and follow-up distinct -----------------------
 const HMO_STAGE={
   Draft:'The clinic is preparing your HMO request.',
   'Missing Requirements':'Some documents are still needed before the clinic can prepare your request.',

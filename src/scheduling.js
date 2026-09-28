@@ -44,7 +44,7 @@ function bookedMinutes(state,dentistId,date,ignoreId=null) {
 // ---- Automatic Dentist assignment --------------------------------------------------------------------------
 // "For this Patient, branch, service, date and time, which Dentist may legitimately perform this appointment?"
 // A candidate is eligible only when it passes the exact same authoritative validator every manual booking already
-// uses (branch/service/shift/hours/overlap/Patient-conflict; the M15 branch-load estimate is never consulted).
+// uses (branch/service/shift/hours/overlap/Patient-conflict; the M10 branch-load estimate is never consulted).
 // Eligible candidates are ranked by fewest legitimately booked minutes on the requested date, tied by ascending canonical
 // Dentist ID, so identical state + identical input always produces the identical Dentist regardless of array order.
 // Zero eligible Dentist is an explicit `{ok:false}` result, never an exception and never a fallback to any Dentist.

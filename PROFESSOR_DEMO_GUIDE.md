@@ -1,6 +1,6 @@
 # Professor Demo Guide — Current Connected Workflow
 
-For the Phase 4B checkpoint (domain baseline `dac864e`, through Phase 3.5; the Patient experience and M24 were added in Phase 4B). Use [Module Coverage](MODULE_COVERAGE.md) for all 25 approved modules and [Documentation Reconciliation](DOCUMENTATION_RECONCILIATION.md) for policies/conflicts. This is a frontend with local persistence and shared validation, not a live provider/payment system.
+For the Phase 4B checkpoint (domain baseline `dac864e`, through Phase 3.5; the Patient experience and M24 were added in Phase 4B). Use [Module Coverage](MODULE_COVERAGE.md) for all 25 canonical modules (and the old → new module mapping) and [Documentation Reconciliation](DOCUMENTATION_RECONCILIATION.md) for policies/conflicts. This is a frontend with local persistence and shared validation, not a live provider/payment system.
 
 ## Prepare the demonstration
 
@@ -41,7 +41,8 @@ renders for Patient; other roles keep it unchanged). The Menu sheet is grouped �
 Visits), **Communications** (Messages), **Account** (Receipts & Payments, My Profile) — with Logout visually
 separated at the bottom and requiring confirmation before it fires. HMO, Prescriptions, Follow-ups and Referral &
 Loyalty are intentionally not repeated in the Menu; they remain reachable via My Profile → More. The Clinic
-Assistant floating logo FAB is Patient-only — Staff/Dentist/Owner do not render it.
+Assistant floating logo FAB is Patient-only — Staff/Dentist/Owner do not render it. It is the limited M7 preview
+(three fixed answers); describe it as rule-based help, not as an AI chatbot, which is not built yet.
 
 Open **Book**: it opens with an explicit choice, **Smart Find** (visually primary) or **Manual Appointment** —
 never a numbered step, and Manual stays fully available. Smart Find shows a "Use my location" control only when
@@ -96,14 +97,14 @@ After issuance, choose **Record Payment** and the exact full positive total. Use
 
 Open Follow-Ups and schedule the obligation the Dentist already requested. The form preserves the source Patient/Dentist/branch and uses the same appointment validator. Show that a cancelled/no-show return appointment permits rescheduling the obligation; changing a booking does not change the clinical decision. Own Patient self-scheduling is also supported.
 
-## 5. Staff and Patient: HMO M12 → M13 → M14
+## 5. Staff and Patient: the M12 HMO case lifecycle
 
-Use an insured Patient with configured membership and an exact appointment/completed treatment. Staff can prepare the case; qualifying completed care also triggers preparation/linkage once. Missing membership is not invented.
+Use an insured Patient with configured membership and an exact appointment/completed treatment. Staff can prepare the case; qualifying completed care also triggers preparation/linkage once. Missing membership is not invented. M12 is one module whose sub-processes keep distinct meanings (they were numbered M12, M13 and M14 before the canonical restructure).
 
-- **M12:** inspect the HMO Card, Valid ID and Dentist treatment request checklist. Patient records metadata for their own missing document; no file is uploaded. Staff validates local requirements. Ready for Submission means local preparation only.
-- **M13:** select **Record External Submission**, enter channel and tracking note for the illustrative action handled outside the app. Then **Record Provider Response** records an illustrative externally received Approved, Rejected or Returned outcome. State clearly that the demo does not contact an insurer or verify coverage.
+- **Verification:** inspect the HMO Card, Valid ID and Dentist treatment request checklist. Patient records metadata for their own missing document; no file is uploaded. Staff validates local requirements. Ready for Submission means local preparation only.
+- **Submission and provider response:** select **Record External Submission**, enter channel and tracking note for the illustrative action handled outside the app. Then **Record Provider Response** records an illustrative externally received Approved, Rejected or Returned outcome. State clearly that the demo does not contact an insurer or verify coverage.
 - For **Returned**, select requirements needing correction, correct/validate them, then **Record Resubmission**. Same case ID, new cycle; stale-cycle responses are rejected.
-- **M14:** use an already eligible pending case with valid timestamps/current-cycle contact to show follow-up and escalation. The documented threshold is 12 hours; do not claim a newly submitted case instantly qualifies. If no eligible case exists, show the deterministic timer/contact/escalation smoke coverage. Escalated remains actionable for contact and provider response; it does not mean Approved or Rejected.
+- **Follow-up and escalation:** use an already eligible pending case with valid timestamps/current-cycle contact to show follow-up and escalation. The documented threshold is 12 hours; do not claim a newly submitted case instantly qualifies. If no eligible case exists, show the deterministic timer/contact/escalation smoke coverage. Escalated remains actionable for contact and provider response; it does not mean Approved or Rejected.
 
 Patient sees only own status, public outcome and required actions. Internal contact/response notes remain operational. Historical or malformed legacy cases may require review rather than accepting new tracking actions.
 
@@ -124,7 +125,7 @@ Optionally show Staff Social Inquiries: record assigned inquiry/status, link the
 
 ## 7. Owner/Admin: configuration and oversight
 
-Show account/profile synchronization in People & Access and Team: canonical person identity, role/branch, separate account status and operational availability. Branch hours/services and personnel changes use shared validation.
+Show account/profile synchronization in User Management and Team: canonical person identity, role/branch, separate account status and operational availability. Branch hours/services and personnel changes use shared validation.
 
 Show Dashboard, Capacity, HMO oversight and Automation Monitor. The monitor presents event/entity/actor/time, successes, warnings and selected failed actions with read-only rule descriptions. A clinical completion can remain valid while an HMO handoff warning needs attention; do not call that whole handoff successful.
 
@@ -132,21 +133,22 @@ Analytics is **partial**. Show existing operational projections and spreadsheet-
 
 Owner oversight does not grant Treatment, Prescription, Payment, HMO processing or Message participation. Existing shared administrative booking/admission/queue exceptions are documented; use the Staff surface for the normal demo.
 
-If showing M24/M25, do so last. Call them **Approved Frontend Enhancements**: M24 Referral & Loyalty is an implemented team-designed prototype (the 50-point redemption threshold, one-Pending-request rule and whole-positive-points validation are team-designed prototype rules, not historical clinic policy), and M25 Marketing & Reactivation is approved with only a limited campaign-draft preview today (it sends nothing); full management is deferred to a later role phase. Use the coverage document for defense; it is not a production navigation item.
+If showing M24/M25, do so last. Call them **Proposed Enhancements (PE)**: M24 Referral & Loyalty is an implemented team-designed prototype (the 50-point redemption threshold, one-Pending-request rule and whole-positive-points validation are team-designed prototype rules, not historical clinic policy), and M25 Marketing & Reactivation has only a limited campaign-draft preview today (it sends nothing); full management is deferred to a later role phase. Use the coverage document for defense; it is not a production navigation item.
 
 ## Module-defense statements
 
 | Module | Explain its distinct responsibility |
 | --- | --- |
+| M6 | “Book a valid visit.” Smart Scheduling and conflict prevention are deterministic features of M6, never AI |
+| M7 | “Help the Patient find their way.” Today only a rule-based preview; the AI chatbot is not built |
 | M8 | “Record that the Patient has arrived.” |
 | M9 | “Where am I in line?” |
-| M10 | “How long will the line take / can the clinic handle it?” |
-| M12 | “Verify and prepare HMO requirements.” Local preparation is not coverage approval |
-| M13 | “Submit and track the provider's externally received response.” Here the app records external submission/response |
-| M14 | “Follow up and escalate overdue HMO cases.” |
+| M10 | “How long will the line take / can the clinic and its staff handle it?” |
+| M12 | “Carry one HMO case from verification to provider response and follow-up.” Local preparation is not coverage approval, the app only records externally handled submissions/responses, and escalation is neither approval nor rejection |
+| M13 / M14 / M15 | Service catalog and pricing / documents, consent and extraction infrastructure / clinic configuration — M13 is partly represented, M14 and M15 are planned |
 | M17 / M18 | Two-way human Messages / one-way operational Notifications |
-| M21 | “Analyze what happened.” Current reporting remains partial |
-| M22 | Present that information for Owner oversight |
+| M21 | “Analyze what happened and present it for Owner oversight.” Current reporting remains partial |
+| M22 | “Record who did what.” Planned; the browser activity history is not an audit trail |
 | M23 | “Automate what happens next based on predefined workflow events.” |
 
 > Module 23 connects the modules by listening for workflow events and automatically triggering the next required administrative action based on predefined rules.

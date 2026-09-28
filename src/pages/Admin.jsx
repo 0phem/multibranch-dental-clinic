@@ -2,6 +2,7 @@ import { pendingHours } from '../phase3-contracts.js'
 import { automationSnapshot } from '../orchestration.js'
 import React, { useMemo, useRef, useState } from 'react'
 import { MODULES, ROLE_INFO } from '../data.js'
+import { eventModuleLabel, ruleTargetLabel } from '../module-map.js'
 import { LOYALTY_PROGRAM, canManageLoyalty, ledgerIssue } from '../loyalty.js'
 import { Button, Card, ConfirmDialog, Field, Modal, Notice, PageHeader, Progress, StatCard, Status, Table, Tabs } from '../components.jsx'
 import { branchCapacity, dateLabel, dentistName, makeCsv, patientName, peso, uid } from '../logic.js'
@@ -96,7 +97,7 @@ export function TeamPage({ store }) {
   }
 
   return <>
-    <PageHeader title="Dentist & Staff Management" text="Personnel records are linked to account access. This screen manages Staff and Dentist profiles, operational shifts, branch assignments, and availability used by scheduling and capacity workflows." modules={[3,15]}/>
+    <PageHeader title="Dentist & Staff Management" text="Personnel records are linked to account access. This screen manages Staff and Dentist profiles, operational shifts, branch assignments, and availability used by scheduling and capacity workflows." modules={[3,10]}/>
     <Notice tone="info" title="Account & personnel synchronization">Create the account first in <b>Access & Roles</b>. Dentist and staff accounts automatically receive a linked personnel profile here. <b>Active</b> comes from the account; <b>Available</b> reflects operational scheduling status.</Notice>
     <Tabs tabs={[{key:'dentists',label:'Dentists',count:state.dentists.length},{key:'staff',label:'Staff',count:state.staff.length}]} active={tab} onChange={setTab}/>
     {tab==='dentists'?<Card title="Dentist profiles & availability" subtitle="License Number • Specialty • Linked Account • Operational availability">
@@ -164,9 +165,9 @@ export function AnalyticsPage({ activeBranch, store }) {
   const hmo=state.hmo.filter(branchFilter)
   const paid=state.invoices.filter(i=>i.status==='Paid'&&branchFilter(i))
   const metrics=[
-    {name:'Scheduling',value:appts.filter(a=>a.status==='Confirmed').length,note:'Confirmed appointment records',module:'M6–M7'},
+    {name:'Scheduling',value:appts.filter(a=>a.status==='Confirmed').length,note:'Confirmed appointment records',module:'M6'},
     {name:'Queue / patient flow',value:queue.filter(q=>q.status==='Completed').length,note:'Completed queue records',module:'M9–M10'},
-    {name:'HMO processing',value:hmo.filter(h=>h.status==='Approved').length,note:'Approved provider outcomes',module:'M12–M14'},
+    {name:'HMO processing',value:hmo.filter(h=>h.status==='Approved').length,note:'Approved provider outcomes',module:'M12'},
     {name:'Communication',value:state.inquiries.filter(i=>i.status==='Responded').length+state.conversations.filter(c=>c.status==='Closed').length,note:'Responded/closed communication records',module:'M16–M18'},
     {name:'Recorded revenue',value:peso.format(paid.reduce((s,i)=>s+i.total,0)),note:'Paid transaction records',module:'M11'},
   ]
@@ -286,7 +287,7 @@ export function AutomationPage({ store }) {
     </div>
     <div className="grid-2">
       <Card title="Workflow health" subtitle="Protected automation rules currently in effect">
-        <div className="automation-rule-list">{state.automations.map(r=><div className="automation-rule-row" key={r.id}><div className="automation-rule-icon">{r.enabled?'✓':'—'}</div><div><b>{r.event}</b><span>{r.action}</span><small>{r.targetModule} • {r.condition}</small></div><Status>{r.enabled?'Active':'Inactive'}</Status></div>)}</div>
+        <div className="automation-rule-list">{state.automations.map(r=><div className="automation-rule-row" key={r.id}><div className="automation-rule-icon">{r.enabled?'✓':'—'}</div><div><b>{r.event}</b><span>{r.action}</span><small>{ruleTargetLabel(r)} • {r.condition}</small></div><Status>{r.enabled?'Active':'Inactive'}</Status></div>)}</div>
       </Card>
       <Card title="Recorded exceptions" subtitle="Historical failed attempts and warnings; current case status determines the next action">
         <div className="alert-list">{[...monitor.failed,...monitor.warnings].length?[...monitor.failed,...monitor.warnings].map(x=><div className="alert warning" key={x.id}><div><b>{x.event}</b><span>{x.result}</span><small>{x.createdAt||x.at} • {x.entityType||'Legacy record'} {x.entityId||''}</small></div><Status>{x.status}</Status></div>):<Notice tone="success" title="No recorded exceptions">No failed attempts or warnings are present in the current activity history.</Notice>}</div>
@@ -295,7 +296,7 @@ export function AutomationPage({ store }) {
     <Card className="top-gap" title="Recent automation activity" subtitle="Central audit trail of system events and triggered actions">
       <Table rows={state.workflowLog} columns={[
         {key:'at',label:'Time'},
-        {key:'module',label:'Workflow'},
+        {key:'module',label:'Workflow',render:e=>eventModuleLabel(e)},
         {key:'entity',label:'Affected record',render:e=>`${e.entityType||'Legacy'} • ${e.entityId||'Not linked'}`},
         {key:'actor',label:'Actor',render:e=>state.users.find(u=>u.id===e.actorUserId)?.name||e.actorUserId||'Historical record'},
         {key:'event',label:'Event'},
@@ -314,7 +315,7 @@ export function EngagementPage({ role, store }) {
   const accounts=Array.isArray(state.loyalty)?state.loyalty.filter(l=>canManageLoyalty(state,session,l?.patientId)):[]
   const [loyaltyForm,setLoyaltyForm]=useState({patientId:patients[0]?.id||'',activity:'Qualified Visit',points:20})
   const recordCommand=useRef({key:'',id:''})
-  const createCampaign=()=>{if(!campaign.name)return toast('Enter a campaign name.','warning');setters.setCampaigns(xs=>[{id:uid('camp'),...campaign,status:'Draft',responses:0,reactivated:0},...xs]);log(role==='owner'?ROLE_INFO.owner.name:ROLE_INFO.staff.name,'Created optional engagement campaign','M25');toast('Campaign draft created. Nothing is sent.','success');setCampaign({...campaign,name:''})}
+  const createCampaign=()=>{if(!campaign.name)return toast('Enter a campaign name.','warning');setters.setCampaigns(xs=>[{id:uid('camp'),...campaign,status:'Draft',responses:0,reactivated:0},...xs]);log(role==='owner'?ROLE_INFO.owner.name:ROLE_INFO.staff.name,'Created optional engagement campaign','campaign');toast('Campaign draft created. Nothing is sent.','success');setCampaign({...campaign,name:''})}
   // M24 writes go through the shared commands, which validate the session, scope, ledger and replay.
   const applyLoyalty=()=>{
     // One command ID per form values and ledger state: a rapid second click replays it instead of recording twice.
@@ -334,7 +335,7 @@ export function EngagementPage({ role, store }) {
   }
   return <>
     <PageHeader title="Patient Engagement" text="Referral & loyalty administration, and the preview of optional marketing and reactivation campaigns, kept separate from core clinic operations." modules={[24,25]}/>
-    <Notice tone="info" title="Approved frontend enhancements">Referral & Loyalty (M24) is implemented as a team-designed prototype program approved for demonstration; it is not an established clinic program. Marketing & Reactivation (M25) is approved; only a limited campaign-draft preview exists today, and full management is planned for a later phase. Neither blocks core care operations.</Notice>
+    <Notice tone="info" title="Optional engagement programs">Referral & Loyalty (M24) is a team-designed prototype program for demonstration; it is not an established clinic program. Marketing & Reactivation (M25) has only a limited campaign-draft preview today, and full management is planned for a later phase. Neither blocks core care operations.</Notice>
     <Tabs tabs={[{key:'loyalty',label:'Referral & Loyalty • M24'},{key:'campaigns',label:'Marketing & Reactivation • M25'}]} active={tab} onChange={setTab}/>
     {tab==='loyalty'?<>
       <div className="grid-2">
@@ -355,8 +356,8 @@ export function ModulesPage() {
   const visible=MODULES.filter(m=>area==='All'||m.area===area)
   return <>
     <PageHeader title="25-Module UI Coverage" text="Professor-facing traceability view showing where every documented process is represented in the frontend prototype." modules={[]}/>
-    <div className="module-summary"><div><b>25</b><span>Documented modules</span></div><div><b>4</b><span>Main role experiences</span></div><div><b>2</b><span>Approved enhancements</span></div></div>
+    <div className="module-summary"><div><b>25</b><span>Documented modules</span></div><div><b>4</b><span>Main role experiences</span></div><div><b>2</b><span>Proposed Enhancements (PE)</span></div></div>
     <div className="tabs top-gap">{areas.map(a=><button className={area===a?'active':''} key={a} onClick={()=>setArea(a)}>{a}</button>)}</div>
-    <div className="module-grid">{visible.map(m=><div className="module-tile" key={m.no}><div className="module-tile-top"><span className="module-badge">M{m.no}{m.enhancement?' • Approved enhancement':''}</span><span>{m.area}</span></div><strong>{m.name}</strong><small>Module owner: {m.owner}</small><div className="role-tags">{m.roles.map(r=><span key={r}>{r==='owner'?'Owner/Admin':r[0].toUpperCase()+r.slice(1)}</span>)}</div><div className="coverage-state">{m.enhancement?(m.implemented?'✓ Implemented prototype (approved enhancement)':m.preview?'Approved enhancement — limited preview; full implementation deferred':'Approved enhancement'):'✓ Represented in final UI'}</div></div>)}</div>
+    <div className="module-grid">{visible.map(m=><div className="module-tile" key={m.no}><div className="module-tile-top"><span className="module-badge">M{m.no}{m.pe?' • Proposed Enhancement (PE)':''}</span><span>{m.area}</span></div><strong>{m.name}</strong><small>Module owner: {m.owner}</small><div className="role-tags">{m.roles.map(r=><span key={r}>{r==='owner'?'Owner/Admin':r[0].toUpperCase()+r.slice(1)}</span>)}</div><div className="coverage-state">{m.pe?(m.implemented?'✓ Implemented prototype (PE)':m.preview?'PE — limited preview; full implementation deferred':'Proposed Enhancement (PE)'):m.coverageNote||'✓ Represented in final UI'}</div></div>)}</div>
   </>
 }

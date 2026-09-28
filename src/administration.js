@@ -29,7 +29,7 @@ export function administrationActions(run) {
     if(roleName==='Dentist')state.dentists=[...state.dentists,{...profile,branchIds:[branch.id],specialty:'Unspecified',assistantStaffId:null}]
     else if(scoped)state.staff=[...state.staff,{...profile,branchId:branch.id,role:roleName}]
     else if(roleName==='Patient')state.patients=[...state.patients,{id:uid('p'),personId:person.id,userId:user.id,patientCode:`PAT-${String(state.patients.length+1).padStart(4,'0')}`,preferredBranchId:state.branches[0]?.id||null,hmo:'None',hmoMember:'—',allergies:'None',medicalHistory:'',dentalHistory:'',consent:false}]
-    event(`account:${user.id}`,'M1','access.user.created','Account and linked profile created',null,user.branchId,{entityType:'user',entityId:user.id})
+    event(`account:${user.id}`,'identity','access.user.created','Account and linked profile created',null,user.branchId,{entityType:'user',entityId:user.id})
     return {ok:true,record:user,user}
   })
   const setUserStatus=run(({state,session,event},id,status)=>{
@@ -41,7 +41,7 @@ export function administrationActions(run) {
     const record={...user,accountStatus:status,status,revision:(user.revision||0)+1}
     state.users=state.users.map(u=>u.id===id?record:u)
     // Account status remains transitional; operational availability is independently backend-authoritative.
-    event(`account:status:${id}:${record.revision}`,'M1','access.user.status.changed',`Account ${status}`,null,user.branchId,{entityType:'user',entityId:id})
+    event(`account:status:${id}:${record.revision}`,'identity','access.user.status.changed',`Account ${status}`,null,user.branchId,{entityType:'user',entityId:id})
     return {ok:true,record,status}
   })
   const updatePatientRecord=run(({state,session,now,event},id,input={})=>{
@@ -60,7 +60,7 @@ export function administrationActions(run) {
     if(unchanged(person,personPatch)&&unchanged(patient,patientPatch))return {ok:true,unchanged:true,record:patient}
     const record={...patient,...patientPatch,revision:(patient.revision||0)+1}
     state.persons=state.persons.map(p=>p.id===person.id?{...p,...personPatch}:p);state.patients=state.patients.map(p=>p.id===id?record:p)
-    event(`patient:updated:${id}:${record.revision}`,'M4','patient.record.updated','Permitted patient fields updated',id,patient.preferredBranchId,{entityType:'patient',entityId:id})
+    event(`patient:updated:${id}:${record.revision}`,'patient','patient.record.updated','Permitted patient fields updated',id,patient.preferredBranchId,{entityType:'patient',entityId:id})
     return {ok:true,record}
   })
   const saveBranch=run(({state,session,event},id,form={})=>{
@@ -72,7 +72,7 @@ export function administrationActions(run) {
     if(state.branches.some(b=>b.id!==id&&(b.branchCode===next.branchCode||b.name===next.name)))return fail('Branch name and code must identify one branch.')
     if(unchanged(branch,patch))return {ok:true,unchanged:true,record:branch}
     const record={...next,revision:(branch.revision||0)+1};state.branches=state.branches.map(b=>b.id===id?record:b)
-    event(`branch:${id}:${record.revision}`,'M2','branch.updated','Branch configuration updated',null,id,{entityType:'branch',entityId:id})
+    event(`branch:${id}:${record.revision}`,'branch','branch.updated','Branch configuration updated',null,id,{entityType:'branch',entityId:id})
     return {ok:true,record}
   })
   const setBranchService=run(({state,session,event},branchId,serviceId,active)=>{
@@ -81,7 +81,7 @@ export function administrationActions(run) {
     if(old&&(old.active!==false)===active)return {ok:true,unchanged:true,record:old}
     const record={...old,id:old?.id||uid('bs'),branchId,serviceId,active,revision:(old?.revision||0)+1}
     state.branchServices=old?state.branchServices.map(b=>b.id===old.id?record:b):[...state.branchServices,record]
-    event(`branch-service:${record.id}:${record.revision}`,'M2','branch.service.changed','Service availability updated',null,branchId,{entityType:'branch',entityId:branchId})
+    event(`branch-service:${record.id}:${record.revision}`,'service','branch.service.changed','Service availability updated',null,branchId,{entityType:'branch',entityId:branchId})
     return {ok:true,record}
   })
   const savePersonnel=run(({state,session,event},collection,id,form={})=>{
@@ -96,7 +96,7 @@ export function administrationActions(run) {
     if(unchanged(old,patch))return {ok:true,unchanged:true,record:old}
     const record={...next,revision:(old.revision||0)+1};state[collection]=state[collection].map(p=>p.id===id?record:p)
     state.users=state.users.map(u=>u.id===user.id?{...u,branchId:ids.includes(u.branchId)?u.branchId:ids[0]}:u)
-    event(`personnel:${id}:${record.revision}`,'M3','personnel.updated','Personnel availability updated',null,ids[0],{entityType:collection,entityId:id})
+    event(`personnel:${id}:${record.revision}`,'personnel','personnel.updated','Personnel availability updated',null,ids[0],{entityType:collection,entityId:id})
     return {ok:true,record}
   })
   // ---- Phase 2A: adopt*FromServer — new, additive actions, alongside the 6 above (not a replacement for

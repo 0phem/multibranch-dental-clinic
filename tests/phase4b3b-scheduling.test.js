@@ -127,7 +127,7 @@ test('booked minutes on a different date never inflate the selected date\'s work
   assert.equal(a.dentistId,'d1','a different date\'s booking does not affect this date\'s tie-break')
 })
 
-test('M15 branchCapacity is never consulted to rank Dentists',()=>{
+test('M10 branchCapacity (formerly M15 workload) is never consulted to rank Dentists',()=>{
   assert.doesNotMatch(read('src/scheduling.js'),/branchCapacity/)
 })
 

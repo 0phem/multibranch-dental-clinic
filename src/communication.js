@@ -38,16 +38,16 @@ export function communicationActions(run) {
     const message={id:uid('cm'),commandId,senderUserId:session.userId,text:clean(text),at:now.timestamp}
     const record={...c,messages:[...c.messages,message],unreadUserIds:[...new Set([...c.unreadUserIds,...c.participantUserIds.filter(id=>id!==session.userId)])].filter(id=>id!==session.userId),readAtByUser:{...c.readAtByUser,[session.userId]:now.timestamp}}
     state.conversations=state.conversations.map(x=>x.id===id?record:x)
-    event(`message:${commandId}`,'M17','conversation.reply.recorded','Reply recorded in clinic conversation',c.patientId,c.branchId,{entityType:'conversation',entityId:id,conversationId:id})
+    event(`message:${commandId}`,'messaging','conversation.reply.recorded','Reply recorded in clinic conversation',c.patientId,c.branchId,{entityType:'conversation',entityId:id,conversationId:id})
     return {ok:true,record}
-  },{name:'conversation.reply',module:'M17'})
+  },{name:'conversation.reply',domain:'messaging'})
   const closeConversation=run(({state,session,event},id)=>{
     const c=state.conversations.find(c=>c.id===id)
     if(!['staff','dentist'].includes(session.role)||!canReadConversation(state,session,c))return fail('Only assigned clinic participants can close this conversation.')
     if(c.status==='Closed')return {ok:true,unchanged:true,record:c}
     const record={...c,status:'Closed'}
     state.conversations=state.conversations.map(x=>x.id===id?record:x)
-    event(`conversation:close:${id}`,'M17','conversation.closed','Conversation closed',c.patientId,c.branchId,{entityType:'conversation',entityId:id})
+    event(`conversation:close:${id}`,'messaging','conversation.closed','Conversation closed',c.patientId,c.branchId,{entityType:'conversation',entityId:id})
     return {ok:true,record}
   })
   const canInquiry=(state,session,i)=>session.role==='staff'&&i?.assignedUserId===session.userId&&i.branchId===session.branchId&&state.users.some(u=>u.id===session.userId&&(u.permissions?.includes('inquiries')||(u.roleName||u.role)==='Receptionist'&&u.permissions?.includes('messages')))
@@ -58,7 +58,7 @@ export function communicationActions(run) {
     if(old)return canInquiry(state,session,old)?{ok:true,unchanged:true,record:old}:fail('Inquiry is outside your scope.')
     const record={id:uid('inq'),commandId,name:clean(form.name),contact:clean(form.contact),topic:clean(form.topic),source:clean(form.source),assignedUserId:session.userId,branchId:session.branchId,status:'Open',receivedAt:now.timestamp}
     state.inquiries=[record,...state.inquiries]
-    event(`inquiry:${record.id}`,'M16','inquiry.created','Inquiry recorded',null,record.branchId,{entityType:'inquiry',entityId:record.id})
+    event(`inquiry:${record.id}`,'inquiry','inquiry.created','Inquiry recorded',null,record.branchId,{entityType:'inquiry',entityId:record.id})
     return {ok:true,record}
   })
   const updateInquiry=run(({state,session,now,event},id,status)=>{
@@ -68,7 +68,7 @@ export function communicationActions(run) {
     if(['Closed','Converted'].includes(i.status))return fail('Inquiry is already closed or converted.')
     const record={...i,status,...(status==='Responded'?{respondedAt:now.timestamp}:{closedAt:now.timestamp})}
     state.inquiries=state.inquiries.map(x=>x.id===id?record:x)
-    event(`inquiry:${id}:${status}`,'M16',`inquiry.${status.toLowerCase()}`,'Staff recorded inquiry status',i.patientId,i.branchId,{entityType:'inquiry',entityId:id})
+    event(`inquiry:${id}:${status}`,'inquiry',`inquiry.${status.toLowerCase()}`,'Staff recorded inquiry status',i.patientId,i.branchId,{entityType:'inquiry',entityId:id})
     return {ok:true,record}
   })
   const convertInquiry=run(({state,session,now,event},id,appointmentId)=>{
@@ -87,9 +87,9 @@ export function communicationActions(run) {
     }else state.conversations=state.conversations.map(c=>c.id===conversation.id?{...c,appointmentId:a.id,inquiryId:id}:c)
     const record={...i,patientId:a.patientId,bookedAppointmentId:a.id,conversationId:conversation.id,status:'Converted',convertedAt:now.timestamp}
     state.inquiries=state.inquiries.map(x=>x.id===id?record:x)
-    event(`inquiry:converted:${id}`,'M16→M17→M6','inquiry.converted','Inquiry linked to appointment and conversation',a.patientId,a.branchId,{entityType:'inquiry',entityId:id,appointmentId:a.id,conversationId:conversation.id})
+    event(`inquiry:converted:${id}`,'inquiry→messaging→appointment','inquiry.converted','Inquiry linked to appointment and conversation',a.patientId,a.branchId,{entityType:'inquiry',entityId:id,appointmentId:a.id,conversationId:conversation.id})
     return {ok:true,record}
-  },{name:'inquiry.convert',module:'M16'})
+  },{name:'inquiry.convert',domain:'inquiry'})
   const evaluateOperationalReminders=run(ctx=>{
     const {state,session,now,event}=ctx
     const user=state.users.find(u=>u.id===session.userId)
@@ -101,14 +101,14 @@ export function communicationActions(run) {
       const key=`reminder:appointment:${a.id}:${a.revision||0}`
       if(a.branchId!==session.branchId||a.status!=='Confirmed'||hours<=0||hours>24||state.workflowLog.some(e=>e.commandKey===key))continue
       const context={entityType:'appointment',entityId:a.id,appointmentId:a.id,patientId:a.patientId,branchId:a.branchId,eventKey:key,eventType:'appointment.reminder',action:{page:'appointments',context:{appointmentId:a.id}}}
-      event(key,'M18','appointment.reminder','Foreground appointment reminder prepared',a.patientId,a.branchId,context)
+      event(key,'notification','appointment.reminder','Foreground appointment reminder prepared',a.patientId,a.branchId,context)
       appendNotification(state,now,key,{patientId:a.patientId},'Upcoming appointment','You have an appointment within the next 24 hours. Review your visit details.',context);changed=true
     }
     for(const q of state.queue){
       const start=clinicTimestamp(q.arrivedAt||`${q.clinicDate}T${q.checkedIn}`),key=`reminder:delay:${q.id}`
       if(q.branchId!==session.branchId||q.clinicDate!==now.date||!['Waiting','Called','Treatment Ready'].includes(q.status)||!start||Date.parse(now.timestamp)-Date.parse(start)<35*60000||state.workflowLog.some(e=>e.commandKey===key))continue
       const context={entityType:'queue',entityId:q.id,queueEntryId:q.id,patientId:q.patientId,branchId:q.branchId,eventKey:key,eventType:'queue.delay',action:{page:'queue',context:{queueEntryId:q.id}}}
-      event(key,'M18','queue.delay','Foreground waiting-time update prepared',q.patientId,q.branchId,context)
+      event(key,'notification','queue.delay','Foreground waiting-time update prepared',q.patientId,q.branchId,context)
       appendNotification(state,now,key,{patientId:q.patientId},'Queue waiting update','Your visit is still in the queue. Please check with the front desk for assistance.',context);changed=true
     }
     return {ok:true,...(!changed?{unchanged:true}:{})}

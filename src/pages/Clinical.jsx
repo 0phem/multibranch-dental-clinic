@@ -28,7 +28,7 @@ export function PatientsPage({ role, store, context, setPage }) {
   const saveRecord=({person,patient:patientPatch})=>{
     const result=actions.updatePatientRecord(selected,{person,patient:patientPatch})
     if(!result.ok)return toast(result.message,'warning')
-    log(role==='dentist'?ROLE_INFO.dentist.name:ROLE_INFO.staff.name,`Updated permitted patient record fields ${selected}`,'M4')
+    log(role==='dentist'?ROLE_INFO.dentist.name:ROLE_INFO.staff.name,`Updated permitted patient record fields ${selected}`,'patient')
     toast('Patient record updated.','success')
   }
   const createPatient=()=>{

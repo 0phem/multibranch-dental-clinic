@@ -130,9 +130,9 @@ endpoint exists for any of these — only what the current UI already does.
 still-local collections (`appointments`, `queue`, `treatments`, etc.) keep resolving today's string IDs
 unchanged. `legacy_user_ref` specifically lets a bridged Dentist/Staff record's `userId` field resolve
 against the still-local, unchanged `state.users` collection — account activity/status is **not**
-backend-authoritative this phase (see `MODULE_COVERAGE.md`'s M7 row).
+backend-authoritative this phase (see `MODULE_COVERAGE.md`'s M6 row, which now includes Smart Scheduling).
 
-**M1 User Management** is a separate backend-authoritative account collection at `GET/POST /api/users`,
+**M1 User & Access Management** (the User Management screen) is a separate backend-authoritative account collection at `GET/POST /api/users`,
 `PATCH /api/users/{user}`, and `DELETE /api/users/{user}`. The Owner screen fetches it on demand through
 `src/user-management-bridge.js`; it never replaces transitional `state.users`. It can create only Patient
 accounts (atomic PERSON + PATIENT + USER creation), edit first/last/email/phone, display role read-only, and

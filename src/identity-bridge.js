@@ -94,7 +94,7 @@ function bridgePatient(me, { getState, commit, clock }) {
 
   const key = `backend-bridge:${me.id}`, eventId = `event:${key}`
   const logEntry = {
-    id: eventId, commandKey: key, at: now.label, createdAt: now.timestamp, module: 'M1→M4',
+    id: eventId, commandKey: key, at: now.label, createdAt: now.timestamp, domain: 'identity→patient',
     event: 'patient.backend_identity_bridged', eventType: 'patient.backend_identity_bridged',
     result: 'Backend-authenticated Patient identity created (local compatibility projection)',
     status: 'Success', entityType: 'patient', entityId: patient.id, patientId: patient.id,
@@ -103,7 +103,7 @@ function bridgePatient(me, { getState, commit, clock }) {
   const auditEntry = {
     id: uid('aud'), eventId, at: now.label, actor: `${firstName} ${lastName}`.trim() || email,
     actorUserId: user.id, action: 'Backend-authenticated Patient registration (local compatibility projection)',
-    module: 'M1→M4',
+    domain: 'identity→patient',
   }
 
   commit({

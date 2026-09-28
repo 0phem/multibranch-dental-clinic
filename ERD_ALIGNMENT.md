@@ -1,6 +1,6 @@
 # ERD v2 and Current Frontend Alignment
 
-Reviewed against protected checkpoint `dac864e`, the [Data Dictionary](docs/architecture/ERD_v2_Data_Dictionary.md), and the approved [PNG](docs/architecture/Multi-Branch_Dental_Clinic_Operation_System_ERD.png) / [SVG](docs/architecture/Multi-Branch_Dental_Clinic_Operation_System_ERD.svg). The ERD artifacts are unchanged. This mapping explains frontend representations; it does not replace normalized backend requirements.
+Reviewed against protected checkpoint `dac864e`, the [Data Dictionary](docs/architecture/ERD_v2_Data_Dictionary.md), and the approved [PNG](docs/architecture/Multi-Branch_Dental_Clinic_Operation_System_ERD.png) / [SVG](docs/architecture/Multi-Branch_Dental_Clinic_Operation_System_ERD.svg). The ERD artifacts are unchanged. This mapping explains frontend representations; it does not replace normalized backend requirements. Module numbers below follow the canonical 25-module structure in [Module Coverage](MODULE_COVERAGE.md); that restructure renamed and regrouped modules only — the ERD structure is unchanged by it.
 
 ## Foundation and patient flow
 
@@ -19,7 +19,7 @@ Reviewed against protected checkpoint `dac864e`, the [Data Dictionary](docs/arch
 | CHECK_IN_RECORDS | `checkIns` | Distinct arrival linked to appointment or walk-in, exact queue and clinic day |
 | DENTIST_QUEUES / QUEUE_ENTRIES | `queue`, with per-Dentist/branch/day `queueId` | Container identity embedded rather than separate queue table; exact appointment/check-in/treatment links |
 | CAPACITY_EVENTS | Derived queue/capacity views and workflow events | No independent persisted aggregate snapshot table; estimates do not replace queue entries |
-| AUDIT_LOGS | `audit` alongside `workflowLog` | Local audit projection (recent audit list capped); not immutable server security evidence |
+| AUDIT_LOGS | `audit` alongside `workflowLog` | Local audit projection (recent audit list capped); not immutable server security evidence. The tamper-resistant audit trail belongs to the planned M22 |
 
 **Identity model clarification (Phase 4B.3A):** `PERSONS` is the single shared identity hub. `USERS` and
 `PATIENTS` are two independent attachments to it, each carrying its own `person_id` foreign key — the ERD does not
@@ -85,10 +85,10 @@ Returned → corrected/local validation → Ready → resubmission retains case 
 | PATIENT_NOTIFICATIONS | `notifications` | Generalized to identity-targeted Patient, Dentist and Staff operational notifications; event/entity IDs, independent read state and validated action context |
 | SYSTEM_EVENTS / AUTOMATED_ACTIONS | Contextual `workflowLog` events/results; `audit` projection | Combined local ledger, not separate transaction tables or durable event queue; deduplicated command/event keys |
 | WORKFLOW_RULES | Descriptive `automations` catalog plus protected domain commands | Read-only Automation Monitor; no arbitrary critical-rule toggles |
-| M21 / M22 | Read projections of operational collections | No duplicate operational data stores; current reporting limitations remain explicit |
-| M24 / M25 logical entities | `loyalty` (account with embedded ledger; M24 implemented prototype) / `campaigns` (draft preview only) | Approved Frontend Enhancements, not complete normalized referral/ledger/recipient systems |
+| M21 (analytics and executive dashboard, formerly M21/M22) | Read projections of operational collections | No duplicate operational data stores; current reporting limitations remain explicit |
+| M24 / M25 logical entities | `loyalty` (account with embedded ledger; M24 implemented prototype) / `campaigns` (draft preview only) | Proposed Enhancements (PE), not complete normalized referral/ledger/recipient systems |
 
-**Authorization status update (Phase 4B.2):** the authorization status of M24 and M25 changed from Proposed to Approved Frontend Enhancement. The ERD structure remains unchanged: no relationship, table or diagram/dictionary change is authorized, and the existing diagrams keep their historical labels. A normalized referral lifecycle (referrer → referred Patient → qualifying appointment) is a later M24 extension and would need its own approved model.
+**Authorization status update (Phase 4B.2, historical):** the authorization status of M24 and M25 changed at that time from Proposed to Approved Frontend Enhancement; the canonical restructure has since designated them Proposed Enhancements (PE) again. The ERD structure remains unchanged: no relationship, table or diagram/dictionary change is authorized, and the existing diagrams keep their historical labels. A normalized referral lifecycle (referrer → referred Patient → qualifying appointment) is a later M24 extension and would need its own approved model.
 
 M23 coordinates administrative handoffs after explicit actions. A completed Treatment closes exact queue/appointment, prepares actual-procedure billing and only the requested Prescription/Follow-Up obligations, then applicable HMO and notifications. A failed HMO handoff leaves valid completed care intact and exposes a warning. Selected failed commands log deduplicated failure results; not every validation rejection creates a monitor record. Rendering/normalization creates no events.
 
@@ -105,7 +105,7 @@ state to real PostgreSQL tables, following the same identity-hub pattern already
 `legacy_ref` string column on each of these tables is a purely transitional bridge key, letting still-local
 collections (`appointments`, `queue`, `treatments`, etc.) keep resolving today's string IDs unchanged; it
 carries no business meaning and is retired once those collections migrate to real backend foreign keys in a
-later phase. `findOpenTimes`/`assignDentist` (M7) are unchanged — only their inputs are now
+later phase. `findOpenTimes`/`assignDentist` (M6 Smart Scheduling, formerly numbered M7) are unchanged — only their inputs are now
 backend-authoritative, not their execution. Linked account Active/Inactive status is explicitly *not*
 backend-authoritative yet (a transitional frontend-local input); closing that gap is a later identity
 migration, not part of this phase. See [BACKEND_INTEGRATION.md](BACKEND_INTEGRATION.md) for the running

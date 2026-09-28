@@ -7,7 +7,7 @@ const administration=readFileSync(new URL('../src/administration.js',import.meta
 const users=source.match(/export function UsersPage[\s\S]*?export function ModulesPage/)[0]
 const team=source.match(/export function TeamPage[\s\S]*?export function AnalyticsPage/)[0]
 
-test('M1 User Management exposes canonical creation roles only',()=>{
+test('M1 User & Access Management: the User Management screen exposes canonical creation roles only',()=>{
   assert.match(users,/title="User Management"/)
   assert.match(users,/value="patient"/)
   assert.match(users,/Staff \(temporarily unavailable\)/)

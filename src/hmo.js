@@ -7,9 +7,11 @@ const fail=message=>({ok:false,message})
 const clean=value=>typeof value==='string'?value.trim():''
 const replace=(state,record)=>{state.hmo=(state.hmo||[]).some(h=>h.id===record.id)?state.hmo.map(h=>h.id===record.id?record:h):[record,...(state.hmo||[])]}
 const caseContext=h=>({entityType:'hmo',entityId:h.id,hmoCaseId:h.id,patientId:h.patientId,branchId:h.branchId,treatmentId:h.treatmentId,appointmentId:h.appointmentId,action:{page:'hmo',context:{hmoCaseId:h.id,patientId:h.patientId}}})
-function publish(ctx,h,key,type,title,body,{staff=false,patient=true,status='Success',module='M13'}={}) {
+// Every HMO event records the one 'hmo' domain (M12); verification, submission, response and follow-up stay
+// distinguishable through their command names and event types.
+function publish(ctx,h,key,type,title,body,{staff=false,patient=true,status='Success'}={}) {
   const context={...caseContext(h),eventKey:key,eventType:type}
-  ctx.event(key,module,type,title,h.patientId,h.branchId,context,status)
+  ctx.event(key,'hmo',type,title,h.patientId,h.branchId,context,status)
   if(patient)appendNotification(ctx.state,ctx.now,key,{patientId:h.patientId},title,body,context)
   if(staff)notifyBranch(ctx.state,ctx.now,key,h.branchId,'hmo',title,'Review this HMO case in your assigned worklist.',context)
 }
@@ -58,20 +60,20 @@ export function prepareHmoCase(ctx,input={},{system=false}={}) {
       const requirements=existing.requirements.map(r=>canPrefill&&r.ruleId==='treatment-request'&&r.state==='Missing'?{...r,state:'Validated locally',treatmentId:treatment.id,validatedAt:now.timestamp}:r)
       const record={...existing,treatmentId:treatment.id,requirements,status:canPrefill&&requirements.every(r=>r.state==='Validated locally')?'Ready for Submission':existing.status}
       replace(state,record)
-      publish(ctx,record,`hmo:linked:${existing.id}:${treatment.id}`,'hmo.encounter.linked','Completed treatment linked to HMO case','',{patient:false,module:'M12'})
+      publish(ctx,record,`hmo:linked:${existing.id}:${treatment.id}`,'hmo.encounter.linked','Completed treatment linked to HMO case','',{patient:false})
       return {ok:true,record}
     }
     return {ok:true,unchanged:true,record:existing}
   }
   const id=uid('h'),record={id,schemaVersion:3,...context,memberId:patient.hmoMember,createdAt:now.timestamp,createdBy:system?'System':session.userId,requirements:HMO_REQUIREMENT_RULES.map(r=>({id:`${id}:${r.id}`,ruleId:r.id,label:r.label,state:r.id==='treatment-request'&&treatment?.status==='Completed'?'Validated locally':'Missing',...(r.id==='treatment-request'&&treatment?.status==='Completed'?{treatmentId:treatment.id,validatedAt:now.timestamp}: {})})),status:'Missing Requirements',providerOutcome:null,submittedAt:null,submissionCycle:0,submissionHistory:[],responses:[],contacts:[],followUpTasks:[],escalationStatus:'Not Escalated'}
   replace(state,record)
-  publish(ctx,record,`hmo:created:${id}`,'hmo.requirements.missing','HMO requirements needed','Review the listed requirements for your HMO case.',{staff:true,module:'M12'})
+  publish(ctx,record,`hmo:created:${id}`,'hmo.requirements.missing','HMO requirements needed','Review the listed requirements for your HMO case.',{staff:true})
   return {ok:true,record}
 }
 export function hmoActions(run) {
-  const command=(name,module,fn)=>run(fn,{name,module})
-  const createHmoCase=command('hmo.create','M12',(ctx,input)=>prepareHmoCase(ctx,input))
-  const provideHmoRequirement=command('hmo.requirement','M12',(ctx,id,ruleId,input={})=>{
+  const command=(name,fn)=>run(fn,{name,domain:'hmo'})
+  const createHmoCase=command('hmo.create',(ctx,input)=>prepareHmoCase(ctx,input))
+  const provideHmoRequirement=command('hmo.requirement',(ctx,id,ruleId,input={})=>{
     const {state,session,now}=ctx
     const raw=(state.hmo||[]).find(h=>h.id===id)
     const patientOwns=session.role==='patient'&&raw?.patientId===session.patientId&&state.patients.find(p=>p.id===session.patientId)?.userId===session.userId
@@ -88,10 +90,10 @@ export function hmoActions(run) {
     const ready=requirements.every(r=>r.state==='Validated locally')
     const record={...h,requirements,status:ready?'Ready for Submission':h.status==='Returned'?'Returned':'Missing Requirements'}
     replace(state,record)
-    publish(ctx,record,`hmo:requirement:${id}:${h.submissionCycle}:${ruleId}:${target}`,patientOwns?'hmo.requirement.provided':'hmo.requirement.validated',patientOwns?'HMO document recorded':'HMO requirement checked locally','Clinic requirement status updated.',{staff:patientOwns,patient:false,module:'M12'})
+    publish(ctx,record,`hmo:requirement:${id}:${h.submissionCycle}:${ruleId}:${target}`,patientOwns?'hmo.requirement.provided':'hmo.requirement.validated',patientOwns?'HMO document recorded':'HMO requirement checked locally','Clinic requirement status updated.',{staff:patientOwns,patient:false})
     return {ok:true,record:patientOwns?visibleHmo(state,session).find(x=>x.id===id):record}
   })
-  const submitHmoCase=command('hmo.submit','M13',(ctx,id,input={})=>{
+  const submitHmoCase=command('hmo.submit',(ctx,id,input={})=>{
     const h=getCase(ctx,id)
     if(!h)return fail('HMO case is outside your scope or has invalid links.')
     if(!input.commandId)return fail('Submission command ID is required.')
@@ -104,7 +106,7 @@ export function hmoActions(run) {
     publish(ctx,record,`hmo:submitted:${id}:${cycle}`,'hmo.submission.recorded','HMO submission recorded','Clinic staff recorded an external submission. A provider response is pending.')
     return {ok:true,record}
   })
-  const recordHmoOutcome=command('hmo.response','M13',(ctx,id,input={})=>{
+  const recordHmoOutcome=command('hmo.response',(ctx,id,input={})=>{
     const h=getCase(ctx,id)
     if(!h)return fail('HMO case is outside your scope or has invalid links.')
     if(!input.commandId||input.caseId&&input.caseId!==id)return fail('Provider response must identify this case and command.')
@@ -121,18 +123,18 @@ export function hmoActions(run) {
     publish(ctx,record,`hmo:response:${id}:${h.submissionCycle}`,'hmo.provider.response.recorded',`Provider response recorded: ${input.outcome}`,input.outcome==='Returned'?'The provider returned your request. Review the requirements needing correction.':`Clinic staff recorded the provider outcome: ${input.outcome}.`,{staff:input.outcome==='Returned'})
     return {ok:true,record}
   })
-  const evaluateHmoTimers=command('hmo.evaluate','M14',ctx=>{
+  const evaluateHmoTimers=command('hmo.evaluate',ctx=>{
     let changed=false
     for(const h of ctx.state.hmo||[]){
       if(!getCase(ctx,h.id)||!pendingHmo(h)||pendingHours(h,ctx.now)<HMO_PENDING_HOURS||h.followUpTasks.some(t=>t.submissionCycle===h.submissionCycle))continue
       const task={id:`${h.id}:followup:${h.submissionCycle}`,caseId:h.id,submissionCycle:h.submissionCycle,status:'Open',createdAt:ctx.now.timestamp}
       const record={...h,followUpTasks:[...h.followUpTasks,task],escalationStatus:h.status==='Escalated'?'Escalated':'Follow-Up Required'}
       replace(ctx.state,record);changed=true
-      publish(ctx,record,`hmo:overdue:${h.id}:${h.submissionCycle}`,'hmo.followup.required','HMO follow-up required','', {staff:true,patient:false,status:'Warning',module:'M14'})
+      publish(ctx,record,`hmo:overdue:${h.id}:${h.submissionCycle}`,'hmo.followup.required','HMO follow-up required','', {staff:true,patient:false,status:'Warning'})
     }
     return {ok:true,...(!changed?{unchanged:true}:{})}
   })
-  const followUpHmo=command('hmo.contact','M14',(ctx,id,input={})=>{
+  const followUpHmo=command('hmo.contact',(ctx,id,input={})=>{
     const h=getCase(ctx,id)
     if(!h)return fail('HMO case is outside your scope or has invalid links.')
     if(!input.commandId)return fail('Contact command ID is required.')
@@ -143,10 +145,10 @@ export function hmoActions(run) {
     const contact={id:uid('hc'),caseId:id,commandId:input.commandId,submissionCycle:h.submissionCycle,at:ctx.now.timestamp,staffUserId:ctx.session.userId,method:input.method,note:clean(input.note),nextAction:clean(input.nextAction)}
     const record={...h,contacts:[...h.contacts,contact],lastFollowUpAt:ctx.now.timestamp,followUpTasks:h.followUpTasks.map(t=>t.submissionCycle===h.submissionCycle?{...t,status:h.status==='Escalated'?'Escalated':'Contact Recorded'}:t)}
     replace(ctx.state,record)
-    publish(ctx,record,`hmo:contact:${input.commandId}`,'hmo.contact.recorded','Staff contact attempt recorded','',{patient:false,module:'M14'})
+    publish(ctx,record,`hmo:contact:${input.commandId}`,'hmo.contact.recorded','Staff contact attempt recorded','',{patient:false})
     return {ok:true,record}
   })
-  const escalateHmo=command('hmo.escalate','M14',(ctx,id)=>{
+  const escalateHmo=command('hmo.escalate',(ctx,id)=>{
     const h=getCase(ctx,id)
     if(!h)return fail('HMO case is outside your scope or has invalid links.')
     if(h.status==='Escalated')return {ok:true,unchanged:true,record:h}
@@ -154,7 +156,7 @@ export function hmoActions(run) {
     const task=h.followUpTasks.find(t=>t.submissionCycle===h.submissionCycle)||{id:`${id}:followup:${h.submissionCycle}`,caseId:id,submissionCycle:h.submissionCycle,createdAt:ctx.now.timestamp}
     const record={...h,status:'Escalated',escalatedAt:ctx.now.timestamp,escalatedBy:ctx.session.userId,escalationStatus:'Escalated',followUpTasks:[...h.followUpTasks.filter(t=>t.id!==task.id),{...task,status:'Escalated'}]}
     replace(ctx.state,record)
-    publish(ctx,record,`hmo:escalated:${id}:${h.submissionCycle}`,'hmo.escalated','HMO escalation needs attention','',{staff:true,patient:false,status:'Warning',module:'M14'})
+    publish(ctx,record,`hmo:escalated:${id}:${h.submissionCycle}`,'hmo.escalated','HMO escalation needs attention','',{staff:true,patient:false,status:'Warning'})
     return {ok:true,record}
   })
   return {createHmoCase,provideHmoRequirement,submitHmoCase,recordHmoOutcome,evaluateHmoTimers,followUpHmo,escalateHmo}

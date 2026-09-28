@@ -89,7 +89,7 @@ export function phase2Actions(run) {
       notify(`paid:${id}`,invoice.patientId,'Receipt Available',`Receipt ${receipt} is available${payment.simulation?' for your simulated payment':''}.`)
     }
     state.invoices=state.invoices.map(i=>i.id===id?record:i)
-    event(`invoice:${transition}:${id}`,'M11',`billing.${transition}`,record.invoiceNo,record.patientId,record.branchId)
+    event(`invoice:${transition}:${id}`,'billing',`billing.${transition}`,record.invoiceNo,record.patientId,record.branchId)
     return {ok:true,record,receipt:record.receipt}
   })
   const savePrescription=run(({state,session,now,event,notify},input={},authorize=false)=>{
@@ -111,7 +111,7 @@ export function phase2Actions(run) {
     const record={id,treatmentId:t.id,patientId:t.patientId,dentistId:t.dentistId,branchId:t.branchId,items,status:authorize?'Authorized':'Draft',version:1,updatedAt:now.timestamp,authorizedAt:authorize?now.timestamp:null,authorizedBy:authorize?session.userId:null,revision:(current?.revision||0)+1}
     if(current&&current.status===record.status&&JSON.stringify(current.items)===JSON.stringify(items))return {ok:true,unchanged:true,record:current}
     state.prescriptions=current?state.prescriptions.map(r=>r.id===id?record:r):[record,...state.prescriptions]
-    event(`prescription:${id}:${record.revision}`,'M19',authorize?'prescription.authorized':'prescription.draft.saved',id,t.patientId,t.branchId)
+    event(`prescription:${id}:${record.revision}`,'prescription',authorize?'prescription.authorized':'prescription.draft.saved',id,t.patientId,t.branchId)
     if(authorize)notify(`rx-authorized:${id}`,t.patientId,'Prescription Available','Your dentist has authorized your prescription.')
     return {ok:true,record}
   })

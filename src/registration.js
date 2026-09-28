@@ -55,8 +55,8 @@ export function createRegistrationAction({getState, commit, clock=clinicNow}) {
     // Self-service registration has no prior actor: the audit trail names the newly created identity as its own
     // actor, not a fabricated staff/session actor. No email/phone is written into the log payload.
     const key=`registration:${id}`, eventId=`event:${key}`
-    const logEntry={id:eventId,commandKey:key,at:now.label,createdAt:now.timestamp,module:'M1→M4',event:'patient.self_registered',eventType:'patient.self_registered',result:'Self-service Patient registration',status:'Success',entityType:'patient',entityId:patient.id,patientId:patient.id,branchId:patient.preferredBranchId}
-    const auditEntry={id:uid('aud'),eventId,at:now.label,actor:`${firstName} ${lastName}`.trim(),actorUserId:user.id,action:'Self-service Patient registration',module:'M1→M4'}
+    const logEntry={id:eventId,commandKey:key,at:now.label,createdAt:now.timestamp,domain:'identity→patient',event:'patient.self_registered',eventType:'patient.self_registered',result:'Self-service Patient registration',status:'Success',entityType:'patient',entityId:patient.id,patientId:patient.id,branchId:patient.preferredBranchId}
+    const auditEntry={id:uid('aud'),eventId,at:now.label,actor:`${firstName} ${lastName}`.trim(),actorUserId:user.id,action:'Self-service Patient registration',domain:'identity→patient'}
     // One atomic commit: PERSON + PATIENT + USER + audit trail, or nothing. No appointment, loyalty account,
     // HMO case, clinical or financial record is created here — only identity.
     commit({persons:[...state.persons,person],patients:[...state.patients,patient],users:[...state.users,user],workflowLog:[logEntry,...state.workflowLog],audit:[auditEntry,...state.audit].slice(0,150)})

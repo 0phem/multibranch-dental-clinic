@@ -98,9 +98,9 @@ export function loyaltyActions(run) {
     const record={...account,history:[entry,...account.history]}
     replace(state,account,record)
     const patient=state.patients.find(p=>p.id===session.patientId)
-    event(`loyalty:request:${id}`,'M24','loyalty.redemption.requested','Loyalty reward requested',session.patientId,patient?.preferredBranchId||null,{entityType:'loyalty',entityId:account.id,loyaltyAccountId:account.id})
+    event(`loyalty:request:${id}`,'loyalty','loyalty.redemption.requested','Loyalty reward requested',session.patientId,patient?.preferredBranchId||null,{entityType:'loyalty',entityId:account.id,loyaltyAccountId:account.id})
     return {ok:true,record}
-  },{name:'loyalty.redemption.request',module:'M24'})
+  },{name:'loyalty.redemption.request',domain:'loyalty'})
 
   const recordLoyaltyActivity=run(({state,session,now,event},input,commandId,...extra)=>{
     if(!isRecord(input)||extra.length)return fail('Enter valid loyalty activity details.')
@@ -128,9 +128,9 @@ export function loyaltyActions(run) {
     }
     replace(state,account,record)
     const patient=state.patients.find(p=>p.id===patientId)
-    event(`loyalty:activity:${id}`,'M24','loyalty.activity.recorded',`${activity} recorded (+${points})`,patientId,patient?.preferredBranchId||null,{entityType:'loyalty',entityId:record.id,loyaltyAccountId:record.id})
+    event(`loyalty:activity:${id}`,'loyalty','loyalty.activity.recorded',`${activity} recorded (+${points})`,patientId,patient?.preferredBranchId||null,{entityType:'loyalty',entityId:record.id,loyaltyAccountId:record.id})
     return {ok:true,record}
-  },{name:'loyalty.activity.record',module:'M24'})
+  },{name:'loyalty.activity.record',domain:'loyalty'})
 
   const processLoyaltyRedemption=run(({state,session,now,event},accountId,commandId,...extra)=>{
     const id=commandIdOf(commandId)
@@ -151,9 +151,9 @@ export function loyaltyActions(run) {
     const record={...account,points:account.points-threshold,history:[entry,...account.history.map(e=>e===pending?{...e,status:'Processed',processedAt:now.timestamp,processedByUserId:session.userId}:e)]}
     replace(state,account,record)
     const patient=state.patients.find(p=>p.id===account.patientId)
-    event(`loyalty:process:${id}`,'M24','loyalty.redemption.processed','Loyalty reward processed',account.patientId,patient?.preferredBranchId||null,{entityType:'loyalty',entityId:account.id,loyaltyAccountId:account.id})
+    event(`loyalty:process:${id}`,'loyalty','loyalty.redemption.processed','Loyalty reward processed',account.patientId,patient?.preferredBranchId||null,{entityType:'loyalty',entityId:account.id,loyaltyAccountId:account.id})
     return {ok:true,record}
-  },{name:'loyalty.redemption.process',module:'M24'})
+  },{name:'loyalty.redemption.process',domain:'loyalty'})
 
   return {requestLoyaltyRedemption,recordLoyaltyActivity,processLoyaltyRedemption}
 }
