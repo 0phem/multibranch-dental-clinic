@@ -80,10 +80,10 @@ export function persistableCollection(key, rows) {
     staff:[...identity,'branch'],users:identity,
   }[key]||[]
   // M6 cutover read models are never stored: server Patient projections (serverProjection) are rebuilt from the API,
-  // and `legacyAppointment` is a derived D5 flag.
-  const stored=key==='patients'?rows.filter(row=>!row.serverProjection):rows
+  // and `legacyAppointment` / `preServer` are derived D5 / M5 flags. Server Treatments (M5) are never stored at all.
+  const stored=key==='patients'?rows.filter(row=>!row.serverProjection):key==='treatments'?rows.filter(row=>row.server!==true):rows
   return stored.map(row=>Object.fromEntries(Object.entries(row).filter(([field])=>{
-    if(field==='legacyAppointment')return false
+    if(field==='legacyAppointment'||field==='preServer'||key==='treatments'&&field==='server')return false
     if(['assignedTo','assignedRole','assigned'].includes(field)&&!row.assignedUserId)return true
     if(field==='provider'&&!row.providerId)return true
     if(field==='branch'&&!row.branchId)return true
@@ -119,9 +119,11 @@ export function normalizeClinicState(state) {
     const appointment=appointments.find(a=>a.id===q.appointmentId)
     // No patient/dentist/day matching: legacy linkage must have a direct encounter ID.
     const appointmentTreatments=q.appointmentId?treatments.filter(t=>t.appointmentId===q.appointmentId):[]
-    const treatment=q.treatmentId?treatments.find(t=>t.id===q.treatmentId):treatments.find(t=>t.queueEntryId===q.id)||(appointmentTreatments.length===1?appointmentTreatments[0]:null)
+    // M5: a server queue entry's treatment is the server Treatment of the same Visit; pre-server history never links.
+    const treatment=q.server?treatments.find(t=>t.server&&q.visitId&&t.visitId===q.visitId)||null
+      :q.treatmentId?treatments.find(t=>t.id===q.treatmentId):treatments.find(t=>t.queueEntryId===q.id)||(appointmentTreatments.length===1?appointmentTreatments[0]:null)
     const clinicDay=q.clinicDate||q.arrivedAt?.slice(0,10)||appointment?.date||q.queueId?.match(/\d{4}-\d{2}-\d{2}$/)?.[0]||null
-    return withBranch({...q,queueEntryId:q.id,branchId:q.branchId||appointment?.branchId||branchIdFor(q,branches),serviceId:q.serviceId||appointment?.serviceId||treatment?.serviceId||null,clinicDate:clinicDay,treatmentId:treatment?.id||q.treatmentId||null,currentState:q.status})
+    return withBranch({...q,queueEntryId:q.id,branchId:q.branchId||appointment?.branchId||branchIdFor(q,branches),serviceId:q.serviceId||appointment?.serviceId||treatment?.serviceId||null,clinicDate:clinicDay,treatmentId:treatment?.id||(q.server?null:q.treatmentId)||null,currentState:q.status})
   })
   // M8: arrival records are server Visits (`state.visits`, an in-memory read model); no browser check-in collection
   // exists or is synthesized. A treatment carries its encounter's Visit id, taken from its exact queue entry.

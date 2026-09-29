@@ -87,8 +87,9 @@ One first-class **Visit** is the operational bridge between arrival and clinical
   moves the appointment to Checked In and opens the Visit in one transaction; walk-ins open a Visit with no appointment.
   C2 is resolved in this direction (approved D10; data dictionary updated). Since M9 the queue is server-authoritative
   too: a Visit with a responsible Dentist is queued in the same arrival transaction (`queue_entries.visit_id`, unique).
-  M5 treatment records are still browser-local and reference the Visit by `visitId`; the M5 backend will reference
-  `visits.id`.
+  Since M5 the clinical Treatment is server-authoritative too: `treatments.visit_id` is required and unique
+  (Visit → zero or one Treatment → procedure lines), and the Visit's clinical progression happens only through the M5
+  Treatment start/complete commands.
 
 ## 4. Dentist professional data (M3 → M19)
 
@@ -268,8 +269,8 @@ them unless a row says otherwise. Anything unapproved is marked TBD.
 | Pending / Confirmed | Checked In | Only through the M8 Visit Check-In command, atomically with opening the Visit (today, Asia/Manila) |
 | Pending / Confirmed | Cancelled | Before arrival. Once a Visit exists, cancellation is refused until a Visit/Queue clinic policy exists |
 | Pending / Confirmed | No-show | Staff/Owner, same clinic day, the Patient did not arrive (no Visit). Manual; no lateness threshold (P4) |
-| Checked In | In Treatment | Only through the linked Visit's start-treatment command (same transaction) |
-| In Treatment | Completed | Only through the linked Visit's complete command (same transaction) |
+| Checked In | In Treatment | Only through the M5 Treatment start on the linked Visit (same transaction) |
+| In Treatment | Completed | Only through the M5 Treatment completion on the linked Visit (same transaction) |
 | Completed / Cancelled / No-show | — | Terminal |
 
 Patient cancellation/reschedule cutoffs remain unresolved policies P1/P2.
@@ -278,8 +279,8 @@ Patient cancellation/reschedule cutoffs remain unresolved policies P1/P2.
 | From | To | By / condition |
 | --- | --- | --- |
 | (new) | Checked In | M8: scheduled Check-In (Staff in scope / Owner; today; opens with the appointment's Checked In) or Walk-In (no appointment) |
-| Checked In | In Treatment | The responsible Dentist (must be set); cascades to a linked appointment |
-| In Treatment | Completed | The responsible Dentist; cascades to a linked appointment; sets `closed_at` |
+| Checked In | In Treatment | Only through the M5 Treatment start (responsible Dentist, must be set); cascades to a linked appointment |
+| In Treatment | Completed | Only through the M5 Treatment completion; cascades to a linked appointment; sets `closed_at` |
 | Completed | — | Terminal |
 
 A Visit has no No-show state (No-show means the Patient never arrived — an appointment decision before Check-In).
@@ -294,7 +295,7 @@ decision); earliest check-in and late-arrival rules remain unresolved policies P
 | Called | Treatment Ready, Temporarily Away | Staff / Owner |
 | Treatment Ready | Temporarily Away | Staff / Owner |
 | Temporarily Away | Waiting (return, original arrival order kept) | Staff / Owner |
-| Called / Treatment Ready | Served | Only by the Visit start-treatment command, in the same transaction |
+| Called / Treatment Ready | Served | Only by the M5 Treatment start command, in the same transaction |
 | Served | — | Terminal: the Patient left the waiting queue because treatment started (not Visit completion) |
 
 **Current (M9, server-authoritative):** the queue has no In Treatment, Completed, Cancelled or No-show state — the Visit
@@ -308,10 +309,14 @@ handling remain **TBD BEFORE IMPLEMENTATION** (Visit/Queue clinic policy).
 ### Treatment (M5)
 | From | To | By / condition |
 | --- | --- | --- |
-| (new) | In Treatment | Dentist, from an exact Called / Treatment Ready queue encounter, after the Visit's start-treatment command |
-| In Treatment | In Treatment (draft saved) | Dentist, with revision check |
-| In Treatment | Completed | Dentist; triggers invoice draft and only the requested prescription/follow-up |
-| Completed | — | Terminal; amendments are unresolved policy P6 |
+| (new) | In Treatment | The Visit's responsible Dentist, from a Called / Treatment Ready queue entry, in ONE transaction with queue → Served, Visit → In Treatment and a scheduled appointment → In Treatment |
+| In Treatment | In Treatment (documentation saved) | The Visit's responsible (authoring) Dentist, with revision check |
+| In Treatment | Completed | The authoring Dentist; procedure summary and ≥ 1 valid line; in ONE transaction with Visit → Completed and a scheduled appointment → Completed (queue stays Served) |
+| Completed | — | Terminal and read-only; amendments are unresolved policy P6 |
+
+**Current (M5, server-authoritative):** a Treatment is anchored to its Visit — exactly one Treatment per Visit. Only the
+Visit's responsible Dentist authors it. Procedure lines reference the canonical service and carry no price — M13/M11
+own pricing.
 
 ### Invoice / Settlement (M11)
 | From | To | By / condition |

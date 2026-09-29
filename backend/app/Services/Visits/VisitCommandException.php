@@ -5,7 +5,7 @@ namespace App\Services\Visits;
 use Illuminate\Http\JsonResponse;
 use RuntimeException;
 
-// A refused M8/M9 (Visit / Queue) command, rendered with the shared API error contract (CONTRACTS.md §2): 422 { message, errors,
+// A refused M8/M9/M5 (Visit / Queue / Treatment) command, rendered with the shared API error contract (CONTRACTS.md §2): 422 { message, errors,
 // code } for a rule failure, 409 { message, code } for a stale revision or a lost concurrent race.
 final class VisitCommandException extends RuntimeException
 {

@@ -93,7 +93,7 @@ test('the server queue is an in-memory projection; nothing about the queue is pe
   assert.doesNotMatch(store, /usePersist\('queue'/)
   assert.doesNotMatch(store, /INITIAL_QUEUE/)
   assert.equal('INITIAL_QUEUE' in data, false)
-  assert.match(store, /const \{appointments:_ignored,visits:_ignoredVisits,queue:_ignoredQueue,myQueue:_ignoredMyQueue,\.\.\.patch\}=rawPatch/)
+  assert.match(store, /const \{appointments:_ignored,visits:_ignoredVisits,queue:_ignoredQueue,myQueue:_ignoredMyQueue,treatments:_ignoredTreatments,\.\.\.patch\}=rawPatch/)
   assert.equal('recalcQueue' in logic, false, 'no browser position authority')
   const workflow = read('src/workflow.js')
   assert.doesNotMatch(workflow, /queueNumber|queueId:`DQ|state\.queue=|admitVisit|updateQueue|recalcQueue/, 'no React queue numbers, ids, writes or commands')
@@ -120,23 +120,23 @@ test('queue commands are server commands followed by a refresh; stale revisions 
   assert.equal(w.patches.length, 0, 'queue commands never write locally')
 })
 
-test('starting treatment Serves the server queue entry; the local treatment carries the server queue id and Visit id', async () => {
+test('the M5 start Serves the server queue entry; the server Treatment carries the server queue id and Visit id', async () => {
   const w = world(); const a = w.seed(row())
   await w.flow.checkIn(a.id, 'arrive')
   const entry = w.state.queue[0]
   w.role('dentist')
-  const tooEarly = await w.flow.treatment({ queueEntryId: entry.id }, 'In Treatment')
+  const tooEarly = await w.treat({ queueEntryId: entry.id }, 'In Treatment')
   assert.equal(tooEarly.ok, false, 'a Waiting entry cannot start treatment'); assert.equal(tooEarly.code, 'queue_not_ready', 'the server refuses it')
   assert.equal(w.state.visits[0].status, 'Checked In')
   await w.flow.queueCommand(entry, 'call', 'call-1')
-  const started = await w.flow.treatment({ queueEntryId: entry.id }, 'In Treatment')
+  const started = await w.treat({ queueEntryId: entry.id }, 'In Treatment')
   assert.equal(started.ok, true, started.message)
   assert.deepEqual([w.state.queue[0].status, w.state.queue[0].displayStatus, w.state.visits[0].status, w.state.appointments[0].status], ['Served', 'In Treatment', 'In Treatment', 'In Treatment'])
   assert.deepEqual([w.state.treatments[0].queueEntryId, w.state.treatments[0].visitId], [entry.id, entry.visitId])
-  const completed = await w.flow.treatment({ queueEntryId: entry.id, procedure: 'Consultation', procedures: [{ serviceId: 'svc1', quantity: 1 }] }, 'Completed')
+  const completed = await w.treat({ queueEntryId: entry.id, procedure: 'Consultation', procedures: [{ serviceId: 'svc1', quantity: 1 }] }, 'Completed')
   assert.equal(completed.ok, true, completed.message)
   assert.deepEqual([w.state.queue[0].status, w.state.queue[0].displayStatus], ['Served', 'Completed'], 'the queue stays Served; the Visit owns Completed')
-  assert.equal(w.log.filter(x => x[0] === 'start-treatment').length, 2, 'one refused attempt, one successful start — completion never repeats it')
+  assert.equal(w.log.filter(x => x[0] === 'treatment.start').length, 2, 'one refused attempt, one successful start — completion never repeats it')
 })
 
 // ================================================================================================================

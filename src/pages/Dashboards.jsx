@@ -55,7 +55,8 @@ function DentistDashboard({ setPage, state, session }) {
   const did=session?.dentistId||ROLE_INFO.dentist.dentistId
   const today=state.appointments.filter(a=>a.date===clinicDate()&&a.dentistId===did&&a.status!=='Cancelled').sort((a,b)=>a.start.localeCompare(b.start))
   const ownQueue=state.queue.filter(q=>q.dentistId===did&&isTodayQueue(q)&&isActiveQueue(q)&&q.status!=='Temporarily Away').sort((a,b)=>(a.position||99)-(b.position||99))
-  const activeTreatment=liveRecords(state.treatments).find(t=>t.dentistId===did&&t.date===clinicDate()&&t.status==='In Treatment')
+  // M5: the server Treatment is the only active-treatment truth (one In Treatment per Dentist at a time, not per day).
+  const activeTreatment=state.treatments.find(t=>t.server&&t.dentistId===did&&t.status==='In Treatment')
   const pendingRx=prescriptionTasks(state,session||sessionForRole('dentist',state)).length
   const follow=liveRecords(state.followups).filter(f=>f.dentistId===did&&f.status==='Open').length
   const next=ownQueue[0]

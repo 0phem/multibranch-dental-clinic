@@ -195,7 +195,14 @@ export function listVisits(params) { return request(`/api/visits${query(params)}
 export function getVisit(id) { return request(`/api/visits/${encodeURIComponent(id)}`) }
 export function checkInVisit(payload, key) { return command('/api/visits/check-in', payload, key) }
 export function walkInVisit(payload, key) { return command('/api/visits/walk-in', payload, key) }
-export function transitionVisit(id, name, payload, key) { return command(`/api/visits/${encodeURIComponent(id)}/${encodeURIComponent(name)}`, payload, key) }
+
+// M5 Treatment & Clinical Workflow. Raw calls only; src/treatments-api.js owns mapping. Starting treatment is the atomic
+// Treatment command on the Visit (there is no standalone Visit start/complete command).
+export function listTreatments(params) { return request(`/api/treatments${query(params)}`) }
+export function getTreatment(id) { return request(`/api/treatments/${encodeURIComponent(id)}`) }
+export function myTreatments() { return request('/api/treatments/mine') }
+export function startTreatment(visitId, payload, key) { return command(`/api/visits/${encodeURIComponent(visitId)}/treatment`, payload, key) }
+export function treatmentCommand(id, name, payload, key) { return command(`/api/treatments/${encodeURIComponent(id)}/${encodeURIComponent(name)}`, payload, key) }
 
 // M9 Patient Queue Management (entries are created only by M8 arrival). Raw calls only; src/queue-api.js owns mapping.
 export function listQueue(params) { return request(`/api/queue${query(params)}`) }

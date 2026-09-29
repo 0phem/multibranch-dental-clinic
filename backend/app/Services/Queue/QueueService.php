@@ -18,7 +18,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 
 // M9 Patient Queue Management. The queue is anchored to the Visit and owns only queue state, number, order and position
-// (M10 owns wait estimates and capacity). QueueService never calls VisitService: M8 arrival and the Visit start-treatment
+// (M10 owns wait estimates and capacity). QueueService never calls VisitService: M8 arrival and the M5 Treatment start
 // command call INTO it (enqueue / serve) inside their own transactions, so there is no circular dependency. The global
 // lock order is appointment → Visit → queue entry → dentist queue counter (via its upsert), matching M6/M8.
 final class QueueService
@@ -76,7 +76,7 @@ final class QueueService
     }
 
     /**
-     * Called by the Visit start-treatment command inside its transaction (after it locked the appointment and Visit):
+     * Called by the M5 Treatment start command inside its transaction (after it locked the appointment and Visit):
      * the entry must be Called or Treatment Ready, and becomes Served — the Patient leaves the waiting queue because
      * treatment started. It is never Served any other way.
      */

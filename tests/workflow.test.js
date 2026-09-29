@@ -73,7 +73,7 @@ test('walk-in preserves service and retries do not duplicate arrival',()=>{
   assert.equal(f.actions.admitWalkIn({...form,serviceId:'svc2'},'walk-2').ok,false,'one active Visit per Patient')
   assert.equal(f.state.queue.length,1);assert.equal(f.state.visits.length,1);assert.equal(f.state.visits[0].serviceId,'svc2')
   start(f,r.record,{procedure:'Oral prophylaxis'})
-  assert.equal(f.actions.completeTreatment({queueEntryId:r.record.id,procedure:'Oral prophylaxis'}).ok,true)
+  assert.equal(f.actions.completeTreatment({queueEntryId:r.record.id,procedure:'Oral prophylaxis',procedures:[{serviceId:'svc2',quantity:1}]}).ok,true)
   assert.equal(f.state.invoices[0].branchId,'b1');assert.equal(f.state.invoices[0].total,1200)
 })
 
@@ -125,7 +125,7 @@ test('pre-arrival No-show creates no Visit and reopens a linked follow-up',()=>{
 test('treatment completes only its exact encounter; repeating commands creates no downstream duplicates',()=>{
   const f=fixture();const a=book(f);const b=book(f,{start:'13:00',patientId:'p3'})
   const qa=arrive(f,a),qb=arrive(f,b)
-  const t=start(f,qa,{procedure:'Consultation',followupRequired:true,prescriptionRequired:true})
+  const t=start(f,qa,{procedure:'Consultation',procedures:[{serviceId:'svc1',quantity:1}],followupRequired:true,prescriptionRequired:true})
   assert.equal(f.actions.saveTreatment({queueEntryId:qa.id,id:t.id,procedure:'Consultation',followupRequired:true,prescriptionRequired:true}).unchanged,true)
   assert.equal(f.actions.saveTreatment({queueEntryId:qb.id,id:t.id}).ok,false)
   assert.equal(f.actions.completeTreatment({queueEntryId:qa.id,id:t.id,procedure:'Consultation',followupRequired:true,prescriptionRequired:true}).ok,true)
@@ -143,7 +143,7 @@ test('treatment completes only its exact encounter; repeating commands creates n
 
 test('dentist-selected performed service drives draft charges, not original booking',()=>{
   const f=fixture();const q=arrive(f,book(f));start(f,q)
-  assert.equal(f.actions.completeTreatment({queueEntryId:q.id,serviceId:'svc2',procedure:'Oral prophylaxis'}).ok,true)
+  assert.equal(f.actions.completeTreatment({queueEntryId:q.id,procedure:'Oral prophylaxis',procedures:[{serviceId:'svc2',quantity:1}]}).ok,true)
   assert.equal(f.state.treatments[0].requestedServiceId,'svc1');assert.equal(f.state.invoices[0].items[0].serviceId,'svc2');assert.equal(f.state.invoices[0].total,1200)
 })
 

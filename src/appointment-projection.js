@@ -1,11 +1,12 @@
 import { isLegacyAppointmentRef, isServerId, mapAppointment } from './appointments-api.js'
 import { mapVisit } from './visits-api.js'
 import { mapQueueEntry } from './queue-api.js'
+import { mapTreatment, mapPatientTreatment } from './treatments-api.js'
 
-// TEMPORARY read model for the M6/M8/M9 cutovers. Server appointments, Visits and queue entries (Laravel/PostgreSQL) are
-// the only appointment, arrival/encounter and queue truth; the still-browser-local modules (treatment, billing, HMO,
-// follow-ups, messaging, dashboards) keep reading `state.appointments`/`state.visits`/`state.queue`/`state.patients`
-// through this projection.
+// TEMPORARY read model for the M6/M8/M9/M5 cutovers. Server appointments, Visits, queue entries and Treatments
+// (Laravel/PostgreSQL) are the only appointment, arrival/encounter, queue and clinical-treatment truth; the still-browser-
+// local modules (billing, HMO, follow-ups, prescriptions, messaging, dashboards) keep reading `state.appointments`/
+// `state.visits`/`state.queue`/`state.treatments`/`state.patients` through this projection.
 // Nothing here is persisted or written back. Remove it module by module as each consumer moves to the backend.
 
 /**
@@ -29,12 +30,20 @@ export function patientKeyResolver({ session, users = [], patients = [] }) {
   }
 }
 
-/** Server rows -> read-model appointments and Visits, plus read-model Patients for server Patients with no local projection. */
-export function buildServerProjection({ rows = [], visitRows = [], queueRows = [], directory = [], session = null, users = [], patients = [] }) {
+/**
+ * Server rows -> read-model appointments, Visits, queue entries and Treatments, plus read-model Patients for server Patients
+ * with no local projection. `treatmentRows` are Staff/Dentist/Owner Treatments; `myTreatmentRows` are the signed-in
+ * Patient's own completed safe subset (GET /api/treatments/mine).
+ */
+export function buildServerProjection({ rows = [], visitRows = [], queueRows = [], treatmentRows = [], myTreatmentRows = [], directory = [], session = null, users = [], patients = [] }) {
   const keyFor = patientKeyResolver({ session, users, patients })
   const appointments = rows.map(row => mapAppointment(row, keyFor))
   const visits = visitRows.map(row => mapVisit(row, keyFor))
   const queue = queueRows.map(row => mapQueueEntry(row, keyFor))
+  const treatments = [
+    ...treatmentRows.map(row => mapTreatment(row, keyFor)),
+    ...(session?.role === 'patient' ? myTreatmentRows.map(row => mapPatientTreatment(row, session.patientId)) : []),
+  ]
   const readModel = new Map()
   const addPatient = (publicId, fields) => {
     if (!publicId || keyFor(publicId) !== publicId) return
@@ -47,9 +56,9 @@ export function buildServerProjection({ rows = [], visitRows = [], queueRows = [
       phone: fields.phone ?? previous.phone ?? '', dob: fields.dob ?? previous.dob ?? '',
     })
   }
-  for (const row of [...rows, ...visitRows, ...queueRows]) addPatient(row.patient?.id, { patientCode: row.patient?.code, name: row.patient?.name })
+  for (const row of [...rows, ...visitRows, ...queueRows, ...treatmentRows]) addPatient(row.patient?.id, { patientCode: row.patient?.code, name: row.patient?.name })
   for (const patient of directory) addPatient(patient.id, patient)
-  return { appointments, visits, queue, readModelPatients: [...readModel.values()], keyFor }
+  return { appointments, visits, queue, treatments, readModelPatients: [...readModel.values()], keyFor }
 }
 
 /** The server Patient public id for a UI Patient key (the reverse of patientKeyResolver), or null for legacy-only Patients. */
@@ -73,13 +82,17 @@ export const flagLegacy = (records = [], key = 'appointmentId', legacyTreatmentI
     ? { ...record, legacyAppointment: true } : record))
 
 /**
- * D5/M8/M9 classification that follows the record links. A treatment is live only when it references its server Visit
- * (a canonical `visitId`, persisted by the exact-link re-anchor in store.jsx); otherwise — a pre-cutover appointment id,
- * or a browser-only encounter with no Visit — it is legacy. Invoices, prescriptions, follow-ups, HMO cases and
+ * D5/M8/M9/M5 classification that follows the record links. Since M5 every browser-local treatment is PRE-SERVER history
+ * (`preServer`): read-only, never live clinical truth, never able to satisfy an active-treatment workflow or start a new
+ * downstream record. One that references its server Visit through an exact link (a canonical `visitId`, persisted by the
+ * M9 re-anchor in store.jsx) stays as "pre-server treatment history" that already-linked local invoices, prescriptions
+ * and follow-ups may keep displaying against; anything else — a pre-cutover appointment id, or a browser-only encounter
+ * with no Visit — is additionally legacy (a historical demo record). Invoices, prescriptions, follow-ups, HMO cases and
  * conversations are legacy when they reference a legacy appointment or a legacy treatment.
  */
 export function classifyLegacy({ treatments = [], invoices = [], prescriptions = [], followups = [], hmo = [], conversations = [], inquiries = [] }) {
-  const flaggedTreatments = treatments.map(t => (isLegacyAppointmentRef(t?.appointmentId) || !isServerId(t?.visitId) ? { ...t, legacyAppointment: true } : t))
+  const flaggedTreatments = treatments.map(t => ({ ...t, server: false, preServer: true,
+    ...(isLegacyAppointmentRef(t?.appointmentId) || !isServerId(t?.visitId) ? { legacyAppointment: true } : {}) }))
   const legacyTreatmentIds = new Set(flaggedTreatments.filter(t => t.legacyAppointment).map(t => t.id))
   const flag = rows => flagLegacy(rows, 'appointmentId', legacyTreatmentIds)
   return {

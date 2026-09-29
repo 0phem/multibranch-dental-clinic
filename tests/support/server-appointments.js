@@ -1,16 +1,18 @@
-import { createWorkflowActions } from '../../src/workflow.js'
-import { clinicNow } from '../../src/clock.js'
+import { clinicNow, validDate } from '../../src/clock.js'
 import { encounterContext, inScope } from '../../src/contracts.js'
+import { encounterIssue } from '../../src/safeguards.js'
 
-// Test support for the M6/M8/M9 cutovers. Appointments, Visits and the queue are server-authoritative
+// Test support for the M6/M8/M9/M5 cutovers. Appointments, Visits, the queue and Treatments are server-authoritative
 // (Laravel/PostgreSQL); the frontend only holds a read projection. These helpers stand in for "the server accepted a
 // command and the projection was refreshed", and mirror store.jsx's server-first flows synchronously. The server rules
-// mirrored here are the ones AppointmentService / VisitService / QueueService enforce (and backend tests cover).
+// mirrored here are the ones AppointmentService / VisitService / QueueService / TreatmentService enforce (and backend
+// tests cover).
 
 let sequence = 0
 // Deterministic ULID-shaped public ids (Crockford base32 alphabet; no i/l/o/u).
 export const serverId = n => `01jtest${String(n).padStart(19, '0')}`
-const VISIT_TRANSITIONS = { 'In Treatment': 'Checked In', Completed: 'In Treatment' }
+const hasDocumentation = input => ['complaint', 'plan', 'procedure', 'notes', 'followupDate', 'followupReason', 'followupInterval'].some(k => input[k] !== undefined)
+  || input.procedures !== undefined || input.prescriptionRequired !== undefined || input.followupRequired !== undefined
 
 export function serverAppointment(fields = {}) {
   const n = ++sequence
@@ -22,6 +24,18 @@ export function serverAppointment(fields = {}) {
     duration: 30, ...fields,
     appointmentNo: fields.code || fields.appointmentNo || `APT-2026-${String(n).padStart(6, '0')}`,
     date, start, scheduledStart: `${date}T${start}`,
+  }
+}
+
+/** A mapped server Treatment (the read-model shape treatments-api.js mapTreatment produces for its author). */
+export function serverTreatment(fields = {}) {
+  const n = ++sequence
+  return {
+    id: fields.id || serverId(700000 + n), server: true, summaryOnly: false, author: true, status: 'In Treatment', revision: 1,
+    startedAt: clinicNow().timestamp, completedAt: null, procedures: [], serviceId: null,
+    complaint: '', plan: '', procedure: '', notes: '', assistant: '', assistantStaffId: null,
+    prescriptionRequired: false, followupRequired: false, followupDate: '', followupReason: '', followupInterval: '', history: null,
+    ...fields,
   }
 }
 
@@ -81,15 +95,13 @@ export function serverFlow({ actions, getState, getSession, patchState }) {
   const appointmentById = id => getState().appointments.find(a => a.id === id)
   const visits = () => getState().visits || []
   const queue = () => getState().queue || []
-  const dryRun = (patch, name, args) => {
-    const simulated = { ...getState(), ...patch }
-    return createWorkflowActions({ getState: () => simulated, getSession, commit: () => {} })[name](...args)
-  }
   const setAppointment = (id, changes) => patchState({ appointments: getState().appointments.map(a => (a.id === id ? { ...a, ...changes, revision: (a.revision || 1) + 1 } : a)) })
   const setServer = ({ visits: nextVisits = visits(), queue: nextQueue = queue() }) => patchState({ visits: nextVisits, queue: projectQueue(nextQueue, nextVisits) })
   const hasActiveVisit = patientId => visits().some(v => v.patientId === patientId && ['Checked In', 'In Treatment'].includes(v.status))
   const walkInKeys = new Map()
   const entryFor = visitId => queue().find(q => q.visitId === visitId)
+  const treatments = () => (getState().treatments || []).filter(t => t.server)
+  const setTreatments = serverTreatments => patchState({ treatments: [...serverTreatments, ...(getState().treatments || []).filter(t => !t.server)] })
   const canOperate = record => {
     const session = getSession()
     return ['staff', 'owner'].includes(session?.role) && inScope(record, session, getState())
@@ -179,28 +191,115 @@ export function serverFlow({ actions, getState, getSession, patchState }) {
       setAppointment(appointmentId, { status: 'No-show' })
       return actions().applyAppointmentNoShow(appointmentId)
     },
-    /** Visit start-treatment (Serves the queue entry) / complete, cascading to the appointment, then the local M5 step. */
+    /**
+     * M5 mirror (TreatmentService): the old test-level `saveTreatment(input)` / `completeTreatment(input)` names drive the
+     * server Treatment commands. With no Treatment for the encounter's Visit, 'In Treatment' is the atomic START (queue
+     * Served, Visit + appointment In Treatment, Treatment created) followed by a documentation save when the input carries
+     * any; with a Treatment it is a DOCUMENT save; 'Completed' saves changed documentation, then COMPLETES (Treatment,
+     * Visit and appointment Completed; the queue stays Served) and runs the transitional downstream reconciliation.
+     */
     treatment(input, status = 'In Treatment') {
-      const name = status === 'Completed' ? 'completeTreatment' : 'saveTreatment'
-      const entry = queue().find(q => q.id === input?.queueEntryId)
+      const session = getSession()
+      if (!input || typeof input !== 'object' || Array.isArray(input)) return { ok: false, message: 'Open a valid encounter from My Queue.' }
+      if (session?.role !== 'dentist') return { ok: false, message: 'Only the responsible Dentist may start or document this treatment.' }
+      const entry = queue().find(q => q.id === input.queueEntryId)
       const visit = entry?.visitId ? visits().find(v => v.id === entry.visitId) : null
-      if (!visit) return actions()[name](input, status)
-      if (visit.status !== status) {
-        if (VISIT_TRANSITIONS[status] !== visit.status) return { ok: false, message: `A visit that is ${visit.status} cannot move to ${status}.` }
-        if (!visit.dentistId) return { ok: false, message: 'Assign a responsible Dentist to this visit before clinical work starts.' }
-        const linked = visit.appointmentId ? appointmentById(visit.appointmentId) : null
-        if (linked && linked.status !== visit.status) return { ok: false, message: `The linked appointment is ${linked.status}; this visit needs clinic review.` }
-        if (status === 'In Treatment' && !['Called', 'Treatment Ready'].includes(entry.status)) return { ok: false, message: 'Call this patient before starting treatment.' }
-        const nextVisits = visits().map(v => (v.id === visit.id ? { ...v, status, revision: v.revision + 1, closedAt: status === 'Completed' ? clinicNow().timestamp : null } : v))
-        const nextQueue = status === 'In Treatment' ? queue().map(q => (q.id === entry.id ? { ...q, status: 'Served', closedAt: clinicNow().timestamp, revision: q.revision + 1 } : q)) : queue()
-        const check = dryRun({ visits: nextVisits, queue: projectQueue(nextQueue, nextVisits), appointments: getState().appointments.map(a => (a.id === visit.appointmentId ? { ...a, status } : a)) }, name, [input, status])
-        if (!check.ok || check.unchanged) return check
-        setServer({ visits: nextVisits, queue: nextQueue })
-        if (visit.appointmentId) setAppointment(visit.appointmentId, { status })
+      if (!entry || !visit) return { ok: false, message: 'Open your exact encounter from today’s queue.' }
+      // appointment-flow.js runs encounterIssue before every M5 command (client-side fail-closed projection check).
+      const issue = encounterIssue(getState(), entry)
+      if (issue) return { ok: false, message: issue }
+      let t = treatments().find(x => x.visitId === visit.id)
+      if (!t) {
+        if (status !== 'In Treatment') return { ok: false, message: 'Start treatment before completing this encounter.' }
+        const started = this.startTreatment(entry, visit)
+        if (!started.ok) return started
+        t = started.record
+        if (!hasDocumentation(input)) return { ok: true, record: t, context: { ...encounterContext(entry), treatmentId: t.id } }
       }
-      return actions()[name](input, status)
+      if (t.dentistId !== session.dentistId) return { ok: false, message: 'Only the Dentist responsible for this treatment may change it.' }
+      if (input.id != null && input.id !== t.id) return { ok: false, message: 'Treatment ID does not match this encounter.' }
+      if (t.status === 'Completed') return status === 'Completed' ? { ok: true, unchanged: true, record: t } : { ok: false, message: 'This treatment is completed and read-only. Amendments are not available.' }
+      let saved = null
+      if (hasDocumentation(input)) {
+        saved = this.documentTreatment(t, input)
+        if (!saved.ok) return saved
+        t = saved.record
+      }
+      if (status !== 'Completed') return { ok: true, unchanged: saved?.unchanged, record: t, context: { ...encounterContext(entry), treatmentId: t.id } }
+      return this.completeTreatment(t)
     },
     complete(input) { return this.treatment(input, 'Completed') },
+    startTreatment(entry, visit) {
+      const session = getSession()
+      if (visit.status !== 'Checked In') return { ok: false, message: `A visit that is ${visit.status} cannot start treatment.` }
+      if (!visit.dentistId) return { ok: false, message: 'Assign a responsible Dentist to this visit before clinical work starts.' }
+      if (visit.dentistId !== session.dentistId) return { ok: false, message: 'Only the responsible Dentist may start this treatment.' }
+      const linked = visit.appointmentId ? appointmentById(visit.appointmentId) : null
+      if (linked && linked.status !== 'Checked In') return { ok: false, message: `The linked appointment is ${linked.status}; this visit needs clinic review.` }
+      if (treatments().some(x => x.dentistId === visit.dentistId && x.status === 'In Treatment')) return { ok: false, message: 'Complete your current treatment before starting another.' }
+      if (!['Called', 'Treatment Ready'].includes(entry.status)) return { ok: false, message: 'Call this patient before starting treatment.' }
+      const now = clinicNow()
+      const dentist = (getState().dentists || []).find(d => d.id === visit.dentistId)
+      const record = serverTreatment({
+        visitId: visit.id, queueEntryId: entry.id, patientId: visit.patientId, branchId: visit.branchId, dentistId: visit.dentistId,
+        appointmentId: visit.appointmentId || null, requestedServiceId: visit.serviceId || null, date: visit.clinicDate,
+        assistant: dentist?.assistant || '', assistantStaffId: dentist?.assistantStaffId || null, startedAt: now.timestamp,
+      })
+      const nextVisits = visits().map(v => (v.id === visit.id ? { ...v, status: 'In Treatment', revision: v.revision + 1 } : v))
+      setServer({ visits: nextVisits, queue: queue().map(q => (q.id === entry.id ? { ...q, status: 'Served', closedAt: now.timestamp, revision: q.revision + 1 } : q)) })
+      if (visit.appointmentId) setAppointment(visit.appointmentId, { status: 'In Treatment' })
+      setTreatments([...treatments(), { ...record, visitStatus: 'In Treatment' }])
+      return { ok: true, record: treatments().find(x => x.id === record.id) }
+    },
+    documentTreatment(t, input) {
+      if (input.revision != null && input.revision !== t.revision) return { ok: false, message: 'This treatment changed after it was opened. Reload it before trying again.' }
+      const state = getState()
+      const lines = []
+      const source = Array.isArray(input.procedures) ? input.procedures : input.procedures === undefined ? (t.procedures || []) : null
+      if (!source) return { ok: false, message: 'Review the performed procedures.' }
+      for (const [index, row] of source.entries()) {
+        const service = (state.services || []).find(x => x.id === row?.serviceId)
+        // The server accepts only an integer quantity (never a boolean or a collection coerced to a number).
+        const raw = row?.quantity ?? 1
+        const quantity = typeof raw === 'number' || (typeof raw === 'string' && raw.trim()) ? Number(raw) : NaN
+        if (!service || service.status !== 'Active' || !(state.branchServices || []).some(b => b.branchId === t.branchId && b.serviceId === service.id && b.active !== false)
+          || !(state.dentistServiceAssignments || []).some(a => a.dentistId === t.dentistId && a.serviceId === service.id && a.isAuthorized !== false)
+          || !Number.isSafeInteger(quantity) || quantity < 1) return { ok: false, message: 'Review the performed procedures.' }
+        const kept = row.id && (t.procedures || []).find(p => p.id === row.id && p.serviceId === service.id)
+        lines.push({ id: kept ? kept.id : `${t.id}-line-${++sequence}`, treatmentId: t.id, lineNo: index + 1, serviceId: service.id, serviceCode: service.code || '', serviceName: service.name, quantity, notes: String(row.notes ?? '').trim() })
+      }
+      for (const key of ['prescriptionRequired', 'followupRequired']) if (input[key] !== undefined && typeof input[key] !== 'boolean') return { ok: false, message: 'Clinical requirements must be explicit Dentist choices.' }
+      const followup = input.followupRequired ?? t.followupRequired
+      if (input.followupDate && !validDate(input.followupDate)) return { ok: false, message: 'Choose a valid recommended follow-up date.' }
+      if (followup && input.followupDate && input.followupDate < t.date) return { ok: false, message: 'Choose a recommended follow-up date on or after the visit date.' }
+      const text = key => (input[key] === undefined ? t[key] : String(input[key] ?? '').trim())
+      const next = {
+        ...t, complaint: text('complaint'), plan: text('plan'), procedure: text('procedure'), notes: text('notes'),
+        prescriptionRequired: input.prescriptionRequired ?? t.prescriptionRequired, followupRequired: !!followup,
+        followupDate: followup ? text('followupDate') : '', followupReason: followup ? text('followupReason') : '', followupInterval: followup ? text('followupInterval') : '',
+        procedures: lines, serviceId: lines[0]?.serviceId ?? null,
+      }
+      const comparable = x => JSON.stringify([x.complaint, x.plan, x.procedure, x.notes, x.prescriptionRequired, x.followupRequired, x.followupDate, x.followupReason, x.followupInterval, x.procedures])
+      if (comparable(next) === comparable(t)) return { ok: true, unchanged: true, record: t }
+      setTreatments(treatments().map(x => (x.id === t.id ? { ...next, revision: t.revision + 1 } : x)))
+      return { ok: true, record: treatments().find(x => x.id === t.id) }
+    },
+    completeTreatment(t) {
+      if (!String(t.procedure || '').trim()) return { ok: false, message: 'Document the performed procedure before completing treatment.' }
+      if (!(t.procedures || []).length) return { ok: false, message: 'Confirm at least one performed procedure before completing treatment.' }
+      const visit = visits().find(v => v.id === t.visitId)
+      const linked = visit?.appointmentId ? appointmentById(visit.appointmentId) : null
+      if (visit?.status !== 'In Treatment' || (linked && linked.status !== 'In Treatment')) return { ok: false, message: 'The visit or its appointment is not In Treatment; this encounter needs clinic review.' }
+      const now = clinicNow()
+      const nextVisits = visits().map(v => (v.id === visit.id ? { ...v, status: 'Completed', revision: v.revision + 1, closedAt: now.timestamp } : v))
+      setServer({ visits: nextVisits })
+      if (linked) setAppointment(linked.id, { status: 'Completed' })
+      setTreatments(treatments().map(x => (x.id === t.id ? { ...x, status: 'Completed', visitStatus: 'Completed', completedAt: now.timestamp, revision: x.revision + 1 } : x)))
+      const record = treatments().find(x => x.id === t.id)
+      const handoffs = actions().reconcileTreatmentHandoffs()
+      const entry = queue().find(q => q.id === t.queueEntryId)
+      return { ok: true, record, warnings: handoffs.ok ? handoffs.warnings || [] : [handoffs.message], context: entry ? { ...encounterContext(entry), treatmentId: t.id } : null }
+    },
     cancel(id) {
       const appointment = appointmentById(id)
       if (!appointment || !['Pending', 'Confirmed'].includes(appointment.status) || visits().some(v => v.appointmentId === id)) return { ok: false, message: 'This appointment can no longer be cancelled.' }
@@ -225,6 +324,7 @@ export function serverFirstActions(rawActions, flow) {
     markNoShow: id => flow.noShow(id),
     updateQueue: (id, status, extra = {}) => (extra.priority ? flow.priority(id, extra.priority, extra.reason)
       : commandFor[status] ? flow.queue(id, commandFor[status]) : { ok: false, message: `There is no queue command for ${status}.` }),
+    // Test-level names for the M5 server commands (see serverFlow.treatment); there is no local treatment command.
     saveTreatment: (input, status = 'In Treatment') => flow.treatment(input, status),
     completeTreatment: (input, status = 'Completed') => flow.treatment(input, status),
   }
@@ -303,3 +403,23 @@ function personName(state, personId) {
 
 /** The state a signed-in Patient's store holds: their own server queue state as `myQueue`. */
 export const asPatient = (state, patientId) => ({ ...state, myQueue: patientQueueState(state, patientId) })
+
+/** The Patient's view of a completed server Treatment: exactly what GET /api/treatments/mine returns (mapPatientTreatment). */
+export const asPatientTreatment = t => (t.server && t.status === 'Completed' ? {
+  id: t.id, server: true, patientSubset: true, status: 'Completed', date: t.date, patientId: t.patientId, dentistName: t.dentistName || '', procedure: t.procedure,
+  procedures: (t.procedures || []).map((p, i) => ({ id: `${t.id}-${i + 1}`, treatmentId: t.id, serviceName: p.serviceName })),
+} : t)
+
+/** A GET /api/treatments row (the shape ClinicProvider's initialServerTreatments accepts), from a mapped server Treatment. */
+export function serverTreatmentRow(t) {
+  return {
+    id: t.id, status: t.status, revision: t.revision, clinic_date: t.date, started_at: t.startedAt, completed_at: t.completedAt || null, author: t.author === true,
+    visit: { id: t.visitId, status: t.visitStatus || t.status, revision: 1, source: t.appointmentId ? 'appointment' : 'walk_in', queue: t.queueEntryId ? { id: t.queueEntryId, status: 'Served' } : null },
+    patient: { id: t.patientId, code: '', name: '' }, branch: { id: t.branchId, name: '' }, dentist: { id: t.dentistId, name: '' },
+    appointment: t.appointmentId ? { id: t.appointmentId, code: '', status: t.status } : null, requested_service: t.requestedServiceId ? { id: t.requestedServiceId, name: '' } : null,
+    prescription_required: t.prescriptionRequired, followup_required: t.followupRequired,
+    procedures: (t.procedures || []).map(p => ({ id: p.id, line_no: p.lineNo, service: { id: p.serviceId, code: p.serviceCode || '', name: p.serviceName || '' }, quantity: p.quantity, notes: p.notes || null })),
+    chief_complaint: t.complaint || null, treatment_plan: t.plan || null, procedure_summary: t.procedure || null, clinical_notes: t.notes || null, assistant: null,
+    followup_recommended_date: t.followupDate || null, followup_reason: t.followupReason || null, followup_interval: t.followupInterval || null,
+  }
+}

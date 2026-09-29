@@ -162,7 +162,7 @@ test('old browser appointment data is not uploaded, read or cleared', () => {
   assert.equal('INITIAL_APPOINTMENTS' in data, false)
   assert.doesNotMatch(store, /localStorage\.removeItem/)
   // The only appointment/Visit writes are server commands: the store strips any local `appointments`/`visits` patch.
-  assert.match(store, /const \{appointments:_ignored,visits:_ignoredVisits,queue:_ignoredQueue,myQueue:_ignoredMyQueue,\.\.\.patch\}=rawPatch/)
+  assert.match(store, /const \{appointments:_ignored,visits:_ignoredVisits,queue:_ignoredQueue,myQueue:_ignoredMyQueue,treatments:_ignoredTreatments,\.\.\.patch\}=rawPatch/)
   for (const path of ['src/workflow.js', 'src/hmo.js', 'src/communication.js', 'src/phase2.js', 'src/booking-drafts.js'])
     assert.doesNotMatch(read(path), /state\.appointments=/, `${path} never writes appointments`)
 })
@@ -214,16 +214,16 @@ test('a server refusal (already checked in from another browser) refreshes and c
   assert.equal(w.state.visits.length, 1, 'the refreshed projection now shows the existing Visit')
 })
 
-test('treatment start/completion run the Visit command first and cascade to the appointment; context resolves by public id', async () => {
+test('treatment start/completion are the M5 server commands and cascade to the Visit and appointment; context resolves by public id', async () => {
   const w = world(); const a = w.seed(row())
   await w.flow.checkIn(a.id, 'k')
   const q = w.state.queue[0]
   w.role('dentist'); assert.equal((await w.flow.queueCommand(q, 'call', 'call-1')).ok, true)
-  const started = await w.flow.treatment({ queueEntryId: q.id }, 'In Treatment')
+  const started = await w.treat({ queueEntryId: q.id }, 'In Treatment')
   assert.equal(started.ok, true, started.message)
-  const completed = await w.flow.treatment({ queueEntryId: q.id, procedure: 'Consultation', procedures: [{ serviceId: 'svc1', quantity: 1 }] }, 'Completed')
+  const completed = await w.treat({ queueEntryId: q.id, procedure: 'Consultation', procedures: [{ serviceId: 'svc1', quantity: 1 }] }, 'Completed')
   assert.equal(completed.ok, true, completed.message)
-  assert.deepEqual(w.log.filter(x => x[0] !== 'refresh').map(x => x[0]), ['check-in', 'queue.call', 'start-treatment', 'complete'])
+  assert.deepEqual(w.log.filter(x => x[0] !== 'refresh').map(x => x[0]), ['check-in', 'queue.call', 'treatment.start', 'treatment.document', 'treatment.complete'])
   assert.equal(w.state.visits[0].status, 'Completed')
   assert.equal(w.state.appointments[0].status, 'Completed')
   assert.equal(w.state.treatments[0].appointmentId, a.id)
@@ -261,8 +261,8 @@ test('follow-up booking creates a server appointment and stores only its public 
   await w.flow.checkIn(a.id, 'k')
   const q = w.state.queue[0]
   w.role('dentist'); await w.flow.queueCommand(q, 'call', 'call-1')
-  await w.flow.treatment({ queueEntryId: q.id }, 'In Treatment')
-  await w.flow.treatment({ queueEntryId: q.id, procedure: 'Consultation', procedures: [{ serviceId: 'svc1', quantity: 1 }], followupRequired: true }, 'Completed')
+  await w.treat({ queueEntryId: q.id }, 'In Treatment')
+  await w.treat({ queueEntryId: q.id, procedure: 'Consultation', procedures: [{ serviceId: 'svc1', quantity: 1 }], followupRequired: true }, 'Completed')
   const followup = w.state.followups[0]
   w.role('staff')
   const before = w.state.appointments.length

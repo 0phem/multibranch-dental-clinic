@@ -150,6 +150,8 @@ export const INITIAL_PATIENTS = [
 
 // M9: the queue is server-authoritative (Laravel/PostgreSQL); there is no browser queue seed any more.
 
+// Historical demo records only (pre-cutover appointment ids): read-only pre-server treatment history, never live
+// clinical truth. Server Treatments (M5) are the only live treatment records.
 export const INITIAL_TREATMENTS = [
   { id:'t1', patientId:'p4', appointmentId:'old-a4', serviceId:'svc4', dentistId:'d4', assistant:'Ken Bautista', date:'2026-09-13', complaint:'Pain from impacted wisdom tooth', plan:'Extraction and post-op review', procedure:'Surgical extraction #48', status:'Completed', notes:'Procedure tolerated well. Hemostasis achieved.', startedAt:'14:05', completedAt:'15:10', followupRequired:true, prescriptionRequired:true },
   { id:'t2', patientId:'p1', appointmentId:'old-a1', serviceId:'svc2', dentistId:'d1', assistant:'Nina Torres', date:'2026-09-12', complaint:'Routine cleaning', plan:'Oral prophylaxis', procedure:'Oral prophylaxis', status:'Completed', notes:'Mild gingivitis. Oral hygiene instructions given.', startedAt:'10:03', completedAt:'10:42', followupRequired:true, prescriptionRequired:false },

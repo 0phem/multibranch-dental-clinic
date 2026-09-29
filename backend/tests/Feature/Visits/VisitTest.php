@@ -53,6 +53,16 @@ class VisitTest extends TestCase
         return $this->postJson("/api/visits/{$v->public_id}/{$command}", ['expected_revision' => $revision ?? $v->fresh()->revision], $headers);
     }
 
+    /** M5: the Visit's clinical progression runs only through the Treatment commands (start, document, complete). */
+    private function treatAndComplete(Visit $v): void
+    {
+        $this->postJson("/api/visits/{$v->public_id}/treatment", ['expected_revision' => $v->fresh()->revision], ['Idempotency-Key' => $this->key()])->assertCreated();
+        $t = $v->fresh()->treatment;
+        $this->postJson("/api/treatments/{$t->public_id}/document", ['expected_revision' => 1, 'procedure_summary' => 'Consultation', 'prescription_required' => false,
+            'followup_required' => false, 'procedures' => [['service_ref' => 'svc1', 'quantity' => 1]]], ['Idempotency-Key' => $this->key()])->assertOk();
+        $this->postJson("/api/treatments/{$t->public_id}/complete", ['expected_revision' => 2], ['Idempotency-Key' => $this->key()])->assertOk();
+    }
+
     /** M9: treatment starts only from a Called queue entry — the current actor calls the Visit's entry. */
     private function callQueue(Visit $v): void
     {
@@ -266,8 +276,8 @@ class VisitTest extends TestCase
         $visit = Visit::where('public_id', $this->walkIn()->json('data.id'))->sole();
         $this->actingAsUser('dentist1');
         $this->callQueue($visit);
-        $this->step($visit, 'start-treatment')->assertOk();
-        $this->step($visit, 'complete')->assertOk()->assertJsonPath('data.status', 'Completed');
+        $this->treatAndComplete($visit);
+        $this->assertSame('Completed', $visit->fresh()->status);
         $this->actingAsUser('staffB1');
         $this->walkIn(['dentist_ref' => 'd2'])->assertCreated()->assertJsonPath('data.clinic_date', '2026-09-28');
         $this->assertSame(2, Visit::where('clinic_date', '2026-09-28')->count());
@@ -296,71 +306,19 @@ class VisitTest extends TestCase
     }
 
     // ---- CLINICAL LIFECYCLE -----------------------------------------------------------------------------------------
+    // The Visit's clinical progression is covered by tests/Feature/Treatments (M5 owns start / complete atomically).
 
-    public function test_start_and_complete_cascade_to_the_linked_appointment_with_history(): void
-    {
-        $a = $this->today();
-        $this->actingAsUser('staffB1');
-        $visit = Visit::where('public_id', $this->checkIn($a)->json('data.id'))->sole();
-
-        $this->actingAsUser('dentist1');
-        $this->callQueue($visit);
-        $this->step($visit, 'start-treatment')->assertOk()->assertJsonPath('data.status', 'In Treatment')->assertJsonPath('data.appointment.status', 'In Treatment');
-        $this->step($visit, 'complete')->assertOk()->assertJsonPath('data.status', 'Completed')->assertJsonPath('data.revision', 3)
-            ->assertJsonPath('data.appointment.status', 'Completed')->assertJsonPath('data.closed_at', '2026-09-28T10:00:00+08:00');
-
-        $this->assertSame(['visit.checked_in', 'visit.treatment_started', 'visit.completed'], VisitHistory::where('visit_id', $visit->id)->orderBy('id')->pluck('event')->all());
-        $this->assertSame(['appointment.checked_in', 'appointment.treatment_started', 'appointment.completed'],
-            AppointmentHistory::where('appointment_id', $a->id)->orderBy('id')->pluck('event')->all());
-        $this->assertSame(4, $a->fresh()->revision);
-    }
-
-    public function test_walk_in_progression_has_no_appointment_cascade(): void
+    public function test_the_standalone_visit_start_and_complete_commands_are_retired(): void
     {
         $this->actingAsUser('staffB1');
         $visit = Visit::where('public_id', $this->walkIn()->json('data.id'))->sole();
         $this->actingAsUser('dentist1');
         $this->callQueue($visit);
-        $this->step($visit, 'start-treatment')->assertOk();
-        $this->step($visit, 'complete')->assertOk()->assertJsonPath('data.appointment', null);
-        $this->assertSame(0, AppointmentHistory::count());
-    }
-
-    public function test_invalid_stale_and_repeated_transitions(): void
-    {
-        $this->actingAsUser('staffB1');
-        $visit = Visit::where('public_id', $this->walkIn()->json('data.id'))->sole();
-        $this->actingAsUser('dentist1');
-        $this->step($visit, 'complete')->assertStatus(422)->assertJsonPath('code', 'invalid_transition');
-        $this->callQueue($visit);
-        $this->step($visit, 'start-treatment', 9)->assertStatus(409)->assertJsonPath('code', 'stale_revision');
-        $headers = ['Idempotency-Key' => 'start-1'];
-        $this->step($visit, 'start-treatment', 1, $headers)->assertOk();
-        $this->step($visit, 'start-treatment', 1, $headers)->assertOk()->assertHeader('Idempotent-Replayed', 'true');
-        $this->step($visit, 'start-treatment', 1)->assertOk()->assertJsonPath('data.revision', 2);    // safe no-op retry
-        $this->assertSame(2, VisitHistory::where('visit_id', $visit->id)->count());
-        $this->postJson("/api/visits/{$visit->public_id}/no-show", ['expected_revision' => 2])->assertNotFound();
-        $this->postJson("/api/visits/{$visit->public_id}/cancel", ['expected_revision' => 2])->assertNotFound();
-    }
-
-    public function test_start_treatment_refuses_until_a_responsible_dentist_exists(): void
-    {
-        $this->actingAsUser('staffB1');
-        $visit = Visit::where('public_id', $this->walkIn(['dentist_ref' => null])->json('data.id'))->sole();
-        $this->actingAsUser('dentist1');
-        $this->step($visit, 'start-treatment')->assertStatus(422)->assertJsonPath('code', 'dentist_unresolved');
-        $this->assertSame('Checked In', $visit->fresh()->status);
-    }
-
-    public function test_only_the_responsible_dentist_progresses_a_visit(): void
-    {
-        $this->actingAsUser('staffB1');
-        $visit = Visit::where('public_id', $this->walkIn()->json('data.id'))->sole();
-        foreach (['dentist2', 'staffB1', 'owner', 'patientA'] as $who) {
-            $this->actingAsUser($who);
-            $this->step($visit, 'start-treatment')->assertForbidden();
+        foreach (['start-treatment', 'complete', 'no-show', 'cancel'] as $retired) {
+            $this->step($visit, $retired, null, ['Idempotency-Key' => $this->key()])->assertNotFound();
         }
         $this->assertSame('Checked In', $visit->fresh()->status);
+        $this->assertSame(1, VisitHistory::where('visit_id', $visit->id)->count());
     }
 
     // ---- READ ACCESS / SHAPE ----------------------------------------------------------------------------------------

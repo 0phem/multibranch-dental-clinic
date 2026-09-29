@@ -53,6 +53,8 @@ export function prepareHmoCase(ctx,input={},{system=false}={}) {
   const matches=(state.hmo||[]).filter(h=>appointmentId?h.appointmentId===appointmentId:treatment&&h.treatmentId===treatment.id)
   if(matches.length>1)return fail('Duplicate legacy HMO cases need clinic review.')
   const existing=matches[0]
+  // M5: pre-server treatment history keeps an HMO case already linked to it, but never starts a new one.
+  if(!existing&&treatment&&!treatment.server)return fail('This treatment was recorded before server treatment records; it cannot start new HMO handling.')
   if(existing){
     if(!validHmoContext(state,existing)||!coherentRequirements(existing)||!coherentTracking(existing,now)||existing.patientId!==patient.id||existing.branchId!==encounter.branchId||existing.providerId!==providerId||existing.treatmentId&&existing.treatmentId!==treatment?.id&&treatment)return fail('Existing HMO case has conflicting encounter links.')
     if(treatment&&!existing.treatmentId){

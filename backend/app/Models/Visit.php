@@ -73,6 +73,12 @@ class Visit extends Model
         return $this->hasOne(QueueEntry::class);
     }
 
+    /** The M5 clinical Treatment of this Visit (at most one; created only by the M5 start command). */
+    public function treatment(): HasOne
+    {
+        return $this->hasOne(Treatment::class);
+    }
+
     public function history(): HasMany
     {
         return $this->hasMany(VisitHistory::class)->orderBy('id');

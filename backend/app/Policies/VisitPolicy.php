@@ -10,8 +10,9 @@ use App\Models\UserBranchScope;
 use App\Models\Visit;
 
 // M8 / Visit authorization. Staff: only branches in the account's authorization scopes (user_branch_scopes), never
-// inferred from operational assignment. Dentist: read and clinical progression only for Visits where they are the
-// responsible Dentist. Owner: broad oversight and the documented Phase 1 front-desk exception, but no clinical actions.
+// inferred from operational assignment. Dentist: read only Visits where they are the responsible Dentist; clinical
+// progression belongs to the M5 Treatment commands (TreatmentPolicy). Owner: broad oversight and the documented Phase 1
+// front-desk exception, but no clinical actions.
 // Patient: no Visit API in this wave (D9). Active-account checks happen earlier in the `role:` middleware.
 class VisitPolicy
 {
@@ -35,15 +36,6 @@ class VisitPolicy
     public function walkIn(User $user, Branch $branch): bool
     {
         return $this->frontDesk($user, $branch->id);
-    }
-
-    /**
-     * Treatment start/completion: only the Visit's responsible Dentist. A Visit with no responsible Dentist yet lets a
-     * Dentist through to the command, which refuses with a clear `dentist_unresolved` error instead of a bare 403.
-     */
-    public function clinical(User $user, Visit $visit): bool
-    {
-        return $user->role === Role::Dentist && ($visit->dentist === null || $visit->dentist->person_id === $user->person_id);
     }
 
     private function frontDesk(User $user, int $branchId): bool

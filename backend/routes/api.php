@@ -7,6 +7,7 @@ use App\Http\Controllers\CurrentUserController;
 use App\Http\Controllers\PatientDirectoryController;
 use App\Http\Controllers\PatientRegistrationController;
 use App\Http\Controllers\QueueController;
+use App\Http\Controllers\TreatmentController;
 use App\Http\Controllers\UserBranchScopeController;
 use App\Http\Controllers\UserManagementController;
 use App\Http\Controllers\VisitController;
@@ -93,6 +94,16 @@ Route::middleware('auth:sanctum')->group(function () {
             ->middleware('role:staff,owner');
     });
 
+    // M5 Treatment & Clinical Workflow. {treatment} binds on the ULID public_id. Reads are role-scoped and projected per
+    // role (TreatmentPolicy); documentation and completion are named commands of the responsible Dentist only.
+    Route::prefix('treatments')->group(function () {
+        Route::get('/mine', [TreatmentController::class, 'mine'])->middleware('role:patient');
+        Route::get('/', [TreatmentController::class, 'index'])->middleware('role:staff,dentist,owner');
+        Route::get('/{treatment}', [TreatmentController::class, 'show'])->middleware('role:staff,dentist,owner');
+        Route::post('/{treatment}/document', [TreatmentController::class, 'document'])->middleware('role:dentist');
+        Route::post('/{treatment}/complete', [TreatmentController::class, 'complete'])->middleware('role:dentist');
+    });
+
     // M8 Patient Check-In and the shared Visit / Clinical Encounter. {visit} binds on the ULID public_id. Patients have
     // no Visit API in this wave (D9). Per-record access is decided by VisitPolicy.
     Route::prefix('visits')->group(function () {
@@ -100,8 +111,9 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/check-in', [VisitController::class, 'checkIn'])->middleware('role:staff,owner');
         Route::post('/walk-in', [VisitController::class, 'walkIn'])->middleware('role:staff,owner');
         Route::get('/{visit}', [VisitController::class, 'show'])->middleware('role:staff,dentist,owner');
-        Route::post('/{visit}/start-treatment', [VisitController::class, 'startTreatment'])->middleware('role:dentist');
-        Route::post('/{visit}/complete', [VisitController::class, 'complete'])->middleware('role:dentist');
+        // M5: starting treatment is the atomic Treatment command (Queue Served + Visit/appointment In Treatment +
+        // Treatment created). There is no standalone Visit start-treatment or complete endpoint.
+        Route::post('/{visit}/treatment', [TreatmentController::class, 'start'])->middleware('role:dentist');
     });
 
     // M9 Patient Queue Management. {queueEntry} binds on the ULID public_id. Entries are created only by M8 arrival; state

@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Http\Controllers\Concerns\ReadsIdempotencyKey;
 use App\Http\Requests\Visit\CheckInVisitRequest;
-use App\Http\Requests\Visit\TransitionVisitRequest;
 use App\Http\Requests\Visit\WalkInVisitRequest;
 use App\Http\Resources\VisitResource;
 use App\Models\Appointment;
@@ -89,19 +88,5 @@ class VisitController extends Controller
             $dentistRef ? DentistProfile::where('legacy_ref', $dentistRef)->firstOrFail() : null,
             $this->idempotencyKey($request, true),
         );
-    }
-
-    public function startTreatment(TransitionVisitRequest $request, Visit $visit): JsonResponse
-    {
-        Gate::authorize('clinical', $visit);
-
-        return $this->visits->startTreatment($request->user(), $visit, (int) $request->validated('expected_revision'), $this->idempotencyKey($request));
-    }
-
-    public function complete(TransitionVisitRequest $request, Visit $visit): JsonResponse
-    {
-        Gate::authorize('clinical', $visit);
-
-        return $this->visits->complete($request->user(), $visit, (int) $request->validated('expected_revision'), $this->idempotencyKey($request));
     }
 }

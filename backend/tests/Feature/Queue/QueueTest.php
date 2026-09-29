@@ -54,7 +54,8 @@ class QueueTest extends TestCase
 
     private function start(Visit $v)
     {
-        return $this->postJson("/api/visits/{$v->public_id}/start-treatment", ['expected_revision' => $v->fresh()->revision], ['Idempotency-Key' => $this->key()]);
+        // M5: the atomic Treatment start command Serves the queue entry.
+        return $this->postJson("/api/visits/{$v->public_id}/treatment", ['expected_revision' => $v->fresh()->revision], ['Idempotency-Key' => $this->key()]);
     }
 
     /** @return array<string,int> Patient key => position */
@@ -235,14 +236,18 @@ class QueueTest extends TestCase
         $this->actingAsUser('dentist1');
         $this->start($visit)->assertStatus(422)->assertJsonPath('code', 'queue_not_ready');   // still Waiting
         $this->command($entry, 'call')->assertOk();                                              // the queue's own Dentist may Call
-        $this->start($visit)->assertOk()->assertJsonPath('data.status', 'In Treatment')->assertJsonPath('data.queue.status', 'Served')
-            ->assertJsonPath('data.appointment.status', 'In Treatment');
+        $this->start($visit)->assertCreated()->assertJsonPath('data.status', 'In Treatment')->assertJsonPath('data.visit.status', 'In Treatment')
+            ->assertJsonPath('data.visit.queue.status', 'Served')->assertJsonPath('data.appointment.status', 'In Treatment');
         $this->assertSame(['Served', 'In Treatment', 'In Treatment'], [$entry->fresh()->status, $visit->fresh()->status, $a->fresh()->status]);
         $this->assertNotNull($entry->fresh()->closed_at);
         $this->assertSame(1, QueueEntryHistory::where('event', 'queue.served')->count());
 
         // Completion moves Visit and appointment; the queue stays terminal Served.
-        $this->postJson("/api/visits/{$visit->public_id}/complete", ['expected_revision' => 2], ['Idempotency-Key' => 'done'])->assertOk()->assertJsonPath('data.status', 'Completed');
+        $treatment = $visit->fresh()->treatment;
+        $this->postJson("/api/treatments/{$treatment->public_id}/document", ['expected_revision' => 1, 'procedure_summary' => 'Consultation', 'prescription_required' => false,
+            'followup_required' => false, 'procedures' => [['service_ref' => 'svc1', 'quantity' => 1]]], ['Idempotency-Key' => 'doc'])->assertOk();
+        $this->postJson("/api/treatments/{$treatment->public_id}/complete", ['expected_revision' => 2], ['Idempotency-Key' => 'done'])->assertOk()
+            ->assertJsonPath('data.status', 'Completed')->assertJsonPath('data.visit.status', 'Completed');
         $this->assertSame(['Served', 3], [$entry->fresh()->status, $entry->fresh()->revision]);
         $this->actingAsUser('staffB1');
         $this->command($entry, 'away')->assertStatus(422)->assertJsonPath('code', 'queue_closed');
@@ -369,7 +374,7 @@ class QueueTest extends TestCase
 
         $this->actingAsUser('dentist1');
         $this->command($this->entryFor('A'), 'call')->assertOk();
-        $this->start(Visit::where('patient_id', $this->p['A']->id)->sole())->assertOk();
+        $this->start(Visit::where('patient_id', $this->p['A']->id)->sole())->assertCreated();
         $this->actingAsUser('patientA');
         $this->getJson('/api/queue/mine')->assertOk()->assertJsonPath('data.phase', 'in-treatment')->assertJsonPath('data.queue_status', 'Served')->assertJsonPath('data.position', null);
 

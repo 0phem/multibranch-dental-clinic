@@ -62,7 +62,7 @@ export function queueWaitEstimate(entry, queue, appointments, treatments, dentis
   const ahead=same.filter(q=>(q.position||99)<(entry.position||99)).length
   const avgDuration=appointments.filter(a=>a.dentistId===entry.dentistId && a.date===clinicDate() && a.status!=='Cancelled').map(a=>a.duration||30)
   const typical=avgDuration.length ? Math.round(avgDuration.reduce((a,b)=>a+b,0)/avgDuration.length) : 30
-  const active=treatments.some(t=>t.dentistId===entry.dentistId && t.date===clinicDate() && t.status==='In Treatment') ? Math.round(typical*.55) : 0
+  const active=treatments.some(t=>t.server && t.dentistId===entry.dentistId && t.status==='In Treatment') ? Math.round(typical*.55) : 0
   const dentistAvailable=dentists.find(d=>d.id===entry.dentistId)?.available !== false
   return dentistAvailable ? Math.max(5, active + ahead*typical) : Math.max(30,(ahead+1)*typical)
 }

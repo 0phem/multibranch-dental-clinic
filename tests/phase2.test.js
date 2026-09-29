@@ -5,7 +5,7 @@ import { setClockSource } from '../src/clock.js'
 import { normalizeClinicState, sessionForRole, persistableCollection } from '../src/contracts.js'
 import { createWorkflowActions } from '../src/workflow.js'
 import { visibleInvoices, visiblePrescriptions, prescriptionTasks } from '../src/phase2.js'
-import { withServerAppointments } from './support/server-appointments.js'
+import { withServerAppointments, asPatientTreatment } from './support/server-appointments.js'
 
 setClockSource(()=>new Date('2026-09-19T02:08:00Z'))
 const seedKeys={persons:'PERSONS',services:'SERVICES',branchServices:'BRANCH_SERVICES',dentistServiceAssignments:'DENTIST_SERVICE_ASSIGNMENTS',branches:'BRANCHES',dentists:'DENTISTS',staff:'STAFF',patients:'PATIENTS',users:'USERS'}
@@ -47,8 +47,14 @@ test('save draft creates no invoice, prescription task or follow-up and does not
   assert.equal(f.state.invoices.length,0);assert.equal(f.state.followups.length,0);assert.equal(prescriptionTasks(f.state,f.session).length,0);assert.equal(f.state.queue[0].status,'Served');assert.equal(f.state.queue[0].displayStatus,'In Treatment');assert.equal(f.state.appointments[0].status,'In Treatment')
 })
 test('no clinical requests means no prescription task and no follow-up',()=>{const f=fixture();complete(f);assert.equal(prescriptionTasks(f.state,f.session).length,0);assert.equal(f.state.prescriptions.length,0);assert.equal(f.state.followups.length,0)})
-for(const procedures of [[],[{serviceId:'missing',quantity:1}],[{serviceId:'svc2',quantity:0}],[{serviceId:'svc2',quantity:1.5}],[{serviceId:'svc6',quantity:1}],[{serviceId:'svc2',quantity:1,treatmentId:'other'}]])test(`invalid procedure rejected atomically: ${JSON.stringify(procedures)}`,()=>{
+for(const procedures of [[{serviceId:'missing',quantity:1}],[{serviceId:'svc2',quantity:0}],[{serviceId:'svc2',quantity:1.5}],[{serviceId:'svc6',quantity:1}]])test(`invalid procedure rejected atomically: ${JSON.stringify(procedures)}`,()=>{
   const f=fixture();const q=encounter(f);const before=structuredClone(f.state);assert.equal(f.actions.completeTreatment({queueEntryId:q.id,procedure:'Documented',procedures}).ok,false);assert.deepEqual(f.state,before)
+})
+// M5: documentation and completion are separate server commands. A save with no performed procedure is recorded, but
+// completion is refused and nothing downstream is created.
+test('completion without a performed procedure is refused after the documentation save',()=>{
+  const f=fixture();const q=encounter(f);assert.equal(f.actions.completeTreatment({queueEntryId:q.id,procedure:'Documented',procedures:[]}).ok,false)
+  assert.equal(f.state.treatments[0].status,'In Treatment');assert.equal(f.state.visits[0].status,'In Treatment');assert.equal(f.state.invoices.length,0);assert.equal(f.state.followups.length,0)
 })
 for(const role of ['staff','patient','owner'])test(`${role} cannot make treatment or prescription decisions`,()=>{
   const f=fixture();const t=complete(f,{prescriptionRequired:true});f.role(role)
@@ -145,8 +151,13 @@ for(const corruption of ['missing patient','missing appointment','wrong patient 
 })
 test('nested procedure, invoice, payment and prescription references survive persistence',()=>{
   const f=fixture();const t=complete(f,{prescriptionRequired:true});ok(f.actions.authorizePrescription({treatmentId:t.id,items:[medication]}));const i=issue(f);ok(f.actions.postPayment(i.id,'Cash',i.total))
-  const persisted=Object.fromEntries(['treatments','invoices','prescriptions'].map(k=>[k,JSON.parse(JSON.stringify(persistableCollection(k,f.state[k])))]));f.patch(persisted)
-  f.role('patient');assert.equal(visibleInvoices(f.state,f.session)[0].payment.invoiceId,i.id);assert.equal(visiblePrescriptions(f.state,f.session)[0].treatmentId,t.id)
+  // M5: server Treatments are never persisted in the browser; local invoices/prescriptions keep their Treatment public id.
+  assert.equal(persistableCollection('treatments',f.state.treatments).length,0)
+  const persisted=Object.fromEntries(['invoices','prescriptions'].map(k=>[k,JSON.parse(JSON.stringify(persistableCollection(k,f.state[k])))]))
+  // The Patient's browser reads its own completed safe subset from GET /api/treatments/mine (no Visit API, D9).
+  f.role('patient');f.patch({...persisted,treatments:f.state.treatments.map(asPatientTreatment),visitsProjected:false})
+  assert.equal(visibleInvoices(f.state,f.session)[0].payment.invoiceId,i.id);assert.equal(visiblePrescriptions(f.state,f.session)[0].treatmentId,t.id)
+  assert.equal(f.state.treatments[0].notes,undefined,'no clinical notes reach the Patient')
 })
 
 test('missing Dentist profile cannot save or complete an encounter',()=>{
@@ -158,8 +169,14 @@ test('invoice cannot switch to another queue or appointment',()=>{
 test('duplicate independent invoices for a treatment cannot be issued or paid',()=>{
   const f=fixture();complete(f);const i=issue(f);f.patch({invoices:[i,{...i,id:'duplicate'}]});assert.equal(f.actions.postPayment(i.id,'Cash',i.total).ok,false)
 })
-test('invalid fee configuration rolls completion back',()=>{
-  const f=fixture();const q=encounter(f);f.patch({services:f.state.services.map(s=>s.id==='svc2'?{...s,baseFee:NaN}:s)});assert.equal(f.actions.completeTreatment({queueEntryId:q.id,procedure:'Documented',procedures:lines}).ok,false);assert.equal(f.state.queue[0].status,'Served');assert.equal(f.state.queue[0].displayStatus,'In Treatment');assert.equal(f.state.invoices.length,0)
+// M5 (Q-T7): clinical completion never depends on local pricing. The M11 adapter refuses to invent a fee and flags the
+// invoice for review; once the fee configuration is fixed, reconciliation creates the Draft invoice exactly once.
+test('invalid fee configuration never blocks completion and the invoice follows once pricing is fixed',()=>{
+  const f=fixture();const q=encounter(f);const services=f.state.services;f.patch({services:services.map(s=>s.id==='svc2'?{...s,baseFee:NaN}:s)})
+  const done=f.actions.completeTreatment({queueEntryId:q.id,procedure:'Documented',procedures:lines})
+  assert.equal(done.ok,true,done.message);assert.match(done.warnings.join(' '),/configured fee/);assert.equal(f.state.queue[0].displayStatus,'Completed');assert.equal(f.state.invoices.length,0)
+  f.patch({services});ok({...f.actions.reconcileTreatmentHandoffs(),record:true});assert.equal(f.state.invoices.length,1);assert.equal(f.state.invoices[0].total,3000)
+  f.actions.reconcileTreatmentHandoffs();assert.equal(f.state.invoices.length,1,'idempotent')
 })
 test('malformed follow-up on another patient is not closed by this treatment',()=>{
   const f=fixture();const q=encounter(f);f.patch({followups:[{id:'bad',patientId:'p2',appointmentId:q.appointmentId,status:'Scheduled'}]});ok(f.actions.completeTreatment({queueEntryId:q.id,procedure:'Documented',procedures:lines}));assert.equal(f.state.followups[0].status,'Scheduled')

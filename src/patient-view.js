@@ -75,10 +75,14 @@ export function appointmentActionState(appointment,now=clinicNow()) {
 
 // ---- Care, follow-up, records ------------------------------------------------------------------
 // Only the currently approved Patient-visible clinical subset: date, procedure text, performed service names, Dentist.
+// Since M5 the Patient's own completed Treatments come from the server as exactly this subset (GET /api/treatments/mine).
 function careEntry(state,t) {
   return {id:t.id,date:t.date,procedure:typeof t.procedure==='string'?t.procedure:'',
-    services:(Array.isArray(t.procedures)?t.procedures.filter(Boolean):[]).map(p=>state.services.find(s=>s.id===p.serviceId)?.name).filter(Boolean),
-    dentist:dentistLabel(state,t.dentistId),appointmentId:t.appointmentId||null}
+    services:(Array.isArray(t.procedures)?t.procedures.filter(Boolean):[]).map(p=>p.serviceName||state.services.find(s=>s.id===p.serviceId)?.name).filter(Boolean),
+    dentist:t.dentistName||dentistLabel(state,t.dentistId),
+    // The M5 Patient subset has no appointment id; the visit link comes only from an exact existing record (the M11
+    // invoice naming this Treatment) or a pre-server record's own link.
+    appointmentId:t.appointmentId||state.invoices.find(i=>i.treatmentId===t.id)?.appointmentId||null}
 }
 export function patientCare(state,session) {
   if(!patientContext(state,session))return []
@@ -98,7 +102,12 @@ export const patientNotifications=(state,session)=>patientContext(state,session)
 
 export function patientVisitDetail(state,session,appointment) {
   if(!patientContext(state,session)||!appointment||!inScope(appointment,session,state))return null
-  const treatment=state.treatments.find(t=>t.appointmentId===appointment.id&&t.status==='Completed'&&inScope(t,session,state))
+  // The M5 Patient subset carries no appointment id, so a visit's care summary is linked only through an exact existing
+  // record of another module: the M11 invoice for this appointment names its Treatment. Pre-server local records still
+  // carry their own appointment link. No date/Dentist matching.
+  // Both ids are exact server public ids of this Patient's own records (their appointment, their own /mine Treatment).
+  const billed=state.invoices.find(i=>i.appointmentId===appointment.id&&i.treatmentId)
+  const treatment=state.treatments.find(t=>t.status==='Completed'&&inScope(t,session,state)&&(t.appointmentId?t.appointmentId===appointment.id:billed?.treatmentId===t.id))
   if(!treatment)return null
   return {...careEntry(state,treatment),links:{
     prescription:patientPrescriptions(state,session).find(r=>r.treatmentId===treatment.id)?.id||null,

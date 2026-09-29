@@ -105,7 +105,8 @@ token) triggers exactly one automatic refetch-and-retry — never a loop.
 Everything below `App.jsx`'s auth gate — Dashboards, Scheduling, PatientFlow, Clinical, FinanceCommunication,
 Admin, HMO, Messages, Loyalty, etc. — is unchanged and still reads/writes the same `localStorage` collections
 it always has, **except** the six reference-data collections Phase 2A covers (below), appointments (M6) and arrival
-records / Visits (M8) and the queue (M9, below), which are never stored in the browser any more. The identity bridge
+records / Visits (M8), the queue (M9) and clinical Treatments (M5, below), which are never stored in the browser any
+more. The identity bridge
 exists only so those still-local pages can keep working before their own data moves to PostgreSQL in a later
 checkpoint.
 
@@ -306,9 +307,10 @@ Laravel/PostgreSQL is the only queue authority; the queue is anchored to the Vis
   Numbers come from `INSERT … ON CONFLICT … DO UPDATE SET next_number = next_number + 1 RETURNING` (first = 1).
 - **Commands** (Idempotency-Key required + `expected_revision`; today's queue only; no generic PATCH):
   `POST /api/queue/{entry}/call|ready|away|return` and `POST /api/queue/{entry}/priority` `{priority, reason}`.
-  Staff (branch scope) / Owner may do all; the queue's own Dentist may only Call. Served happens only through
-  `POST /api/visits/{visit}/start-treatment`, which requires a Called / Treatment Ready entry and moves queue entry,
-  Visit and appointment together (lock order appointment → Visit → queue entry). Completion leaves the entry Served.
+  Staff (branch scope) / Owner may do all; the queue's own Dentist may only Call. Served happens only through the M5
+  Treatment start `POST /api/visits/{visit}/treatment` (see "M5 Treatment" below), which requires a Called / Treatment
+  Ready entry and moves queue entry, Visit, appointment and the new Treatment together (lock order appointment → Visit
+  → queue entry → Treatment). Completion leaves the entry Served.
 - **Reads**: `GET /api/queue?date=&branch_ref=&dentist_ref=` (default today; Staff by scope, Dentist own queues,
   Owner all; server positions: Waiting / Called / Treatment Ready only, Urgent > Priority > Normal, then exact Visit
   arrival, then number) and `GET /api/queue/{entry}` (with history). `GET /api/queue/mine` is the Patient's own current
@@ -325,8 +327,8 @@ Frontend (`src/queue-api.js`, `src/appointment-flow.js`, `src/store.jsx`):
 - Staff/Dentist/Owner load today's server queue with appointments and Visits into an in-memory `state.queue`; a Patient
   loads `state.myQueue` from `/api/queue/mine`. Neither is persisted; local patches can never write them. The projection
   keeps the real queue status and adds a display status (Served + Visit In Treatment → "In Treatment").
-- Queue commands and arrival are server-only; treatment start runs the Visit command first, then the local M5 record,
-  which stores `visitId` and the server queue entry id. Queue screens (Staff/Dentist queue, Patient Live Queue) refresh
+- Queue commands and arrival are server-only; since M5 treatment start is also a single server command (no local
+  treatment record). Queue screens (Staff/Dentist queue, Patient Live Queue) refresh
   every 30 s only while mounted and visible (no websockets).
 - One-time local evidence re-anchor (compatibility, remove with M5/M11 backends): local treatments/invoices that reach
   a server Visit through an exact browser-queue link persist that `visitId` (and the server queue entry id where one
@@ -334,3 +336,75 @@ Frontend (`src/queue-api.js`, `src/appointment-flow.js`, `src/store.jsx`):
   not uploaded or cleared.
 - Completed-encounter evidence (billing, prescriptions, follow-ups) is the server Visit (`completedEncounter`), not a
   browser queue row. Wait estimates, capacity and workload stay client-side M10 calculations over the projection.
+
+## M5 Treatment
+
+Laravel/PostgreSQL is the only authority for the clinical Treatment record. A Treatment is anchored to exactly one
+Visit (Visit → zero or one Treatment → procedure lines); Patient, branch, appointment and clinic date are read from the
+Visit, never copied.
+
+- **Schema** (`2026_10_02_000100_create_treatment_tables`): `treatments` (ULID `public_id`, UNIQUE `visit_id`,
+  authoring `dentist_profile_id`, status In Treatment / Completed, chief complaint, treatment plan, procedure summary,
+  clinical notes, nullable assistant snapshot, the Dentist's `prescription_required` / `followup_required` decisions
+  with the follow-up recommendation, `started_at`, `completed_at`, `revision`, actors), `treatment_procedures`
+  (ULID `public_id`, `line_no`, canonical `service_id`, `quantity` ≥ 1, notes, immutable `service_code` /
+  `service_name` snapshot — **no fee, amount or subtotal**) and append-only `treatment_history` (every committed
+  revision with a jsonb snapshot of the documentation and procedure lines; M5 clinical history, not the M22 audit
+  trail). PostgreSQL enforces: one Treatment per Visit; at most one In Treatment Treatment per Dentist at a time
+  (partial unique index — not a per-day rule); `completed_at` exactly when Completed; follow-up fields only with a
+  follow-up decision; a Completed Treatment and its lines are read-only; a line keeps its id, service and snapshot;
+  and, at commit (deferred constraint triggers), a Visit In Treatment has its In Treatment Treatment, a Visit is never
+  Completed while its Treatment is active, and a Treatment's status follows its Visit.
+- **Commands** (all require `Idempotency-Key` and `expected_revision`; responsible Dentist only; lock order
+  appointment → Visit → queue entry → Treatment):
+  - `POST /api/visits/{visit}/treatment` (`expected_revision` = the Visit's) — one transaction: queue entry → Served,
+    Visit → In Treatment, scheduled appointment → In Treatment, Treatment created In Treatment. Refusals:
+    `dentist_unresolved`, 403 for any other Dentist, `queue_not_ready` / `not_in_queue`, `treatment_exists`,
+    `dentist_busy`, `stale_revision`.
+  - `POST /api/treatments/{treatment}/document` — the whole editable documentation and procedure-line set. Each line is
+    validated (service exists, Active, offered at the Visit's branch, the Dentist authorized; integer quantity 1–99).
+    A submitted line id is kept only for the same saved line and service; other lines are new; omitted lines are
+    removed from the current record and remain in history. An unchanged save records no new revision.
+  - `POST /api/treatments/{treatment}/complete` — requires a procedure summary and at least one still-valid line; one
+    transaction: Treatment → Completed, Visit → Completed, scheduled appointment → Completed; the queue stays Served.
+    Completion creates no invoice, prescription, follow-up or HMO case.
+  - The standalone `POST /api/visits/{visit}/start-treatment` and `/complete` endpoints are retired (404).
+  - Post-completion amendment is **POLICY DECISION REQUIRED — P6** and is not implemented.
+- **Reads**: `GET /api/treatments?date= | from=&to=` (bounded 184-day window, paginated) and `GET /api/treatments/{id}`
+  (with history events). Staff: branch-scoped full clinical record, read-only. Dentist: Treatments they authored, plus
+  COMPLETED Treatments of a Patient for whom they are currently the responsible Dentist on an active Visit (read-only,
+  continuity of care). Owner: operational summary only (no complaint, plan, procedure summary, notes, follow-up reason
+  or line notes). The per-revision documentation snapshot is returned only to the authoring Dentist.
+  `GET /api/treatments/mine` (Patient): own COMPLETED Treatments only, identity from the session (a `patient_id`
+  parameter is refused) — exactly `{id, date, procedure_summary, services: [{name}], dentist: {name}}`: the Treatment's
+  own public id for keying plus the approved subset. No Visit, appointment, branch or service identifier. The Patient's
+  Billing / Visit / HMO views link to it only through their own records' exact `treatmentId` (e.g. the M11 invoice that
+  names the Treatment and its appointment); with no such record nothing is inferred.
+- **Cutover** (no backfill, no fabricated shells): browser Treatment content is never uploaded. The migration refuses to
+  run — and `php artisan treatments:cutover-check` exits non-zero, listing the Visits — while any Visit is In Treatment
+  without a server Treatment. Deploy outside active clinical treatment; completed historical Visits get no Treatment.
+
+Frontend (`src/treatments-api.js`, `src/appointment-flow.js`, `src/store.jsx`):
+
+- Staff/Dentist/Owner load server Treatments in the same bounded window as appointments; a Patient loads only
+  `/api/treatments/mine`. They form the in-memory `state.treatments` projection (`server: true`), never persisted and
+  never written by a local patch (`commit()` drops `treatments`). The Treatment form keeps unsaved text in React memory
+  only; a stale save refreshes, keeps the text and offers "Load the latest version".
+- Browser-local treatments (`dentalops-v4-treatments`) are read-only **pre-server history** (`preServer`): those with
+  an exact server Visit link are labelled "Recorded before server treatment records"; the rest are also legacy
+  "Historical demo record". They never count as live treatment, never start a new prescription task or HMO case, and
+  keep supporting only already-linked local downstream records. The key is neither uploaded nor cleared.
+- **Transitional downstream adapters** (`reconcileTreatmentHandoffs`, remove as each module's backend lands): in any
+  authorized Staff/Dentist browser, every completed server Treatment in scope gets — once, keyed by its public id — the
+  M11 Draft invoice (`inv-<id>`, priced from the local fee configuration; an unconfigured fee is flagged for review
+  instead of invented), the M20 follow-up task (`f-<id>`), the M19 prescription-required task and the M12 HMO handoff.
+  Idempotent, role-appropriate, and it never writes the Treatment. **M18 boundary:** it creates no notification of any
+  kind (no in-app record, email, SMS, delivery status, retry or schedule) — only M23 workflow-log events. The M12 HMO
+  adapter it invokes is unchanged M12 prototype code and, when it opens a case, records M12's own in-app case notices
+  exactly as a manually created HMO case does (local records only; nothing is delivered).
+- Completion no longer appends to the Patient's `dentalHistory` text; existing text stays as earlier, read-only notes.
+- **Known limitation (pre-existing, not M5):** the frontend identity bridge maps `patient@example.test` onto the seeded
+  local Patient `p1`, while Staff/Dentist server workflows key the same Patient by its server public id. A local M11
+  invoice reconciled/issued in a Staff browser therefore carries the public id, and the Patient's local billing filter
+  (which compares the session's local key) may not show it. The Patient Treatment API is deliberately not widened for
+  this; the fix belongs to future identity-bridge / M11 backend work.

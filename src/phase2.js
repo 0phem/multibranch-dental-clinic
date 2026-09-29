@@ -6,10 +6,13 @@ const fail=message=>({ok:false,message})
 const clean=value=>String(value??'').trim()
 const numericInput=value=>typeof value==='number'||typeof value==='string'&&!!value.trim()
 export const money=value=>Math.round(Number(value)*100)/100
+// The Patient's own M5 subset (`patientSubset`) carries no Dentist/branch identifiers by design; for it, the exact link is the
+// record's own `treatmentId` (the server Treatment public id) plus the same Patient. Every other treatment keeps the full
+// Dentist/branch agreement check.
 export function linkedTreatment(state, record) {
   const treatment=state.treatments.find(t=>t.id===record?.treatmentId)
   return treatment && state.patients.some(p=>p.id===treatment.patientId) &&
-    record.patientId===treatment.patientId && ['dentistId','branchId'].every(k=>record[k]==null||record[k]===treatment[k]) ? treatment : null
+    record.patientId===treatment.patientId && (treatment.patientSubset||['dentistId','branchId'].every(k=>record[k]==null||record[k]===treatment[k])) ? treatment : null
 }
 export function visiblePrescriptions(state, session) {
   if(!validSession(state,session)||session.role==='dentist'&&!permitted(state,session,'prescriptions'))return []
@@ -19,29 +22,31 @@ export function visibleInvoices(state, session) {
   if(!validSession(state,session)||session.role==='staff'&&!permitted(state,session,'billing'))return []
   return state.invoices.filter(i=>inScope(i,session,state)&&(['staff','owner'].includes(session.role)||session.role==='patient'&&linkedTreatment(state,i)&&['Issued','Open','Paid'].includes(i.status)&&paymentConsistent(i)))
 }
+// M19 tasks come from completed SERVER Treatments the Dentist authored. Pre-server treatment history starts no new task;
+// a prescription already linked to one stays readable.
 export function prescriptionTasks(state, session) {
   if(!permitted(state,session,'prescriptions'))return []
-  return state.treatments.filter(t=>session?.role==='dentist'&&inScope(t,session,state)&&t.status==='Completed'&&t.prescriptionRequired===true&&!state.prescriptions.some(r=>r.treatmentId===t.id&&r.status==='Authorized'))
+  return state.treatments.filter(t=>t.server&&t.author&&session?.role==='dentist'&&inScope(t,session,state)&&t.status==='Completed'&&t.prescriptionRequired===true&&!state.prescriptions.some(r=>r.treatmentId===t.id&&r.status==='Authorized'))
 }
 
-// Embedded child rows retain canonical foreign keys, while fees are encounter snapshots.
-export function procedureLines(state, entry, treatmentId, input, current) {
-  const source=input.procedures ?? (input.serviceId&&input.serviceId!==current?.serviceId?null:current?.procedures) ??
-    (clean(input.procedure??current?.procedure)?[{serviceId:input.serviceId||current?.serviceId||entry.serviceId,quantity:1,notes:input.procedure??current?.procedure}]:[])
-  if(!Array.isArray(source))return fail('Enter valid performed procedures.')
-  const lines=[]
-  for(const [index,row] of source.entries()){
-    if(!isRecord(row)||row.treatmentId&&row.treatmentId!==treatmentId)return fail('Procedure belongs to another treatment.')
-    const service=state.services.find(s=>s.id===row.serviceId&&s.status==='Active')
-    const assignment=state.branchServices.find(b=>b.branchId===entry.branchId&&b.serviceId===row.serviceId&&b.active!==false)
+// TRANSITIONAL M11 pricing adapter (M13/M11 own pricing; the server M5 Treatment stores no money). Each performed line of
+// a completed server Treatment becomes one Draft invoice item priced from the CURRENT local fee configuration (branch
+// override, else the service's base fee). The fee snapshot lives only on the local invoice item. Refuses rather than
+// guessing when a line's service or fee is not configured.
+export function treatmentInvoiceItems(state, treatment, invoiceId) {
+  const lines=Array.isArray(treatment?.procedures)?treatment.procedures.filter(Boolean):[]
+  if(!lines.length)return fail('The completed treatment has no performed procedures to bill.')
+  const items=[]
+  for(const p of lines){
+    const service=state.services.find(s=>s.id===p.serviceId)
+    const assignment=state.branchServices.find(b=>b.branchId===treatment.branchId&&b.serviceId===p.serviceId)
     const configuredFee=assignment?.feeOverride??service?.baseFee
-    const quantity=Number(row.quantity), unitFee=Number(configuredFee)
-    if(!service||!assignment||!state.dentistServiceAssignments.some(a=>a.dentistId===entry.dentistId&&a.serviceId===row.serviceId&&a.isAuthorized!==false))return fail('Select an authorized performed procedure for this branch.')
-    if(!numericInput(row.quantity)||!numericInput(configuredFee)||configuredFee==null||typeof configuredFee==='boolean'||typeof configuredFee==='string'&&!configuredFee.trim()||!Number.isSafeInteger(quantity)||quantity<=0||!Number.isFinite(unitFee)||unitFee<0||!Number.isSafeInteger(Math.round(unitFee*100)*quantity))return fail('Procedure quantity and configured fee must be valid.')
-    lines.push({id:`${treatmentId}-procedure-${index+1}`,treatmentId,serviceId:service.id,quantity,unitFee:money(unitFee),amount:money(money(unitFee)*quantity),notes:clean(row.notes)})
+    const quantity=Number(p.quantity), unitFee=Number(configuredFee)
+    if(!service||!numericInput(configuredFee)||!Number.isSafeInteger(quantity)||quantity<=0||!Number.isFinite(unitFee)||unitFee<0||!Number.isSafeInteger(Math.round(unitFee*100)*quantity))return fail(`No valid configured fee for ${p.serviceName||p.serviceId||'a performed procedure'}. Billing needs clinic review.`)
+    items.push({id:`${invoiceId}-${p.id}`,invoiceId,procedureId:p.id,treatmentId:treatment.id,serviceId:service.id,quantity,unitFee:money(unitFee),amount:money(money(unitFee)*quantity)})
   }
-  if(!Number.isSafeInteger(lines.reduce((sum,p)=>sum+Math.round(p.amount*100),0)))return fail('Procedure total exceeds the supported amount.')
-  return {ok:true,lines}
+  if(!Number.isSafeInteger(items.reduce((sum,i)=>sum+Math.round(i.amount*100),0)))return fail('Procedure total exceeds the supported amount.')
+  return {ok:true,items}
 }
 
 export function validInvoice(state, invoice) {
@@ -58,7 +63,10 @@ export function validInvoice(state, invoice) {
   for(const item of invoice.items){
     if(!item)return false
     const p=t.procedures.find(p=>p?.id===item.procedureId)
-    if(!p||p.treatmentId!==t.id||!state.services.some(s=>s.id===p.serviceId)||!Number.isSafeInteger(p.quantity)||p.quantity<=0||!Number.isFinite(p.unitFee)||p.unitFee<0||p.amount!==money(p.quantity*p.unitFee)||used.has(p.id)||item.invoiceId!==invoice.id||item.treatmentId!==t.id||item.serviceId!==p.serviceId||item.quantity!==p.quantity||item.unitFee!==p.unitFee||item.amount!==p.amount||!Number.isFinite(item.amount)||item.amount<0)return false
+    if(!p||p.treatmentId!==t.id||!state.services.some(s=>s.id===p.serviceId)||!Number.isSafeInteger(p.quantity)||p.quantity<=0||used.has(p.id)||item.invoiceId!==invoice.id||item.treatmentId!==t.id||item.serviceId!==p.serviceId||item.quantity!==p.quantity)return false
+    // The fee is an invoice-item snapshot (M11). Pre-server treatment lines also carried a fee; theirs must still agree.
+    if(!Number.isFinite(item.unitFee)||item.unitFee<0||item.amount!==money(item.quantity*item.unitFee)||!Number.isFinite(item.amount)||item.amount<0)return false
+    if(!t.server&&(!Number.isFinite(p.unitFee)||p.unitFee<0||p.amount!==money(p.quantity*p.unitFee)||item.unitFee!==p.unitFee||item.amount!==p.amount))return false
     used.add(p.id)
   }
   const total=money(invoice.items.reduce((sum,i)=>sum+i.amount,0))
@@ -98,6 +106,8 @@ export function phase2Actions(run) {
     if(!isRecord(input))return fail('Select a valid prescription task.')
     const t=state.treatments.find(t=>t.id===input.treatmentId)
     if(session.role!=='dentist'||!t||!inScope(t,session,state)||!state.patients.some(p=>p.id===t.patientId)||!completedEncounter(state,t)||t.prescriptionRequired!==true)return fail('Only the treating Dentist can document a requested prescription.')
+    if(!t.server&&!state.prescriptions.some(r=>r.treatmentId===t.id))return fail('This treatment was recorded before server treatment records; it cannot start a new prescription.')
+    if(t.server&&!t.author)return fail('Only the treating Dentist can document a requested prescription.')
     if(['patientId','dentistId','branchId'].some(k=>input[k]!=null&&input[k]!==t[k]))return fail('Prescription context does not match treatment.')
     const matches=state.prescriptions.filter(r=>r.treatmentId===t.id),current=matches[0]
     if(matches.length>1||current&&!linkedTreatment(state,current)||input.id&&input.id!==current?.id)return fail('Prescription linkage needs review.')

@@ -2,8 +2,8 @@ import * as api from './api-client.js'
 import { appointmentWindow, normalizeFailure } from './appointments-api.js'
 
 // M8 Visit client. Laravel/PostgreSQL is the ONLY authority for Patient arrival (scheduled Check-In, Walk-In) and for
-// the Visit / Clinical Encounter lifecycle. This module reads server Visits and sends the named M8 commands; the
-// still-browser-local M9 queue and M5 treatment prototypes read the mapped Visits through the in-memory projection,
+// Visit arrival. This module reads server Visits and sends the named M8 commands; the Visit's clinical progression is
+// driven only by the M5 Treatment commands (src/treatments-api.js). The mapped Visits feed the in-memory projection,
 // which is never persisted and never written back. Failures use the same normalized shape as the appointment client,
 // so 401s reach the shared session-invalidated path.
 
@@ -64,15 +64,6 @@ export async function walkIn({ patientPublicId, branchId, serviceId = null, dent
   if (serviceId) payload.service_ref = serviceId
   if (dentistId) payload.dentist_ref = dentistId
   return commandResult(await api.walkInVisit(payload, key))
-}
-
-/** Clinical progression: 'start-treatment' | 'complete' (the responsible Dentist only; cascades to the appointment). */
-export async function transitionVisit(visit, name, key) {
-  const result = await api.transitionVisit(visit.id, name, { expected_revision: visit.revision }, key)
-  if (result.ok) return { ok: true, row: result.data }
-  const failure = normalizeFailure(result)
-  if (failure.code === 'stale_revision') failure.message = 'This visit changed since you opened it. It has been refreshed — review it and try again.'
-  return failure
 }
 
 /** Minimal front-desk Patient registration (Person + Patient, no login). Returns the directory shape. */

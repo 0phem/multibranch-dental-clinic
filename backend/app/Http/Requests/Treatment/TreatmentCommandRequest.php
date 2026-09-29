@@ -1,11 +1,12 @@
 <?php
 
-namespace App\Http\Requests\Visit;
+namespace App\Http\Requests\Treatment;
 
 use Illuminate\Foundation\Http\FormRequest;
 
-// start-treatment / complete. The target status comes from the named command, never the client.
-class TransitionVisitRequest extends FormRequest
+// Treatment start / complete. The target status comes from the named command, never the client. For start the
+// expected_revision is the Visit's; for complete it is the Treatment's.
+class TreatmentCommandRequest extends FormRequest
 {
     public function authorize(): bool
     {

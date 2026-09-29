@@ -55,8 +55,9 @@ const rawActions=m.createWorkflowActions({getState:()=>state,getSession:()=>sess
   state.patients=state.patients.map(p=>m.patientProjection(p,state.persons.find(person=>person.id===p.personId)))
   store={...store,state,actions}
 }})
-// M6/M8 cutovers: appointments and Visits are server-authoritative. The smoke run stands in for "the server accepted
-// the command and the projection was refreshed" and runs Check-In/Walk-In/treatment server-first, like the store's flow.
+// M6/M8/M9/M5 cutovers: appointments, Visits, the queue and Treatments are server-authoritative. The smoke run stands in
+// for "the server accepted the command and the projection was refreshed" and runs Check-In/Walk-In/treatment server-first,
+// like the store's flow.
 const flow=m.serverFlow({actions:()=>rawActions,getState:()=>state,getSession:()=>session,patchState:patch=>{state=m.normalizeClinicState({...state,...patch});store={...store,state,actions}}})
 const actions=m.serverFirstActions(rawActions,flow)
 const bookServer=form=>({ok:true,record:flow.book(form)})
@@ -76,7 +77,7 @@ assert.equal(actions.updateQueue(arrival.record.id,'Called').ok,true)
 assert.ok(render('treatment','dentist',arrival.context).includes('PhaseOne Patient'))
 assert.equal(actions.saveTreatment({queueEntryId:arrival.record.id,procedure:'Consultation'}).ok,true)
 assert.ok(render('treatment','dentist',arrival.context).includes('Save Treatment Progress'))
-assert.equal(actions.completeTreatment({queueEntryId:arrival.record.id,procedure:'Consultation'}).ok,true)
+assert.equal(actions.completeTreatment({queueEntryId:arrival.record.id,procedure:'Consultation',procedures:[{serviceId:'svc1',quantity:1}]}).ok,true)
 assert.ok(render('treatment','dentist',arrival.context).includes('read-only'))
 assert.ok(render('billing').includes('Draft'))
 console.log('PASS: created-patient chart, booking/check-in visibility, exact queue treatment, completion, billing renders')
@@ -213,7 +214,12 @@ renderToString(React.createElement(m.ClinicProvider,{initialReferenceData},React
 assert.equal(store.state.appointments.length,0,'browser-stored appointments are ignored after the cutover')
 // Appointments return only from the server (here: the rows GET /api/appointments would return).
 const serverRows=state.appointments.map(a=>m.serverRow({...a,code:a.appointmentNo}))
+// M5: Treatments are never read back from browser storage either; they return only from the server.
+const serverTreatmentRows=state.treatments.filter(t=>t.server).map(m.serverTreatmentRow)
+assert.ok(serverTreatmentRows.length>0)
 renderToString(React.createElement(m.ClinicProvider,{initialReferenceData,initialServerAppointments:serverRows},React.createElement(Capture)))
+assert.equal(store.state.treatments.filter(t=>t.server).length,0,'browser storage never restores a server Treatment')
+renderToString(React.createElement(m.ClinicProvider,{initialReferenceData,initialServerAppointments:serverRows,initialServerTreatments:serverTreatmentRows},React.createElement(Capture)))
 assert.ok(render('patients','staff',{patientId:patient.record.id}).includes('PhaseOne Patient'))
 assert.ok(render('schedule','dentist').includes('Branch A'))
 assert.ok(render('appointments').includes('Appointment management'))

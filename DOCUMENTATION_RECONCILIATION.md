@@ -82,7 +82,7 @@ The Data Dictionary and diagrams are intentionally preserved. Historical phase p
 
 **Recommended resolution:** obtain approval for optional appointment linkage plus required encounter evidence (or an explicitly approved encounter abstraction) before database constraints. Preserve walk-in behavior; do not fabricate a booked appointment. Neither diagram nor dictionary is changed in this phase.
 
-**Resolution (M8, approved decision D10):** the Visit-anchored direction is approved and implemented for arrival: `VISITS` (PostgreSQL) with an optional appointment and a required Patient/branch; Treatment → required Visit, Visit → optional Appointment. The data dictionary records `VISITS`; the generated ERD images are pending regeneration. The M5 backend applies the `TREATMENT_PLANS.visit_id` constraint when it is built.
+**Resolution (M8, approved decision D10):** the Visit-anchored direction is approved and implemented for arrival: `VISITS` (PostgreSQL) with an optional appointment and a required Patient/branch; Treatment → required Visit, Visit → optional Appointment. The data dictionary records `VISITS`; the generated ERD images are pending regeneration. The M5 backend now applies it: `treatments.visit_id` is required and unique (Visit → zero or one Treatment), and walk-in Treatments have no appointment.
 
 No other approved-requirement violations were established by this reconciliation review. Partial features and frontend-only integration boundaries below are not silently represented as complete ERD implementations. Passing tests do not imply an exhaustive defect/security audit.
 

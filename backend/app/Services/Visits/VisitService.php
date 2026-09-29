@@ -24,11 +24,12 @@ use Illuminate\Http\JsonResponse;
 // M8 Patient Check-In and the shared Visit / Clinical Encounter lifecycle (CONTRACTS.md §3). Every command runs in one
 // transaction through the shared idempotency mechanism and appends Visit history:
 //   - checkInScheduled: Appointment (Pending/Confirmed, today) -> Checked In AND a new Visit, atomically;
-//   - walkIn:           a new Visit with no appointment (never a fake appointment);
-//   - startTreatment / complete: the Visit's clinical progression, cascading to the linked appointment.
+//   - walkIn:           a new Visit with no appointment (never a fake appointment).
+// The Visit's clinical progression (In Treatment, Completed) is owned by the M5 Treatment commands, which call
+// applyClinical inside their own transaction; there is no standalone Visit start/complete command.
 // Lock order is always appointment, then Visit, then queue entry, so concurrent commands cannot deadlock on each other.
-// M9: an arrival with a responsible Dentist is queued in the SAME transaction (QueueService::enqueue), and treatment start
-// moves the queue entry to Served in the same transaction (QueueService::serve). The dependency is one-way.
+// M9: an arrival with a responsible Dentist is queued in the SAME transaction (QueueService::enqueue). M5 treatment start
+// Serves the queue entry (QueueService::serve) in the Treatment transaction. The dependency is one-way.
 final class VisitService
 {
     private const RELATIONS = ['patient.person', 'branch', 'appointment.service', 'dentist.person', 'requestedService', 'queueEntry'];
@@ -103,66 +104,32 @@ final class VisitService
         });
     }
 
-    public function startTreatment(User $actor, Visit $visit, int $expectedRevision, ?string $key): JsonResponse
-    {
-        return $this->transition($actor, $visit, $expectedRevision, $key, 'start-treatment');
-    }
-
-    public function complete(User $actor, Visit $visit, int $expectedRevision, ?string $key): JsonResponse
-    {
-        return $this->transition($actor, $visit, $expectedRevision, $key, 'complete');
-    }
-
-    /** command => [source status, target status, Visit event, appointment event] */
-    public const TRANSITIONS = [
-        'start-treatment' => ['Checked In', 'In Treatment', 'visit.treatment_started', 'appointment.treatment_started'],
-        'complete' => ['In Treatment', 'Completed', 'visit.completed', 'appointment.completed'],
+    /** Visit clinical progression, applied ONLY by the M5 Treatment commands: [source status, target, Visit event, appointment event]. */
+    public const CLINICAL = [
+        'In Treatment' => ['Checked In', 'visit.treatment_started', 'appointment.treatment_started'],
+        'Completed' => ['In Treatment', 'visit.completed', 'appointment.completed'],
     ];
 
-    private function transition(User $actor, Visit $visit, int $expectedRevision, ?string $key, string $command): JsonResponse
+    /**
+     * M5 cascade: moves an already-locked Visit (and its already-locked linked appointment) to In Treatment or Completed,
+     * with history. There is no standalone Visit start/complete endpoint any more — the M5 Treatment start/complete
+     * commands call this inside their own transaction, after their own checks, so a Visit never enters or leaves
+     * treatment without its Treatment (decision Q-T2). The caller has verified the source statuses.
+     */
+    public function applyClinical(User $actor, Visit $visit, ?Appointment $appointment, string $to): void
     {
-        [$from, $to, $visitEvent, $appointmentEvent] = self::TRANSITIONS[$command];
-        $payload = ['visit' => $visit->id, 'expected_revision' => $expectedRevision];
-
-        return $this->idempotent($actor, $key, 'visit.'.$command, $payload, function () use ($actor, $visit, $expectedRevision, $from, $to, $visitEvent, $appointmentEvent) {
-            // appointment_id never changes after creation, so it is safe to read before taking the locks.
-            $appointment = $visit->appointment_id ? Appointment::whereKey($visit->appointment_id)->lockForUpdate()->firstOrFail() : null;
-            $current = Visit::whereKey($visit->id)->lockForUpdate()->firstOrFail();
-            if ($current->status === $to) {
-                return [$current, 200];
-            }
-            if ($current->revision !== $expectedRevision) {
-                throw VisitCommandException::staleVisit();
-            }
-            if ($current->status !== $from) {
-                throw VisitCommandException::rule('invalid_transition', "A visit that is {$current->status} cannot move to {$to}.", 'status');
-            }
-            if ($current->responsible_dentist_profile_id === null) {
-                throw VisitCommandException::rule('dentist_unresolved', 'Assign a responsible Dentist to this visit before clinical work starts.', 'dentist');
-            }
-            // The linked appointment mirrors the Visit's clinical progression; a mismatch is refused, never repaired.
-            if ($appointment && $appointment->status !== $from) {
-                throw VisitCommandException::rule('appointment_mismatch', "The linked appointment is {$appointment->status}; this visit needs clinic review.", 'appointment');
-            }
-            // M9: treatment starts only from a Called / Treatment Ready queue entry, which becomes Served here.
-            if ($to === 'In Treatment') {
-                $this->queue->serve($actor, $current);
-            }
-
-            $current->update([
-                'status' => $to,
-                'revision' => $current->revision + 1,
-                'updated_by_user_id' => $actor->id,
-                'closed_at' => $to === 'Completed' ? ClinicClock::now() : null,
-            ]);
-            $this->history($current, $actor, $visitEvent, $from);
-            if ($appointment) {
-                $appointment->update(['status' => $to, 'revision' => $appointment->revision + 1, 'updated_by_user_id' => $actor->id]);
-                $this->appointments->record($appointment, $actor, $appointmentEvent, $from);
-            }
-
-            return [$current, 200];
-        });
+        [$from, $visitEvent, $appointmentEvent] = self::CLINICAL[$to];
+        $visit->update([
+            'status' => $to,
+            'revision' => $visit->revision + 1,
+            'updated_by_user_id' => $actor->id,
+            'closed_at' => $to === 'Completed' ? ClinicClock::now() : null,
+        ]);
+        $this->history($visit, $actor, $visitEvent, $from);
+        if ($appointment) {
+            $appointment->update(['status' => $to, 'revision' => $appointment->revision + 1, 'updated_by_user_id' => $actor->id]);
+            $this->appointments->record($appointment, $actor, $appointmentEvent, $from);
+        }
     }
 
     /**

@@ -93,7 +93,7 @@ export function HmoPage({ role, activeBranch, store, context }) {
     const result=operation.mode==='submit'?actions.submitHmoCase(operation.caseId,input):operation.mode==='contact'?actions.followUpHmo(operation.caseId,input):actions.recordHmoOutcome(operation.caseId,input)
     if(report(result,operation.mode==='response'?'Externally received provider response recorded.':'Clinic-side tracking record saved.'))setOperation(null)
   }
-  const eligible=[...state.appointments.filter(a=>a.branchId===session.branchId&&!['Cancelled','No-show'].includes(a.status)).map(a=>({key:`appointment:${a.id}`,record:a})),...state.treatments.filter(t=>t.branchId===session.branchId&&!t.appointmentId).map(t=>({key:`treatment:${t.id}`,record:t}))].filter(x=>state.patients.find(p=>p.id===x.record.patientId)?.hmoProviderId)
+  const eligible=[...state.appointments.filter(a=>a.branchId===session.branchId&&!['Cancelled','No-show'].includes(a.status)).map(a=>({key:`appointment:${a.id}`,record:a})),...state.treatments.filter(t=>t.server&&t.branchId===session.branchId&&!t.appointmentId).map(t=>({key:`treatment:${t.id}`,record:t}))].filter(x=>state.patients.find(p=>p.id===x.record.patientId)?.hmoProviderId)
   const staff=role==='staff'
   // Owner oversight is read-only: it gets views of the same cases, never the Staff mutation controls below.
   const views=staff?[['all','All Cases'],['action','Needs Action'],['followups','Follow-Ups']]:role==='owner'?[['action','Needs Attention'],['all','All Cases']]:null

@@ -40,7 +40,7 @@ logical-only, not yet implemented.
 | QUEUE_ENTRIES | Individual patient queue state | Requires exactly one VISIT (unique `visit_id`) and one DENTIST_QUEUE; unique number per queue; states Waiting / Called / Treatment Ready / Temporarily Away / Served (Served only when the Visit starts treatment); priority override requires reason and history; no no-show/in-treatment/completed queue state (M9) |
 | CAPACITY_EVENTS | Aggregate waiting/workload snapshots/events | Does not replace QUEUE_ENTRIES; it supports M10/M15/M21 |
 
-**VISITS (M8, approved D10) and QUEUE_ENTRIES → VISIT (M9):** this dictionary is the current text of record. The rendered ERD images (PNG/SVG) predate these changes and are pending regeneration from the diagram source; they have not been hand-edited.
+**VISITS (M8, approved D10), QUEUE_ENTRIES → VISIT (M9) and TREATMENT_PLANS → exactly one VISIT with price-free TREATMENT_PROCEDURES (M5):** this dictionary is the current text of record. The rendered ERD images (PNG/SVG) predate these changes and are pending regeneration from the diagram source; they have not been hand-edited.
 
 ## Clinical / Billing
 
@@ -48,8 +48,8 @@ logical-only, not yet implemented.
 |---|---|---|
 | PATIENT_DOCUMENTS | Generic patient-uploaded/visit/HMO document reference | File bytes belong in controlled storage; DB stores metadata/URI |
 | CLINICAL_TEMPLATES | Structured documentation aid | Suggestions/templates never authorize diagnosis/treatment automatically |
-| TREATMENT_PLANS | Clinical encounter/treatment record | Requires a VISIT (`visit_id`); `appointment_id` is optional (walk-in care); dentist identity and visit context are loaded from the Visit/queue; dentist retains judgment |
-| TREATMENT_PROCEDURES | Actual performed procedure line(s) | Completed procedure is the normal source of billing line items |
+| TREATMENT_PLANS | Clinical encounter/treatment record (implemented as `treatments`, M5) | Requires exactly one VISIT (`visit_id`, unique: a Visit has zero or one Treatment); Patient, branch, appointment (optional — walk-in care) and clinic date are read from the Visit, never copied; authoring Dentist = the Visit's responsible Dentist; status In Treatment → Completed (Completed is read-only; amendments are unresolved policy P6); chief complaint, treatment plan, procedure summary, clinical notes, nullable assistant snapshot, the Dentist's prescription/follow-up decisions and follow-up recommendation; at most one In Treatment per Dentist at a time; every committed revision appended to an immutable history with a documentation snapshot (M5) |
+| TREATMENT_PROCEDURES | Actual performed procedure line(s) (implemented as `treatment_procedures`, M5) | Canonical service, quantity ≥ 1, notes and an immutable service code/name snapshot; ordered `line_no`; **no fee, amount or subtotal** — M13/M11 price the performed lines when billing. Completed procedures are the normal source of billing line items |
 | PRESCRIPTIONS | Dentist-authorized prescription header/version | No prescription becomes valid without dentist authorization |
 | PRESCRIPTION_ITEMS | Medication/dose/instructions | Linked to one prescription version |
 | TREATMENT_FOLLOW_UPS | Clinical return-visit obligation | Created from dentist decision; scheduling creates/links the next appointment |

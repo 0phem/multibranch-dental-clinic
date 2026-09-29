@@ -17,6 +17,7 @@ import { fetchReferenceData, deriveDentistServiceAssignments } from './reference
 import * as appointmentsApi from './appointments-api.js'
 import * as visitsApi from './visits-api.js'
 import * as queueApi from './queue-api.js'
+import * as treatmentsApi from './treatments-api.js'
 import { buildServerProjection, classifyLegacy, reanchorLocalEvidence } from './appointment-projection.js'
 import { createAppointmentFlow } from './appointment-flow.js'
 
@@ -60,7 +61,7 @@ const fullName=person=>[person?.firstName,person?.lastName].map(cleanNamePart).f
 // render-smoke.mjs renders ClinicProvider via renderToString, which runs render-phase code only — a real
 // fetch-on-mount effect never executes under SSR, so the script needs a synchronous alternative rather than
 // silently seeing empty reference data.
-export function ClinicProvider({ children, initialReferenceData, initialServerAppointments, initialServerVisits, initialServerQueue, initialMyQueue }) {
+export function ClinicProvider({ children, initialReferenceData, initialServerAppointments, initialServerVisits, initialServerQueue, initialMyQueue, initialServerTreatments, initialMyTreatments }) {
   const recoveryBlocked=useRef(false)
   const [persistenceErrors,setPersistenceErrors]=useState({})
   const reportPersistence=useCallback((key,message)=>setPersistenceErrors(previous=>{
@@ -100,6 +101,12 @@ export function ClinicProvider({ children, initialReferenceData, initialServerAp
     const result=readCollection(localStorage,`${STORAGE_PREFIX}queue`,[])
     return !result.blocked&&Array.isArray(result.value)?result.value:[]
   },[])
+  // M5 cutover: Treatments are server-authoritative. `serverTreatmentRows` (Staff/Dentist/Owner: GET /api/treatments) and
+  // `myTreatmentRows` (a Patient's own completed safe subset: GET /api/treatments/mine) are held in memory only — never
+  // persisted, never written by a local command. The `dentalops-v4-treatments` browser collection below is PRE-SERVER
+  // HISTORY only: read-only, never uploaded, never cleared, never written by a workflow command (commit() drops it).
+  const [serverTreatmentRows,setServerTreatmentRows]=useState(initialServerTreatments??[])
+  const [myTreatmentRows,setMyTreatmentRows]=useState(initialMyTreatments??[])
   const [treatments,setTreatments]=usePersist('treatments',INITIAL_TREATMENTS,reportPersistence,recoveryBlocked)
   const [invoices,setInvoices]=usePersist('invoices',INITIAL_INVOICES,reportPersistence,recoveryBlocked)
   const [hmo,setHmo]=usePersist('hmo',INITIAL_HMO,reportPersistence,recoveryBlocked)
@@ -196,7 +203,7 @@ export function ClinicProvider({ children, initialReferenceData, initialServerAp
     const name=role==='Dentist'&&base?`Dr. ${base}`:base||u.username
     return {...u,name,email:p?.email||'',phone:p?.phone||'',firstName:p?.firstName||'',lastName:p?.lastName||''}
   })
-  const serverProjection=buildServerProjection({rows:serverAppointmentRows,visitRows:serverVisitRows,queueRows:serverQueueRows,directory:directoryPatients,session,users,patients})
+  const serverProjection=buildServerProjection({rows:serverAppointmentRows,visitRows:serverVisitRows,queueRows:serverQueueRows,treatmentRows:serverTreatmentRows,myTreatmentRows,directory:directoryPatients,session,users,patients})
   // D5/M8/M9: records without a server Visit (pre-cutover appointments, browser-only encounters) carry
   // `legacyAppointment` so live decisions and KPIs can exclude them. The live queue is the server queue only.
   const legacy=classifyLegacy({treatments,invoices,prescriptions,followups,hmo,conversations,inquiries})
@@ -204,7 +211,7 @@ export function ClinicProvider({ children, initialReferenceData, initialServerAp
   const state={...normalizeClinicState({
     persons,services,branchServices,dentistServiceAssignments,branches,
     dentists:projectedDentists,staff:projectedStaff,patients:[...projectedPatients,...serverProjection.readModelPatients],appointments:serverProjection.appointments,
-    visits:serverProjection.visits,queue:serverProjection.queue,myQueue,treatments:legacy.treatments,invoices:legacy.invoices,hmo:legacy.hmo,inquiries:legacy.inquiries,
+    visits:serverProjection.visits,queue:serverProjection.queue,myQueue,treatments:[...serverProjection.treatments,...legacy.treatments],invoices:legacy.invoices,hmo:legacy.hmo,inquiries:legacy.inquiries,
     conversations:legacy.conversations,notifications,prescriptions:legacy.prescriptions,followups:legacy.followups,users:projectedUsers,
     automations,workflowLog,campaigns,loyalty,audit,bookingDrafts,clock,today:clock.date,
     // Whether server Visits are part of this session's projection (Staff/Dentist/Owner). Derived, never persisted.
@@ -227,7 +234,7 @@ export function ClinicProvider({ children, initialReferenceData, initialServerAp
       const next=projected.find(x=>x.id===record.id)
       return next?{...record,...Object.fromEntries(keys.map(key=>[key,next[key]??null]))}:record
     })
-    setTreatments(persistableCollection('treatments',migrate(treatments,state.treatments,['branchId','queueEntryId'])))
+    setTreatments(persistableCollection('treatments',migrate(treatments,state.treatments.filter(t=>!t.server),['branchId','queueEntryId'])))
     setInvoices(persistableCollection('invoices',migrate(invoices,state.invoices,['branchId'])))
     setFollowups(migrate(followups,state.followups,['branchId']))
     setPatients(persistableCollection('patients',migrate(patients,state.patients,['preferredBranchId'])))
@@ -257,9 +264,10 @@ export function ClinicProvider({ children, initialReferenceData, initialServerAp
   }
   const actions={}
   const commit=rawPatch=>{
-    // Appointments, Visits and the queue are server-authoritative: no local command may write them (the projection is
-    // refreshed from the server instead), so `appointments`/`visits`/`queue` keys are never applied or persisted.
-    const {appointments:_ignored,visits:_ignoredVisits,queue:_ignoredQueue,myQueue:_ignoredMyQueue,...patch}=rawPatch
+    // Appointments, Visits, the queue and Treatments are server-authoritative: no local command may write them (the
+    // projection is refreshed from the server instead), so those keys are never applied or persisted. Pre-server treatment
+    // history is read-only, so `treatments` is dropped as well.
+    const {appointments:_ignored,visits:_ignoredVisits,queue:_ignoredQueue,myQueue:_ignoredMyQueue,treatments:_ignoredTreatments,...patch}=rawPatch
     // Advance immediately so repeated clicks before React renders see the commit.
     stateRef.current=normalizeClinicState({...stateRef.current,...patch})
     for(const [key,value] of Object.entries(patch))setters[`set${key[0].toUpperCase()}${key.slice(1)}`]?.(persistableCollection(key,value))
@@ -288,26 +296,32 @@ export function ClinicProvider({ children, initialReferenceData, initialServerAp
   // ---- M6 server appointments ------------------------------------------------------------------------------------
   // Applies fresh server rows to the in-memory projection immediately (so a local adapter command that follows a server
   // command sees the new status before React re-renders) and to React state.
-  const applyServerRows=(rows,directory=directoryRef.current,visitRows=visitRowsRef.current,queueRows=queueRowsRef.current,mine=myQueueRef.current)=>{
+  const applyServerRows=(rows,directory=directoryRef.current,visitRows=visitRowsRef.current,queueRows=queueRowsRef.current,mine=myQueueRef.current,treatmentRows=treatmentRowsRef.current,myTreatments=myTreatmentRowsRef.current)=>{
     const current=stateRef.current
-    const projection=buildServerProjection({rows,visitRows,queueRows,directory,session:sessionRef.current,users:current.users,patients:current.patients.filter(p=>!p.serverProjection)})
-    stateRef.current=normalizeClinicState({...current,appointments:projection.appointments,visits:projection.visits,queue:projection.queue,myQueue:mine,patients:[...current.patients.filter(p=>!p.serverProjection),...projection.readModelPatients]})
+    const projection=buildServerProjection({rows,visitRows,queueRows,treatmentRows,myTreatmentRows:myTreatments,directory,session:sessionRef.current,users:current.users,patients:current.patients.filter(p=>!p.serverProjection)})
+    stateRef.current=normalizeClinicState({...current,appointments:projection.appointments,visits:projection.visits,queue:projection.queue,myQueue:mine,treatments:[...projection.treatments,...current.treatments.filter(t=>!t.server)],patients:[...current.patients.filter(p=>!p.serverProjection),...projection.readModelPatients]})
     rowsRef.current=rows
     visitRowsRef.current=visitRows
     queueRowsRef.current=queueRows
     myQueueRef.current=mine
+    treatmentRowsRef.current=treatmentRows
+    myTreatmentRowsRef.current=myTreatments
     setServerAppointmentRows(rows)
     setServerVisitRows(visitRows)
     setServerQueueRows(queueRows)
     setMyQueue(mine)
+    setServerTreatmentRows(treatmentRows)
+    setMyTreatmentRows(myTreatments)
   }
   const rowsRef=useRef(serverAppointmentRows)
   const visitRowsRef=useRef(serverVisitRows)
   const queueRowsRef=useRef(serverQueueRows)
   const myQueueRef=useRef(myQueue)
+  const treatmentRowsRef=useRef(serverTreatmentRows)
+  const myTreatmentRowsRef=useRef(myTreatmentRows)
   const directoryRef=useRef(directoryPatients)
-  // Loads server appointments and — for Staff/Dentist/Owner — server Visits and today's queue (there is no Patient Visit
-  // API yet, D9); a Patient loads only their own current queue state.
+  // Loads server appointments and — for Staff/Dentist/Owner — server Visits, today's queue and Treatments (there is no
+  // Patient Visit API yet, D9); a Patient loads only their own current queue state and own completed Treatment subset.
   const refreshAppointments=async()=>{
     if(!sessionRef.current)return {ok:false,kind:'unauthenticated'}
     setAppointmentsStatus(status=>status==='ready'?status:'loading')
@@ -315,16 +329,18 @@ export function ClinicProvider({ children, initialReferenceData, initialServerAp
     const role=sessionRef.current.role
     const operational=['staff','dentist','owner'].includes(role)
     const none=Promise.resolve({ok:true,rows:[],truncated:false,data:null})
-    const [result,visits,queue,mine]=await Promise.all([
+    const [result,visits,queue,mine,treated,myTreated]=await Promise.all([
       appointmentsApi.loadAppointments(today),
       operational?visitsApi.loadVisits(today):none,
       operational?queueApi.loadQueue(today):none,
       role==='patient'?queueApi.loadMyQueue():none,
+      operational?treatmentsApi.loadTreatments(today):none,
+      role==='patient'?treatmentsApi.loadMyTreatments():none,
     ])
-    const failed=[result,visits,queue,mine].find(r=>!r.ok)
+    const failed=[result,visits,queue,mine,treated,myTreated].find(r=>!r.ok)
     if(failed){setAppointmentsStatus('error');setAppointmentsError(failed.message);return failed}
-    applyServerRows(result.rows,directoryRef.current,visits.rows,queue.rows,mine.data??null)
-    setAppointmentsTruncated(result.truncated||visits.truncated)
+    applyServerRows(result.rows,directoryRef.current,visits.rows,queue.rows,mine.data??null,treated.rows,myTreated.rows)
+    setAppointmentsTruncated(result.truncated||visits.truncated||treated.truncated)
     setAppointmentsError('')
     setAppointmentsStatus('ready')
     return {ok:true}
@@ -351,10 +367,10 @@ export function ClinicProvider({ children, initialReferenceData, initialServerAp
 
   // Load server appointments after sign-in (once reference data is ready), and again when the window regains focus.
   useEffect(()=>{
-    if(initialServerAppointments||initialServerVisits||initialServerQueue)return
+    if(initialServerAppointments||initialServerVisits||initialServerQueue||initialServerTreatments)return
     if(!session?.role){
-      rowsRef.current=[];visitRowsRef.current=[];queueRowsRef.current=[];myQueueRef.current=null;directoryRef.current=[]
-      setServerAppointmentRows([]);setServerVisitRows([]);setServerQueueRows([]);setMyQueue(null);setDirectoryPatients([]);setAppointmentsStatus('idle');setAppointmentsError('')
+      rowsRef.current=[];visitRowsRef.current=[];queueRowsRef.current=[];myQueueRef.current=null;directoryRef.current=[];treatmentRowsRef.current=[];myTreatmentRowsRef.current=[]
+      setServerAppointmentRows([]);setServerVisitRows([]);setServerQueueRows([]);setMyQueue(null);setServerTreatmentRows([]);setMyTreatmentRows([]);setDirectoryPatients([]);setAppointmentsStatus('idle');setAppointmentsError('')
       return
     }
     if(refDataStatus!=='ready')return
@@ -363,7 +379,7 @@ export function ClinicProvider({ children, initialReferenceData, initialServerAp
     const onFocus=()=>{if(sessionRef.current)refreshAppointments()}
     window.addEventListener('focus',onFocus)
     return ()=>window.removeEventListener('focus',onFocus)
-  },[session?.role,session?.userId,refDataStatus,initialServerAppointments,initialServerVisits,initialServerQueue])
+  },[session?.role,session?.userId,refDataStatus,initialServerAppointments,initialServerVisits,initialServerQueue,initialServerTreatments])
 
   // M9 one-time local evidence re-anchor (compatibility only; remove with the M5/M11 backends). Once server Visits and
   // the server queue are loaded for a Staff/Dentist/Owner session, local treatments and invoices that reach a server
@@ -373,13 +389,21 @@ export function ClinicProvider({ children, initialReferenceData, initialServerAp
   useEffect(()=>{
     if(recoveryBlocked.current||appointmentsStatus!=='ready'||!['staff','dentist','owner'].includes(session?.role))return
     const {visits,queue:serverQueue}=stateRef.current
-    const t=reanchorLocalEvidence({records:treatments,localQueue:legacyLocalQueue,visits,serverQueue})
+    const t=reanchorLocalEvidence({records:treatments.filter(x=>x.server!==true),localQueue:legacyLocalQueue,visits,serverQueue})
     if(t.changed)setTreatments(persistableCollection('treatments',t.records))
     const i=reanchorLocalEvidence({records:invoices,localQueue:legacyLocalQueue,visits,serverQueue})
     if(i.changed)setInvoices(persistableCollection('invoices',i.records))
   },[appointmentsStatus,serverVisitRows,serverQueueRows,session?.role])
 
-  const value=useMemo(()=>({state,setters,actions,appointmentFlow,appointmentsStatus,appointmentsError,appointmentsTruncated,directoryPatients,toast,log,workflow,toasts,session,setSession,adoptSession,persistenceErrors,refDataStatus,retryReferenceData}),[persons,services,branchServices,dentistServiceAssignments,branches,dentists,staff,patients,serverAppointmentRows,serverVisitRows,serverQueueRows,myQueue,directoryPatients,appointmentsStatus,appointmentsError,appointmentsTruncated,treatments,invoices,hmo,inquiries,conversations,notifications,prescriptions,followups,users,automations,workflowLog,campaigns,loyalty,audit,toasts,bookingDrafts,session,clock,persistenceErrors,refDataStatus])
+  // M5 transitional downstream reconciliation (decision Q-T7): whenever server Treatments load in an authorized
+  // Staff/Dentist browser, missing local M11/M19/M20/M12 projections for completed server Treatments are created once,
+  // keyed by the Treatment public id. Idempotent; never writes the Treatment (see reconcileTreatmentHandoffs).
+  useEffect(()=>{
+    if(recoveryBlocked.current||appointmentsStatus!=='ready'||!['staff','dentist'].includes(session?.role))return
+    actionsRef.current?.reconcileTreatmentHandoffs()
+  },[appointmentsStatus,serverTreatmentRows,serverVisitRows,session?.role])
+
+  const value=useMemo(()=>({state,setters,actions,appointmentFlow,appointmentsStatus,appointmentsError,appointmentsTruncated,directoryPatients,toast,log,workflow,toasts,session,setSession,adoptSession,persistenceErrors,refDataStatus,retryReferenceData}),[persons,services,branchServices,dentistServiceAssignments,branches,dentists,staff,patients,serverAppointmentRows,serverVisitRows,serverQueueRows,myQueue,serverTreatmentRows,myTreatmentRows,directoryPatients,appointmentsStatus,appointmentsError,appointmentsTruncated,treatments,invoices,hmo,inquiries,conversations,notifications,prescriptions,followups,users,automations,workflowLog,campaigns,loyalty,audit,toasts,bookingDrafts,session,clock,persistenceErrors,refDataStatus])
   return <ClinicContext.Provider value={value}>{children}</ClinicContext.Provider>
 }
 

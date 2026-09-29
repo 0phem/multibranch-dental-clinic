@@ -1,12 +1,12 @@
 import { administrationActions } from './administration.js'
-import { validSession, permitted, isRecord, encounterIssue, completedEncounter } from './safeguards.js'
+import { validSession, permitted, isRecord, completedEncounter } from './safeguards.js'
 import { communicationActions } from './communication.js'
 import { hmoActions, prepareHmoCase } from './hmo.js'
 import { loyaltyActions } from './loyalty.js'
 import { workflowContext, notificationEventKey, appendWorkflowEvent, appendNotification, notifyBranch } from './orchestration.js'
-import { phase2Actions, procedureLines, linkedTreatment, money, validInvoice } from './phase2.js'
+import { phase2Actions, treatmentInvoiceItems, linkedTreatment, money } from './phase2.js'
 import { clinicNow, validDate } from './clock.js'
-import { encounterContext, inScope, isTodayQueue } from './contracts.js'
+import { inScope } from './contracts.js'
 import { uid } from './logic.js'
 import { bookingDraftActions } from './booking-drafts.js'
 
@@ -52,35 +52,25 @@ export function createWorkflowActions({getState,commit,getSession,clock=clinicNo
       return result
     }
     if(result.ok&&!result.unchanged){
-      const completed=state.treatments.filter(t=>t.status==='Completed'&&!before.treatments.some(old=>old.id===t.id&&old.status==='Completed'))
-      for(const treatment of completed){
-        const handoff=prepareHmoCase(ctx,{treatmentId:treatment.id},{system:true})
-        if(!handoff.ok){
-          event(`hmo:handoff:${treatment.id}`,'treatment→hmo','hmo.handoff.needs_review',handoff.message,treatment.patientId,treatment.branchId,{entityType:'treatment',entityId:treatment.id,treatmentId:treatment.id},'Warning')
-          result.warnings=[...(result.warnings||[]),handoff.message]
-        }
-      }
-    }
-    if(result.ok&&!result.unchanged){
       const patch=Object.fromEntries(Object.entries(state).filter(([key,value])=>value!==before[key]))
       commit(patch)
     }
     return result
   }
   const canOperate=(state,session,record)=>['staff','owner'].includes(session.role)&&inScope(record,session,state)
-  const queueRecord=(state,id)=>state.queue.find(q=>q.id===id)
   const closeFollowup=(state,appointmentId,status)=>{
     const appointment=state.appointments.find(a=>a.id===appointmentId)
-    state.followups=state.followups.map(f=>f.appointmentId===appointmentId&&appointment&&f.patientId===appointment.patientId&&(!f.branchId||f.branchId===appointment.branchId)&&(!f.dentistId||f.dentistId===appointment.dentistId)?{...f,status,appointmentId:status==='Open'?null:appointmentId}:f)
+    const matches=f=>f.appointmentId===appointmentId&&appointment&&f.patientId===appointment.patientId&&(!f.branchId||f.branchId===appointment.branchId)&&(!f.dentistId||f.dentistId===appointment.dentistId)
+    // Only reassign when something changes, so an idempotent reconciliation commits nothing.
+    if(state.followups.some(f=>matches(f)&&(f.status!==status||f.appointmentId!==(status==='Open'?null:appointmentId))))state.followups=state.followups.map(f=>matches(f)?{...f,status,appointmentId:status==='Open'?null:appointmentId}:f)
   }
 
   // ---- M6/M8/M9 cutover adapters (TEMPORARY) --------------------------------------------------------------------
   // Appointments, Visits and the queue are server-authoritative (Laravel/PostgreSQL). These commands never create or edit
   // an appointment, a Visit or a queue entry: each runs only AFTER the matching server command succeeded and the server
-  // projection was refreshed, and it updates the still-browser-local downstream records (treatment, follow-up, in-app
-  // notifications) to match. Remove each one when its owning module (M5/M20/M18) becomes backend-authoritative.
+  // projection was refreshed, and it updates the still-browser-local downstream records (follow-up, in-app notifications)
+  // to match. Remove each one when its owning module (M20/M18) becomes backend-authoritative.
   const serverAppointment=(state,id)=>state.appointments.find(a=>a.id===id&&a.server)
-  const serverVisit=(state,id)=>(state.visits||[]).find(v=>v.id===id&&v.server)
 
   // In-app notification/workflow event for a server-confirmed booking change (M18 prototype projection only).
   const recordAppointmentEvent=run(({state,session,event,notify},id,kind)=>{
@@ -143,76 +133,56 @@ export function createWorkflowActions({getState,commit,getSession,clock=clinicNo
     return {ok:true,record}
   })
 
-  const saveTreatment=run(({state,session,now,event,notify},input={},status='In Treatment')=>{
-    if(!isRecord(input))return fail('Open a valid encounter from My Queue.')
-    if(session.role!=='dentist')return fail('Only the assigned dentist may document treatment.')
-    const entry=queueRecord(state,input.queueEntryId)
-    if(!entry||!inScope(entry,session,state)||!isTodayQueue(entry,now.date))return fail('Open your exact encounter from today’s queue.')
-    const issue=encounterIssue(state,entry,now,status);if(issue)return fail(issue)
-    const dentist=state.dentists.find(d=>d.id===entry.dentistId)
-    if(!dentist||dentist.available===false||dentist.userId!==session.userId||!dentist.branchIds?.includes(entry.branchId))return fail('The assigned Dentist profile is unavailable for this encounter.')
-    const visit=serverVisit(state,entry.visitId)
-    const appointment=entry.appointmentId?serverAppointment(state,entry.appointmentId):null
-    if(!visit||!state.patients.some(p=>p.id===entry.patientId)||!state.branches.some(b=>b.id===entry.branchId)||entry.appointmentId&&(!appointment||['patientId','dentistId','branchId'].some(k=>appointment[k]!==entry[k])||appointment.date!==entry.clinicDate))return fail('Encounter relationships are missing or inconsistent.')
-    const current=entry.treatmentId?state.treatments.find(t=>t.id===entry.treatmentId):state.treatments.find(t=>t.queueEntryId===entry.id)
-    if(entry.treatmentId&&!current)return fail('The linked treatment record is missing; review this encounter before continuing.')
-    if(input.id&&input.id!==current?.id)return fail('Treatment ID does not match this encounter.')
-    if(current&&((current.queueEntryId&&current.queueEntryId!==entry.id)||['patientId','dentistId','branchId','appointmentId','visitId'].some(key=>current[key]!=null&&current[key]!==entry[key])))return fail('The linked treatment belongs to another encounter. Review the record linkage.')
-    for(const key of ['patientId','appointmentId','dentistId','branchId','visitId'])if(input[key]!=null&&input[key]!==entry[key])return fail('Treatment context does not match the queue entry.')
-    if(appointment&&['Cancelled','No-show'].includes(appointment.status))return fail('The appointment does not match the active treatment.')
-    // Server-first ordering: the Visit's clinical transition (start-treatment / complete, which also moves a linked
-    // appointment) is recorded on the server before the local treatment record changes.
-    if(visit.status!==status)return fail(status==='Completed'?'Complete the visit on the server first.':'Start the treatment on the visit first.')
-    if(current?.status==='Completed')return status==='Completed'?{ok:true,unchanged:true,record:current}:fail('Completed treatment cannot be reopened here.')
-    if(current&&input.revision!=null&&input.revision!==current.revision)return fail('This treatment draft changed. Reopen the encounter before saving your notes.')
-    if(!state.branches.some(b=>b.id===entry.branchId&&b.status==='Open'))return fail('This branch is not open for treatment. Ask Staff to review the encounter.')
-    // M9: the server queue entry is Served by the Visit start-treatment command itself (server-first), so a local treatment
-    // only ever follows a Served entry.
-    if(entry.status!=='Served')return fail('Start the treatment from the queue first.')
-    if(!['In Treatment','Completed'].includes(status))return fail('Invalid treatment status.')
-    if(state.treatments.some(t=>t.dentistId===entry.dentistId&&t.status==='In Treatment'&&t.date===entry.clinicDate&&t.id!==current?.id))return fail('Complete the current treatment before starting another encounter.')
-    if(status==='Completed'&&current?.status!=='In Treatment')return fail('Start treatment before completing this encounter.')
-    const serviceId=input.procedures?.[0]?.serviceId||input.serviceId||current?.serviceId||entry.serviceId
-    const service=state.services.find(s=>s.id===serviceId&&s.status==='Active')
-    const branchService=state.branchServices.find(bs=>bs.branchId===entry.branchId&&bs.serviceId===serviceId&&bs.active!==false)
-    if(!service||!branchService||!state.dentistServiceAssignments.some(a=>a.dentistId===entry.dentistId&&a.serviceId===serviceId&&a.isAuthorized!==false))return fail('Select an authorized performed service for this branch.')
-    if(status==='Completed'&&!clean(input.procedure??current?.procedure))return fail('Document the performed procedure before completing treatment.')
-    const treatmentId=current?.id||uid('t')
-    const performed=procedureLines(state,entry,treatmentId,input,current)
-    if(!performed.ok)return performed
-    if(status==='Completed'&&!performed.lines.length)return fail('Confirm at least one performed procedure.')
-    for(const key of ['prescriptionRequired','followupRequired'])if(input[key]!==undefined&&typeof input[key]!=='boolean')return fail('Clinical requirements must be explicit Dentist choices.')
-    if(input.followupDate&&(!validDate(input.followupDate)||input.followupDate<now.date))return fail('Choose a valid recommended follow-up date.')
-    const fields=['complaint','plan','procedure','notes','assistant','assistantStaffId','followupRequired','prescriptionRequired','followupDate','followupInterval','followupReason']
-    if(fields.filter(k=>!['followupRequired','prescriptionRequired'].includes(k)).some(k=>input[k]!=null&&typeof input[k]!=='string'))return fail('Clinical documentation fields must contain text.')
-    const clinical=Object.fromEntries(fields.filter(k=>input[k]!==undefined).map(k=>[k,input[k]]))
-    if(current&&current.status===status&&current.serviceId===serviceId&&JSON.stringify(current.procedures||[])===JSON.stringify(performed.lines)&&Object.entries(clinical).every(([k,v])=>current[k]===v))return {ok:true,unchanged:true,record:current}
-    const record={...current,...clinical,id:treatmentId,procedures:performed.lines,queueEntryId:entry.id,visitId:entry.visitId,patientId:entry.patientId,appointmentId:entry.appointmentId||null,dentistId:entry.dentistId,branchId:entry.branchId,requestedServiceId:entry.serviceId,serviceId,date:entry.clinicDate,status,startedAt:current?.startedAt||now.timestamp,completedAt:status==='Completed'?now.timestamp:null,revision:(current?.revision||0)+1}
-    state.treatments=replace(state.treatments,record)
-    if(status==='Completed'){
-      state.patients=state.patients.map(p=>p.id===record.patientId?{...p,dentalHistory:`${p.dentalHistory||''} ${record.procedure} • ${record.date}.`.trim()}:p)
-      const existingInvoice=state.invoices.find(i=>i.treatmentId===record.id)
-      if(existingInvoice&&!validInvoice(state,existingInvoice))return fail('An existing invoice has inconsistent treatment links.')
-      if(state.followups.some(f=>f.treatmentId===record.id&&!linkedTreatment(state,f))||state.prescriptions.some(r=>r.treatmentId===record.id&&!linkedTreatment(state,r)))return fail('An existing clinical handoff has inconsistent treatment links.')
-      if(!existingInvoice){
-        const invoiceId=uid('inv')
-        const items=record.procedures.map(p=>({id:`${invoiceId}-${p.id}`,invoiceId,procedureId:p.id,treatmentId:record.id,serviceId:p.serviceId,quantity:p.quantity,unitFee:p.unitFee,amount:p.amount}))
-        const amount=money(items.reduce((sum,p)=>sum+p.amount,0))
-        const invoice={id:invoiceId,invoiceNo:`INV-${now.date.slice(0,4)}-${String(state.invoices.length+1).padStart(4,'0')}`,treatmentId:record.id,queueEntryId:entry.id,visitId:entry.visitId,appointmentId:entry.appointmentId||null,patientId:record.patientId,branchId:record.branchId,visitDate:record.date,items,subtotal:amount,total:amount,netAmount:amount,status:'Draft',paymentStatus:'Unpaid',method:'—',receipt:null,createdBy:'System'}
-        state.invoices=[invoice,...state.invoices]
-        event(`invoice:${record.id}`,'treatment→billing','billing.draft.prepared',invoice.invoiceNo,record.patientId,record.branchId)
+  // ---- M5 downstream reconciliation (TEMPORARY transitional adapters; decision Q-T7) --------------------------------------
+  // The clinical Treatment is server-authoritative (M5). A COMPLETED server Treatment is the durable fact the still-browser-
+  // local modules consume: M11 Draft invoice, M20 follow-up task, M19 prescription-required task and M12 HMO handoff.
+  // Every authorized Staff/Dentist browser in scope reconciles the missing local
+  // projections from the server Treatments it loaded, keyed by the Treatment's public id (the deterministic source key),
+  // so the result never depends on which browser completed the treatment. Idempotent: an existing projection for that
+  // Treatment is never duplicated or rewritten. It reads the Treatment and never writes it (commit() drops treatments).
+  // Pre-server treatment history and Owner summary rows are never reconciled. Remove each adapter when its module's
+  // backend lands.
+  // M18 boundary: this reconciliation creates NO notification of any kind (no in-app record, email, SMS, delivery status,
+  // retry or schedule) — notification & reminder delivery belongs to M18. It only appends M23 workflow-log events
+  // (`log`, which never notifies). The M12 HMO adapter it calls is unchanged M12 prototype code: when it opens a case it
+  // still records M12's own in-app case notices, exactly as a manual HMO case does (see the M5 hardening report).
+  const reconcileTreatmentHandoffs=run(({state,session,now,event,notify})=>{
+    if(!['staff','dentist'].includes(session.role))return {ok:true,unchanged:true}
+    const log=(key,domain,type,result,t,extra={},status='Success')=>appendWorkflowEvent(state,session,now,key,domain,type,result,{...workflowContext(state,key),patientId:t.patientId,branchId:t.branchId,...extra},status)
+    const warnings=[]
+    const completed=state.treatments.filter(t=>t.server&&!t.summaryOnly&&!t.patientSubset&&t.status==='Completed'&&inScope(t,session,state)&&completedEncounter(state,t))
+    for(const t of completed){
+      // M11: Draft invoice priced from the local fee configuration (M13/M11 own pricing; M5 stores no money).
+      if(!state.invoices.some(i=>i.treatmentId===t.id)){
+        const invoiceId=`inv-${t.id}`
+        const priced=treatmentInvoiceItems(state,t,invoiceId)
+        if(!priced.ok){
+          log(`billing:needs-review:${t.id}`,'treatment→billing','billing.draft.needs_review',priced.message,t,{entityType:'treatment',entityId:t.id,treatmentId:t.id},'Warning')
+          warnings.push(priced.message)
+        }else{
+          const amount=money(priced.items.reduce((sum,p)=>sum+p.amount,0))
+          const invoice={id:invoiceId,invoiceNo:`INV-${t.date.slice(0,4)}-${String(state.invoices.length+1).padStart(4,'0')}`,treatmentId:t.id,queueEntryId:t.queueEntryId,visitId:t.visitId,appointmentId:t.appointmentId||null,patientId:t.patientId,branchId:t.branchId,visitDate:t.date,items:priced.items,subtotal:amount,total:amount,netAmount:amount,status:'Draft',paymentStatus:'Unpaid',method:'—',receipt:null,createdBy:'System'}
+          state.invoices=[invoice,...state.invoices]
+          log(`invoice:${t.id}`,'treatment→billing','billing.draft.prepared',invoice.invoiceNo,t)
+        }
       }
-      if(record.followupRequired&&!state.followups.some(f=>f.treatmentId===record.id)){
-        state.followups=[{id:uid('f'),patientId:record.patientId,treatmentId:record.id,dentistId:record.dentistId,branchId:record.branchId,reason:record.followupReason||`Follow-up after ${record.procedure}`,recommendedDate:record.followupDate||'',interval:record.followupInterval||'',status:'Open',appointmentId:null,taskCreatedAt:now.label},...state.followups]
-        notify(`followup:${record.id}`,record.patientId,'Follow-Up Required','Your dentist recommends a follow-up visit.')
-        event(`followup:${record.id}`,'treatment→followup','clinical.followup.required',`Follow-up for ${record.id}`,record.patientId,record.branchId)
+      // M20: the Dentist's follow-up decision becomes an Open task that clinic Staff schedule through the M6 bridge.
+      if(t.followupRequired&&!state.followups.some(f=>f.treatmentId===t.id)){
+        state.followups=[{id:`f-${t.id}`,patientId:t.patientId,treatmentId:t.id,dentistId:t.dentistId,branchId:t.branchId,reason:t.followupReason||`Follow-up after ${t.procedure}`,recommendedDate:t.followupDate||'',interval:t.followupInterval||'',status:'Open',appointmentId:null,taskCreatedAt:now.label},...state.followups]
+        log(`followup:${t.id}`,'treatment→followup','clinical.followup.required',`Follow-up for ${t.id}`,t)
       }
-      if(record.prescriptionRequired&&!state.prescriptions.some(rx=>rx.treatmentId===record.id))event(`rx:${record.id}`,'treatment→prescription','clinical.prescription.required','Dentist authorization required',record.patientId,record.branchId)
-      if(entry.appointmentId)closeFollowup(state,entry.appointmentId,'Completed')
-      notify(`treatment:${record.id}`,record.patientId,'Visit Complete','Your treatment is complete. Staff will review the prepared bill.')
+      // M19: a requested prescription becomes the Dentist's authorization task (the Dentist enters every medication).
+      if(t.prescriptionRequired&&!state.prescriptions.some(rx=>rx.treatmentId===t.id))log(`rx:${t.id}`,'treatment→prescription','clinical.prescription.required','Dentist authorization required',t)
+      // M12: clinic-side HMO handoff for an insured Patient (never a provider decision).
+      const handoff=prepareHmoCase({state,session,now,event,notify},{treatmentId:t.id},{system:true})
+      if(!handoff.ok){
+        log(`hmo:handoff:${t.id}`,'treatment→hmo','hmo.handoff.needs_review',handoff.message,t,{entityType:'treatment',entityId:t.id,treatmentId:t.id},'Warning')
+        warnings.push(handoff.message)
+      }
+      if(t.appointmentId)closeFollowup(state,t.appointmentId,'Completed')
+      log(`treatment:${t.id}:${t.revision}`,'treatment→automation','clinical.treatment.completed',`${t.id} • Completed`,t)
     }
-    event(`treatment:${record.id}:${record.revision}`,'treatment→automation',status==='Completed'?'clinical.treatment.completed':'clinical.treatment.updated',`${record.id} • ${status}`,record.patientId,record.branchId)
-    return {ok:true,record,context:{...encounterContext(entry),treatmentId:record.id}}
+    return {ok:true,warnings}
   })
 
   const createPatientRecord=run(({state,session,now,event},input={})=>{
@@ -240,7 +210,7 @@ export function createWorkflowActions({getState,commit,getSession,clock=clinicNo
     event(`patient:${record.id}`,'patient','patient.record.created',record.patientCode,record.id,preferredBranchId)
     return {ok:true,record:patientProjection(record,personRecord)}
   })
-  const commands={...administrationActions(run),...phase2Actions(run),...hmoActions(run),...communicationActions(run),...loyaltyActions(run),...bookingDraftActions(run),recordAppointmentEvent,applyAppointmentCancellation,applyAppointmentNoShow,linkFollowupAppointment,saveTreatment,completeTreatment:(input,status='Completed')=>saveTreatment(input,status),createPatientRecord}
-  const permissions={recordAppointmentEvent:'appointments',applyAppointmentCancellation:'appointments',applyAppointmentNoShow:'appointments',linkFollowupAppointment:'followups',saveTreatment:'treatment',completeTreatment:'treatment',createPatientRecord:'patient-demographics',reviewInvoice:'billing',issueInvoice:'billing',postPayment:'billing',savePrescription:'prescriptions',authorizePrescription:'prescriptions',recordLoyaltyActivity:'engagement',processLoyaltyRedemption:'engagement'}
+  const commands={...administrationActions(run),...phase2Actions(run),...hmoActions(run),...communicationActions(run),...loyaltyActions(run),...bookingDraftActions(run),recordAppointmentEvent,applyAppointmentCancellation,applyAppointmentNoShow,linkFollowupAppointment,reconcileTreatmentHandoffs,createPatientRecord}
+  const permissions={recordAppointmentEvent:'appointments',applyAppointmentCancellation:'appointments',applyAppointmentNoShow:'appointments',linkFollowupAppointment:'followups',createPatientRecord:'patient-demographics',reviewInvoice:'billing',issueInvoice:'billing',postPayment:'billing',savePrescription:'prescriptions',authorizePrescription:'prescriptions',recordLoyaltyActivity:'engagement',processLoyaltyRedemption:'engagement'}
   return Object.fromEntries(Object.entries(commands).map(([name,action])=>[name,(...args)=>permissions[name]&&!permitted(getState(),getSession(),permissions[name])?fail('Your current account or permission no longer allows this action. Reopen your workspace or ask an administrator.'):action(...args)]))
 }

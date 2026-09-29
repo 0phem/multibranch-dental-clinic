@@ -27,9 +27,11 @@ export function validHmoContext(state,h) {
   if(!h||!state.patients.some(p=>p.id===h.patientId)||!state.branches.some(b=>b.id===h.branchId)||!HMO_PROVIDERS.some(p=>p.id===h.providerId))return false
   const t=h.treatmentId?state.treatments.find(t=>t.id===h.treatmentId):null
   const a=h.appointmentId?state.appointments.find(a=>a.id===h.appointmentId):null
-  if(h.treatmentId&&(!t||t.patientId!==h.patientId||t.branchId!==h.branchId))return false
+  // A Patient's own M5 subset has no branch/appointment/Dentist identifiers: the HMO case's exact `treatmentId` and Patient
+  // are the link; branch/appointment agreement is checked where Staff/Dentists hold the full Treatment.
+  if(h.treatmentId&&(!t||t.patientId!==h.patientId||!t.patientSubset&&t.branchId!==h.branchId))return false
   if(h.appointmentId&&(!a||a.patientId!==h.patientId||a.branchId!==h.branchId))return false
-  if(t&&h.appointmentId&&(t.appointmentId!==h.appointmentId||t.dentistId!==a.dentistId))return false
+  if(t&&!t.patientSubset&&h.appointmentId&&(t.appointmentId!==h.appointmentId||t.dentistId!==a.dentistId))return false
   return true
 }
 export function canProcessHmo(state,session,h) {

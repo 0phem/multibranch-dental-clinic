@@ -24,8 +24,8 @@ async function openFollowup() {
   await w.flow.checkIn(a.id)
   const q = w.state.queue[0]
   w.role('dentist'); await w.flow.queueCommand(q, 'call', 'call-1')
-  await w.flow.treatment({ queueEntryId: q.id }, 'In Treatment')
-  const done = await w.flow.treatment({ queueEntryId: q.id, procedure: 'Consultation', procedures: [{ serviceId: 'svc1', quantity: 1 }], followupRequired: true, followupDate: '2026-09-26' }, 'Completed')
+  await w.treat({ queueEntryId: q.id }, 'In Treatment')
+  const done = await w.treat({ queueEntryId: q.id, procedure: 'Consultation', procedures: [{ serviceId: 'svc1', quantity: 1 }], followupRequired: true, followupDate: '2026-09-26' }, 'Completed')
   assert.equal(done.ok, true, done.message)
   const followup = w.state.followups[0]
   assert.equal(followup.status, 'Open')

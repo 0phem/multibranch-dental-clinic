@@ -28,12 +28,11 @@ const same=(a,b,keys)=>keys.every(k=>(a?.[k]??null)===(b?.[k]??null))
 const contextKeys=['patientId','dentistId','branchId','appointmentId']
 const ARRIVAL_SKEW_MS=5*60*1000
 // Missing legacy optional links remain readable; explicit contradictory links fail closed.
-// M8/M9: every live encounter is one server Visit, and its queue entry `q` is the server M9 queue entry for that Visit
-// (`q.visitId`). The Visit, its appointment and the queue are server truth; the local M5 treatment must agree with them.
-// Queue and Visit: the entry is Served exactly when the Visit has moved on to treatment (one server transaction).
-// `appliedStatus`: during a server-first clinical transition the server Visit already carries the new status while the
-// local treatment record is about to follow it. Only that exact status is tolerated; every relationship check applies.
-export function encounterIssue(state,q,now=clinicNow(),appliedStatus=null) {
+// M8/M9/M5: every live encounter is one server Visit; its queue entry `q` is the server M9 entry for that Visit
+// (`q.visitId`) and its clinical record is the server M5 Treatment for that Visit. All three are server truth (one server
+// transaction moves them together); this check only refuses to act on a projection that is missing or contradictory.
+// Pre-server (browser-local) treatment history never takes part in a live encounter.
+export function encounterIssue(state,q,now=clinicNow()) {
   if(!q||!state.patients.some(p=>p.id===q.patientId)||!state.branches.some(b=>b.id===q.branchId)||!state.dentists.some(d=>d.id===q.dentistId))return 'The encounter profile is missing. Ask the clinic to review this record.'
   // Arrival times come from the server clock, so a few minutes of browser clock skew are tolerated.
   if(!validDate(q.clinicDate)||q.arrivedAt&&(!strictTimestamp(q.arrivedAt)||Date.parse(strictTimestamp(q.arrivedAt))>Date.parse(now.timestamp)+ARRIVAL_SKEW_MS||clinicDateAt(strictTimestamp(q.arrivedAt))!==q.clinicDate))return 'The arrival date/time needs clinic review.'
@@ -46,27 +45,28 @@ export function encounterIssue(state,q,now=clinicNow(),appliedStatus=null) {
   if(v&&(!same(v,q,contextKeys)||v.clinicDate!==q.clinicDate))return 'The queue and visit identify different encounters. Ask the clinic to review the links.'
   const a=q.appointmentId?state.appointments.find(a=>a.id===q.appointmentId):null
   if(q.appointmentId&&(!a||!same(a,q,['patientId','dentistId','branchId'])||a.date!==q.clinicDate))return 'The queue and appointment identify different encounters. Ask the clinic to review the links.'
-  const treatments=state.treatments.filter(t=>t.queueEntryId===q.id||t.id===q.treatmentId||t.visitId&&t.visitId===q.visitId||q.appointmentId&&t.appointmentId===q.appointmentId&&!t.legacyAppointment)
-  if(treatments.length>1)return 'Multiple treatments reference this encounter. Ask the clinic to review the links.'
-  const t=treatments[0]
-  if(q.treatmentId&&!t||t&&(!same(t,q,contextKeys)||t.queueEntryId!==q.id||q.treatmentId&&t.id!==q.treatmentId||t.visitId!==q.visitId))return 'The treatment does not match this encounter.'
-  const serverStatus=v?.status??null
-  const transitioning=!!v&&!!appliedStatus&&serverStatus===appliedStatus
   if(a&&['Cancelled','No-show'].includes(a.status))return 'The appointment is already closed. Refresh the worklist; this queue requires clinic review.'
+  if(!v)return null
   // A scheduled Visit moves its appointment in the same server transaction, so their statuses always match.
-  if(a&&v&&a.status!==v.status&&!(transitioning&&a.status===appliedStatus))return 'The appointment and visit disagree. Refresh the worklist; this encounter needs clinic review.'
-  if(v&&(q.status==='Served')!==(serverStatus!=='Checked In'))return 'The queue and visit disagree. Refresh the worklist; this encounter needs clinic review.'
-  // The server Visit moved ahead of this browser's treatment record (a local step failed after the server succeeded, or
-  // the step happened in another browser): the Dentist retries from the treatment screen, where the record may follow.
-  if(v&&!transitioning&&t&&t.status!==serverStatus)return `The visit is ${serverStatus} at the clinic server but this treatment record is ${t.status}. Retry the step from the treatment screen.`
-  if(v&&!transitioning&&!t&&serverStatus!=='Checked In')return `The visit is ${serverStatus} at the clinic server but this browser has no treatment record for it. Retry the step from the treatment screen.`
+  if(a&&a.status!==v.status)return 'The appointment and visit disagree. Refresh the worklist; this encounter needs clinic review.'
+  if((q.status==='Served')!==(v.status!=='Checked In'))return 'The queue and visit disagree. Refresh the worklist; this encounter needs clinic review.'
+  const treatments=state.treatments.filter(t=>t.server&&t.visitId===v.id)
+  if(treatments.length>1)return 'Multiple treatments reference this visit. Ask the clinic to review the links.'
+  const t=treatments[0]
+  if(t&&(!same(t,q,['patientId','dentistId','branchId','appointmentId'])||t.status!==v.status))return 'The treatment does not match this encounter. Refresh the worklist; it needs clinic review.'
+  // Completed Visits from before the M5 cutover legitimately have no server Treatment; an In Treatment Visit always has one.
+  if(!t&&v.status==='In Treatment')return 'This encounter’s treatment is not loaded from the clinic server. Refresh the worklist and try again.'
   return null
 }
-// M9 (Q11): completed-encounter evidence is anchored on the server Visit, not on a browser queue row. A completed local
-// treatment counts only when it references its server Visit and — where Visits are projected — that Visit is Completed
-// for the same Patient, Dentist, branch and appointment. A Patient session (no Visit API yet, D9) checks local links only.
+// M5/M9 (Q11): completed-encounter evidence is anchored on the server Visit. A SERVER Treatment counts when it is Completed
+// and — where Visits are projected — its Visit is Completed for the same Patient, Dentist, branch and appointment. A
+// Patient session (no Visit API yet, D9) reads only its own completed safe subset from the server, which is itself the
+// evidence. A pre-server local treatment keeps counting only for downstream records already linked to it, through its
+// exact server Visit link.
 export function completedEncounter(state,t) {
-  if(!t||t.status!=='Completed'||!isServerId(t.visitId))return false
+  if(!t||t.status!=='Completed')return false
+  if(t.server&&t.patientSubset)return state.visitsProjected===false
+  if(!isServerId(t.visitId))return false
   const v=(state.visits||[]).find(v=>v.id===t.visitId)
   if(!v)return state.visitsProjected===false
   return v.status==='Completed'&&same(v,t,contextKeys)

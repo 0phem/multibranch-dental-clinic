@@ -22,7 +22,8 @@ export function PatientsPage({ role, store, context, setPage }) {
   const [newPatient,setNewPatient]=useState({firstName:'',lastName:'',dob:'',sex:'Female',phone:'',email:'',address:'',preferredBranch:'Branch A',hmo:'None',hmoMember:'—',allergies:'None',medicalHistory:'',dentalHistory:'',emergencyContact:'',consent:false,createPortalAccount:false})
   const patient=availablePatients.find(p=>p.id===selected)
   const visits=state.appointments.filter(a=>a.patientId===selected&&inScope(a,session,state)).sort((a,b)=>`${b.date}${b.start}`.localeCompare(`${a.date}${a.start}`))
-  const treatments=state.treatments.filter(t=>t.patientId===selected).sort((a,b)=>b.date.localeCompare(a.date))
+  // M5: server Treatments (already scoped by the server) first, then read-only pre-server history.
+  const treatments=state.treatments.filter(t=>t.patientId===selected).sort((a,b)=>Number(!!b.server)-Number(!!a.server)||String(b.date).localeCompare(String(a.date)))
   const hmo=visibleHmo(state,session).filter(h=>h.patientId===selected)
   const encounter=state.queue.find(q=>q.id===context?.queueEntryId&&q.patientId===selected&&inScope(q,session,state)&&isTodayQueue(q))
   const saveRecord=({person,patient:patientPatch})=>{
@@ -53,7 +54,7 @@ export function PatientsPage({ role, store, context, setPage }) {
         <Tabs tabs={tabs} active={tab} onChange={setTab}/>
         {tab==='summary'&&<SummaryTab key={patient.id} patient={patient} role={role} onSave={saveRecord}/>}
         {tab==='visits'&&<Card title="Cross-branch visit history"><Table rows={visits} columns={[{key:'date',label:'Date',render:a=>dateLabel(a.date)},{key:'branch',label:'Branch'},{key:'service',label:'Service'},{key:'dentist',label:'Dentist',render:a=>dentistName(a.dentistId,state.dentists)},{key:'status',label:'Status',render:a=><Status>{a.status}</Status>}]} /></Card>}
-        {tab==='clinical'&&<Card title="Treatment history" subtitle={role==='dentist'?'Dentist-authorized clinical view':'Staff read-only clinical summary'}>{treatments.length?treatments.map(t=><div className="clinical-history" key={t.id}><div><b>{dateLabel(t.date)} • {t.procedure||t.plan}</b><p>{t.notes}</p><small>{dentistName(t.dentistId,state.dentists)} • {t.status}</small></div><Status>{t.status}</Status></div>):<Notice>No treatment history recorded.</Notice>}</Card>}
+        {tab==='clinical'&&<Card title="Treatment history" subtitle={role==='dentist'?'Clinic server records you may read: your own treatments and, while you treat this patient, their earlier completed treatments. Read-only unless you are the treating Dentist.':'Staff read-only clinical record'}>{treatments.length?treatments.map(t=><div className="clinical-history" key={t.id}><div><b>{dateLabel(t.date)} • {t.procedure||t.plan||'Treatment in progress'}</b>{t.complaint&&<p>Complaint: {t.complaint}</p>}{t.plan&&<p>Plan: {t.plan}</p>}{t.notes&&<p>{t.notes}</p>}{Array.isArray(t.procedures)&&t.procedures.length>0&&<p>{t.procedures.map(p=>`${p.serviceName||state.services.find(s=>s.id===p.serviceId)?.name||'Service'} × ${p.quantity}`).join(', ')}</p>}<small>{t.dentistName||dentistName(t.dentistId,state.dentists)} • {t.status}</small>{!t.server&&<small className="block-muted">{t.legacyAppointment?'Historical demo record':'Recorded before server treatment records'} — read-only</small>}</div><Status>{t.status}</Status></div>):<Notice>No treatment history recorded.</Notice>}</Card>}
         {tab==='hmo'&&<Card title="HMO record"><Table rows={hmo} columns={[{key:'provider',label:'Provider'},{key:'memberId',label:'Member ID'},{key:'treatment',label:'Requested treatment'},{key:'eligibility',label:'Eligibility',render:h=><Status>{h.eligibility}</Status>},{key:'status',label:'Status',render:h=><Status>{h.status}</Status>}]} /></Card>}
         {tab==='documents'&&<Card title="Visit documents"><Notice tone="info">Document upload/storage is represented in the UI only. A backend will store file metadata and protected object-storage references linked to this patient.</Notice><div className="document-grid"><div><span>PDF</span><b>Consent Form</b><small>Verified • 2026-09-12</small></div><div><span>IMG</span><b>Visit Attachment</b><small>Branch A • 2026-09-12</small></div></div></Card>}
       </div>
@@ -108,57 +109,95 @@ function SummaryTab({ patient, role, onSave }) {
   </Card>
 }
 
+// The editable Treatment form, derived from the server record (or empty before treatment starts). Unsaved changes live
+// only in React memory; there are no browser Treatment drafts.
+const treatmentForm=(t,dentist)=>({
+  complaint:t?.complaint||'',plan:t?.plan||'',procedure:t?.procedure||'',notes:t?.notes||'',
+  assistant:t?t.assistant||'Unassigned':dentist?.assistant||'Unassigned',
+  prescriptionRequired:!!t?.prescriptionRequired,followupRequired:!!t?.followupRequired,
+  followupDate:t?.followupDate||'',followupReason:t?.followupReason||'',followupInterval:t?.followupInterval||'',
+  procedures:(t?.procedures||[]).map(p=>({id:p.id,serviceId:p.serviceId,quantity:p.quantity,notes:p.notes||''})),
+})
+const formKey=form=>JSON.stringify({...form,assistant:undefined,procedures:form.procedures.map(p=>({...p,quantity:String(p.quantity)}))})
+
 export function TreatmentPage({ store, context, setPage }) {
-  const { state, actions, toast }=store
+  const { state, toast }=store
   const session=store.session||sessionForRole('dentist',state)
+  const flow=store.appointmentFlow
   const queueEntry=state.queue.find(q=>q.id===context?.queueEntryId&&inScope(q,session,state)&&isTodayQueue(q))
-  const selected=queueEntry?.patientId||''
-  const linked=queueEntry?.treatmentId?state.treatments.find(t=>t.id===queueEntry.treatmentId&&t.queueEntryId===queueEntry.id):state.treatments.find(t=>t.queueEntryId===queueEntry?.id)
-  const current=linked&&queueEntry&&['patientId','dentistId','branchId','appointmentId'].every(k=>(linked[k]??null)===(queueEntry[k]??null))?linked:null
+  // M5: the clinical record is the server Treatment of the encounter's Visit (never a browser record).
+  const treatment=state.treatments.find(t=>t.server&&(context?.treatmentId&&t.id===context.treatmentId||queueEntry?.visitId&&t.visitId===queueEntry.visitId))||null
+  const visitId=treatment?.visitId||queueEntry?.visitId||null
+  const visit=(state.visits||[]).find(v=>v.id===visitId)||null
+  const patientId=treatment?.patientId||queueEntry?.patientId||''
+  const patient=state.patients.find(p=>p.id===patientId)
   const dentist=state.dentists.find(d=>d.id===session.dentistId)
-  const emptyForm={complaint:'',plan:'',procedure:'',notes:'',assistant:dentist?.assistant||'Unassigned',assistantStaffId:dentist?.assistantStaffId||null,serviceId:queueEntry?.serviceId||'',procedures:[],followupRequired:false,prescriptionRequired:false,followupDate:'',followupInterval:''}
-  const [form,setForm]=useState(current?{...current,procedures:(Array.isArray(current.procedures)?current.procedures.filter(Boolean):null)||[{serviceId:current.serviceId,quantity:1,notes:current.procedure||''}]}:emptyForm)
-  const closed=current?.status==='Completed'||['Completed','Cancelled','No-show'].includes(queueEntry?.displayStatus||queueEntry?.status)
-  const performedServices=state.services.filter(s=>s.status==='Active'&&state.branchServices.some(bs=>bs.branchId===queueEntry?.branchId&&bs.serviceId===s.id&&bs.active!==false)&&state.dentistServiceAssignments.some(a=>a.dentistId===session.dentistId&&a.serviceId===s.id&&a.isAuthorized!==false))
+  const [base,setBase]=useState(treatment)
+  const [form,setForm]=useState(()=>treatmentForm(treatment,dentist))
   const [saving,setSaving]=useState(false)
-  // Appointment-linked encounters record start/completion on the server appointment first (M6 lifecycle), then the
-  // browser-local treatment record follows; walk-ins have no appointment and stay local.
-  const save=async status=>{
-    if(!queueEntry)return toast('Open an encounter from My Queue.','warning')
-    setSaving(true)
-    const result=await store.appointmentFlow.treatment({...form,id:current?.id,queueEntryId:queueEntry.id},status)
-    setSaving(false)
-    if(!result.ok)return toast(result.message,'warning')
-    setForm(result.record)
-    toast(result.warnings?.length?`Treatment completed. Clinic review needed: ${result.warnings.join(' ')}`:status==='Completed'?'Treatment completed; this encounter is closed and downstream tasks prepared.':'Treatment progress saved.',result.warnings?.length?'warning':'success')
+  const dirty=formKey(form)!==formKey(treatmentForm(base,dentist))
+  // Adopt the latest server record when nothing is unsaved; otherwise keep the Dentist's text and flag the newer version.
+  React.useEffect(()=>{
+    if(!dirty||!base){setBase(treatment);setForm(treatmentForm(treatment,dentist))}
+  },[treatment?.id,treatment?.revision,treatment?.status])
+  const newer=!!treatment&&!!base&&treatment.revision!==base.revision
+  const reloadLatest=()=>{setBase(treatment);setForm(treatmentForm(treatment,dentist))}
+  const readOnly=!!treatment&&(treatment.status!=='In Treatment'||!treatment.author)
+  const canStart=!treatment&&!!queueEntry&&['Called','Treatment Ready'].includes(queueEntry.status)&&visit?.status==='Checked In'
+  const performedServices=state.services.filter(s=>s.status==='Active'&&state.branchServices.some(bs=>bs.branchId===(treatment?.branchId||queueEntry?.branchId)&&bs.serviceId===s.id&&bs.active!==false)&&state.dentistServiceAssignments.some(a=>a.dentistId===session.dentistId&&a.serviceId===s.id&&a.isAuthorized!==false))
+  const priorCare=state.treatments.filter(t=>t.server&&t.patientId===patientId&&t.status==='Completed'&&t.id!==treatment?.id)
+  const done=(result,message)=>{
+    // A refused or partial step keeps the Dentist's unsaved text on screen (a started-but-undocumented treatment only
+    // becomes the new base record, so Save retries the documentation against it).
+    if(!result.ok){toast(result.message,'warning');if(result.record)setBase(result.record);return}
+    setBase(result.record);setForm(treatmentForm(result.record,dentist))
+    toast(result.warnings?.length?`${message} Clinic review needed: ${result.warnings.join(' ')}`:message,result.warnings?.length?'warning':'success')
   }
+  const act=async fn=>{setSaving(true);try{await fn()}finally{setSaving(false)}}
+  const start=()=>act(async()=>done(await flow.startTreatment(queueEntry,form),'Treatment started.'))
+  // Saves against the revision this form was loaded from, so a newer save elsewhere is reported, never overwritten.
+  const save=()=>act(async()=>done(await flow.saveTreatment({...treatment,revision:base.revision},form),'Treatment progress saved.'))
+  const complete=()=>act(async()=>done(await flow.completeTreatment({...treatment,revision:base.revision},form,{dirty}),'Treatment completed; this encounter is closed and downstream tasks prepared.'))
+  const line=(index,key,value)=>setForm({...form,procedures:form.procedures.map((p,i)=>i===index?{...p,[key]:value}:p)})
   return <>
     <PageHeader title="Treatment & Clinical Workflow" text="Treatment opens from the logged-in dentist’s active queue. Patient, appointment, dentist, branch, and service context are loaded automatically; clinical judgment remains with the dentist."/>
-    {!queueEntry?<Notice tone="info" title="No encounter selected">Open the exact patient from My Queue to document treatment. <Button size="sm" onClick={()=>setPage('queue')}>Open My Queue</Button></Notice>:<div className="grid-2 clinical-layout">
+    {!queueEntry&&!treatment?<Notice tone="info" title="No encounter selected">Open the exact patient from My Queue to document treatment. <Button size="sm" onClick={()=>setPage('queue')}>Open My Queue</Button></Notice>:<div className="grid-2 clinical-layout">
       <Card title="Current patient & visit context">
-        <p>Queue #{queueEntry.queueNumber} • {queueEntry.branch} • <Status>{queueEntry.displayStatus||queueEntry.status}</Status></p>
-        <Button size="sm" variant="ghost" onClick={()=>setPage('patients',{...context,patientId:selected})}>Open Chart</Button>
-        <div className="patient-summary"><b>{patientName(selected,state.patients)}</b><p>{state.services.find(s=>s.id===queueEntry.serviceId)?.name||'Unknown requested service'} • {queueEntry.branch} • {dentist?.name}</p><p>Allergies: {state.patients.find(p=>p.id===selected)?.allergies}</p><p>History: {state.patients.find(p=>p.id===selected)?.dentalHistory}</p></div>
-        {visibleHmo(state,session).filter(h=>current?.id&&h.treatmentId===current.id||h.appointmentId&&h.appointmentId===queueEntry.appointmentId).map(h=><p key={h.id}>HMO: {HMO_PROVIDERS.find(p=>p.id===h.providerId)?.name} • {h.status} • Provider decisions are external.</p>)}
+        {queueEntry&&<p>Queue #{queueEntry.queueNumber} • {queueEntry.branch} • <Status>{queueEntry.displayStatus||queueEntry.status}</Status></p>}
+        <Button size="sm" variant="ghost" onClick={()=>setPage('patients',{...context,patientId})}>Open Chart</Button>
+        <div className="patient-summary"><b>{patientName(patientId,state.patients)}</b><p>{state.services.find(s=>s.id===(queueEntry?.serviceId||treatment?.requestedServiceId))?.name||'Unknown requested service'} • {state.branches.find(b=>b.id===(treatment?.branchId||queueEntry?.branchId))?.name} • {treatment?.dentistName||dentist?.name}</p><p>Allergies: {patient?.allergies}</p>
+          {patient?.dentalHistory&&<p>Earlier dental history notes (read-only, recorded before server treatment records): {patient.dentalHistory}</p>}
+          <p>{priorCare.length?`${priorCare.length} earlier completed treatment record${priorCare.length===1?'':'s'} available in the chart.`:'No earlier server treatment records you can view.'}</p></div>
+        {visibleHmo(state,session).filter(h=>treatment?.id&&h.treatmentId===treatment.id||queueEntry?.appointmentId&&h.appointmentId===queueEntry.appointmentId).map(h=><p key={h.id}>HMO: {HMO_PROVIDERS.find(p=>p.id===h.providerId)?.name} • {h.status} • Provider decisions are external.</p>)}
         <Notice tone="info">The system does not diagnose, prescribe, or choose treatment. It only loads known context and automates downstream handoffs after the dentist’s decisions.</Notice>
       </Card>
-      <Card title="Clinical documentation">{closed&&<Notice tone="success">This encounter is complete and its clinical record is read-only.</Notice>}<fieldset disabled={closed} style={{border:0,padding:0,margin:0,minWidth:0}}><div className="form-grid one-col">
+      <Card title="Clinical documentation" subtitle={treatment?`Clinic server record • revision ${treatment.revision}`:'Starting treatment serves the queue entry and creates the clinic server record.'}>
+        {treatment?.status==='Completed'&&<Notice tone="success">This encounter is complete and its clinical record is read-only. Corrections after completion are not available yet (clinic policy pending).</Notice>}
+        {treatment&&!treatment.author&&treatment.status!=='Completed'&&<Notice tone="warning">This treatment belongs to another Dentist and is read-only.</Notice>}
+        {newer&&dirty&&<Notice tone="warning" title="A newer version was saved">This treatment was saved elsewhere after you opened it. Your unsaved changes are still here. <Button size="sm" variant="soft" onClick={reloadLatest}>Load the latest version (discards unsaved changes)</Button></Notice>}
+        <fieldset disabled={readOnly||saving} style={{border:0,padding:0,margin:0,minWidth:0}}><div className="form-grid one-col">
         <Notice>Confirm the procedures actually performed. The booked service is visit context only.</Notice>
-        {(form.procedures||[]).map((line,index)=><div className="form-grid" key={index}>
-          <Field label={`Procedure ${index+1}`} required><select value={line.serviceId} onChange={e=>setForm({...form,procedures:form.procedures.map((p,i)=>i===index?{...p,serviceId:e.target.value}:p)})}><option value="">Select performed procedure</option>{performedServices.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></Field>
-          <Field label="Quantity" required><input type="number" min="1" step="1" value={line.quantity} onChange={e=>setForm({...form,procedures:form.procedures.map((p,i)=>i===index?{...p,quantity:e.target.value}:p)})}/></Field>
-          <Field label="Procedure notes"><input value={line.notes||''} onChange={e=>setForm({...form,procedures:form.procedures.map((p,i)=>i===index?{...p,notes:e.target.value}:p)})}/></Field>
+        {form.procedures.map((p,index)=><div className="form-grid" key={p.id||`new-${index}`}>
+          <Field label={`Procedure ${index+1}`} required><select value={p.serviceId||''} onChange={e=>line(index,'serviceId',e.target.value)}><option value="">Select performed procedure</option>{performedServices.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}{p.serviceId&&!performedServices.some(s=>s.id===p.serviceId)&&<option value={p.serviceId}>{treatment?.procedures.find(x=>x.id===p.id)?.serviceName||p.serviceId}</option>}</select></Field>
+          <Field label="Quantity" required><input type="number" min="1" step="1" value={p.quantity} onChange={e=>line(index,'quantity',e.target.value)}/></Field>
+          <Field label="Procedure notes"><input value={p.notes||''} onChange={e=>line(index,'notes',e.target.value)}/></Field>
           <Button variant="ghost" onClick={()=>setForm({...form,procedures:form.procedures.filter((_,i)=>i!==index)})}>Remove procedure {index+1}</Button>
         </div>)}
-        <Button variant="ghost" onClick={()=>setForm({...form,procedures:[...(form.procedures||[]),{serviceId:'',quantity:1,notes:''}]})}>Add performed procedure</Button>
-        <Field label="Chief complaint"><textarea value={form.complaint||''} onChange={e=>setForm({...form,complaint:e.target.value})}/></Field>
-        <Field label="Treatment plan"><textarea value={form.plan||''} onChange={e=>setForm({...form,plan:e.target.value})}/></Field>
-        <Field label="Procedure / treatment performed"><textarea value={form.procedure||''} onChange={e=>setForm({...form,procedure:e.target.value})}/></Field>
-        <Field label="Assigned assistant" hint="Suggested from the dentist profile / current staffing context"><input value={form.assistant||'Unassigned'} readOnly/></Field>
-        <Field label="Clinical notes"><textarea value={form.notes||''} onChange={e=>setForm({...form,notes:e.target.value})}/></Field>
-        <div className="check-pair"><label><input type="checkbox" checked={!!form.prescriptionRequired} onChange={e=>setForm({...form,prescriptionRequired:e.target.checked})}/> Dentist indicates prescription required</label><label><input type="checkbox" checked={!!form.followupRequired} onChange={e=>setForm({...form,followupRequired:e.target.checked})}/> Dentist indicates follow-up required</label></div>
-        {form.followupRequired&&<div className="form-grid"><Field label="Recommended follow-up date"><input type="date" value={form.followupDate||''} onChange={e=>setForm({...form,followupDate:e.target.value})}/></Field><Field label="Follow-up reason / instructions"><input value={form.followupReason||''} onChange={e=>setForm({...form,followupReason:e.target.value})}/></Field><Field label="Recommended interval"><input value={form.followupInterval||''} onChange={e=>setForm({...form,followupInterval:e.target.value})}/></Field></div>}
-        <div className="form-actions"><Button variant="ghost" disabled={saving} onClick={()=>save('In Treatment')}>{current?'Save Treatment Progress':'Start Treatment'}</Button><Button disabled={saving||!current||current.status!=='In Treatment'} onClick={()=>save('Completed')}>Complete Treatment</Button></div>
+        <Button variant="ghost" onClick={()=>setForm({...form,procedures:[...form.procedures,{serviceId:'',quantity:1,notes:''}]})}>Add performed procedure</Button>
+        <Field label="Chief complaint"><textarea value={form.complaint} onChange={e=>setForm({...form,complaint:e.target.value})}/></Field>
+        <Field label="Treatment plan"><textarea value={form.plan} onChange={e=>setForm({...form,plan:e.target.value})}/></Field>
+        <Field label="Procedure / treatment performed"><textarea value={form.procedure} onChange={e=>setForm({...form,procedure:e.target.value})}/></Field>
+        <Field label="Assigned assistant" hint="From the dentist profile when treatment started"><input value={form.assistant} readOnly/></Field>
+        <Field label="Clinical notes"><textarea value={form.notes} onChange={e=>setForm({...form,notes:e.target.value})}/></Field>
+        <div className="check-pair"><label><input type="checkbox" checked={form.prescriptionRequired} onChange={e=>setForm({...form,prescriptionRequired:e.target.checked})}/> Dentist indicates prescription required</label><label><input type="checkbox" checked={form.followupRequired} onChange={e=>setForm({...form,followupRequired:e.target.checked})}/> Dentist indicates follow-up required</label></div>
+        {form.followupRequired&&<div className="form-grid"><Field label="Recommended follow-up date"><input type="date" value={form.followupDate} onChange={e=>setForm({...form,followupDate:e.target.value})}/></Field><Field label="Follow-up reason / instructions"><input value={form.followupReason} onChange={e=>setForm({...form,followupReason:e.target.value})}/></Field><Field label="Recommended interval"><input value={form.followupInterval} onChange={e=>setForm({...form,followupInterval:e.target.value})}/></Field></div>}
+        {!readOnly&&<div className="form-actions">
+          {!treatment?<Button disabled={saving||!canStart} onClick={start}>Start Treatment</Button>:<>
+            <Button variant="ghost" disabled={saving||!dirty} onClick={save}>Save Treatment Progress</Button>
+            <Button disabled={saving} onClick={complete}>Complete Treatment</Button></>}
+        </div>}
+        {!treatment&&queueEntry&&!canStart&&<Notice>Treatment can start once this patient is Called or Ready for treatment.</Notice>}
+        {dirty&&!readOnly&&treatment&&<small className="block-muted">Unsaved changes — they are kept only on this screen until you save.</small>}
       </div></fieldset></Card>
     </div>}
   </>

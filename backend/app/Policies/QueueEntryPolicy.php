@@ -10,7 +10,7 @@ use App\Models\UserBranchScope;
 // M9 authorization. Staff: only branches in the account's authorization scopes (user_branch_scopes), never inferred
 // from operational assignment. Dentist: their own Dentist queues; may Call their own entries only. Owner: global view
 // and the documented Phase 1 non-clinical operational exception. Patients use the own-queue read endpoint only.
-// Starting treatment is a Visit command (VisitPolicy::clinical), not a queue command.
+// Starting treatment is an M5 Treatment command (TreatmentPolicy::start), not a queue command.
 class QueueEntryPolicy
 {
     public function view(User $user, QueueEntry $entry): bool

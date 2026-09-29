@@ -66,17 +66,16 @@ test('Visits load through the same bounded, paginated window as appointments', a
   assert.deepEqual([params.get('from'), params.get('to'), params.get('per_page')], ['2026-06-21', '2026-12-21', '100'])
 })
 
-test('Check-In, Walk-In and Visit transitions send named commands with the Idempotency-Key and no client-chosen status', async () => {
+test('Check-In and Walk-In send named commands with the Idempotency-Key and no client-chosen status; Visit progression is M5-only', async () => {
   mockFetch(() => json(201, { data: visitRow() }))
   await visitsApi.checkIn({ id: serverId(900), revision: 1 }, 'arrive-1')
   await visitsApi.walkIn({ patientPublicId: serverId(500), branchId: 'b1', serviceId: 'svc1', dentistId: null }, 'walk-1')
-  await visitsApi.transitionVisit({ id: serverId(4000), revision: 1 }, 'start-treatment', 'start-1')
-  const [checkIn, walkIn, start] = apiCalls()
+  const [checkIn, walkIn] = apiCalls()
   assert.deepEqual([checkIn.method, checkIn.path, checkIn.body, checkIn.headers['Idempotency-Key']], ['POST', '/api/visits/check-in', { appointment_id: serverId(900), expected_revision: 1 }, 'arrive-1'])
   assert.deepEqual([walkIn.path, walkIn.body, walkIn.headers['Idempotency-Key']], ['/api/visits/walk-in', { patient_id: serverId(500), branch_ref: 'b1', service_ref: 'svc1' }, 'walk-1'])
   assert.equal('appointment_id' in walkIn.body, false, 'a walk-in never names an appointment')
-  assert.deepEqual([start.path, start.body], [`/api/visits/${serverId(4000)}/start-treatment`, { expected_revision: 1 }])
-  for (const call of [checkIn, walkIn, start]) assert.equal('status' in call.body, false)
+  for (const call of [checkIn, walkIn]) assert.equal('status' in call.body, false)
+  assert.equal('transitionVisit' in visitsApi, false, 'there is no standalone Visit start/complete client')
 })
 
 test('front-desk registration sends only Person/Patient fields — never a password, role or login', async () => {
@@ -112,7 +111,7 @@ test('server Visits enter the read model; walk-in Patients become read-model Pat
   assert.equal(persistableCollection('patients', projection.readModelPatients).length, 0)
   const store = read('src/store.jsx')
   assert.doesNotMatch(store, /usePersist\('check-ins'/); assert.doesNotMatch(store, /usePersist\('visits'/)
-  assert.match(store, /const \{appointments:_ignored,visits:_ignoredVisits,queue:_ignoredQueue,myQueue:_ignoredMyQueue,\.\.\.patch\}=rawPatch/, 'a local patch can never write Visits or the queue')
+  assert.match(store, /const \{appointments:_ignored,visits:_ignoredVisits,queue:_ignoredQueue,myQueue:_ignoredMyQueue,treatments:_ignoredTreatments,\.\.\.patch\}=rawPatch/, 'a local patch can never write Visits, the queue or Treatments')
 })
 
 test('local evidence re-anchors to a server Visit only through an exact link; everything else is legacy (M9 Q11)', () => {
@@ -169,24 +168,23 @@ test('a Walk-In goes server-first and creates no appointment; a Visit without a 
   assert.deepEqual([noDentist.queued, w2.state.visits.length, w2.state.queue.length], [false, 1, 0])
 })
 
-test('the treatment adapter carries the Visit id; a failed local step after server success keeps server truth and can be retried', async () => {
+test('M5 start is one server command; a documentation save that fails after it is reported partial and retried without restarting', async () => {
   const w = world(); const a = w.seed(row())
   await w.flow.checkIn(a.id, 'k')
   const q = w.state.queue[0]
   w.role('dentist'); await w.flow.queueCommand(q, 'call', 'call-1')
-  // Simulate a local failure after the server step: the local action refuses once.
-  const realSave = w.actions.saveTreatment
-  let failOnce = true
-  w.actions.saveTreatment = (...args) => (failOnce ? ((failOnce = false), { ok: false, message: 'local storage unavailable' }) : realSave(...args))
-  const partial = await w.flow.treatment({ queueEntryId: q.id }, 'In Treatment')
-  assert.equal(partial.ok, false); assert.equal(partial.partial, true); assert.match(partial.message, /recorded at the clinic/)
-  assert.equal(w.state.visits[0].status, 'In Treatment', 'the server lifecycle is never rolled back')
-  assert.equal(w.state.queue[0].status, 'Served', 'the server queue entry was Served in the same server command')
-  const retry = await w.flow.treatment({ queueEntryId: q.id }, 'In Treatment')
+  w.failNextDocumentWith({ ok: false, kind: 'server', code: null, message: 'The clinic server is unavailable.' })
+  const partial = await w.treat({ queueEntryId: q.id, complaint: 'Sensitivity' }, 'In Treatment')
+  assert.equal(partial.ok, false); assert.equal(partial.partial, true); assert.match(partial.message, /Treatment started, but the documentation was not saved/)
+  assert.equal(w.state.visits[0].status, 'In Treatment', 'the server start is never rolled back')
+  assert.equal(w.state.queue[0].status, 'Served', 'the server queue entry was Served by the same server command')
+  assert.equal(w.state.treatments[0].complaint, '', 'nothing clinical is written locally')
+  const retry = await w.treat({ queueEntryId: q.id, complaint: 'Sensitivity' }, 'In Treatment')
   assert.equal(retry.ok, true, retry.message)
-  assert.deepEqual(w.log.filter(x => x[0] === 'start-treatment').length, 1, 'the retry does not repeat the server command')
+  assert.equal(w.log.filter(x => x[0] === 'treatment.start').length, 1, 'the retry does not repeat the start command')
+  assert.equal(w.state.treatments[0].complaint, 'Sensitivity')
   assert.equal(w.state.treatments[0].visitId, q.visitId)
-  assert.equal(w.state.treatments[0].queueEntryId, q.id, 'the local treatment points at the SERVER queue entry public id')
+  assert.equal(w.state.treatments[0].queueEntryId, q.id, 'the server Treatment points at the SERVER queue entry public id')
 })
 
 test('a front-desk registered Patient is added to the in-memory directory', async () => {
