@@ -6,6 +6,7 @@ use App\Http\Controllers\Auth\RegisteredPatientController;
 use App\Http\Controllers\CurrentUserController;
 use App\Http\Controllers\PatientDirectoryController;
 use App\Http\Controllers\PatientRegistrationController;
+use App\Http\Controllers\QueueController;
 use App\Http\Controllers\UserBranchScopeController;
 use App\Http\Controllers\UserManagementController;
 use App\Http\Controllers\VisitController;
@@ -101,5 +102,17 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/{visit}', [VisitController::class, 'show'])->middleware('role:staff,dentist,owner');
         Route::post('/{visit}/start-treatment', [VisitController::class, 'startTreatment'])->middleware('role:dentist');
         Route::post('/{visit}/complete', [VisitController::class, 'complete'])->middleware('role:dentist');
+    });
+
+    // M9 Patient Queue Management. {queueEntry} binds on the ULID public_id. Entries are created only by M8 arrival; state
+    // changes are named commands (Idempotency-Key + expected_revision). Patients get only their own current queue state.
+    Route::prefix('queue')->group(function () {
+        Route::get('/mine', [QueueController::class, 'mine'])->middleware('role:patient');
+        Route::get('/', [QueueController::class, 'index'])->middleware('role:staff,dentist,owner');
+        Route::get('/{queueEntry}', [QueueController::class, 'show'])->middleware('role:staff,dentist,owner');
+        Route::post('/{queueEntry}/priority', [QueueController::class, 'priority'])->middleware('role:staff,owner');
+        Route::post('/{queueEntry}/{command}', [QueueController::class, 'transition'])
+            ->whereIn('command', ['call', 'ready', 'away', 'return'])
+            ->middleware('role:staff,dentist,owner');
     });
 });

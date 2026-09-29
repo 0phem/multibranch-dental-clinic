@@ -36,11 +36,11 @@ logical-only, not yet implemented.
 | PATIENTS | Patient-specific profile linked to PERSONS | A patient may exist without a login; a registered login shares the same PERSON identity |
 | APPOINTMENTS | Confirmed/planned visit | Past start times cannot be newly booked; status changes release/reserve slots |
 | VISITS | Visit / Clinical Encounter: the arrival record (formerly CHECK_IN_RECORDS) and the encounter anchor for queue, treatment, prescription, follow-up, invoice and HMO | Patient and branch required; appointment optional (walk-ins have none; one Visit per appointment); source appointment/walk-in; status Checked In → In Treatment → Completed; responsible Dentist nullable until resolved and required before clinical work; at most one active Visit per Patient; server arrival time and Asia/Manila clinic date (added with approval, M8 / D10) |
-| DENTIST_QUEUES | Per-dentist, per-branch/day queue container | Dentist UI reads the logged-in dentist's queue directly |
-| QUEUE_ENTRIES | Individual patient queue state | References exactly one VISIT; priority override requires reason/audit; a checked-in Visit is not marked no-show (no-show is a pre-arrival appointment decision) |
+| DENTIST_QUEUES | Per-dentist, per-branch/day queue container | Unique per branch + Dentist + clinic day; holds the atomic queue-number counter (first number 1) (M9) |
+| QUEUE_ENTRIES | Individual patient queue state | Requires exactly one VISIT (unique `visit_id`) and one DENTIST_QUEUE; unique number per queue; states Waiting / Called / Treatment Ready / Temporarily Away / Served (Served only when the Visit starts treatment); priority override requires reason and history; no no-show/in-treatment/completed queue state (M9) |
 | CAPACITY_EVENTS | Aggregate waiting/workload snapshots/events | Does not replace QUEUE_ENTRIES; it supports M10/M15/M21 |
 
-**VISITS (M8, approved D10):** this dictionary is the current text of record. The rendered ERD images (PNG/SVG) predate VISITS and are pending regeneration from the diagram source; they have not been hand-edited.
+**VISITS (M8, approved D10) and QUEUE_ENTRIES → VISIT (M9):** this dictionary is the current text of record. The rendered ERD images (PNG/SVG) predate these changes and are pending regeneration from the diagram source; they have not been hand-edited.
 
 ## Clinical / Billing
 

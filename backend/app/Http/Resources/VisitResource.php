@@ -38,6 +38,13 @@ class VisitResource extends JsonResource
                 'date' => ClinicClock::local($appointment->starts_at)->toDateString(),
                 'start_time' => ClinicClock::local($appointment->starts_at)->format('H:i'),
             ] : null,
+            // M9: the queue entry opened with this arrival (null for a Visit without a responsible Dentist).
+            'queue' => $this->whenLoaded('queueEntry', fn () => $this->queueEntry ? [
+                'id' => $this->queueEntry->public_id,
+                'status' => $this->queueEntry->status,
+                'queue_number' => $this->queueEntry->queue_number,
+                'revision' => $this->queueEntry->revision,
+            ] : null),
             'created_at' => $iso($this->created_at),
             'updated_at' => $iso($this->updated_at),
             'history' => $this->whenLoaded('history', fn () => $this->history->map(fn ($h) => [

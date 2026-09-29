@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs'
 import { setClockSource } from '../src/clock.js'
 import * as visitsApi from '../src/visits-api.js'
 import { __resetCsrfCacheForTests, onSessionInvalidated } from '../src/api-client.js'
-import { buildServerProjection, classifyLegacy, splitQueue, liveRecords } from '../src/appointment-projection.js'
+import { buildServerProjection, classifyLegacy, reanchorLocalEvidence, liveRecords } from '../src/appointment-projection.js'
 import { persistableCollection, normalizeClinicState } from '../src/contracts.js'
 import { encounterIssue } from '../src/safeguards.js'
 import { serverId } from './support/server-appointments.js'
@@ -112,45 +112,50 @@ test('server Visits enter the read model; walk-in Patients become read-model Pat
   assert.equal(persistableCollection('patients', projection.readModelPatients).length, 0)
   const store = read('src/store.jsx')
   assert.doesNotMatch(store, /usePersist\('check-ins'/); assert.doesNotMatch(store, /usePersist\('visits'/)
-  assert.match(store, /const \{appointments:_ignored,visits:_ignoredVisits,\.\.\.patch\}=rawPatch/, 'a local patch can never write Visits')
+  assert.match(store, /const \{appointments:_ignored,visits:_ignoredVisits,queue:_ignoredQueue,myQueue:_ignoredMyQueue,\.\.\.patch\}=rawPatch/, 'a local patch can never write Visits or the queue')
 })
 
-test('queue entries re-link to a backfilled Visit only by exact appointment public id; everything else is legacy', () => {
+test('local evidence re-anchors to a server Visit only through an exact link; everything else is legacy (M9 Q11)', () => {
   const visits = [visitsApi.mapVisit(visitRow(), id => (id === serverId(500) ? 'p1' : id))]
-  const queue = [
-    { id: 'relink', appointmentId: serverId(900), patientId: 'p1', clinicDate: '2026-09-19' },                // exact appointment id
-    { id: 'linked', visitId: serverId(4000), appointmentId: serverId(900), patientId: 'p1' },               // already carries the Visit
-    { id: 'same-day-other', appointmentId: serverId(901), patientId: 'p1', clinicDate: '2026-09-19' },       // same Patient/day, no Visit
-    { id: 'walkin-local', appointmentId: null, patientId: 'p1', clinicDate: '2026-09-19' },                  // browser-only walk-in
-    { id: 'pre-m6', appointmentId: 'a1', patientId: 'p1' },                                                  // pre-cutover appointment id
+  const serverQueue = [{ id: serverId(7000), visitId: serverId(4000) }]
+  const localQueue = [
+    { id: 'relink', appointmentId: serverId(900), patientId: 'p1', clinicDate: '2026-09-19' },            // exact server appointment id
+    { id: 'linked', visitId: serverId(4000), appointmentId: serverId(900), patientId: 'p1' },           // carries the Visit already
+    { id: 'same-day-other', appointmentId: serverId(901), patientId: 'p1', clinicDate: '2026-09-19' },   // same Patient/day, no Visit
+    { id: 'walkin-local', appointmentId: null, patientId: 'p1', clinicDate: '2026-09-19' },              // browser-only walk-in
+    { id: 'pre-m6', appointmentId: 'a1', patientId: 'p1' },                                              // pre-cutover appointment id
   ]
-  const { live, legacy } = splitQueue(queue, visits)
-  assert.deepEqual(live.map(q => q.id), ['relink', 'linked'])
-  assert.equal(live[0].visitId, serverId(4000), 'the relink attaches the exact server Visit id')
-  assert.deepEqual(legacy.map(q => q.id), ['same-day-other', 'walkin-local', 'pre-m6'])
+  const records = localQueue.map(q => ({ id: `t-${q.id}`, queueEntryId: q.id, patientId: 'p1' }))
+  const { records: next, changed } = reanchorLocalEvidence({ records, localQueue, visits, serverQueue })
+  assert.equal(changed, true)
+  const byId = Object.fromEntries(next.map(r => [r.id, r]))
+  for (const id of ['t-relink', 't-linked']) {
+    assert.equal(byId[id].visitId, serverId(4000), id)
+    assert.equal(byId[id].queueEntryId, serverId(7000), `${id} now points at the server queue entry for the same Visit`)
+  }
+  for (const id of ['t-same-day-other', 't-walkin-local', 't-pre-m6']) assert.equal(byId[id].visitId, undefined, `${id} is never guessed`)
+  assert.equal(reanchorLocalEvidence({ records: next, localQueue, visits, serverQueue }).changed, false, 'idempotent')
 
-  const classified = classifyLegacy({ queue, visits, treatments: [{ id: 't-walkin', queueEntryId: 'walkin-local' }, { id: 't-live', queueEntryId: 'relink' }], invoices: [{ id: 'i1', treatmentId: 't-walkin', status: 'Paid' }] })
-  assert.equal(classified.treatments.find(t => t.id === 't-walkin').legacyAppointment, true)
-  assert.equal(classified.treatments.find(t => t.id === 't-live').legacyAppointment, undefined)
+  const classified = classifyLegacy({ treatments: next, invoices: [{ id: 'i1', treatmentId: 't-walkin-local', status: 'Paid' }] })
+  assert.equal(classified.treatments.find(t => t.id === 't-walkin-local').legacyAppointment, true)
+  assert.equal(classified.treatments.find(t => t.id === 't-relink').legacyAppointment, undefined)
   assert.deepEqual(liveRecords(classified.invoices), [], 'legacy walk-in billing never reaches live KPIs')
 })
 
 // ================================================================================================================
 // M9 QUEUE ADAPTER / M5 TREATMENT ADAPTER (real appointment-flow.js + workflow.js over the mocked server)
 // ================================================================================================================
-test('the queue adapter stores the server visitId and is idempotent', async () => {
+test('arrival queues the Visit on the server; there is no local queue creation step', async () => {
   const w = world(); const a = w.seed(row())
   const first = await w.flow.checkIn(a.id, 'arrive')
   assert.equal(first.ok, true, first.message)
   const visitId = w.state.visits[0].id
-  assert.equal(w.state.queue[0].visitId, visitId)
-  const again = w.flow.retryAdmit(visitId)
-  assert.equal(again.ok, true); assert.equal(again.unchanged, true)
-  assert.equal(w.state.queue.length, 1)
-  assert.equal(w.patches.some(p => 'visits' in p || 'appointments' in p || 'checkIns' in p), false, 'no local arrival/Visit/appointment write')
+  assert.deepEqual([w.state.queue.length, w.state.queue[0].visitId, w.state.queue[0].queueNumber, w.state.queue[0].server], [1, visitId, 1, true])
+  assert.equal('retryAdmit' in w.flow, false); assert.equal('admitVisit' in w.actions, false)
+  assert.equal(w.patches.length, 0, 'no local write at all')
 })
 
-test('a Walk-In goes server-first and creates no appointment; the queue needs a responsible Dentist', async () => {
+test('a Walk-In goes server-first and creates no appointment; a Visit without a Dentist is simply not queued', async () => {
   const w = world()
   const result = await w.flow.walkIn({ patientId: 'p1', patientPublicId: serverId(500), branchId: 'b1', serviceId: 'svc1', dentistId: 'd1' }, 'walk-1')
   assert.equal(result.ok, true, result.message)
@@ -158,18 +163,17 @@ test('a Walk-In goes server-first and creates no appointment; the queue needs a 
   assert.equal(w.state.appointments.length, 0)
   assert.deepEqual([w.state.visits[0].walkIn, w.state.queue[0].appointmentId, w.state.queue[0].visitId], [true, null, w.state.visits[0].id])
 
-  // The server allows a Visit without a Dentist; the Dentist-organized local queue refuses it before any command.
   const w2 = world()
   const noDentist = await w2.flow.walkIn({ patientId: 'p1', patientPublicId: serverId(500), branchId: 'b1', serviceId: 'svc1', dentistId: null }, 'walk-2')
-  assert.equal(noDentist.ok, false); assert.match(noDentist.message, /no responsible Dentist/)
-  assert.deepEqual(w2.log, [])
+  assert.equal(noDentist.ok, true, noDentist.message)
+  assert.deepEqual([noDentist.queued, w2.state.visits.length, w2.state.queue.length], [false, 1, 0])
 })
 
 test('the treatment adapter carries the Visit id; a failed local step after server success keeps server truth and can be retried', async () => {
   const w = world(); const a = w.seed(row())
   await w.flow.checkIn(a.id, 'k')
   const q = w.state.queue[0]
-  w.role('dentist'); w.actions.updateQueue(q.id, 'Called')
+  w.role('dentist'); await w.flow.queueCommand(q, 'call', 'call-1')
   // Simulate a local failure after the server step: the local action refuses once.
   const realSave = w.actions.saveTreatment
   let failOnce = true
@@ -177,10 +181,12 @@ test('the treatment adapter carries the Visit id; a failed local step after serv
   const partial = await w.flow.treatment({ queueEntryId: q.id }, 'In Treatment')
   assert.equal(partial.ok, false); assert.equal(partial.partial, true); assert.match(partial.message, /recorded at the clinic/)
   assert.equal(w.state.visits[0].status, 'In Treatment', 'the server lifecycle is never rolled back')
+  assert.equal(w.state.queue[0].status, 'Served', 'the server queue entry was Served in the same server command')
   const retry = await w.flow.treatment({ queueEntryId: q.id }, 'In Treatment')
   assert.equal(retry.ok, true, retry.message)
   assert.deepEqual(w.log.filter(x => x[0] === 'start-treatment').length, 1, 'the retry does not repeat the server command')
   assert.equal(w.state.treatments[0].visitId, q.visitId)
+  assert.equal(w.state.treatments[0].queueEntryId, q.id, 'the local treatment points at the SERVER queue entry public id')
 })
 
 test('a front-desk registered Patient is added to the in-memory directory', async () => {
@@ -211,14 +217,14 @@ test('the front desk uses server commands only; no local arrival, walk-in or que
   assert.match(page, /flow\.checkIn\(selectedAppointment\.id,checkInKey\.current\.key\)/)
   assert.match(page, /flow\.walkIn\(\{\.\.\.walkIn,patientId\},walkKey\.current\)/)
   assert.match(page, /flow\.registerPatient\(/)
-  assert.doesNotMatch(page, /actions\.admitWalkIn|checkIns|update\(q\.id,'No-show'\)/)
+  assert.doesNotMatch(page, /actions\.admitWalkIn|actions\.updateQueue|checkIns|'No-show'\)|Add to queue|retryAdmit/)
   assert.match(page, /isn’t available yet — the clinic still needs to decide how an admitted visit is closed/)
-  // The walk-in form requires a Dentist only because the local queue is Dentist-organized.
+  // The walk-in form still requires a Dentist: the queue is organized per Dentist and there is no assignment step yet.
   assert.match(page, /const canWalkIn=!!walkIn\.patientPublicId&&!!walkIn\.branchId&&!!walkIn\.serviceId&&!!walkIn\.dentistId/)
   const scheduling = read('src/pages/Scheduling.jsx')
   assert.match(scheduling, /store\.appointmentFlow\.noShow\(a,commandKey\(\)\)/)
   assert.match(scheduling, /Use this only when the patient did not arrive; no visit is created/)
   const workflow = read('src/workflow.js')
-  assert.doesNotMatch(workflow, /checkInAppointment|admitWalkIn|state\.checkIns|uid\('ci'\)/)
+  assert.doesNotMatch(workflow, /checkInAppointment|admitWalkIn|admitVisit|updateQueue|state\.checkIns|state\.queue=|uid\('ci'\)|recalcQueue/)
   assert.doesNotMatch(read('src/contracts.js'), /checkIns/)
 })

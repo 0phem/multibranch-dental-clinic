@@ -6,13 +6,12 @@ import { loyaltyActions } from './loyalty.js'
 import { workflowContext, notificationEventKey, appendWorkflowEvent, appendNotification, notifyBranch } from './orchestration.js'
 import { phase2Actions, procedureLines, linkedTreatment, money, validInvoice } from './phase2.js'
 import { clinicNow, validDate } from './clock.js'
-import { encounterContext, inScope, isTodayQueue, TERMINAL } from './contracts.js'
-import { recalcQueue, uid } from './logic.js'
+import { encounterContext, inScope, isTodayQueue } from './contracts.js'
+import { uid } from './logic.js'
 import { bookingDraftActions } from './booking-drafts.js'
 
 const fail=message=>({ok:false,message})
 const replace=(rows,record)=>rows.some(x=>x.id===record.id)?rows.map(x=>x.id===record.id?record:x):[...rows,record]
-const durable=record=>{const {branch,service,...value}=record;return value}
 const clean=value=>String(value||'').trim().replace(/\s+/g,' ')
 export const patientProjection=(patient,person)=>({...person,...patient,id:patient.id,personId:person.id,name:[person.firstName,person.lastName].filter(Boolean).join(' ')})
 
@@ -75,11 +74,11 @@ export function createWorkflowActions({getState,commit,getSession,clock=clinicNo
     state.followups=state.followups.map(f=>f.appointmentId===appointmentId&&appointment&&f.patientId===appointment.patientId&&(!f.branchId||f.branchId===appointment.branchId)&&(!f.dentistId||f.dentistId===appointment.dentistId)?{...f,status,appointmentId:status==='Open'?null:appointmentId}:f)
   }
 
-  // ---- M6/M8 cutover adapters (TEMPORARY) -----------------------------------------------------------------------
-  // Appointments and Visits are server-authoritative (Laravel/PostgreSQL). These commands never create or edit an
-  // appointment or a Visit: each runs only AFTER the matching server command succeeded and the server projection was
-  // refreshed, and it updates the still-browser-local downstream records (queue, follow-up, in-app notifications) to
-  // match. Remove each one when its owning module (M9/M20/M18) becomes backend-authoritative.
+  // ---- M6/M8/M9 cutover adapters (TEMPORARY) --------------------------------------------------------------------
+  // Appointments, Visits and the queue are server-authoritative (Laravel/PostgreSQL). These commands never create or edit
+  // an appointment, a Visit or a queue entry: each runs only AFTER the matching server command succeeded and the server
+  // projection was refreshed, and it updates the still-browser-local downstream records (treatment, follow-up, in-app
+  // notifications) to match. Remove each one when its owning module (M5/M20/M18) becomes backend-authoritative.
   const serverAppointment=(state,id)=>state.appointments.find(a=>a.id===id&&a.server)
   const serverVisit=(state,id)=>(state.visits||[]).find(v=>v.id===id&&v.server)
 
@@ -144,69 +143,6 @@ export function createWorkflowActions({getState,commit,getSession,clock=clinicNo
     return {ok:true,record}
   })
 
-  // M9 handoff of a server Visit (M8 cutover): creates the browser-local queue entry for a Visit the server already
-  // opened (scheduled Check-In or Walk-In). Patient, branch, Dentist, service, arrival time and clinic date all come
-  // from the server Visit; queue numbering, priority and ordering stay M9-local. Idempotent: a Visit gets at most one
-  // queue entry, so this is also the retry path when the server step succeeded but the local step did not.
-  const admitVisit=run(({state,session,now,event,notify},visitId)=>{
-    const visit=serverVisit(state,visitId)
-    if(!visit||!canOperate(state,session,visit))return fail('This visit is outside your assigned branch.')
-    if(visit.clinicDate!==now.date)return fail('This visit belongs to another clinic day and cannot join today’s queue.')
-    const existing=state.queue.find(q=>q.visitId===visitId)
-    if(existing){const issue=encounterIssue(state,existing);return issue?fail(issue):{ok:true,unchanged:true,record:existing,context:encounterContext(existing)}}
-    if(visit.status!=='Checked In')return fail('This visit is no longer waiting for the queue. Refresh the worklist.')
-    if(!visit.dentistId)return fail('This visit has no responsible Dentist yet, and the queue is organized by Dentist. Ask the clinic to assign one.')
-    if(!state.dentists.some(d=>d.id===visit.dentistId)||!state.patients.some(p=>p.id===visit.patientId))return fail('The visit profile is missing. Refresh the worklist.')
-    if(visit.appointmentId&&state.queue.some(q=>q.appointmentId===visit.appointmentId))return fail('This appointment already has a queue record that needs clinic review.')
-    const context={visitId:visit.id,appointmentId:visit.appointmentId||null,patientId:visit.patientId,branchId:visit.branchId,dentistId:visit.dentistId,serviceId:visit.serviceId||null}
-    const id=uid('qe')
-    const queueNumber=Math.max(0,...state.queue.filter(q=>q.branchId===context.branchId&&q.dentistId===context.dentistId&&q.clinicDate===visit.clinicDate).map(q=>q.queueNumber||0))+1
-    const record={...context,id,queueEntryId:id,queueId:`DQ-${context.branchId}-${context.dentistId}-${visit.clinicDate}`,clinicDate:visit.clinicDate,queueNumber,arrivedAt:visit.arrivedAt,checkedIn:visit.checkedIn,status:'Waiting',currentState:'Waiting',priority:'Normal',priorityReason:'',position:null,calledAt:null,readyAt:null,completedAt:null,treatmentId:null}
-    // The new entry must pass the same encounter checks as every later queue/treatment step (arrival time, Visit and
-    // appointment links); a contradictory server record is refused, never repaired.
-    const issue=encounterIssue({...state,queue:[...state.queue,record]},record,now);if(issue)return fail(issue)
-    state.queue=recalcQueue([...state.queue,record])
-    event(`arrival:${visit.id}`,'checkin→queue','patient.checked_in',`Arrival recorded at ${state.branches.find(b=>b.id===context.branchId)?.name}`,context.patientId,context.branchId)
-    notify(`arrival:${visit.id}`,context.patientId,'Check-In Confirmation','Your arrival is recorded. You are in the clinic queue.')
-    return {ok:true,record:state.queue.find(q=>q.id===id),context:encounterContext(record)}
-  })
-
-  const updateQueue=run(({state,session,now,event,notify},id,status,extra={})=>{
-    const entry=queueRecord(state,id)
-    if(!entry||!inScope(entry,session,state)||!isTodayQueue(entry,now.date))return fail('Queue entry is outside your current day or scope.')
-    // A queue entry is a checked-in Visit, and a Visit has no No-show state: No-show means the Patient never arrived
-    // (an appointment-level decision before Check-In). Leaving or cancelling after Check-In needs a future Visit/Queue
-    // clinic-policy decision, so it is not offered here.
-    if(status==='No-show')return fail('A checked-in visit can’t be marked No-show. Leaving or cancelling after Check-In needs a clinic policy that isn’t decided yet.')
-    const issue=encounterIssue(state,entry,now);if(issue)return fail(issue)
-    if(!['staff','owner','dentist'].includes(session.role))return fail('This role cannot control the queue.')
-    if(status==='Called'&&state.dentists.find(d=>d.id===entry.dentistId)?.available===false)return fail('This Dentist is unavailable. Ask Staff to review the queue assignment.')
-    if(status==='Completed'||status==='In Treatment')return fail('Queue treatment state is controlled by the linked treatment only.')
-    if(session.role==='dentist'&&status!=='Called')return fail('Only Staff manages absence, no-show, and priority.')
-    if(TERMINAL.includes(entry.status))return fail('This queue entry is closed.')
-    const priority=extra.priority
-    if(priority){
-      if(status!==entry.status)return fail('Priority changes cannot change the queue state.')
-      if(!canOperate(state,session,entry)||!['Normal','Priority','Urgent'].includes(priority)||typeof extra.reason!=='string'||!clean(extra.reason))return fail('An authorized priority change requires a reason.')
-      if(entry.priority===priority&&entry.priorityReason===clean(extra.reason))return {ok:true,unchanged:true,record:entry}
-    }else{
-      if(entry.status===status)return {ok:true,unchanged:true,record:entry}
-      const allowed={Waiting:['Called','Temporarily Away'],Called:['Treatment Ready','Temporarily Away'],'Treatment Ready':['Temporarily Away'],'Temporarily Away':['Waiting']}
-      if(!allowed[entry.status]?.includes(status))return fail('This queue transition is not allowed.')
-    }
-    const record={...durable(entry),status:priority?entry.status:status,currentState:priority?entry.status:status,revision:(entry.revision||0)+1}
-    if(priority){record.priority=priority;record.priorityReason=clean(extra.reason)}
-    if(status==='Temporarily Away')record.awayAt=now.timestamp
-    if(status==='Waiting')record.returnedAt=now.timestamp
-    if(status==='Called')record.calledAt=now.timestamp
-    if(status==='Treatment Ready')record.readyAt=now.timestamp
-    state.queue=recalcQueue(replace(state.queue,record))
-    const key=`queue:${id}:${record.revision}`
-    event(key,'queue',priority?'queue.priority.changed':'queue.status.changed',priority?`${priority}: ${record.priorityReason}`:status,entry.patientId,entry.branchId)
-    notify(key,entry.patientId,'Queue Update',priority?'Your queue priority has been updated.':`Your queue status is now ${status}.`)
-    return {ok:true,record}
-  })
-
   const saveTreatment=run(({state,session,now,event,notify},input={},status='In Treatment')=>{
     if(!isRecord(input))return fail('Open a valid encounter from My Queue.')
     if(session.role!=='dentist')return fail('Only the assigned dentist may document treatment.')
@@ -230,7 +166,9 @@ export function createWorkflowActions({getState,commit,getSession,clock=clinicNo
     if(current?.status==='Completed')return status==='Completed'?{ok:true,unchanged:true,record:current}:fail('Completed treatment cannot be reopened here.')
     if(current&&input.revision!=null&&input.revision!==current.revision)return fail('This treatment draft changed. Reopen the encounter before saving your notes.')
     if(!state.branches.some(b=>b.id===entry.branchId&&b.status==='Open'))return fail('This branch is not open for treatment. Ask Staff to review the encounter.')
-    if(!['Called','Treatment Ready','In Treatment'].includes(entry.status))return fail('Call this patient before starting treatment.')
+    // M9: the server queue entry is Served by the Visit start-treatment command itself (server-first), so a local treatment
+    // only ever follows a Served entry.
+    if(entry.status!=='Served')return fail('Start the treatment from the queue first.')
     if(!['In Treatment','Completed'].includes(status))return fail('Invalid treatment status.')
     if(state.treatments.some(t=>t.dentistId===entry.dentistId&&t.status==='In Treatment'&&t.date===entry.clinicDate&&t.id!==current?.id))return fail('Complete the current treatment before starting another encounter.')
     if(status==='Completed'&&current?.status!=='In Treatment')return fail('Start treatment before completing this encounter.')
@@ -251,7 +189,6 @@ export function createWorkflowActions({getState,commit,getSession,clock=clinicNo
     if(current&&current.status===status&&current.serviceId===serviceId&&JSON.stringify(current.procedures||[])===JSON.stringify(performed.lines)&&Object.entries(clinical).every(([k,v])=>current[k]===v))return {ok:true,unchanged:true,record:current}
     const record={...current,...clinical,id:treatmentId,procedures:performed.lines,queueEntryId:entry.id,visitId:entry.visitId,patientId:entry.patientId,appointmentId:entry.appointmentId||null,dentistId:entry.dentistId,branchId:entry.branchId,requestedServiceId:entry.serviceId,serviceId,date:entry.clinicDate,status,startedAt:current?.startedAt||now.timestamp,completedAt:status==='Completed'?now.timestamp:null,revision:(current?.revision||0)+1}
     state.treatments=replace(state.treatments,record)
-    state.queue=recalcQueue(state.queue.map(q=>q.id===entry.id?{...durable(q),treatmentId:record.id,status,currentState:status,treatmentStartedAt:record.startedAt,completedAt:record.completedAt}:q))
     if(status==='Completed'){
       state.patients=state.patients.map(p=>p.id===record.patientId?{...p,dentalHistory:`${p.dentalHistory||''} ${record.procedure} • ${record.date}.`.trim()}:p)
       const existingInvoice=state.invoices.find(i=>i.treatmentId===record.id)
@@ -303,7 +240,7 @@ export function createWorkflowActions({getState,commit,getSession,clock=clinicNo
     event(`patient:${record.id}`,'patient','patient.record.created',record.patientCode,record.id,preferredBranchId)
     return {ok:true,record:patientProjection(record,personRecord)}
   })
-  const commands={...administrationActions(run),...phase2Actions(run),...hmoActions(run),...communicationActions(run),...loyaltyActions(run),...bookingDraftActions(run),recordAppointmentEvent,applyAppointmentCancellation,applyAppointmentNoShow,linkFollowupAppointment,admitVisit,updateQueue,saveTreatment,completeTreatment:(input,status='Completed')=>saveTreatment(input,status),createPatientRecord}
-  const permissions={recordAppointmentEvent:'appointments',applyAppointmentCancellation:'appointments',applyAppointmentNoShow:'appointments',linkFollowupAppointment:'followups',admitVisit:'checkin',updateQueue:'queue',saveTreatment:'treatment',completeTreatment:'treatment',createPatientRecord:'patient-demographics',reviewInvoice:'billing',issueInvoice:'billing',postPayment:'billing',savePrescription:'prescriptions',authorizePrescription:'prescriptions',recordLoyaltyActivity:'engagement',processLoyaltyRedemption:'engagement'}
+  const commands={...administrationActions(run),...phase2Actions(run),...hmoActions(run),...communicationActions(run),...loyaltyActions(run),...bookingDraftActions(run),recordAppointmentEvent,applyAppointmentCancellation,applyAppointmentNoShow,linkFollowupAppointment,saveTreatment,completeTreatment:(input,status='Completed')=>saveTreatment(input,status),createPatientRecord}
+  const permissions={recordAppointmentEvent:'appointments',applyAppointmentCancellation:'appointments',applyAppointmentNoShow:'appointments',linkFollowupAppointment:'followups',saveTreatment:'treatment',completeTreatment:'treatment',createPatientRecord:'patient-demographics',reviewInvoice:'billing',issueInvoice:'billing',postPayment:'billing',savePrescription:'prescriptions',authorizePrescription:'prescriptions',recordLoyaltyActivity:'engagement',processLoyaltyRedemption:'engagement'}
   return Object.fromEntries(Object.entries(commands).map(([name,action])=>[name,(...args)=>permissions[name]&&!permitted(getState(),getSession(),permissions[name])?fail('Your current account or permission no longer allows this action. Reopen your workspace or ask an administrator.'):action(...args)]))
 }

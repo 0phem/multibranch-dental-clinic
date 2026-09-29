@@ -26,7 +26,7 @@ class VisitController extends Controller
 {
     use ReadsIdempotencyKey;
 
-    private const RELATIONS = ['patient.person', 'branch', 'appointment.service', 'dentist.person', 'requestedService'];
+    private const RELATIONS = ['patient.person', 'branch', 'appointment.service', 'dentist.person', 'requestedService', 'queueEntry'];
 
     // Same bounded window as the appointment list (about three months back and three ahead), always paginated.
     private const MAX_RANGE_DAYS = 184;

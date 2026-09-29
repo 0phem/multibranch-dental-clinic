@@ -1,20 +1,21 @@
 import * as appointmentsApi from './appointments-api.js'
 import * as visitsApi from './visits-api.js'
-import { clinicNow } from './clock.js'
+import * as queueApi from './queue-api.js'
 import { createWorkflowActions } from './workflow.js'
 
-// Server-first M6/M8 command flows. Every appointment and Visit change is a Laravel command followed by a refresh of
-// the in-memory server projection; the browser-local adapter step for unfinished modules (M9 queue, M5 treatment,
-// follow-ups, in-app notifications) runs only after the server succeeded and is never used to reverse it. For
-// Check-In, Walk-In and treatment start/completion, a no-commit dry run of the local step against the state the
-// server command would produce runs first, so a server command whose local step would predictably fail is never sent.
+// Server-first M6/M8/M9 command flows. Every appointment, Visit and queue change is a Laravel command followed by a
+// refresh of the in-memory server projection; the browser-local adapter step for unfinished modules (M5 treatment,
+// follow-ups, in-app notifications) runs only after the server succeeded and is never used to reverse it. Arrival
+// (Check-In / Walk-In) is entirely server-side since M9: the server opens the Visit and queues it in one transaction.
+// For treatment start/completion, a no-commit dry run of the local step against the state the server command would
+// produce runs first, so a server command whose local step would predictably fail is never sent.
 //
 // Dependencies are injected so the exact flow the store uses is unit-testable with a mocked API:
 //   getState()/getSession()  latest store snapshot and session
 //   getActions()             the committed workflow actions (adapters)
 //   refresh()                reloads server appointments and Visits into the projection (async)
-//   api / visits             appointments-api.js / visits-api.js (or test doubles)
-export function createAppointmentFlow({ getState, getSession, getActions, refresh, searchPatients = null, addDirectoryPatient = null, api = appointmentsApi, visits = visitsApi }) {
+//   api / visits / queue     appointments-api.js / visits-api.js / queue-api.js (or test doubles)
+export function createAppointmentFlow({ getState, getSession, getActions, refresh, searchPatients = null, addDirectoryPatient = null, api = appointmentsApi, visits = visitsApi, queue = queueApi }) {
   const projected = id => getState().appointments.find(a => a.id === id)
   const visitFor = id => (getState().visits || []).find(v => v.id === id)
 
@@ -24,16 +25,6 @@ export function createAppointmentFlow({ getState, getSession, getActions, refres
     const dry = createWorkflowActions({ getState: () => simulated, getSession, commit: () => {} })
     return dry[name](...args)
   }
-  // The Visit the server would open for this arrival (used only for the dry run).
-  const simulatedVisit = fields => {
-    const now = clinicNow()
-    return { id: 'preflight-visit', server: true, status: 'Checked In', revision: 1, arrivedAt: now.timestamp, checkedIn: now.time, clinicDate: now.date, appointmentId: null, serviceId: null, ...fields }
-  }
-  const admitPreflight = visit => preflight(state => ({
-    visits: [...(state.visits || []), visit],
-    appointments: state.appointments.map(a => (a.id === visit.appointmentId ? { ...a, status: 'Checked In' } : a)),
-  }), 'admitVisit', visit.id)
-
   const afterServerCommand = async result => {
     // A stale or conflicting command means the server state moved on: refresh so the UI shows the truth.
     if (!result.ok && ['conflict', 'validation', 'not_found'].includes(result.kind)) await refresh()
@@ -41,12 +32,6 @@ export function createAppointmentFlow({ getState, getSession, getActions, refres
   }
 
   const partial = (what, local) => ({ ok: false, partial: true, message: `${what} is recorded at the clinic, but this browser’s queue/treatment record could not be updated: ${local.message} You can retry this step.` })
-
-  // M9 handoff of a server Visit (idempotent; also the retry path).
-  const admit = (visitId, what) => {
-    const local = getActions().admitVisit(visitId)
-    return local.ok ? { ...local, visitId } : partial(what, local)
-  }
 
   return {
     refresh,
@@ -88,44 +73,38 @@ export function createAppointmentFlow({ getState, getSession, getActions, refres
       return local.ok ? { ok: true } : { ok: true, warning: `The appointment is cancelled, but its local follow-up/notification records need review: ${local.message}` }
     },
 
-    // M8 scheduled Check-In: the server moves the appointment to Checked In and opens the Visit atomically; then the
-    // local M9 queue entry is created from that Visit. An appointment whose Visit already exists only retries the
-    // local queue step.
+    // M8 scheduled Check-In: the server moves the appointment to Checked In, opens the Visit and — when the Visit has a
+    // responsible Dentist — queues it, all in one transaction. Nothing is written locally.
     async checkIn(appointmentId, key) {
       const appointment = projected(appointmentId)
       if (!appointment) return { ok: false, message: 'This appointment is not loaded from the server. Refresh and try again.' }
-      const existing = (getState().visits || []).find(v => v.appointmentId === appointmentId)
-      if (existing) return admit(existing.id, 'The arrival')
-      const check = admitPreflight(simulatedVisit({
-        source: 'appointment', appointmentId, patientId: appointment.patientId, patientPublicId: appointment.patientPublicId,
-        branchId: appointment.branchId, dentistId: appointment.dentistId, serviceId: appointment.serviceId,
-      }))
-      if (!check.ok) return check
       const result = await visits.checkIn(appointment, key)
       if (!result.ok) return afterServerCommand(result)
       await refresh()
-      return admit(result.row.id, 'The arrival')
+      return { ok: true, visitId: result.row.id, queued: !!result.row.queue, queueNumber: result.row.queue?.queue_number ?? null }
     },
 
-    // M8 Walk-In: a server Visit with no appointment, then the local M9 queue entry. `form.patientId` is the UI key of
-    // the directory-selected Patient and `form.patientPublicId` its server public id.
+    // M8 Walk-In: a server Visit with no appointment, queued in the same server transaction when a Dentist is given.
     async walkIn(form, key) {
-      const check = admitPreflight(simulatedVisit({
-        source: 'walk_in', patientId: form.patientId, patientPublicId: form.patientPublicId,
-        branchId: form.branchId, dentistId: form.dentistId || null, serviceId: form.serviceId || null,
-      }))
-      if (!check.ok) return check
       const result = await visits.walkIn(form, key)
       if (!result.ok) return afterServerCommand(result)
       await refresh()
-      return admit(result.row.id, 'The walk-in')
+      return { ok: true, visitId: result.row.id, queued: !!result.row.queue, queueNumber: result.row.queue?.queue_number ?? null }
     },
 
-    // Explicit "Add to queue" for a Visit the server already opened: the plain local result (the Visit itself is
-    // already recorded, and the page says so).
-    retryAdmit(visitId) {
-      const local = getActions().admitVisit(visitId)
-      return local.ok ? { ...local, visitId } : local
+    // M9 queue commands (server only): 'call' | 'ready' | 'away' | 'return', and the operational priority.
+    async queueCommand(entry, name, key) {
+      const result = await queue.transitionQueue(entry, name, key)
+      if (!result.ok) return afterServerCommand(result)
+      await refresh()
+      return { ok: true, row: result.row }
+    },
+
+    async queuePriority(entry, priority, reason, key) {
+      const result = await queue.setQueuePriority(entry, priority, reason, key)
+      if (!result.ok) return afterServerCommand(result)
+      await refresh()
+      return { ok: true, row: result.row }
     },
 
     // M6 pre-arrival No-show: the scheduled Patient did not arrive, so there is no Visit and no queue entry.
@@ -137,8 +116,9 @@ export function createAppointmentFlow({ getState, getSession, getActions, refres
       return local.ok ? { ok: true } : { ok: true, warning: `The No-show is recorded, but its local follow-up records need review: ${local.message}` }
     },
 
-    // M5 prototype treatment start/draft/completion for a Visit-linked encounter: the Visit command runs first (it
-    // also moves a linked appointment), then the local treatment record follows.
+    // M5 prototype treatment start/draft/completion for a queued encounter: the Visit command runs first (start also
+    // Serves the server queue entry and moves a linked appointment, in one server transaction), then the local
+    // treatment record follows.
     async treatment(input, status = 'In Treatment') {
       const entry = getState().queue.find(q => q.id === input?.queueEntryId)
       const name = status === 'Completed' ? 'completeTreatment' : 'saveTreatment'
@@ -147,6 +127,7 @@ export function createAppointmentFlow({ getState, getSession, getActions, refres
       const check = preflight(state => ({
         visits: state.visits.map(v => (v.id === visit.id ? { ...v, status } : v)),
         appointments: state.appointments.map(a => (a.id === visit.appointmentId ? { ...a, status } : a)),
+        queue: state.queue.map(q => (q.id === entry.id ? { ...q, status: 'Served' } : q)),
       }), name, input, status)
       if (!check.ok || check.unchanged) return check
       if (visit.status !== status) {

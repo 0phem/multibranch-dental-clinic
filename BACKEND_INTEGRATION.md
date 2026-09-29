@@ -2,9 +2,9 @@
 
 Scope: authentication, registration, session restoration, logout and RBAC (Foundation 1B), branch/service/
 staff/dentist reference data (Phase 2A), M1/M4 identity, M6 appointments (server-authoritative since the M6
-React cutover) and M8 Patient Check-In with the shared Visit / Clinical Encounter (see "M8 Check-In and Visit" below).
-Every other business module (queue, treatments, HMO, billing, prescriptions, messages, loyalty, marketing) is still
-frontend-local — see "Frontend-local boundary" below.
+React cutover), M8 Patient Check-In with the shared Visit / Clinical Encounter (see "M8 Check-In and Visit") and M9
+Patient Queue Management (see "M9 Queue" below). Every other business module (treatments, HMO, billing, prescriptions,
+messages, loyalty, marketing) is still frontend-local — see "Frontend-local boundary" below.
 
 ## Running it locally
 
@@ -105,7 +105,7 @@ token) triggers exactly one automatic refetch-and-retry — never a loop.
 Everything below `App.jsx`'s auth gate — Dashboards, Scheduling, PatientFlow, Clinical, FinanceCommunication,
 Admin, HMO, Messages, Loyalty, etc. — is unchanged and still reads/writes the same `localStorage` collections
 it always has, **except** the six reference-data collections Phase 2A covers (below), appointments (M6) and arrival
-records / Visits (M8, below), which are never stored in the browser any more. The identity bridge
+records / Visits (M8) and the queue (M9, below), which are never stored in the browser any more. The identity bridge
 exists only so those still-local pages can keep working before their own data moves to PostgreSQL in a later
 checkpoint.
 
@@ -240,8 +240,8 @@ React reads and writes appointments only through the M6 API:
 - The appointment list is a bounded working window (`appointmentWindow`), never all-time history; Analytics labels the
   Scheduling metric with that window.
 - Old `dentalops-v4-appointments` browser data is not read, uploaded or cleared. `INITIAL_APPOINTMENTS` is gone.
-- Queue and treatment records are still per-browser prototypes: a Dentist sees a queue entry only in the browser where
-  the arrival was handed to the queue (M9/M5 backend work removes this).
+- Treatment records are still per-browser prototypes (M5 backend work removes this). The queue became
+  server-authoritative in M9 (below).
 
 ## M8 Check-In and Visit
 
@@ -291,3 +291,46 @@ Frontend (`src/visits-api.js`, `src/appointment-flow.js`, `src/store.jsx`):
   appointment ids and browser-only walk-ins are read-only history, excluded from live views and KPIs.
 - Patient read views have no Visit projection yet (D9): they validate encounters from the local links alone
   (`visitsProjected: false`); Staff/Dentist/Owner fail closed when a Visit is missing.
+
+## M9 Queue
+
+Laravel/PostgreSQL is the only queue authority; the queue is anchored to the Visit (never to the appointment).
+
+- **Schema** (`2026_10_01_000100_create_queue_tables`): `dentist_queues` (branch + Dentist + Asia/Manila clinic day
+  container and atomic number counter), `queue_entries` (ULID `public_id`, unique `visit_id`, `dentist_queue_id`,
+  `queue_number`, status Waiting / Called / Treatment Ready / Temporarily Away / Served, priority Normal / Priority /
+  Urgent with reason, `revision`, `closed_at` exactly when Served, actors) and append-only `queue_entry_history`
+  (trigger). Constraints: one entry per Visit; UNIQUE (queue, number); numbers ≥ 1; many active entries per queue.
+- **Creation**: `QueueService::enqueue` runs inside the M8 arrival transaction (scheduled Check-In or Walk-In) when the
+  Visit has a responsible Dentist; any failure rolls back the whole arrival. A Visit without a Dentist is not queued.
+  Numbers come from `INSERT … ON CONFLICT … DO UPDATE SET next_number = next_number + 1 RETURNING` (first = 1).
+- **Commands** (Idempotency-Key required + `expected_revision`; today's queue only; no generic PATCH):
+  `POST /api/queue/{entry}/call|ready|away|return` and `POST /api/queue/{entry}/priority` `{priority, reason}`.
+  Staff (branch scope) / Owner may do all; the queue's own Dentist may only Call. Served happens only through
+  `POST /api/visits/{visit}/start-treatment`, which requires a Called / Treatment Ready entry and moves queue entry,
+  Visit and appointment together (lock order appointment → Visit → queue entry). Completion leaves the entry Served.
+- **Reads**: `GET /api/queue?date=&branch_ref=&dentist_ref=` (default today; Staff by scope, Dentist own queues,
+  Owner all; server positions: Waiting / Called / Treatment Ready only, Urgent > Priority > Normal, then exact Visit
+  arrival, then number) and `GET /api/queue/{entry}` (with history). `GET /api/queue/mine` is the Patient's own current
+  queue state only (phase, own number and position, display context) — identity from the session, no list, no other
+  Patients, no wait estimate.
+- **Backfill** (`2026_10_01_000200_backfill_queue_entries_from_visits`, `App\Services\Queue\QueueBackfill`): server
+  Visits only — Checked In + Dentist → Waiting / Normal (numbered by exact arrival, then Visit id); In Treatment →
+  Served at the exact `visit.treatment_started` time (missing → reported); Completed or no Dentist → none.
+  Idempotent and reversible. **Cut over while the queue is empty / outside clinic activity**: browser-only Called,
+  Treatment Ready, Temporarily Away and priority cannot be reconstructed and are never uploaded.
+
+Frontend (`src/queue-api.js`, `src/appointment-flow.js`, `src/store.jsx`):
+
+- Staff/Dentist/Owner load today's server queue with appointments and Visits into an in-memory `state.queue`; a Patient
+  loads `state.myQueue` from `/api/queue/mine`. Neither is persisted; local patches can never write them. The projection
+  keeps the real queue status and adds a display status (Served + Visit In Treatment → "In Treatment").
+- Queue commands and arrival are server-only; treatment start runs the Visit command first, then the local M5 record,
+  which stores `visitId` and the server queue entry id. Queue screens (Staff/Dentist queue, Patient Live Queue) refresh
+  every 30 s only while mounted and visible (no websockets).
+- One-time local evidence re-anchor (compatibility, remove with M5/M11 backends): local treatments/invoices that reach
+  a server Visit through an exact browser-queue link persist that `visitId` (and the server queue entry id where one
+  exists); nothing is matched by Patient, Dentist, branch or date. `dentalops-v4-queue` is no longer live state and is
+  not uploaded or cleared.
+- Completed-encounter evidence (billing, prescriptions, follow-ups) is the server Visit (`completedEncounter`), not a
+  browser queue row. Wait estimates, capacity and workload stay client-side M10 calculations over the projection.

@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from 'react'
 import { Button, Card, Field, Icon, Notice, PageHeader, Progress, Status, Table } from '../components.jsx'
 import { branchCapacity, dentistName, displayTime, patientName, queueWaitEstimate } from '../logic.js'
 import { commandKey } from '../appointments-api.js'
+import { useVisibleRefresh } from '../use-visible-refresh.js'
 import { patientKeyResolver } from '../appointment-projection.js'
 import { DEFAULT_COUNTRY, normalizePhoneNumber } from '../phone.js'
 import { bookableBranches } from './Scheduling.jsx'
@@ -11,9 +12,9 @@ import { PatientQueuePage } from './PatientVisits.jsx'
 import { encounterContext, inScope, isActiveQueue, isTodayQueue, sessionForRole } from '../contracts.js'
 
 // M8 front desk. Arrival is server-authoritative: a scheduled Check-In or a Walk-In opens a server Visit (the scheduled
-// appointment moves to Checked In in the same server transaction), then the still-browser-local M9 queue entry is
-// created from that Visit. Patients come from the server directory (or the minimal front-desk registration); nothing
-// here writes an arrival record locally.
+// appointment moves to Checked In) and — when the Visit has a responsible Dentist — queues it, all in one server
+// transaction (M9). Patients come from the server directory (or the minimal front-desk registration); nothing here
+// writes an arrival or queue record locally.
 export function CheckInPage({ store }) {
   const { state, toast }=store
   const session=store.session||sessionForRole('staff',state)
@@ -22,9 +23,9 @@ export function CheckInPage({ store }) {
   const today=clinicDate()
   // Today's server appointments awaiting arrival (no Visit yet).
   const eligible=state.appointments.filter(a=>inScope(a,session,state)&&a.date===today&&['Confirmed','Pending'].includes(a.status)&&!(state.visits||[]).some(v=>v.appointmentId===a.id))
-  // Server Visits whose local queue step has not happened in this browser (the local step failed after the server
-  // succeeded, or the arrival was recorded in another browser): Staff can complete the queue handoff.
-  const pendingQueue=(state.visits||[]).filter(v=>v.status==='Checked In'&&v.clinicDate===today&&inScope(v,session,state)&&!state.queue.some(q=>q.visitId===v.id))
+  // Today's server Visits that are checked in but not in a queue: only a Visit without a responsible Dentist (M9 Q4).
+  // Shown honestly; no assignment workflow exists in this wave.
+  const notQueued=(state.visits||[]).filter(v=>v.status==='Checked In'&&v.clinicDate===today&&inScope(v,session,state)&&!v.dentistId)
   const [appointmentId,setAppointmentId]=useState('')
   const selectedAppointment=eligible.find(a=>a.id===appointmentId)
   // One Idempotency-Key per confirm attempt, reused when retrying the same arrival.
@@ -38,11 +39,7 @@ export function CheckInPage({ store }) {
     setBusy(false)
     if(!result.ok)return toast(result.message,'warning')
     checkInKey.current={appointmentId:null,key:null}
-    setAppointmentId('');toast(result.unchanged?'Arrival already recorded.':'Arrival recorded and queue entry created.','success')
-  }
-  const retryQueue=visit=>{
-    const result=flow.retryAdmit(visit.id)
-    toast(result.ok?'Queue entry created for this visit.':result.message,result.ok?'success':'warning')
+    setAppointmentId('');toast(result.queued?`Arrival recorded — queue number ${result.queueNumber}.`:'Arrival recorded.','success')
   }
 
   const branches=bookableBranches(state,session)
@@ -69,7 +66,7 @@ export function CheckInPage({ store }) {
     const result=await flow.walkIn({...walkIn,patientId},walkKey.current)
     setWalking(false)
     if(!result.ok)return toast(result.message,'warning')
-    setAdmitted(true);toast(result.unchanged?'Arrival already recorded.':'Walk-in admitted to the queue.','success')
+    setAdmitted(true);toast(result.queued?`Walk-in admitted — queue number ${result.queueNumber}.`:'Walk-in arrival recorded.','success')
   }
 
   // Minimal front-desk registration of a new walk-in Patient (Person + Patient on the server, no login account).
@@ -99,9 +96,9 @@ export function CheckInPage({ store }) {
       {mode==='scheduled'?<Card className="checkin-focus-card" title="Scheduled arrivals" subtitle="Select the patient who has arrived." actions={<Button size="sm" variant="ghost" onClick={()=>flow?.refresh()}>Refresh</Button>}>
         <div className="checkin-select-row"><Field label="Today’s appointment"><select value={selectedAppointment?.id||''} onChange={e=>setAppointmentId(e.target.value)}><option value="">Select appointment</option>{eligible.map(a=><option value={a.id} key={a.id}>{displayTime(a.start)} • {patientName(a.patientId,state.patients)} • {a.service}</option>)}</select></Field></div>
         {selectedAppointment?<div className="arrival-card"><div className="avatar large">{patientName(selectedAppointment.patientId,state.patients).split(' ').map(x=>x[0]).slice(0,2).join('')}</div><div className="arrival-main"><span>Arriving patient</span><h2>{patientName(selectedAppointment.patientId,state.patients)}</h2><p>{selectedAppointment.service} • {selectedAppointment.dentistName||dentistName(selectedAppointment.dentistId,state.dentists)}</p><div className="arrival-meta"><span><Icon name="calendar" size={15}/>{displayTime(selectedAppointment.start)}</span><span><Icon name="building" size={15}/>{selectedAppointment.branch}</span><span>{selectedAppointment.appointmentNo}</span></div></div><div className="arrival-action"><Status>{selectedAppointment.status}</Status><Button onClick={checkScheduled} disabled={busy} icon="checkin">{busy?'Recording…':'Confirm arrival'}</Button></div></div>:<Notice>Select an appointment to check the patient in.</Notice>}
-        <div className="checkin-note"><Icon name="shield" size={17}/><div><b>Fast admission</b><span>The existing patient profile and appointment already identify the patient. The clinic server records the arrival and opens the visit; a patient who did not arrive is marked No-show from Appointments.</span></div></div>
-        {pendingQueue.length>0&&<div className="top-gap"><Notice tone="warning" title="Arrivals waiting for the queue step">These visits are checked in at the clinic server but have no queue entry in this browser yet.</Notice>
-          {pendingQueue.map(v=><div className="clinical-history" key={v.id}><div><b>{v.patientName||patientName(v.patientId,state.patients)}</b><p>{v.walkIn?'Walk-in':v.appointmentCode} • arrived {displayTime(v.checkedIn)} • {v.dentistName||'No Dentist assigned'}</p></div><Button size="sm" variant="soft" onClick={()=>retryQueue(v)}>Add to queue</Button></div>)}
+        <div className="checkin-note"><Icon name="shield" size={17}/><div><b>Fast admission</b><span>The existing patient profile and appointment already identify the patient. The clinic server records the arrival, opens the visit and adds it to the Dentist’s queue; a patient who did not arrive is marked No-show from Appointments.</span></div></div>
+        {notQueued.length>0&&<div className="top-gap"><Notice tone="info" title="Checked in, not in a queue">These visits have no responsible Dentist yet, so they are not in a Dentist’s queue and treatment can’t start. Assigning a Dentist later isn’t available yet.</Notice>
+          {notQueued.map(v=><div className="clinical-history" key={v.id}><div><b>{v.patientName||patientName(v.patientId,state.patients)}</b><p>{v.walkIn?'Walk-in':v.appointmentCode} • arrived {displayTime(v.checkedIn)} • No Dentist assigned</p></div></div>)}
         </div>}
       </Card>:<Card title="Walk-in admission" subtitle="Find the patient in the clinic directory (or register a new patient), then choose the branch, service and available Dentist."><div className="form-grid">
         <Field label="Find patient" hint="Search the clinic Patient directory by name, code or phone."><input value={search} placeholder="Type at least 2 characters" onChange={e=>setSearch(e.target.value)}/></Field>
@@ -130,7 +127,7 @@ function AppointmentsLoadNotice({ store }) {
 }
 
 export function QueuePage({ role, activeBranch, store, setPage }) {
-  const { state, actions, toast }=store
+  const { state, toast }=store
   const session=store.session||sessionForRole(role,state)
   const [dentistFilter,setDentistFilter]=useState('All Dentists')
   const [statusFilter,setStatusFilter]=useState('Active')
@@ -141,37 +138,49 @@ export function QueuePage({ role, activeBranch, store, setPage }) {
     if(role==='staff'&&dentistFilter!=='All Dentists'&&q.dentistId!==dentistFilter)return false
     if(statusFilter==='Active'&&!active(q))return false
     return ['Active','All'].includes(statusFilter)||q.status===statusFilter
-  }).sort((a,b)=>String(a.branch||'').localeCompare(String(b.branch||''))||String(dentistName(a.dentistId,state.dentists)||'').localeCompare(String(dentistName(b.dentistId,state.dentists)||''))||(a.position||999)-(b.position||999))
-  const update=(id,status,extra={})=>{
-    const result=actions.updateQueue(id,status,extra)
-    toast(result.ok?'Queue updated.':result.message,result.ok?'success':'warning')
+  }).sort((a,b)=>String(a.branch||'').localeCompare(String(b.branch||''))||String(dentistName(a.dentistId,state.dentists)||'').localeCompare(String(dentistName(b.dentistId,state.dentists)||''))||(a.position||999)-(b.position||999)||(a.queueNumber||0)-(b.queueNumber||0))
+  // M9: every queue change is a server command (Idempotency-Key per attempt + expected revision); the server computes
+  // numbers and positions. A second click while a command is in flight is ignored.
+  const flow=store.appointmentFlow
+  const [busy,setBusy]=useState(null)
+  const run=async(entry,label,send)=>{
+    if(busy)return
+    setBusy(entry.id)
+    const result=await send(commandKey())
+    setBusy(null)
+    toast(result.ok?label:result.message,result.ok?'success':'warning')
   }
-  const priority=q=>{
-    const reason=window.prompt('Reason for emergency priority:')
-    if(reason?.trim())update(q.id,q.status,{priority:'Urgent',reason})
+  const update=(entry,name,label)=>run(entry,label,key=>flow.queueCommand(entry,name,key))
+  const priority=entry=>{
+    const reason=window.prompt('Reason for urgent queue priority (operational, not a clinical assessment):')
+    if(reason?.trim())run(entry,'Queue priority updated.',key=>flow.queuePriority(entry,'Urgent',reason.trim(),key))
   }
+  const operational=['staff','owner'].includes(role)
+  useVisibleRefresh(flow?.refresh,{active:role!=='patient'})
   if (role==='patient') return <PatientQueuePage store={store} setPage={setPage}/>
   return <>
-    <PageHeader title={role==='dentist'?'My Patient Queue':'Patient Queue'} text="Operational queue controls with priority, check-in age, patient state transitions, and automatic position recalculation."/>
-    <Card title={role==='dentist'?'My queue filters':'Queue filters'} className="filter-card"><div className="filter-row"><label>Branch <select value={activeBranch} disabled><option>{activeBranch}</option></select></label>{role!=='dentist'&&<label>Dentist <select value={dentistFilter} onChange={e=>setDentistFilter(e.target.value)}><option>All Dentists</option>{state.dentists.filter(d=>role==='owner'||d.branchIds.includes(session.branchId)).map(d=><option key={d.id} value={d.id}>{d.name}</option>)}</select></label>}<label>Status <select value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}><option>Active</option><option>All</option><option>Waiting</option><option>Called</option><option>Treatment Ready</option><option>In Treatment</option><option>Temporarily Away</option><option>Completed</option></select></label></div></Card>
+    <PageHeader title={role==='dentist'?'My Patient Queue':'Patient Queue'} text="The clinic server keeps the queue: numbers, order and positions update for everyone. Priority and arrival order decide positions inside each Dentist’s queue." aside={<Button variant="ghost" onClick={()=>flow?.refresh()}>Refresh</Button>}/>
+    <Card title={role==='dentist'?'My queue filters':'Queue filters'} className="filter-card"><div className="filter-row"><label>Branch <select value={activeBranch} disabled><option>{activeBranch}</option></select></label>{role!=='dentist'&&<label>Dentist <select value={dentistFilter} onChange={e=>setDentistFilter(e.target.value)}><option>All Dentists</option>{state.dentists.filter(d=>role==='owner'||d.branchIds.includes(session.branchId)).map(d=><option key={d.id} value={d.id}>{d.name}</option>)}</select></label>}<label>Status <select value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}><option>Active</option><option>All</option><option>Waiting</option><option>Called</option><option>Treatment Ready</option><option>Temporarily Away</option><option value="Served">Served (treatment started)</option></select></label></div></Card>
+    <AppointmentsLoadNotice store={store}/>
     {role==='staff'&&<Notice tone="info">A patient in the queue has already checked in. Marking them as having left or cancelling their visit isn’t available yet — the clinic still needs to decide how an admitted visit is closed. A patient who never arrived is marked No-show from Appointments.</Notice>}
     <Card title="Live queue" subtitle="Priority and checked-in order determine positions inside each dentist queue." className="top-gap">
       <Table rows={visible} columns={[
         {key:'position',label:'Pos.',render:q=>q.position?`#${q.position}`:'—'},
-        {key:'queueNumber',label:'Queue no.',render:q=>q.queueNumber||q.position||'—'},
-        {key:'patient',label:'Patient',render:q=><div><b>{patientName(q.patientId,state.patients)}</b><small className="block-muted">{q.priority} priority • {q.appointmentId?state.appointments.find(a=>a.id===q.appointmentId)?.appointmentNo||'Scheduled visit':'Walk-in visit'}</small></div>},
+        {key:'queueNumber',label:'Queue no.',render:q=>q.queueNumber||'—'},
+        {key:'patient',label:'Patient',render:q=><div><b>{q.patientName||patientName(q.patientId,state.patients)}</b><small className="block-muted">{q.priority} priority{q.priorityReason?` (${q.priorityReason})`:''} • {q.appointmentCode||(q.walkIn?'Walk-in visit':'Scheduled visit')}</small></div>},
         {key:'branch',label:'Branch'},{key:'dentist',label:'Dentist',render:q=>dentistName(q.dentistId,state.dentists)},
         {key:'checkedIn',label:'Checked in',render:q=>displayTime(q.checkedIn)},
         {key:'wait',label:'Est. wait',render:q=>`${queueWaitEstimate(q,state.queue,state.appointments,state.treatments,state.dentists)} min`},
-        {key:'status',label:'Status',render:q=><Status>{q.status}</Status>},
+        {key:'status',label:'Status',render:q=><Status>{q.displayStatus||q.status}</Status>},
         {key:'actions',label:'Actions',render:q=><div className="row-actions">
-          {q.status==='Waiting'&&<Button size="sm" variant="soft" onClick={()=>update(q.id,'Called')}>Call patient</Button>}
-          {role==='dentist'&&['Called','Treatment Ready','In Treatment'].includes(q.status)&&<Button size="sm" onClick={()=>setPage('treatment',encounterContext(q))}>{q.treatmentId?'Continue Treatment':'Open Treatment'}</Button>}
+          {q.status==='Waiting'&&(operational||role==='dentist')&&<Button size="sm" variant="soft" disabled={!!busy} onClick={()=>update(q,'call','Patient called.')}>Call patient</Button>}
+          {role==='dentist'&&(['Called','Treatment Ready'].includes(q.status)||q.status==='Served'&&q.visitStatus==='In Treatment')&&<Button size="sm" onClick={()=>setPage('treatment',encounterContext(q))}>{q.treatmentId?'Continue Treatment':'Open Treatment'}</Button>}
           <Button size="sm" variant="ghost" onClick={()=>setPage('patients',encounterContext(q))}>Open Chart</Button>
-          {role==='staff'&&<>
-            {['Waiting','Called','Treatment Ready'].includes(q.status)&&<Button size="sm" variant="ghost" onClick={()=>update(q.id,'Temporarily Away')}>Temporarily Away</Button>}
-            {q.status==='Temporarily Away'&&<Button size="sm" variant="soft" onClick={()=>update(q.id,'Waiting')}>Return to Queue</Button>}
-            {active(q)&&q.status!=='In Treatment'&&<Button size="sm" variant="ghost" onClick={()=>priority(q)}>Emergency priority</Button>}
+          {operational&&<>
+            {q.status==='Called'&&<Button size="sm" variant="soft" disabled={!!busy} onClick={()=>update(q,'ready','Marked ready for treatment.')}>Ready for treatment</Button>}
+            {['Waiting','Called','Treatment Ready'].includes(q.status)&&<Button size="sm" variant="ghost" disabled={!!busy} onClick={()=>update(q,'away','Marked temporarily away.')}>Temporarily Away</Button>}
+            {q.status==='Temporarily Away'&&<Button size="sm" variant="soft" disabled={!!busy} onClick={()=>update(q,'return','Returned to the queue.')}>Return to Queue</Button>}
+            {active(q)&&q.priority!=='Urgent'&&<Button size="sm" variant="ghost" disabled={!!busy} onClick={()=>priority(q)}>Urgent queue priority</Button>}
           </>}
         </div>}
 

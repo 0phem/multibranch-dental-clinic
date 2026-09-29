@@ -1,11 +1,11 @@
 import { createWorkflowActions } from '../../src/workflow.js'
 import { clinicNow } from '../../src/clock.js'
+import { encounterContext, inScope } from '../../src/contracts.js'
 
-// Test support for the M6/M8 cutovers. Appointments and Visits are server-authoritative (Laravel/PostgreSQL); the
-// frontend only holds a read projection. These helpers stand in for "the server accepted a command and the projection
-// was refreshed", and mirror store.jsx's server-first flows synchronously: a no-commit dry run of the local adapter step
-// against the state the server command would produce, then the server command, then the real local step. The server
-// rules mirrored here are the ones VisitService / AppointmentService enforce (and backend tests cover).
+// Test support for the M6/M8/M9 cutovers. Appointments, Visits and the queue are server-authoritative
+// (Laravel/PostgreSQL); the frontend only holds a read projection. These helpers stand in for "the server accepted a
+// command and the projection was refreshed", and mirror store.jsx's server-first flows synchronously. The server rules
+// mirrored here are the ones AppointmentService / VisitService / QueueService enforce (and backend tests cover).
 
 let sequence = 0
 // Deterministic ULID-shaped public ids (Crockford base32 alphabet; no i/l/o/u).
@@ -38,29 +38,74 @@ export function serverVisit(fields = {}) {
   }
 }
 
+// ---- M9 server queue mirror (QueueService) -------------------------------------------------------------------------
+const QUEUE_RANK = { Urgent: 0, Priority: 1, Normal: 2 }
+const POSITIONAL = ['Waiting', 'Called', 'Treatment Ready']
+const QUEUE_TRANSITIONS = { call: [['Waiting'], 'Called'], ready: [['Called'], 'Treatment Ready'], away: [['Waiting', 'Called', 'Treatment Ready'], 'Temporarily Away'], return: [['Temporarily Away'], 'Waiting'] }
+
+/** A mapped server queue entry (the read-model shape queue-api.js mapQueueEntry produces). */
+export function serverQueueEntry(visit, queueNumber, fields = {}) {
+  const n = ++sequence
+  const id = fields.id || serverId(900000 + n)
+  return {
+    id, queueEntryId: id, server: true, status: 'Waiting', priority: 'Normal', priorityReason: '', queueNumber, position: null, revision: 1,
+    clinicDate: visit.clinicDate, closedAt: null, visitId: visit.id, visitStatus: visit.status, walkIn: !visit.appointmentId,
+    arrivedAt: visit.arrivedAt, checkedIn: visit.checkedIn, patientId: visit.patientId, branchId: visit.branchId, dentistId: visit.dentistId,
+    serviceId: visit.serviceId || null, appointmentId: visit.appointmentId || null, displayStatus: 'Waiting', ...fields,
+  }
+}
+
+/** Server positions (per branch + Dentist + day: priority, exact arrival, queue number) and Visit-derived display. */
+export function projectQueue(queue, visits = []) {
+  const groups = new Map()
+  for (const q of queue) {
+    if (!POSITIONAL.includes(q.status)) continue
+    const key = `${q.branchId}|${q.dentistId}|${q.clinicDate}`
+    groups.set(key, [...(groups.get(key) || []), q])
+  }
+  const positions = new Map()
+  for (const list of groups.values()) {
+    list.sort((a, b) => QUEUE_RANK[a.priority] - QUEUE_RANK[b.priority] || String(a.arrivedAt).localeCompare(String(b.arrivedAt)) || a.queueNumber - b.queueNumber)
+      .forEach((q, i) => positions.set(q.id, i + 1))
+  }
+  return queue.map(q => {
+    const visitStatus = visits.find(v => v.id === q.visitId)?.status ?? q.visitStatus
+    return { ...q, queueEntryId: q.id, position: positions.get(q.id) ?? null, visitStatus, displayStatus: q.status === 'Served' ? visitStatus : q.status }
+  })
+}
+
 /**
  * @param {{actions:()=>object, getState:()=>object, getSession:()=>object, patchState:(patch:object)=>void}} f
  */
 export function serverFlow({ actions, getState, getSession, patchState }) {
   const appointmentById = id => getState().appointments.find(a => a.id === id)
   const visits = () => getState().visits || []
+  const queue = () => getState().queue || []
   const dryRun = (patch, name, args) => {
     const simulated = { ...getState(), ...patch }
     return createWorkflowActions({ getState: () => simulated, getSession, commit: () => {} })[name](...args)
   }
   const setAppointment = (id, changes) => patchState({ appointments: getState().appointments.map(a => (a.id === id ? { ...a, ...changes, revision: (a.revision || 1) + 1 } : a)) })
+  const setServer = ({ visits: nextVisits = visits(), queue: nextQueue = queue() }) => patchState({ visits: nextVisits, queue: projectQueue(nextQueue, nextVisits) })
   const hasActiveVisit = patientId => visits().some(v => v.patientId === patientId && ['Checked In', 'In Treatment'].includes(v.status))
   const walkInKeys = new Map()
+  const entryFor = visitId => queue().find(q => q.visitId === visitId)
+  const canOperate = record => {
+    const session = getSession()
+    return ['staff', 'owner'].includes(session?.role) && inScope(record, session, getState())
+  }
 
-  // Server Check-In + Visit, then the local queue handoff (mirrors appointmentFlow.checkIn).
+  // Server arrival (M8 + M9 in one transaction): appointment Checked In, Visit, and — with a Dentist — the queue entry.
   const openVisit = (visit, appointmentId) => {
-    const patch = { visits: [...visits(), visit] }
-    if (appointmentId) patch.appointments = getState().appointments.map(a => (a.id === appointmentId ? { ...a, status: 'Checked In' } : a))
-    const check = dryRun(patch, 'admitVisit', [visit.id])
-    if (!check.ok) return check
     if (appointmentId) setAppointment(appointmentId, { status: 'Checked In' })
-    patchState({ visits: [...visits(), visit] })
-    return actions().admitVisit(visit.id)
+    let entry = null
+    if (visit.dentistId) {
+      const number = Math.max(0, ...queue().filter(q => q.branchId === visit.branchId && q.dentistId === visit.dentistId && q.clinicDate === visit.clinicDate).map(q => q.queueNumber)) + 1
+      entry = serverQueueEntry(visit, number)
+    }
+    setServer({ visits: [...visits(), visit], queue: entry ? [...queue(), entry] : queue() })
+    const record = entry ? entryFor(visit.id) : null
+    return { ok: true, visit, record, context: record ? encounterContext(record) : null }
   }
 
   return {
@@ -71,32 +116,61 @@ export function serverFlow({ actions, getState, getSession, patchState }) {
       return appointmentById(record.id)
     },
     setAppointment,
-    /** Scheduled Check-In (VisitService::checkInScheduled). */
+    setServer,
+    /** Scheduled Check-In (VisitService::checkInScheduled + QueueService::enqueue). */
     checkIn(appointmentId) {
       const appointment = appointmentById(appointmentId)
       const existing = visits().find(v => v.appointmentId === appointmentId)
-      if (existing) return actions().admitVisit(existing.id)
+      if (existing) return { ok: true, unchanged: true, visit: existing, record: entryFor(existing.id) || null, context: entryFor(existing.id) ? encounterContext(entryFor(existing.id)) : null }
       if (!appointment) return { ok: false, message: 'This appointment is not loaded from the server.' }
+      if (!canOperate(appointment)) return { ok: false, message: 'This appointment is outside your assigned branch.' }
       if (!['Pending', 'Confirmed'].includes(appointment.status)) return { ok: false, message: `An appointment that is ${appointment.status} cannot be checked in.` }
       if (appointment.date !== clinicNow().date) return { ok: false, message: 'Only today’s appointments can be checked in.' }
       if (hasActiveVisit(appointment.patientId)) return { ok: false, message: 'This patient already has an active visit.' }
       const visit = serverVisit({ appointmentId, patientId: appointment.patientId, branchId: appointment.branchId, dentistId: appointment.dentistId, serviceId: appointment.serviceId })
       return openVisit(visit, appointmentId)
     },
-    /** Walk-In (VisitService::walkIn). The key makes a repeated submission replay instead of acting twice. */
+    /** Walk-In (VisitService::walkIn + enqueue). The key makes a repeated submission replay instead of acting twice. */
     walkIn(form, key = null) {
       const request = JSON.stringify([form.patientId, form.branchId, form.serviceId || null, form.dentistId || null])
       if (key && walkInKeys.has(key)) {
         const [visitId, original] = walkInKeys.get(key)
         if (original !== request) return { ok: false, message: 'This Idempotency-Key was already used for a different request.' }
-        // The server replays the original Visit; the local queue handoff is idempotent (and day-bound).
-        return actions().admitVisit(visitId)
+        return { ok: true, unchanged: true, visit: visits().find(v => v.id === visitId), record: entryFor(visitId) || null }
       }
+      if (!canOperate(form)) return { ok: false, message: 'Walk-ins must use your assigned branch.' }
+      if (!getState().patients.some(p => p.id === form.patientId)) return { ok: false, message: 'The patient could not be found.' }
+      if (form.dentistId && !getState().dentists.some(d => d.id === form.dentistId)) return { ok: false, message: 'The Dentist could not be found.' }
       if (hasActiveVisit(form.patientId)) return { ok: false, message: 'This patient already has an active visit.' }
       const visit = serverVisit({ patientId: form.patientId, branchId: form.branchId, dentistId: form.dentistId || null, serviceId: form.serviceId || null })
       const result = openVisit(visit, null)
       if (result.ok && key) walkInKeys.set(key, [visit.id, request])
       return result
+    },
+    /** M9 named queue commands (QueueService::transition). */
+    queue(entryId, name) {
+      const entry = queue().find(q => q.id === entryId)
+      if (!entry || !QUEUE_TRANSITIONS[name]) return { ok: false, message: 'This queue command is not available.' }
+      const session = getSession()
+      const allowed = name === 'call' ? canOperate(entry) || (session?.role === 'dentist' && entry.dentistId === session.dentistId) : canOperate(entry)
+      if (!allowed) return { ok: false, message: 'This role cannot perform that queue action.' }
+      const [from, to] = QUEUE_TRANSITIONS[name]
+      if (entry.status === to) return { ok: true, unchanged: true, record: entry }
+      if (entry.status === 'Served' || visits().find(v => v.id === entry.visitId)?.status !== 'Checked In') return { ok: false, message: 'This patient has left the waiting queue.' }
+      if (!from.includes(entry.status)) return { ok: false, message: `A queue entry that is ${entry.status} cannot move to ${to}.` }
+      if (entry.clinicDate !== clinicNow().date) return { ok: false, message: 'This queue entry belongs to another clinic day.' }
+      setServer({ queue: queue().map(q => (q.id === entryId ? { ...q, status: to, revision: q.revision + 1 } : q)) })
+      return { ok: true, record: queue().find(q => q.id === entryId) }
+    },
+    /** M9 operational priority (Staff/Owner, reason required). */
+    priority(entryId, priority, reason) {
+      const entry = queue().find(q => q.id === entryId)
+      if (!entry || !canOperate(entry)) return { ok: false, message: 'Only in-scope Staff or the Owner can change queue priority.' }
+      if (!Object.hasOwn(QUEUE_RANK, priority) || typeof reason !== 'string' || !reason.trim()) return { ok: false, message: 'A queue priority change needs a reason.' }
+      if (entry.status === 'Served') return { ok: false, message: 'This patient has left the waiting queue.' }
+      if (entry.clinicDate !== clinicNow().date) return { ok: false, message: 'This queue entry belongs to another clinic day.' }
+      setServer({ queue: queue().map(q => (q.id === entryId ? { ...q, priority, priorityReason: reason.trim(), revision: q.revision + 1 } : q)) })
+      return { ok: true, record: queue().find(q => q.id === entryId) }
     },
     /** Pre-arrival No-show (AppointmentService::transition 'no-show'): no Visit exists or is created. */
     noShow(appointmentId) {
@@ -105,10 +179,10 @@ export function serverFlow({ actions, getState, getSession, patchState }) {
       setAppointment(appointmentId, { status: 'No-show' })
       return actions().applyAppointmentNoShow(appointmentId)
     },
-    /** Visit start-treatment / complete (cascading to the linked appointment), then the local M5 step. */
+    /** Visit start-treatment (Serves the queue entry) / complete, cascading to the appointment, then the local M5 step. */
     treatment(input, status = 'In Treatment') {
       const name = status === 'Completed' ? 'completeTreatment' : 'saveTreatment'
-      const entry = getState().queue.find(q => q.id === input?.queueEntryId)
+      const entry = queue().find(q => q.id === input?.queueEntryId)
       const visit = entry?.visitId ? visits().find(v => v.id === entry.visitId) : null
       if (!visit) return actions()[name](input, status)
       if (visit.status !== status) {
@@ -116,11 +190,12 @@ export function serverFlow({ actions, getState, getSession, patchState }) {
         if (!visit.dentistId) return { ok: false, message: 'Assign a responsible Dentist to this visit before clinical work starts.' }
         const linked = visit.appointmentId ? appointmentById(visit.appointmentId) : null
         if (linked && linked.status !== visit.status) return { ok: false, message: `The linked appointment is ${linked.status}; this visit needs clinic review.` }
-        const moved = v => (v.id === visit.id ? { ...v, status, revision: v.revision + 1, closedAt: status === 'Completed' ? clinicNow().timestamp : null } : v)
-        const patch = { visits: visits().map(moved), appointments: getState().appointments.map(a => (a.id === visit.appointmentId ? { ...a, status } : a)) }
-        const check = dryRun(patch, name, [input, status])
+        if (status === 'In Treatment' && !['Called', 'Treatment Ready'].includes(entry.status)) return { ok: false, message: 'Call this patient before starting treatment.' }
+        const nextVisits = visits().map(v => (v.id === visit.id ? { ...v, status, revision: v.revision + 1, closedAt: status === 'Completed' ? clinicNow().timestamp : null } : v))
+        const nextQueue = status === 'In Treatment' ? queue().map(q => (q.id === entry.id ? { ...q, status: 'Served', closedAt: clinicNow().timestamp, revision: q.revision + 1 } : q)) : queue()
+        const check = dryRun({ visits: nextVisits, queue: projectQueue(nextQueue, nextVisits), appointments: getState().appointments.map(a => (a.id === visit.appointmentId ? { ...a, status } : a)) }, name, [input, status])
         if (!check.ok || check.unchanged) return check
-        patchState({ visits: visits().map(moved) })
+        setServer({ visits: nextVisits, queue: nextQueue })
         if (visit.appointmentId) setAppointment(visit.appointmentId, { status })
       }
       return actions()[name](input, status)
@@ -137,15 +212,19 @@ export function serverFlow({ actions, getState, getSession, patchState }) {
 
 /**
  * Wraps a raw createWorkflowActions() object the way store.jsx's appointmentFlow does: scheduled Check-In, Walk-In,
- * pre-arrival No-show and treatment start/completion run server-first. Everything else passes straight through.
- * `checkInAppointment` / `admitWalkIn` / `markNoShow` are test-level names for those server-first flows.
+ * queue commands, pre-arrival No-show and treatment start/completion run server-first. `checkInAppointment` /
+ * `admitWalkIn` / `updateQueue` / `markNoShow` are test-level names for those server flows (updateQueue maps the
+ * target status onto the M9 named command; there is no queue command for 'No-show').
  */
 export function serverFirstActions(rawActions, flow) {
+  const commandFor = { Called: 'call', 'Treatment Ready': 'ready', 'Temporarily Away': 'away', Waiting: 'return' }
   return {
     ...rawActions,
     checkInAppointment: id => flow.checkIn(id),
     admitWalkIn: (form, key) => flow.walkIn(form, key),
     markNoShow: id => flow.noShow(id),
+    updateQueue: (id, status, extra = {}) => (extra.priority ? flow.priority(id, extra.priority, extra.reason)
+      : commandFor[status] ? flow.queue(id, commandFor[status]) : { ok: false, message: `There is no queue command for ${status}.` }),
     saveTreatment: (input, status = 'In Treatment') => flow.treatment(input, status),
     completeTreatment: (input, status = 'Completed') => flow.treatment(input, status),
   }
@@ -179,3 +258,48 @@ export function serverVisitRow(fields = {}) {
     appointment: v.appointmentId ? { id: v.appointmentId, code: fields.appointmentCode || '', status: fields.appointmentStatus || 'Checked In', revision: 2 } : null,
   }
 }
+
+/** A GET /api/queue row (the shape ClinicProvider's initialServerQueue accepts), from a mapped queue entry. */
+export function serverQueueRow(entry, fields = {}) {
+  return {
+    id: entry.id, status: entry.status, priority: entry.priority, priority_reason: entry.priorityReason || null, queue_number: entry.queueNumber,
+    position: entry.position ?? null, revision: entry.revision, clinic_date: entry.clinicDate, closed_at: entry.closedAt || null,
+    branch: { id: entry.branchId, name: '' }, dentist: { id: entry.dentistId, name: '' },
+    visit: { id: entry.visitId, status: entry.visitStatus, source: entry.walkIn ? 'walk_in' : 'appointment', revision: 1, arrived_at: entry.arrivedAt },
+    patient: { id: entry.patientId, code: fields.patientCode || '', name: fields.patientName || '' },
+    service: entry.serviceId ? { id: entry.serviceId, name: '' } : null,
+    appointment: entry.appointmentId ? { id: entry.appointmentId, code: fields.appointmentCode || '', status: fields.appointmentStatus || 'Checked In', start_time: '11:00' } : null,
+  }
+}
+
+/**
+ * Mirror of GET /api/queue/mine (QueueService::patientCurrent) for one Patient over the helper's server state: the
+ * Patient's single active Visit and its queue entry — own number, phase and position only, no wait estimate.
+ */
+export function patientQueueState(state, patientId) {
+  const visit = [...(state.visits || [])].reverse().find(v => v.patientId === patientId && ['Checked In', 'In Treatment'].includes(v.status))
+  if (!visit) return null
+  const entry = (state.queue || []).find(q => q.visitId === visit.id) || null
+  const phase = visit.status === 'In Treatment' ? 'in-treatment' : !entry ? 'checked-in'
+    : { Waiting: 'waiting', Called: 'called', 'Treatment Ready': 'ready', 'Temporarily Away': 'away' }[entry.status] || 'checked-in'
+  const appointment = visit.appointmentId ? (state.appointments || []).find(a => a.id === visit.appointmentId) : null
+  const serviceId = appointment?.serviceId || visit.serviceId
+  return {
+    phase, queue_status: entry?.status ?? null, queue_number: entry?.queueNumber ?? null,
+    position: entry && POSITIONAL.includes(entry.status) ? entry.position : null,
+    clinic_date: visit.clinicDate, arrived_at: visit.arrivedAt,
+    branch: { name: (state.branches || []).find(b => b.id === visit.branchId)?.name || '' },
+    dentist: visit.dentistId ? { name: personName(state, (state.dentists || []).find(d => d.id === visit.dentistId)?.personId) } : null,
+    service: serviceId ? { name: (state.services || []).find(s => s.id === serviceId)?.name || '' } : null,
+    appointment: appointment ? { start_time: appointment.start } : null,
+  }
+}
+
+// The server returns the Dentist's Person full name (DentistProfile → Person), without a title.
+function personName(state, personId) {
+  const person = (state.persons || []).find(p => p.id === personId)
+  return person ? [person.firstName, person.lastName].filter(Boolean).join(' ') : ''
+}
+
+/** The state a signed-in Patient's store holds: their own server queue state as `myQueue`. */
+export const asPatient = (state, patientId) => ({ ...state, myQueue: patientQueueState(state, patientId) })

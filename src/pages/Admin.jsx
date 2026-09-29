@@ -174,7 +174,7 @@ export function AnalyticsPage({ activeBranch, store }) {
   const schedulingNote=`Confirmed appointments dated ${dateLabel(loaded.from)} – ${dateLabel(loaded.to)} (the loaded scheduling window, not all-time; the period selector does not apply)${store.appointmentsTruncated?'. Partial: the appointment list limit was reached.':''}`
   const metrics=[
     {name:'Scheduling',value:appts.filter(a=>a.status==='Confirmed').length,note:schedulingNote,module:'M6'},
-    {name:'Queue / patient flow',value:queue.filter(q=>q.status==='Completed').length,note:'Completed queue records',module:'M9–M10'},
+    {name:'Queue / patient flow',value:queue.filter(q=>q.status==='Served').length,note:'Patients served from today’s queue (treatment started)',module:'M9–M10'},
     {name:'HMO processing',value:hmo.filter(h=>h.status==='Approved').length,note:'Approved provider outcomes',module:'M12'},
     {name:'Communication',value:state.inquiries.filter(i=>i.status==='Responded').length+state.conversations.filter(c=>c.status==='Closed').length,note:'Responded/closed communication records',module:'M16–M18'},
     {name:'Recorded revenue',value:peso.format(paid.reduce((s,i)=>s+i.total,0)),note:'Paid transaction records',module:'M11'},

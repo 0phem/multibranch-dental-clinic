@@ -1,3 +1,4 @@
+import { useVisibleRefresh } from '../use-visible-refresh.js'
 import React, { useEffect, useId, useRef, useState } from 'react'
 import { Button, Card, ConfirmDialog, Empty, Field, Modal, Notice, PageHeader, Status, Tabs } from '../components.jsx'
 import { addDays, clinicDate } from '../clock.js'
@@ -126,6 +127,8 @@ export function PatientAppointmentsPage({ store, setPage, context }) {
 }
 
 export function PatientQueuePage({ store, setPage }) {
+  // M9: the Patient's own queue state comes from the server; refresh every 30 s while this page is visible.
+  useVisibleRefresh(store.appointmentFlow?.refresh,{active:!!store.session})
   const q=patientQueueView(store.state,store.session)
   if(!q)return NO_ACCOUNT
   let body
@@ -138,8 +141,8 @@ export function PatientQueuePage({ store, setPage }) {
       {q.waitMinutes!=null&&<p>Estimated wait: about {q.waitMinutes} min.</p>}
     </div>
     {q.position&&<div className="pt-queue-number" aria-hidden="true">#{q.position}</div>}
-    <DefinitionList items={[{label:'Dentist',value:q.dentist},{label:'Service',value:q.service},{label:'Branch',value:q.branch},{label:'Checked in',value:q.checkedIn?displayTime(q.checkedIn):null}]}/>
-    <Notice>Only your own place in line is shown. The estimated wait is based on the current queue at this clinic and can change.</Notice>
+    <DefinitionList items={[{label:'Queue number',value:q.queueNumber?String(q.queueNumber):null},{label:'Dentist',value:q.dentist},{label:'Service',value:q.service},{label:'Branch',value:q.branch},{label:'Checked in',value:q.checkedIn?displayTime(q.checkedIn):null}]}/>
+    <Notice>Only your own place in line is shown. It updates as the clinic moves the queue.</Notice>
   </Card>
   return <div className="pt-page"><PageHeader kicker="Today" title="Live queue" text="Where you are at the clinic today."/>{body}</div>
 }

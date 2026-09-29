@@ -196,3 +196,8 @@ export function getVisit(id) { return request(`/api/visits/${encodeURIComponent(
 export function checkInVisit(payload, key) { return command('/api/visits/check-in', payload, key) }
 export function walkInVisit(payload, key) { return command('/api/visits/walk-in', payload, key) }
 export function transitionVisit(id, name, payload, key) { return command(`/api/visits/${encodeURIComponent(id)}/${encodeURIComponent(name)}`, payload, key) }
+
+// M9 Patient Queue Management (entries are created only by M8 arrival). Raw calls only; src/queue-api.js owns mapping.
+export function listQueue(params) { return request(`/api/queue${query(params)}`) }
+export function myQueue() { return request('/api/queue/mine') }
+export function queueCommand(id, name, payload, key) { return command(`/api/queue/${encodeURIComponent(id)}/${encodeURIComponent(name)}`, payload, key) }

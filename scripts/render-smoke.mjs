@@ -180,18 +180,21 @@ m.setClockSource(()=>new Date('2026-09-19T02:08:00Z'))
 console.log('PASS: Phase 3 HMO correction/resubmission/escalation, Patient privacy, notification navigation/read scope, participant messages, monitor failures, render purity')
 
 // Exercise ClinicProvider's synchronous snapshot with commands issued before any render.
-// The server already recorded the arrival (appointment Checked In + an open Visit); the local queue handoff must stay
-// idempotent before a render.
+// The server already recorded the arrival and queued it (M8 + M9): the appointment, Visit and queue entry reach the
+// in-memory projection, and a repeated local adapter command issued before any render stays idempotent.
 const quickRow=m.serverRow({patientId:'p1',branchId:'b1',dentistId:'d1',serviceId:'svc1',date:'2026-09-19',start:'16:00',status:'Checked In'})
 const quickVisit=m.serverVisitRow({appointmentId:quickRow.id,patientId:'p1',branchId:'b1',dentistId:'d1',serviceId:'svc1',arrivedAt:'2026-09-19T10:05:00+08:00'})
+const quickEntry=m.serverQueueRow(m.serverQueueEntry(m.serverVisit({id:quickVisit.id,appointmentId:quickRow.id,patientId:'p1',branchId:'b1',dentistId:'d1',serviceId:'svc1',arrivedAt:'2026-09-19T10:05:00+08:00'}),1))
 let serverStore
-renderToString(React.createElement(m.ClinicProvider,{initialReferenceData,initialServerAppointments:[quickRow],initialServerVisits:[quickVisit]},React.createElement(function(){serverStore=m.useClinic();return null})))
+renderToString(React.createElement(m.ClinicProvider,{initialReferenceData,initialServerAppointments:[quickRow],initialServerVisits:[quickVisit],initialServerQueue:[quickEntry]},React.createElement(function(){serverStore=m.useClinic();return null})))
 serverStore.setSession('staff')
 assert.equal(serverStore.state.appointments[0].id,quickRow.id,'server rows reach the in-memory projection')
 assert.equal(serverStore.state.visits[0].id,quickVisit.id,'server Visits reach the in-memory projection')
-const check1=serverStore.actions.admitVisit(quickVisit.id),check2=serverStore.actions.admitVisit(quickVisit.id)
-assert.equal(check1.ok,true,check1.message);assert.equal(check2.unchanged,true)
-assert.equal(check2.record.id,check1.record.id);assert.equal(check1.record.visitId,quickVisit.id)
+assert.equal(serverStore.state.queue[0].id,quickEntry.id,'the server queue reaches the in-memory projection')
+assert.equal(serverStore.state.queue[0].queueNumber,1)
+assert.equal('updateQueue' in serverStore.actions,false,'no local queue command exists')
+const check1=serverStore.actions.recordAppointmentEvent(quickRow.id,'created'),check2=serverStore.actions.recordAppointmentEvent(quickRow.id,'created')
+assert.equal(check1.ok,true,check1.message);assert.equal(check2.ok,true)
 console.log('PASS: immediate repeated command integration')
 
 // Reload persisted ID-only records, including an old record missing branch entirely.
@@ -371,8 +374,13 @@ assert.ok(!/Internal|Record Provider Response/.test(hmoPage))
 const bookPage=render('book','patient')
 for(const text of ['Smart Find','Manual Appointment','pt-book-modes'])assert.ok(bookPage.includes(text),text)
 assert.ok(!/Any available|Finding|Smart Scheduling validation|AI-powered|Smart AI|best Dentist|recommended Dentist|Preferred Dentist/.test(bookPage),'Book entry names no Dentist chooser and no fake-AI language')
+// M9: a Patient's queue state is their own server queue state (GET /api/queue/mine); once the encounter is complete
+// there is no active queue experience and no wait figure.
+const storeBeforePatientQueue=store
+store={...store,state:m.asPatient(store.state,'p1')}
 const doneQueue=render('queue','patient')
-assert.ok(doneQueue.includes('Your visit is complete.')&&!/0 min|updates automatically/.test(doneQueue))
+store=storeBeforePatientQueue
+assert.ok(!doneQueue.includes('in line')&&!/0 min|Estimated wait|updates automatically/.test(doneQueue))
 assert.ok(/Unread: /.test(renderPanel('patient')))
 // A live queue entry, built by the real Staff check-in command.
 m.setClockSource(()=>new Date('2026-09-19T02:08:00Z'))
@@ -380,10 +388,12 @@ session=m.sessionForRole('staff',state)
 const liveVisit=bookServer({patientId:'p1',branchId:'b1',dentistId:'d2',serviceId:'svc1',date:'2026-09-19',start:'16:30'})
 assert.equal(liveVisit.ok,true,liveVisit.message)
 assert.equal(actions.checkInAppointment(liveVisit.record.id).ok,true)
-store={...store,state}
+store={...store,state:m.asPatient(state,'p1')}
 const liveQueue=render('queue','patient')
-assert.ok(liveQueue.includes('in line')&&liveQueue.includes('aria-live="polite"')&&liveQueue.includes('Estimated wait')&&!liveQueue.includes('PhaseOne'))
+assert.ok(liveQueue.includes('in line')&&liveQueue.includes('aria-live="polite"')&&liveQueue.includes('Queue number')&&!liveQueue.includes('Estimated wait')&&!liveQueue.includes('PhaseOne'))
 assert.ok(render('dashboard','patient').includes('You’re checked in')&&render('dashboard','patient').includes('View live queue'))
+// A real store only ever holds the signed-in Patient's own queue state; drop Maria's before other Patients render.
+store={...store,state}
 m.setClockSource(()=>new Date('2026-09-19T15:08:00Z'))
 // Messages: participant conversations only, and never a control that promises Patient-started messages.
 const messages=render('messages','patient')

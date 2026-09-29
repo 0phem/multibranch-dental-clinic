@@ -145,14 +145,10 @@ export const INITIAL_PATIENTS = [
 ]
 
 // M6 cutover: appointments are server-authoritative (Laravel/PostgreSQL + backend seeders), so there is no frontend
-// appointment seed. The seeded queue/treatment/invoice records below still reference the former demo appointment ids
+// appointment seed. The seeded treatment/invoice records below still reference the former demo appointment ids
 // ('a1'…'a5'); they are D5 LEGACY HISTORY (read-only, excluded from live scheduling and KPIs).
 
-export const INITIAL_QUEUE = [
-  { id:'q1', queueId:'dq1', clinicDate:'2026-09-19', checkInId:'ci1', queueNumber:1, appointmentId:'a1', patientId:'p1', branch:'Branch A', dentistId:'d1', checkedIn:'09:46', status:'Waiting', currentState:'Waiting', priority:'Normal', position:1, calledAt:null, readyAt:null, completedAt:null, skipCount:0 },
-  { id:'q2', queueId:'dq2', clinicDate:'2026-09-19', checkInId:'ci2', queueNumber:1, appointmentId:'a3', patientId:'p3', branch:'Branch A', dentistId:'d2', checkedIn:'09:51', status:'Waiting', currentState:'Waiting', priority:'Normal', position:1, calledAt:null, readyAt:null, completedAt:null, skipCount:0 },
-  { id:'q3', queueId:'dq3', clinicDate:'2026-09-19', checkInId:'ci3', queueNumber:1, appointmentId:'a2', patientId:'p2', branch:'Branch B', dentistId:'d3', checkedIn:'10:02', status:'Waiting', currentState:'Waiting', priority:'Priority', position:1, calledAt:null, readyAt:null, completedAt:null, skipCount:0 },
-]
+// M9: the queue is server-authoritative (Laravel/PostgreSQL); there is no browser queue seed any more.
 
 export const INITIAL_TREATMENTS = [
   { id:'t1', patientId:'p4', appointmentId:'old-a4', serviceId:'svc4', dentistId:'d4', assistant:'Ken Bautista', date:'2026-09-13', complaint:'Pain from impacted wisdom tooth', plan:'Extraction and post-op review', procedure:'Surgical extraction #48', status:'Completed', notes:'Procedure tolerated well. Hemostasis achieved.', startedAt:'14:05', completedAt:'15:10', followupRequired:true, prescriptionRequired:true },

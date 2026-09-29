@@ -23,7 +23,7 @@ async function openFollowup() {
   const w = world(); const a = w.seed(row())
   await w.flow.checkIn(a.id)
   const q = w.state.queue[0]
-  w.role('dentist'); w.actions.updateQueue(q.id, 'Called')
+  w.role('dentist'); await w.flow.queueCommand(q, 'call', 'call-1')
   await w.flow.treatment({ queueEntryId: q.id }, 'In Treatment')
   const done = await w.flow.treatment({ queueEntryId: q.id, procedure: 'Consultation', procedures: [{ serviceId: 'svc1', quantity: 1 }], followupRequired: true, followupDate: '2026-09-26' }, 'Completed')
   assert.equal(done.ok, true, done.message)

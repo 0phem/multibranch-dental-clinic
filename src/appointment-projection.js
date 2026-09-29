@@ -1,9 +1,11 @@
 import { isLegacyAppointmentRef, isServerId, mapAppointment } from './appointments-api.js'
 import { mapVisit } from './visits-api.js'
+import { mapQueueEntry } from './queue-api.js'
 
-// TEMPORARY read model for the M6/M8 cutovers. Server appointments and Visits (Laravel/PostgreSQL) are the only
-// appointment and arrival/encounter truth; the still-browser-local modules (queue, treatment, billing, HMO, follow-ups,
-// messaging, dashboards) keep reading `state.appointments`/`state.visits`/`state.patients` through this projection.
+// TEMPORARY read model for the M6/M8/M9 cutovers. Server appointments, Visits and queue entries (Laravel/PostgreSQL) are
+// the only appointment, arrival/encounter and queue truth; the still-browser-local modules (treatment, billing, HMO,
+// follow-ups, messaging, dashboards) keep reading `state.appointments`/`state.visits`/`state.queue`/`state.patients`
+// through this projection.
 // Nothing here is persisted or written back. Remove it module by module as each consumer moves to the backend.
 
 /**
@@ -28,10 +30,11 @@ export function patientKeyResolver({ session, users = [], patients = [] }) {
 }
 
 /** Server rows -> read-model appointments and Visits, plus read-model Patients for server Patients with no local projection. */
-export function buildServerProjection({ rows = [], visitRows = [], directory = [], session = null, users = [], patients = [] }) {
+export function buildServerProjection({ rows = [], visitRows = [], queueRows = [], directory = [], session = null, users = [], patients = [] }) {
   const keyFor = patientKeyResolver({ session, users, patients })
   const appointments = rows.map(row => mapAppointment(row, keyFor))
   const visits = visitRows.map(row => mapVisit(row, keyFor))
+  const queue = queueRows.map(row => mapQueueEntry(row, keyFor))
   const readModel = new Map()
   const addPatient = (publicId, fields) => {
     if (!publicId || keyFor(publicId) !== publicId) return
@@ -44,9 +47,9 @@ export function buildServerProjection({ rows = [], visitRows = [], directory = [
       phone: fields.phone ?? previous.phone ?? '', dob: fields.dob ?? previous.dob ?? '',
     })
   }
-  for (const row of [...rows, ...visitRows]) addPatient(row.patient?.id, { patientCode: row.patient?.code, name: row.patient?.name })
+  for (const row of [...rows, ...visitRows, ...queueRows]) addPatient(row.patient?.id, { patientCode: row.patient?.code, name: row.patient?.name })
   for (const patient of directory) addPatient(patient.id, patient)
-  return { appointments, visits, readModelPatients: [...readModel.values()], keyFor }
+  return { appointments, visits, queue, readModelPatients: [...readModel.values()], keyFor }
 }
 
 /** The server Patient public id for a UI Patient key (the reverse of patientKeyResolver), or null for legacy-only Patients. */
@@ -60,53 +63,61 @@ export function publicPatientIdFor(patientKey, { session, users = [], patients =
 }
 
 /**
- * D5 LEGACY HISTORY. Records created before the cutovers reference browser-local appointment ids, or (for queue
- * entries) no server Visit. They stay only as read-only history: the live queue excludes them, and every other record
- * carries `legacyAppointment` so live integrity decisions, live KPIs and mutations can ignore them.
+ * D5 LEGACY HISTORY. Records created before the cutovers reference browser-local appointment ids or carry no server
+ * Visit. They stay only as read-only history: every such record carries `legacyAppointment` so live integrity
+ * decisions, live KPIs and mutations can ignore it. (Since M9 the live queue is the server queue; browser queue rows are
+ * no longer read as live state at all.)
  */
-export function splitLegacy(records = [], key = 'appointmentId') {
-  const live = [], legacy = []
-  for (const record of records) (isLegacyAppointmentRef(record?.[key]) ? legacy : live).push(record)
-  return { live, legacy }
-}
-
-export const flagLegacy = (records = [], key = 'appointmentId', legacyTreatmentIds = new Set(), legacyQueueIds = new Set()) =>
-  records.map(record => (isLegacyAppointmentRef(record?.[key]) || legacyTreatmentIds.has(record?.treatmentId) || legacyQueueIds.has(record?.queueEntryId)
+export const flagLegacy = (records = [], key = 'appointmentId', legacyTreatmentIds = new Set()) =>
+  records.map(record => (isLegacyAppointmentRef(record?.[key]) || legacyTreatmentIds.has(record?.treatmentId)
     ? { ...record, legacyAppointment: true } : record))
 
 /**
- * M8: a live queue entry is always the M9 handoff of a server Visit. An entry that already carries a server `visitId`
- * is live. An older entry without one is re-linked only by EXACT canonical id — its server appointment public id is the
- * appointment of a (backfilled) server Visit — never by Patient, Dentist or day. Everything else (pre-cutover appointment
- * ids, browser-only walk-ins, entries whose appointment has no Visit) is legacy history.
+ * D5/M8/M9 classification that follows the record links. A treatment is live only when it references its server Visit
+ * (a canonical `visitId`, persisted by the exact-link re-anchor in store.jsx); otherwise — a pre-cutover appointment id,
+ * or a browser-only encounter with no Visit — it is legacy. Invoices, prescriptions, follow-ups, HMO cases and
+ * conversations are legacy when they reference a legacy appointment or a legacy treatment.
  */
-export function splitQueue(queue = [], visits = []) {
-  const byAppointment = new Map(visits.filter(v => v.appointmentId).map(v => [v.appointmentId, v]))
-  const live = [], legacy = []
-  for (const entry of queue) {
-    if (isServerId(entry?.visitId)) live.push(entry)
-    else if (!entry?.visitId && isServerId(entry?.appointmentId) && byAppointment.has(entry.appointmentId)) live.push({ ...entry, visitId: byAppointment.get(entry.appointmentId).id })
-    else legacy.push(entry)
-  }
-  return { live, legacy }
-}
-
-/**
- * D5/M8 classification that follows the record links: a treatment is legacy when it references a pre-cutover
- * appointment or a legacy queue entry; invoices, prescriptions, follow-ups, HMO cases and conversations are legacy when
- * they reference a legacy appointment, a legacy treatment or a legacy queue entry.
- */
-export function classifyLegacy({ queue = [], visits = [], treatments = [], invoices = [], prescriptions = [], followups = [], hmo = [], conversations = [], inquiries = [] }) {
-  const liveQueue = splitQueue(queue, visits)
-  const legacyQueueIds = new Set(liveQueue.legacy.map(q => q.id))
-  const flaggedTreatments = flagLegacy(treatments, 'appointmentId', new Set(), legacyQueueIds)
+export function classifyLegacy({ treatments = [], invoices = [], prescriptions = [], followups = [], hmo = [], conversations = [], inquiries = [] }) {
+  const flaggedTreatments = treatments.map(t => (isLegacyAppointmentRef(t?.appointmentId) || !isServerId(t?.visitId) ? { ...t, legacyAppointment: true } : t))
   const legacyTreatmentIds = new Set(flaggedTreatments.filter(t => t.legacyAppointment).map(t => t.id))
-  const flag = rows => flagLegacy(rows, 'appointmentId', legacyTreatmentIds, legacyQueueIds)
+  const flag = rows => flagLegacy(rows, 'appointmentId', legacyTreatmentIds)
   return {
-    queue: liveQueue, treatments: flaggedTreatments,
+    treatments: flaggedTreatments,
     invoices: flag(invoices), prescriptions: flag(prescriptions), followups: flag(followups), hmo: flag(hmo), conversations: flag(conversations),
     inquiries: flagLegacy(inquiries, 'bookedAppointmentId'),
   }
+}
+
+/**
+ * M9 one-time local evidence re-anchor (compatibility only; remove with the M5/M11 backends). Before browser queue rows
+ * stop being read, a local treatment or invoice that lacks a server Visit id gets one ONLY through an exact link:
+ * its `queueEntryId` names a browser queue row that carries a server `visitId` — or whose server appointment id is the
+ * appointment of a server Visit. When the server queue has an entry for that same Visit, the record's queue link moves
+ * to that entry's public id. Nothing is matched by Patient, Dentist, branch, date or time; anything else stays legacy.
+ * Idempotent: records that already reference a server Visit (and a server queue entry where one exists) are unchanged.
+ */
+export function reanchorLocalEvidence({ records = [], localQueue = [], visits = [], serverQueue = [] }) {
+  const visitIds = new Set(visits.map(v => v.id))
+  const visitByAppointment = new Map(visits.filter(v => v.appointmentId).map(v => [v.appointmentId, v.id]))
+  const serverEntryByVisit = new Map(serverQueue.map(q => [q.visitId, q.id]))
+  const localById = new Map(localQueue.map(q => [q.id, q]))
+  let changed = false
+  const next = records.map(record => {
+    let visitId = isServerId(record?.visitId) ? record.visitId : null
+    if (!visitId) {
+      const row = localById.get(record?.queueEntryId)
+      const candidate = isServerId(row?.visitId) ? row.visitId : isServerId(row?.appointmentId) ? visitByAppointment.get(row.appointmentId) : null
+      if (candidate && visitIds.has(candidate)) visitId = candidate
+    }
+    if (!visitId) return record
+    const serverEntry = serverEntryByVisit.get(visitId)
+    const queueEntryId = serverEntry && !isServerId(record.queueEntryId) ? serverEntry : record.queueEntryId
+    if (visitId === record.visitId && queueEntryId === record.queueEntryId) return record
+    changed = true
+    return { ...record, visitId, queueEntryId }
+  })
+  return { records: next, changed }
 }
 
 /** Live operational records only: D5 legacy history never feeds live KPIs or worklists. */

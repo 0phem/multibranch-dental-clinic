@@ -5,7 +5,7 @@ import * as data from '../src/data.js'
 import { setClockSource, clinicNow } from '../src/clock.js'
 import { normalizeClinicState, sessionForRole } from '../src/contracts.js'
 import { createWorkflowActions } from '../src/workflow.js'
-import { withServerAppointments } from './support/server-appointments.js'
+import { withServerAppointments, asPatient } from './support/server-appointments.js'
 import { notificationDestination } from '../src/phase3-contracts.js'
 import * as view from '../src/patient-view.js'
 
@@ -85,10 +85,12 @@ test('second Patient sees only their own appointments, hero and queue',()=>{
   ok(f.actions.checkInAppointment(a1.id));ok(f.actions.checkInAppointment(a2.id))
   assert.deepEqual(view.patientAppointments(f.state,maria(f)).map(a=>a.id),[a1.id])
   assert.deepEqual(view.patientAppointments(f.state,john(f)).map(a=>a.id),[a2.id])
-  const queueJohn=view.patientQueueView(f.state,john(f)),queueMaria=view.patientQueueView(f.state,maria(f))
-  assert.equal(queueJohn.dentist,'Dr. Patricia Lim');assert.equal(queueMaria.dentist,'Dr. Miguel Reyes')
-  assert.doesNotMatch(JSON.stringify([queueJohn,view.patientHome(f.state,john(f))]),/Maria|Miguel|"p1"/)
-  assert.doesNotMatch(JSON.stringify([queueMaria,view.patientHome(f.state,maria(f))]),/John|Patricia|"p2"/)
+  // Each Patient's store holds only their own server queue state (GET /api/queue/mine).
+  const asJohn=asPatient(f.state,'p2'),asMaria=asPatient(f.state,'p1')
+  const queueJohn=view.patientQueueView(asJohn,john(f)),queueMaria=view.patientQueueView(asMaria,maria(f))
+  assert.equal(queueJohn.dentist,'Patricia Lim');assert.equal(queueMaria.dentist,'Miguel Reyes')
+  assert.doesNotMatch(JSON.stringify([queueJohn,view.patientHome(asJohn,john(f))]),/Maria|Miguel|"p1"/)
+  assert.doesNotMatch(JSON.stringify([queueMaria,view.patientHome(asMaria,maria(f))]),/John|Patricia|"p2"/)
 })
 
 // ---- Journey Hub ------------------------------------------------------------------------------------
@@ -102,7 +104,7 @@ test('Journey Hub hero follows queue → today → next → none',()=>{
   const hero=view.patientHome(f.state,maria(f)).hero
   assert.equal(hero.kind,'today');assert.equal(hero.appointment.id,today.id)
   ok(f.actions.checkInAppointment(today.id))
-  const live=view.patientHome(f.state,maria(f)).hero
+  const live=view.patientHome(asPatient(f.state,'p1'),maria(f)).hero
   assert.equal(live.kind,'queue');assert.equal(live.queue.phase,'waiting')
   assert.ok(later.id)
 })
@@ -203,26 +205,27 @@ test('a Dentist whose assignment is revoked or whose account is inactive is not 
 
 // ---- Queue privacy ----------------------------------------------------------------------------------
 
-test('queue view exposes only the Patient’s own place and an aggregate estimate',()=>{
+test('queue view exposes only the Patient’s own place and number, with no backend wait estimate (M9 Q5)',()=>{
   const f=fixture()
   const own=checkIn(f),other=checkIn(f,{patientId:'p2',dentistId:'d1',start:'12:00'})
-  const view1=view.patientQueueView(f.state,maria(f))
-  assert.deepEqual(Object.keys(view1).sort(),['active','branch','checkedIn','dentist','phase','position','service','start','status','waitMinutes'])
-  assert.equal(view1.phase,'waiting');assert.equal(view1.position,1)
-  assert.equal(view.patientQueueView(f.state,john(f)).position,2)
+  const view1=view.patientQueueView(asPatient(f.state,'p1'),maria(f))
+  assert.deepEqual(Object.keys(view1).sort(),['active','branch','checkedIn','dentist','phase','position','queueNumber','service','start','status','waitMinutes'])
+  assert.equal(view1.phase,'waiting');assert.equal(view1.position,1);assert.equal(view1.queueNumber,1);assert.equal(view1.waitMinutes,null)
+  assert.equal(view.patientQueueView(asPatient(f.state,'p2'),john(f)).position,2)
   assert.doesNotMatch(JSON.stringify(view1),new RegExp(`John|${other.q.id}|${other.a.id}|p2`))
 })
 
 test('queue phases progress from real Staff commands with no meaningless wait after completion',()=>{
-  const f=fixture(),{q}=checkIn(f),phase=()=>view.patientQueueView(f.state,maria(f))
-  assert.equal(phase().phase,'waiting');assert.ok(phase().waitMinutes>=0)
+  const f=fixture(),{q}=checkIn(f),phase=()=>view.patientQueueView(asPatient(f.state,'p1'),maria(f))
+  assert.equal(phase().phase,'waiting');assert.equal(phase().waitMinutes,null)
   ok(f.actions.updateQueue(q.id,'Temporarily Away'));assert.equal(phase().phase,'away');assert.equal(phase().position,null);assert.equal(phase().waitMinutes,null)
   ok(f.actions.updateQueue(q.id,'Waiting'));ok(f.actions.updateQueue(q.id,'Called'))
   assert.equal(phase().phase,'called');assert.equal(phase().waitMinutes,null)
   f.role('dentist');ok(f.actions.saveTreatment({queueEntryId:q.id}))
-  assert.equal(phase().phase,'in-treatment');assert.equal(phase().waitMinutes,null)
+  assert.equal(phase().phase,'in-treatment');assert.equal(phase().waitMinutes,null);assert.equal(phase().position,null)
   ok(f.actions.completeTreatment({queueEntryId:q.id,procedure:'Documented procedure',procedures:[{serviceId:'svc1',quantity:1}]}))
-  assert.equal(phase().phase,'completed');assert.equal(phase().active,false);assert.equal(phase().waitMinutes,null);assert.equal(phase().position,null)
+  // Once the encounter is complete there is no active queue experience any more.
+  assert.equal(phase().phase,'none');assert.equal(phase().position,undefined)
 })
 
 test('not checked in and no-visit states never invent an arrival rule',()=>{

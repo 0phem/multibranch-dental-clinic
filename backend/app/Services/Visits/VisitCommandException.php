@@ -5,7 +5,7 @@ namespace App\Services\Visits;
 use Illuminate\Http\JsonResponse;
 use RuntimeException;
 
-// A refused M8/Visit command, rendered with the shared API error contract (CONTRACTS.md §2): 422 { message, errors,
+// A refused M8/M9 (Visit / Queue) command, rendered with the shared API error contract (CONTRACTS.md §2): 422 { message, errors,
 // code } for a rule failure, 409 { message, code } for a stale revision or a lost concurrent race.
 final class VisitCommandException extends RuntimeException
 {
@@ -40,6 +40,11 @@ final class VisitCommandException extends RuntimeException
     public static function staleVisit(): self
     {
         return new self(409, 'stale_revision', 'This visit changed after it was opened. Reload it before trying again.');
+    }
+
+    public static function staleQueueEntry(): self
+    {
+        return new self(409, 'stale_revision', 'This queue entry changed after it was opened. Reload the queue before trying again.');
     }
 
     public static function visitExists(): self

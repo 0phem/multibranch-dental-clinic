@@ -53,6 +53,13 @@ class VisitTest extends TestCase
         return $this->postJson("/api/visits/{$v->public_id}/{$command}", ['expected_revision' => $revision ?? $v->fresh()->revision], $headers);
     }
 
+    /** M9: treatment starts only from a Called queue entry — the current actor calls the Visit's entry. */
+    private function callQueue(Visit $v): void
+    {
+        $entry = $v->fresh()->queueEntry;
+        $this->postJson("/api/queue/{$entry->public_id}/call", ['expected_revision' => $entry->revision], ['Idempotency-Key' => $this->key()])->assertOk();
+    }
+
     private function today(string $patient = 'A', string $dentist = 'd1', string $branch = 'b1', string $time = '11:00'): Appointment
     {
         return $this->existing($patient, $dentist, $branch, 'svc1', '2026-09-28', $time);
@@ -258,6 +265,7 @@ class VisitTest extends TestCase
         $this->actingAsUser('staffB1');
         $visit = Visit::where('public_id', $this->walkIn()->json('data.id'))->sole();
         $this->actingAsUser('dentist1');
+        $this->callQueue($visit);
         $this->step($visit, 'start-treatment')->assertOk();
         $this->step($visit, 'complete')->assertOk()->assertJsonPath('data.status', 'Completed');
         $this->actingAsUser('staffB1');
@@ -296,6 +304,7 @@ class VisitTest extends TestCase
         $visit = Visit::where('public_id', $this->checkIn($a)->json('data.id'))->sole();
 
         $this->actingAsUser('dentist1');
+        $this->callQueue($visit);
         $this->step($visit, 'start-treatment')->assertOk()->assertJsonPath('data.status', 'In Treatment')->assertJsonPath('data.appointment.status', 'In Treatment');
         $this->step($visit, 'complete')->assertOk()->assertJsonPath('data.status', 'Completed')->assertJsonPath('data.revision', 3)
             ->assertJsonPath('data.appointment.status', 'Completed')->assertJsonPath('data.closed_at', '2026-09-28T10:00:00+08:00');
@@ -311,6 +320,7 @@ class VisitTest extends TestCase
         $this->actingAsUser('staffB1');
         $visit = Visit::where('public_id', $this->walkIn()->json('data.id'))->sole();
         $this->actingAsUser('dentist1');
+        $this->callQueue($visit);
         $this->step($visit, 'start-treatment')->assertOk();
         $this->step($visit, 'complete')->assertOk()->assertJsonPath('data.appointment', null);
         $this->assertSame(0, AppointmentHistory::count());
@@ -322,6 +332,7 @@ class VisitTest extends TestCase
         $visit = Visit::where('public_id', $this->walkIn()->json('data.id'))->sole();
         $this->actingAsUser('dentist1');
         $this->step($visit, 'complete')->assertStatus(422)->assertJsonPath('code', 'invalid_transition');
+        $this->callQueue($visit);
         $this->step($visit, 'start-treatment', 9)->assertStatus(409)->assertJsonPath('code', 'stale_revision');
         $headers = ['Idempotency-Key' => 'start-1'];
         $this->step($visit, 'start-treatment', 1, $headers)->assertOk();

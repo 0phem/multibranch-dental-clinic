@@ -1,0 +1,277 @@
+<?php
+
+namespace App\Services\Queue;
+
+use App\Http\Resources\QueueEntryResource;
+use App\Models\CommandKey;
+use App\Models\Patient;
+use App\Models\QueueEntry;
+use App\Models\QueueEntryHistory;
+use App\Models\User;
+use App\Models\Visit;
+use App\Services\Visits\VisitCommandException;
+use App\Support\ClinicClock;
+use App\Support\IdempotentCommand;
+use Closure;
+use Illuminate\Database\QueryException;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\DB;
+
+// M9 Patient Queue Management. The queue is anchored to the Visit and owns only queue state, number, order and position
+// (M10 owns wait estimates and capacity). QueueService never calls VisitService: M8 arrival and the Visit start-treatment
+// command call INTO it (enqueue / serve) inside their own transactions, so there is no circular dependency. The global
+// lock order is appointment → Visit → queue entry → dentist queue counter (via its upsert), matching M6/M8.
+final class QueueService
+{
+    public const RELATIONS = ['visit.patient.person', 'visit.appointment.service', 'visit.requestedService', 'dentistQueue.branch', 'dentistQueue.dentist.person'];
+
+    private const ATTEMPTS = 3;
+
+    /** command => [allowed source statuses, target status, history event] */
+    public const TRANSITIONS = [
+        'call' => [['Waiting'], 'Called', 'queue.called'],
+        'ready' => [['Called'], 'Treatment Ready', 'queue.ready'],
+        'away' => [['Waiting', 'Called', 'Treatment Ready'], 'Temporarily Away', 'queue.away'],
+        'return' => [['Temporarily Away'], 'Waiting', 'queue.returned'],
+    ];
+
+    /**
+     * Called by M8 inside its arrival transaction. A Visit with a responsible Dentist gets exactly one Waiting / Normal
+     * entry numbered in its branch + Dentist + clinic-day queue; a Visit without one gets none (decision Q4). Any failure
+     * propagates, so the whole arrival (appointment + Visit + queue entry) rolls back together.
+     */
+    public function enqueue(User $actor, Visit $visit): ?QueueEntry
+    {
+        if ($visit->responsible_dentist_profile_id === null) {
+            return null;
+        }
+        [$queueId, $number] = $this->allocate($visit->branch_id, $visit->responsible_dentist_profile_id, $visit->clinic_date->format('Y-m-d'));
+        $entry = QueueEntry::create([
+            'visit_id' => $visit->id, 'dentist_queue_id' => $queueId, 'queue_number' => $number, 'status' => 'Waiting', 'priority' => 'Normal',
+            'revision' => 1, 'created_by_user_id' => $actor->id, 'updated_by_user_id' => $actor->id,
+        ]);
+        $this->history($entry, $actor, 'queue.entered', null, null);
+
+        return $entry;
+    }
+
+    /**
+     * Atomic per-queue number allocation: the first entry of a new Dentist/day queue gets 1, then 2, 3, … Concurrent
+     * arrivals serialize on the dentist_queues row; UNIQUE (dentist_queue_id, queue_number) is the final guard.
+     *
+     * @return array{0:int,1:int} [dentist_queue_id, queue_number]
+     */
+    public function allocate(int $branchId, int $dentistId, string $clinicDate): array
+    {
+        $row = DB::selectOne(
+            'INSERT INTO dentist_queues (branch_id, dentist_profile_id, clinic_date, next_number, created_at, updated_at)
+             VALUES (?, ?, ?, 1, now(), now())
+             ON CONFLICT (branch_id, dentist_profile_id, clinic_date)
+             DO UPDATE SET next_number = dentist_queues.next_number + 1, updated_at = now()
+             RETURNING id, next_number',
+            [$branchId, $dentistId, $clinicDate]
+        );
+
+        return [(int) $row->id, (int) $row->next_number];
+    }
+
+    /**
+     * Called by the Visit start-treatment command inside its transaction (after it locked the appointment and Visit):
+     * the entry must be Called or Treatment Ready, and becomes Served — the Patient leaves the waiting queue because
+     * treatment started. It is never Served any other way.
+     */
+    public function serve(User $actor, Visit $visit): QueueEntry
+    {
+        $entry = QueueEntry::where('visit_id', $visit->id)->lockForUpdate()->first();
+        if (! $entry) {
+            throw VisitCommandException::rule('not_in_queue', 'This visit is not in a queue, so treatment cannot start from it.', 'queue');
+        }
+        if (! in_array($entry->status, ['Called', 'Treatment Ready'], true)) {
+            throw VisitCommandException::rule('queue_not_ready', 'Call this patient before starting treatment.', 'queue');
+        }
+        $from = $entry->status;
+        $entry->update(['status' => 'Served', 'closed_at' => ClinicClock::now(), 'revision' => $entry->revision + 1, 'updated_by_user_id' => $actor->id]);
+        $this->history($entry, $actor, 'queue.served', $from, null);
+
+        return $entry;
+    }
+
+    /** Named queue transitions: call, ready, away, return (Idempotency-Key + expected_revision). */
+    public function transition(User $actor, QueueEntry $entry, string $command, int $expectedRevision, string $key): JsonResponse
+    {
+        [$from, $to, $event] = self::TRANSITIONS[$command];
+        $payload = ['entry' => $entry->id, 'expected_revision' => $expectedRevision];
+
+        return $this->idempotent($actor, $key, 'queue.'.$command, $payload, function () use ($actor, $entry, $command, $expectedRevision, $from, $to, $event) {
+            [$visit, $current] = $this->lock($entry);
+            if ($current->status === $to) {
+                return $current;
+            }
+            $this->assertCurrent($current, $visit, $expectedRevision);
+            if (! in_array($current->status, $from, true)) {
+                throw VisitCommandException::rule('invalid_transition', "A queue entry that is {$current->status} cannot move to {$to}.", 'status');
+            }
+            if ($command === 'call' && $current->dentistQueue->dentist?->available === false) {
+                throw VisitCommandException::rule('dentist_unavailable', 'This Dentist is marked unavailable. Ask Staff to review the queue.', 'dentist');
+            }
+            $previous = $current->status;
+            $current->update(['status' => $to, 'revision' => $current->revision + 1, 'updated_by_user_id' => $actor->id]);
+            $this->history($current, $actor, $event, $previous, null);
+
+            return $current;
+        });
+    }
+
+    /** Operational priority (not clinical triage): Normal / Priority / Urgent with a required reason; the state never changes. */
+    public function priority(User $actor, QueueEntry $entry, string $priority, string $reason, int $expectedRevision, string $key): JsonResponse
+    {
+        $payload = ['entry' => $entry->id, 'expected_revision' => $expectedRevision, 'priority' => $priority, 'reason' => $reason];
+
+        return $this->idempotent($actor, $key, 'queue.priority', $payload, function () use ($actor, $entry, $priority, $reason, $expectedRevision) {
+            [$visit, $current] = $this->lock($entry);
+            if ($current->priority === $priority && $current->priority_reason === $reason) {
+                return $current;
+            }
+            $this->assertCurrent($current, $visit, $expectedRevision);
+            $previous = $current->priority;
+            $current->update(['priority' => $priority, 'priority_reason' => $reason, 'revision' => $current->revision + 1, 'updated_by_user_id' => $actor->id]);
+            $this->history($current, $actor, 'queue.priority_changed', $current->status, $previous);
+
+            return $current;
+        });
+    }
+
+    /**
+     * Server-computed positions for the given Dentist queues: only Waiting / Called / Treatment Ready hold a place,
+     * ordered by priority (Urgent, Priority, Normal), then the Visit's exact arrival time, then the unique queue number.
+     *
+     * @param  list<int>  $dentistQueueIds
+     * @return array<int,int> queue_entries.id => position
+     */
+    public function positions(array $dentistQueueIds): array
+    {
+        if (! $dentistQueueIds) {
+            return [];
+        }
+        $placeholders = implode(',', array_fill(0, count($dentistQueueIds), '?'));
+        $rows = DB::select(
+            "SELECT q.id, ROW_NUMBER() OVER (
+                 PARTITION BY q.dentist_queue_id
+                 ORDER BY CASE q.priority WHEN 'Urgent' THEN 0 WHEN 'Priority' THEN 1 ELSE 2 END, v.arrived_at, q.queue_number
+             ) AS position
+             FROM queue_entries q JOIN visits v ON v.id = q.visit_id
+             WHERE q.dentist_queue_id IN ({$placeholders}) AND q.status IN ('Waiting','Called','Treatment Ready')",
+            array_values($dentistQueueIds)
+        );
+
+        return collect($rows)->mapWithKeys(fn ($r) => [(int) $r->id => (int) $r->position])->all();
+    }
+
+    /** Attaches the server position to each entry (null for Temporarily Away / Served). */
+    public function withPositions(iterable $entries): iterable
+    {
+        $entries = collect($entries);
+        $positions = $this->positions($entries->pluck('dentist_queue_id')->unique()->values()->all());
+        foreach ($entries as $entry) {
+            $entry->setAttribute('position', $positions[$entry->id] ?? null);
+        }
+
+        return $entries;
+    }
+
+    /**
+     * The authenticated Patient's own current queue experience (decision Q5): their single active Visit and its entry.
+     * Only this Patient's own number/position and display context they can already see — never other Patients, internal
+     * ids or wait estimates. Null when there is no active encounter.
+     */
+    public function patientCurrent(Patient $patient): ?array
+    {
+        $visit = Visit::where('patient_id', $patient->id)->whereIn('status', Visit::ACTIVE_STATUSES)
+            ->with(['branch', 'dentist.person', 'appointment.service', 'requestedService', 'queueEntry'])->orderByDesc('id')->first();
+        if (! $visit) {
+            return null;
+        }
+        $entry = $visit->queueEntry;
+        $phase = match (true) {
+            $visit->status === 'In Treatment' => 'in-treatment',
+            $entry === null => 'checked-in',
+            default => ['Waiting' => 'waiting', 'Called' => 'called', 'Treatment Ready' => 'ready', 'Temporarily Away' => 'away'][$entry->status] ?? 'checked-in',
+        };
+        $position = $entry && in_array($entry->status, QueueEntry::POSITIONAL, true) ? ($this->positions([$entry->dentist_queue_id])[$entry->id] ?? null) : null;
+        $service = $visit->appointment?->service ?? $visit->requestedService;
+
+        return [
+            'phase' => $phase,
+            'queue_status' => $entry?->status,
+            'queue_number' => $entry?->queue_number,
+            'position' => $position,
+            'clinic_date' => $visit->clinic_date->format('Y-m-d'),
+            'arrived_at' => ClinicClock::local($visit->arrived_at)->toIso8601String(),
+            'branch' => ['name' => $visit->branch->name],
+            'dentist' => $visit->dentist ? ['name' => $visit->dentist->person?->fullName()] : null,
+            'service' => $service ? ['name' => $service->name] : null,
+            'appointment' => $visit->appointment ? ['start_time' => ClinicClock::local($visit->appointment->starts_at)->format('H:i')] : null,
+        ];
+    }
+
+    /** @return array{0:Visit,1:QueueEntry} locked in the global order (Visit, then queue entry). */
+    private function lock(QueueEntry $entry): array
+    {
+        $visit = Visit::whereKey($entry->visit_id)->lockForUpdate()->firstOrFail();
+        $current = QueueEntry::whereKey($entry->id)->lockForUpdate()->firstOrFail();
+
+        return [$visit, $current];
+    }
+
+    private function assertCurrent(QueueEntry $current, Visit $visit, int $expectedRevision): void
+    {
+        if ($current->revision !== $expectedRevision) {
+            throw VisitCommandException::staleQueueEntry();
+        }
+        if ($current->status === 'Served' || $visit->status !== 'Checked In') {
+            throw VisitCommandException::rule('queue_closed', 'This patient has left the waiting queue.', 'status');
+        }
+        // Existing rule (the prototype's "current day" check): only today's queue (Asia/Manila) can be operated.
+        if ($current->dentistQueue->clinic_date->format('Y-m-d') !== ClinicClock::today()) {
+            throw VisitCommandException::rule('not_today', 'This queue entry belongs to another clinic day.', 'status');
+        }
+    }
+
+    private function history(QueueEntry $entry, User $actor, string $event, ?string $from, ?string $fromPriority): void
+    {
+        QueueEntryHistory::create([
+            'queue_entry_id' => $entry->id,
+            'event' => $event,
+            'from_status' => $from,
+            'to_status' => $entry->status,
+            'from_priority' => $fromPriority,
+            'to_priority' => $entry->priority,
+            'priority_reason' => $event === 'queue.priority_changed' ? $entry->priority_reason : null,
+            'revision' => $entry->revision,
+            'actor_user_id' => $actor->id,
+            'actor_role' => $actor->role->value,
+            'occurred_at' => ClinicClock::now(),
+        ]);
+    }
+
+    private function idempotent(User $actor, string $key, string $command, array $payload, Closure $work): JsonResponse
+    {
+        return IdempotentCommand::run(
+            CommandKey::class, $actor, $key, $command, $payload,
+            function () use ($work) {
+                $entry = $work()->fresh(self::RELATIONS);
+                $this->withPositions([$entry]);
+                $body = (new QueueEntryResource($entry))->response()->getData(true);
+
+                return [$body, 200];
+            },
+            fn () => VisitCommandException::rule('idempotency_key_reused', 'This Idempotency-Key was already used for a different request.', 'idempotency_key'),
+            function (QueryException $e) {
+                if (in_array($e->getCode(), ['40P01', '40001'], true)) {
+                    throw new VisitCommandException(409, 'conflict', 'Another request changed this queue at the same time. Reload and try again.');
+                }
+            },
+            self::ATTEMPTS,
+        );
+    }
+}

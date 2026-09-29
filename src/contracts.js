@@ -4,7 +4,10 @@ import { INITIAL_BRANCHES, ROLE_INFO } from './data.js'
 import { clinicDate } from './clock.js'
 
 export const TERMINAL = ['Completed','Cancelled','No-show']
-export const isActiveQueue = q => !!q && !TERMINAL.includes(q.status)
+// M9: Served (the Patient left the waiting queue because treatment started) closes a queue entry; the historical
+// prototype statuses Completed / Cancelled / No-show do too.
+export const QUEUE_CLOSED = ['Served', ...TERMINAL]
+export const isActiveQueue = q => !!q && !QUEUE_CLOSED.includes(q.status)
 export const isTodayQueue = (q, date=clinicDate()) => q?.clinicDate === date
 export const isWaitingQueue = q => isActiveQueue(q) && q.status !== 'Temporarily Away'
 export function branchIdFor(record, branches) {

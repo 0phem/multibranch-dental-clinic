@@ -3,12 +3,13 @@ import { normalizeClinicState, sessionForRole } from '../../src/contracts.js'
 import { createWorkflowActions } from '../../src/workflow.js'
 import * as api from '../../src/appointments-api.js'
 import { mapVisit } from '../../src/visits-api.js'
+import { mapQueueEntry } from '../../src/queue-api.js'
 import { createAppointmentFlow } from '../../src/appointment-flow.js'
 import { clinicNow } from '../../src/clock.js'
 import { serverId } from './server-appointments.js'
 
 // The REAL appointment-flow.js (store.jsx's server-first flows) over a tiny in-memory "server" that mirrors the Laravel
-// M6/M8 command rules (AppointmentService / VisitService; covered by the backend tests). Commands mutate the server
+// M6/M8/M9 command rules (AppointmentService / VisitService / QueueService; covered by the backend tests). Commands mutate the server
 // maps; refresh() copies them into the read projection exactly like the store does.
 
 /** A GET /api/appointments row. Patient serverId(500) is the seeded local Patient p1. */
@@ -30,20 +31,39 @@ export function world() {
   const actions = createWorkflowActions({ getState: () => state, getSession: () => session, commit: patch => { patches.push(patch); state = normalizeClinicState({ ...state, ...patch }) } })
   const server = new Map()
   const visits = new Map()
+  const queueRows = new Map()
   const log = []
   let createResult = null
+  // Server positions: per Dentist queue, priority then exact arrival then queue number (QueueService::positions).
+  const rank = { Urgent: 0, Priority: 1, Normal: 2 }
+  const queueView = () => {
+    const rows = [...queueRows.values()].map(q => ({ ...q, visit: { ...q.visit, status: visits.get(q.visit.id).status } }))
+    const positional = rows.filter(q => ['Waiting', 'Called', 'Treatment Ready'].includes(q.status))
+      .sort((a, b) => rank[a.priority] - rank[b.priority] || a.visit.arrived_at.localeCompare(b.visit.arrived_at) || a.queue_number - b.queue_number)
+    return rows.map(q => ({ ...q, position: q.dentist ? (positional.filter(p => p.dentist.id === q.dentist.id).findIndex(p => p.id === q.id) + 1 || null) : null }))
+  }
   const project = () => {
-    state = normalizeClinicState({ ...state, appointments: [...server.values()].map(r => api.mapAppointment(r, keyFor)), visits: [...visits.values()].map(v => mapVisit(v, keyFor)) })
+    state = normalizeClinicState({ ...state, appointments: [...server.values()].map(r => api.mapAppointment(r, keyFor)), visits: [...visits.values()].map(v => mapVisit(v, keyFor)), queue: queueView().map(q => mapQueueEntry(q, keyFor)) })
   }
   const accept = (id, changes) => { const current = server.get(id); const next = { ...current, ...changes, revision: current.revision + 1 }; server.set(id, next); return { ok: true, row: next } }
   const visitFor = appointmentId => [...visits.values()].find(v => v.appointment?.id === appointmentId)
   const refuse = (kind, code, message) => ({ ok: false, kind, code, message })
+  // M8 + M9 arrival: the Visit and — with a responsible Dentist — its queue entry, in one "transaction".
   const openVisit = fields => {
     const now = clinicNow()
     const v = { id: serverId(800000 + visits.size), status: 'Checked In', revision: 1, arrived_at: now.timestamp, clinic_date: now.date, closed_at: null, ...fields }
     visits.set(v.id, v)
+    if (v.dentist) {
+      const number = [...queueRows.values()].filter(q => q.dentist.id === v.dentist.id && q.clinic_date === v.clinic_date).length + 1
+      const q = { id: serverId(850000 + queueRows.size), status: 'Waiting', priority: 'Normal', priority_reason: null, queue_number: number, revision: 1, clinic_date: v.clinic_date, closed_at: null,
+        branch: v.branch, dentist: v.dentist, visit: { id: v.id, status: v.status, source: v.source, revision: 1, arrived_at: v.arrived_at }, patient: v.patient, service: v.service,
+        appointment: v.appointment ? { id: v.appointment.id, code: v.appointment.code, status: 'Checked In', start_time: '11:00' } : null }
+      queueRows.set(q.id, q)
+      v.queue = { id: q.id, status: q.status, queue_number: number, revision: 1 }
+    } else v.queue = null
     return { ok: true, row: v }
   }
+  const queueEntryForVisit = visitId => [...queueRows.values()].find(q => q.visit.id === visitId)
 
   const mock = {
     commandKey: () => `k-${log.length}`,
@@ -88,6 +108,12 @@ export function world() {
       const [from, to] = { 'start-treatment': ['Checked In', 'In Treatment'], complete: ['In Treatment', 'Completed'] }[name]
       if (current.revision !== v.revision) return refuse('conflict', 'stale_revision', 'changed')
       if (current.status !== from) return refuse('validation', 'invalid_transition', 'invalid')
+      const entry = queueEntryForVisit(v.id)
+      if (to === 'In Treatment') {
+        if (!entry) return refuse('validation', 'not_in_queue', 'This visit is not in a queue.')
+        if (!['Called', 'Treatment Ready'].includes(entry.status)) return refuse('validation', 'queue_not_ready', 'Call this patient before starting treatment.')
+        queueRows.set(entry.id, { ...entry, status: 'Served', closed_at: clinicNow().timestamp, revision: entry.revision + 1 })
+      }
       const next = { ...current, status: to, revision: current.revision + 1, closed_at: to === 'Completed' ? clinicNow().timestamp : null }
       if (current.appointment) { accept(current.appointment.id, { status: to }); next.appointment = { ...current.appointment, status: to } }
       visits.set(v.id, next)
@@ -95,9 +121,31 @@ export function world() {
     },
     async registerPatient(form) { log.push(['register']); return { ok: true, patient: { id: serverId(600), patientCode: 'PAT-0600', name: `${form.firstName} ${form.lastName}` } } },
   }
-  const flow = createAppointmentFlow({ getState: () => state, getSession: () => session, getActions: () => actions, refresh: async () => { log.push(['refresh']); project(); return { ok: true } }, api: mock, visits: visitsMock })
+  const queueTransitions = { call: [['Waiting'], 'Called'], ready: [['Called'], 'Treatment Ready'], away: [['Waiting', 'Called', 'Treatment Ready'], 'Temporarily Away'], return: [['Temporarily Away'], 'Waiting'] }
+  const queueMock = {
+    async transitionQueue(entry, name) {
+      log.push([`queue.${name}`, entry.revision])
+      const current = queueRows.get(entry.id)
+      const [from, to] = queueTransitions[name]
+      if (current.status === to) return { ok: true, row: current }
+      if (current.revision !== entry.revision) return refuse('conflict', 'stale_revision', 'This queue entry changed.')
+      if (!from.includes(current.status)) return refuse('validation', 'invalid_transition', 'invalid')
+      const next = { ...current, status: to, revision: current.revision + 1 }
+      queueRows.set(entry.id, next)
+      return { ok: true, row: next }
+    },
+    async setQueuePriority(entry, priority, reason) {
+      log.push(['queue.priority', entry.revision])
+      const current = queueRows.get(entry.id)
+      if (current.revision !== entry.revision) return refuse('conflict', 'stale_revision', 'This queue entry changed.')
+      const next = { ...current, priority, priority_reason: reason, revision: current.revision + 1 }
+      queueRows.set(entry.id, next)
+      return { ok: true, row: next }
+    },
+  }
+  const flow = createAppointmentFlow({ getState: () => state, getSession: () => session, getActions: () => actions, refresh: async () => { log.push(['refresh']); project(); return { ok: true } }, api: mock, visits: visitsMock, queue: queueMock })
   return {
-    flow, actions, log, server, visits, patches,
+    flow, actions, log, server, visits, queueRows, patches,
     get state() { return state },
     set state(next) { state = next },
     get session() { return session },

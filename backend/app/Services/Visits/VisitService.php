@@ -13,6 +13,7 @@ use App\Models\User;
 use App\Models\Visit;
 use App\Models\VisitHistory;
 use App\Services\Appointments\AppointmentService;
+use App\Services\Queue\QueueService;
 use App\Services\Scheduling\SchedulingService;
 use App\Support\ClinicClock;
 use App\Support\IdempotentCommand;
@@ -25,16 +26,19 @@ use Illuminate\Http\JsonResponse;
 //   - checkInScheduled: Appointment (Pending/Confirmed, today) -> Checked In AND a new Visit, atomically;
 //   - walkIn:           a new Visit with no appointment (never a fake appointment);
 //   - startTreatment / complete: the Visit's clinical progression, cascading to the linked appointment.
-// Lock order is always appointment, then Visit, so concurrent commands cannot deadlock on each other.
+// Lock order is always appointment, then Visit, then queue entry, so concurrent commands cannot deadlock on each other.
+// M9: an arrival with a responsible Dentist is queued in the SAME transaction (QueueService::enqueue), and treatment start
+// moves the queue entry to Served in the same transaction (QueueService::serve). The dependency is one-way.
 final class VisitService
 {
-    private const RELATIONS = ['patient.person', 'branch', 'appointment.service', 'dentist.person', 'requestedService'];
+    private const RELATIONS = ['patient.person', 'branch', 'appointment.service', 'dentist.person', 'requestedService', 'queueEntry'];
 
     private const ATTEMPTS = 3;
 
     public function __construct(
         private readonly AppointmentService $appointments,
         private readonly SchedulingService $scheduling,
+        private readonly QueueService $queue,
     ) {}
 
     public function checkInScheduled(User $actor, Appointment $appointment, int $expectedRevision, string $key): JsonResponse
@@ -140,6 +144,10 @@ final class VisitService
             if ($appointment && $appointment->status !== $from) {
                 throw VisitCommandException::rule('appointment_mismatch', "The linked appointment is {$appointment->status}; this visit needs clinic review.", 'appointment');
             }
+            // M9: treatment starts only from a Called / Treatment Ready queue entry, which becomes Served here.
+            if ($to === 'In Treatment') {
+                $this->queue->serve($actor, $current);
+            }
 
             $current->update([
                 'status' => $to,
@@ -219,6 +227,8 @@ final class VisitService
             'updated_by_user_id' => $actor->id,
         ]);
         $this->history($visit, $actor, 'visit.checked_in', null);
+        // M9: a Visit with a responsible Dentist enters that Dentist's queue in this same transaction.
+        $this->queue->enqueue($actor, $visit);
 
         return $visit;
     }

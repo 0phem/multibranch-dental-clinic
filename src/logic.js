@@ -56,21 +56,6 @@ export function statusTone(value='') {
   return 'neutral'
 }
 
-export function recalcQueue(queue) {
-  const priorityRank={Urgent:0,Priority:1,Normal:2}
-  const groups={}
-  queue.forEach(q=>{
-    if (!isWaitingQueue(q) || !q.clinicDate) return
-    const key=`${q.clinicDate}|${q.branchId}|${q.dentistId}`
-    groups[key] ||= []
-    groups[key].push(q)
-  })
-  Object.values(groups).forEach(list=>list.sort((a,b)=>(a.status==='In Treatment'?-1:0)-(b.status==='In Treatment'?-1:0) || (priorityRank[a.priority]??2)-(priorityRank[b.priority]??2) || toMinutes(a.checkedIn)-toMinutes(b.checkedIn)))
-  const positions={}
-  Object.entries(groups).forEach(([key,list])=>list.forEach((q,i)=>positions[q.id]=i+1))
-  return queue.map(q=>({...q,position:positions[q.id]||null}))
-}
-
 export function queueWaitEstimate(entry, queue, appointments, treatments, dentists) {
   if (!isWaitingQueue(entry) || !isTodayQueue(entry) || entry.status==='In Treatment') return 0
   const same=queue.filter(q=>q.branchId===entry.branchId && q.clinicDate===entry.clinicDate && q.dentistId===entry.dentistId && isWaitingQueue(q))

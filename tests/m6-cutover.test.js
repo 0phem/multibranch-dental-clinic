@@ -6,7 +6,7 @@ import { setClockSource } from '../src/clock.js'
 import { persistableCollection, inScope } from '../src/contracts.js'
 import * as api from '../src/appointments-api.js'
 import { __resetCsrfCacheForTests } from '../src/api-client.js'
-import { buildServerProjection, classifyLegacy, flagLegacy, liveRecords, patientKeyResolver, publicPatientIdFor, splitLegacy } from '../src/appointment-projection.js'
+import { buildServerProjection, classifyLegacy, flagLegacy, liveRecords, patientKeyResolver, publicPatientIdFor } from '../src/appointment-projection.js'
 import { serverId } from './support/server-appointments.js'
 import { row, world } from './support/mock-server-world.js'
 
@@ -128,13 +128,11 @@ test('Staff branch reach follows server authorization scopes (multi-branch, empt
 // ================================================================================================================
 // LEGACY HISTORY (D5)
 // ================================================================================================================
-test('pre-cutover records are legacy history: out of live queue/check-ins, flagged elsewhere, excluded from live KPIs', () => {
+test('pre-cutover records are legacy history: flagged, excluded from live KPIs; the live queue is the server queue', () => {
   assert.equal(api.isServerId(serverId(1)), true)
   assert.equal(api.isLegacyAppointmentRef('a1'), true)
   assert.equal(api.isLegacyAppointmentRef(null), false, 'a walk-in has no appointment and is not legacy')
-  const queue = splitLegacy(data.INITIAL_QUEUE)
-  assert.ok(queue.legacy.length > 0, 'seeded queue entries referencing former demo appointments are legacy')
-  assert.ok(queue.live.every(q => !q.appointmentId), 'only walk-ins stay live')
+  assert.equal('INITIAL_QUEUE' in data, false, 'no browser queue seed exists (M9)')
   const invoices = flagLegacy([{ id: 'i1', appointmentId: 'a1', status: 'Paid', total: 500 }, { id: 'i2', appointmentId: serverId(2), status: 'Paid', total: 700 }])
   assert.deepEqual(liveRecords(invoices).map(i => i.id), ['i2'])
   assert.equal(persistableCollection('invoices', invoices)[0].legacyAppointment, undefined, 'the derived flag is never stored')
@@ -143,7 +141,7 @@ test('pre-cutover records are legacy history: out of live queue/check-ins, flagg
 })
 
 test('legacy classification follows links: invoices, prescriptions, follow-ups and HMO of legacy treatments are legacy too', () => {
-  const c = classifyLegacy({ queue: structuredClone(data.INITIAL_QUEUE), treatments: structuredClone(data.INITIAL_TREATMENTS), invoices: structuredClone(data.INITIAL_INVOICES),
+  const c = classifyLegacy({ treatments: structuredClone(data.INITIAL_TREATMENTS), invoices: structuredClone(data.INITIAL_INVOICES),
     prescriptions: structuredClone(data.INITIAL_PRESCRIPTIONS), followups: structuredClone(data.INITIAL_FOLLOWUPS), hmo: structuredClone(data.INITIAL_HMO) })
   assert.ok(c.treatments.every(t => t.legacyAppointment), 'every seeded treatment belongs to the former demo appointments')
   for (const key of ['invoices', 'prescriptions', 'followups']) {
@@ -153,7 +151,7 @@ test('legacy classification follows links: invoices, prescriptions, follow-ups a
   const paidLive = liveRecords(c.invoices).filter(i => i.status === 'Paid')
   assert.deepEqual(paidLive, [], 'no legacy paid invoice reaches live revenue')
   // A live record linked to a server appointment is untouched.
-  const live = classifyLegacy({ treatments: [{ id: 't-live', appointmentId: serverId(3) }], invoices: [{ id: 'i-live', treatmentId: 't-live' }] })
+  const live = classifyLegacy({ treatments: [{ id: 't-live', appointmentId: serverId(3), visitId: serverId(4) }], invoices: [{ id: 'i-live', treatmentId: 't-live' }] })
   assert.equal(live.invoices[0].legacyAppointment, undefined)
 })
 
@@ -164,7 +162,7 @@ test('old browser appointment data is not uploaded, read or cleared', () => {
   assert.equal('INITIAL_APPOINTMENTS' in data, false)
   assert.doesNotMatch(store, /localStorage\.removeItem/)
   // The only appointment/Visit writes are server commands: the store strips any local `appointments`/`visits` patch.
-  assert.match(store, /const \{appointments:_ignored,visits:_ignoredVisits,\.\.\.patch\}=rawPatch/)
+  assert.match(store, /const \{appointments:_ignored,visits:_ignoredVisits,queue:_ignoredQueue,myQueue:_ignoredMyQueue,\.\.\.patch\}=rawPatch/)
   for (const path of ['src/workflow.js', 'src/hmo.js', 'src/communication.js', 'src/phase2.js', 'src/booking-drafts.js'])
     assert.doesNotMatch(read(path), /state\.appointments=/, `${path} never writes appointments`)
 })
@@ -172,32 +170,35 @@ test('old browser appointment data is not uploaded, read or cleared', () => {
 // ================================================================================================================
 // SERVER-FIRST FLOWS (real appointment-flow.js with a mocked server — tests/support/mock-server-world.js)
 // ================================================================================================================
-test('Check-In opens the server Visit first (atomically with the appointment), then the local queue entry', async () => {
+test('Check-In opens the server Visit and its server queue entry in one command; nothing is written locally', async () => {
   const w = world(); const a = w.seed(row())
   const result = await w.flow.checkIn(a.id, 'arrive-1')
   assert.equal(result.ok, true, result.message)
+  assert.deepEqual([result.queued, result.queueNumber], [true, 1])
+  assert.equal(w.patches.length, 0, 'no local command ran')
   assert.deepEqual(w.log.map(x => x[0]), ['check-in', 'refresh'])
   assert.equal(w.state.appointments[0].status, 'Checked In')
   const visit = w.state.visits[0]
   assert.equal(visit.appointmentId, a.id)
-  assert.equal(w.state.queue[0].visitId, visit.id, 'the queue references the server Visit public id')
+  assert.equal(w.state.queue[0].visitId, visit.id, 'the server queue entry references the server Visit public id')
+  assert.equal(w.state.queue[0].server, true)
   assert.equal(w.state.queue[0].appointmentId, a.id, 'the appointment id stays only as derived compatibility data')
   assert.equal(w.state.queue[0].arrivedAt, visit.arrivedAt, 'arrival time comes from the server Visit')
   assert.equal('checkIns' in w.state, false, 'no browser check-in collection exists')
 })
 
-test('a Check-In whose local queue step would fail never reaches the server', async () => {
-  const w = world(); const a = w.seed(row({ branch: { id: 'b2', name: 'Branch B' }, dentist: { id: 'd3', name: 'Dr' } }))
-  const result = await w.flow.checkIn(a.id, 'k') // outside the Staff member's branch
-  assert.equal(result.ok, false)
-  assert.deepEqual(w.log, [], 'no server command was sent')
+test('a Visit without a responsible Dentist is not queued (server rule, M9 Q4)', async () => {
+  const w = world()
+  const result = await w.flow.walkIn({ patientId: 'p1', patientPublicId: serverId(500), branchId: 'b1', serviceId: 'svc1', dentistId: null }, 'walk-no-dentist')
+  assert.equal(result.ok, true, result.message)
+  assert.deepEqual([result.queued, w.state.visits.length, w.state.queue.length], [false, 1, 0])
 })
 
-test('a tomorrow appointment is refused before any server command', async () => {
+test('a tomorrow appointment is refused by the server and leaves no records', async () => {
   const w = world(); const a = w.seed(row({ date: '2026-09-20', starts_at: '2026-09-20T11:00:00+08:00' }))
   const result = await w.flow.checkIn(a.id, 'k')
-  assert.equal(result.ok, false)
-  assert.deepEqual(w.log, [])
+  assert.equal(result.ok, false); assert.equal(result.code, 'not_today')
+  assert.deepEqual(w.log.map(x => x[0]), ['check-in', 'refresh'])
   assert.deepEqual([w.state.visits.length, w.state.queue.length], [0, 0])
 })
 
@@ -217,12 +218,12 @@ test('treatment start/completion run the Visit command first and cascade to the 
   const w = world(); const a = w.seed(row())
   await w.flow.checkIn(a.id, 'k')
   const q = w.state.queue[0]
-  w.role('dentist'); assert.equal(w.actions.updateQueue(q.id, 'Called').ok, true)
+  w.role('dentist'); assert.equal((await w.flow.queueCommand(q, 'call', 'call-1')).ok, true)
   const started = await w.flow.treatment({ queueEntryId: q.id }, 'In Treatment')
   assert.equal(started.ok, true, started.message)
   const completed = await w.flow.treatment({ queueEntryId: q.id, procedure: 'Consultation', procedures: [{ serviceId: 'svc1', quantity: 1 }] }, 'Completed')
   assert.equal(completed.ok, true, completed.message)
-  assert.deepEqual(w.log.filter(x => x[0] !== 'refresh').map(x => x[0]), ['check-in', 'start-treatment', 'complete'])
+  assert.deepEqual(w.log.filter(x => x[0] !== 'refresh').map(x => x[0]), ['check-in', 'queue.call', 'start-treatment', 'complete'])
   assert.equal(w.state.visits[0].status, 'Completed')
   assert.equal(w.state.appointments[0].status, 'Completed')
   assert.equal(w.state.treatments[0].appointmentId, a.id)
@@ -242,9 +243,8 @@ test('No-show is a pre-arrival appointment command; a checked-in visit cannot be
   await w2.flow.checkIn(b.id, 'k')
   const refused = await w2.flow.noShow(w2.state.appointments[0], 'n-2')
   assert.equal(refused.ok, false)
-  const local = w2.actions.updateQueue(w2.state.queue[0].id, 'No-show')
-  assert.equal(local.ok, false); assert.match(local.message, /can’t be marked No-show/)
-  assert.equal(w2.state.queue[0].status, 'Waiting')
+  assert.equal('updateQueue' in w2.actions, false, 'there is no local queue command at all (M9)')
+  assert.equal(w2.state.queue[0].status, 'Waiting', 'the queue has no No-show state')
 })
 
 test('a stale reschedule refreshes and asks the user to review; nothing is silently retried', async () => {
@@ -260,7 +260,7 @@ test('follow-up booking creates a server appointment and stores only its public 
   const w = world(); const a = w.seed(row())
   await w.flow.checkIn(a.id, 'k')
   const q = w.state.queue[0]
-  w.role('dentist'); w.actions.updateQueue(q.id, 'Called')
+  w.role('dentist'); await w.flow.queueCommand(q, 'call', 'call-1')
   await w.flow.treatment({ queueEntryId: q.id }, 'In Treatment')
   await w.flow.treatment({ queueEntryId: q.id, procedure: 'Consultation', procedures: [{ serviceId: 'svc1', quantity: 1 }], followupRequired: true }, 'Completed')
   const followup = w.state.followups[0]

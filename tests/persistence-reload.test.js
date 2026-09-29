@@ -55,8 +55,10 @@ test('store persistence inventory is fully discovered',()=>{
   // backend-authoritative and deliberately no longer usePersist-backed (no localStorage for this slice,
   // refetched fresh every session — see the Phase 2A plan, section J, and src/store.jsx's own comment
   // above its reference-data useState declarations). 26 collections minus those 6 leaves 20; the M6 cutover then removed
-  // `appointments` and the M8 cutover `check-ins` (both server-authoritative, held in memory only), leaving 18.
-  assert.equal(keys.length,18)
+  // `appointments`, the M8 cutover `check-ins` and the M9 cutover `queue` (all server-authoritative, held in memory
+  // only), leaving 17.
+  assert.equal(keys.length,17)
+  assert.ok(!keys.includes('queue'),'the queue is never persisted in the browser (M9)')
   assert.ok(!keys.includes('appointments'),'appointments are never persisted in the browser')
   assert.ok(!keys.includes('check-ins'),'arrival records are server Visits, never persisted in the browser')
   assert.ok(!keys.includes('visits'),'Visits are never persisted in the browser')

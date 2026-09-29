@@ -44,7 +44,7 @@ test('repeat completion preserves exact invoice, item IDs, follow-up and event c
 })
 test('save draft creates no invoice, prescription task or follow-up and does not close encounter',()=>{
   const f=fixture();const q=encounter(f);ok(f.actions.saveTreatment({queueEntryId:q.id,procedure:'Draft',procedures:lines,prescriptionRequired:true,followupRequired:true}))
-  assert.equal(f.state.invoices.length,0);assert.equal(f.state.followups.length,0);assert.equal(prescriptionTasks(f.state,f.session).length,0);assert.equal(f.state.queue[0].status,'In Treatment');assert.equal(f.state.appointments[0].status,'In Treatment')
+  assert.equal(f.state.invoices.length,0);assert.equal(f.state.followups.length,0);assert.equal(prescriptionTasks(f.state,f.session).length,0);assert.equal(f.state.queue[0].status,'Served');assert.equal(f.state.queue[0].displayStatus,'In Treatment');assert.equal(f.state.appointments[0].status,'In Treatment')
 })
 test('no clinical requests means no prescription task and no follow-up',()=>{const f=fixture();complete(f);assert.equal(prescriptionTasks(f.state,f.session).length,0);assert.equal(f.state.prescriptions.length,0);assert.equal(f.state.followups.length,0)})
 for(const procedures of [[],[{serviceId:'missing',quantity:1}],[{serviceId:'svc2',quantity:0}],[{serviceId:'svc2',quantity:1.5}],[{serviceId:'svc6',quantity:1}],[{serviceId:'svc2',quantity:1,treatmentId:'other'}]])test(`invalid procedure rejected atomically: ${JSON.stringify(procedures)}`,()=>{
@@ -159,7 +159,7 @@ test('duplicate independent invoices for a treatment cannot be issued or paid',(
   const f=fixture();complete(f);const i=issue(f);f.patch({invoices:[i,{...i,id:'duplicate'}]});assert.equal(f.actions.postPayment(i.id,'Cash',i.total).ok,false)
 })
 test('invalid fee configuration rolls completion back',()=>{
-  const f=fixture();const q=encounter(f);f.patch({services:f.state.services.map(s=>s.id==='svc2'?{...s,baseFee:NaN}:s)});assert.equal(f.actions.completeTreatment({queueEntryId:q.id,procedure:'Documented',procedures:lines}).ok,false);assert.equal(f.state.queue[0].status,'In Treatment');assert.equal(f.state.invoices.length,0)
+  const f=fixture();const q=encounter(f);f.patch({services:f.state.services.map(s=>s.id==='svc2'?{...s,baseFee:NaN}:s)});assert.equal(f.actions.completeTreatment({queueEntryId:q.id,procedure:'Documented',procedures:lines}).ok,false);assert.equal(f.state.queue[0].status,'Served');assert.equal(f.state.queue[0].displayStatus,'In Treatment');assert.equal(f.state.invoices.length,0)
 })
 test('malformed follow-up on another patient is not closed by this treatment',()=>{
   const f=fixture();const q=encounter(f);f.patch({followups:[{id:'bad',patientId:'p2',appointmentId:q.appointmentId,status:'Scheduled'}]});ok(f.actions.completeTreatment({queueEntryId:q.id,procedure:'Documented',procedures:lines}));assert.equal(f.state.followups[0].status,'Scheduled')

@@ -2,7 +2,7 @@ import { readCollection, writeCollection } from './persistence.js'
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import {
   INITIAL_PERSONS,
-  INITIAL_PATIENTS, INITIAL_QUEUE,
+  INITIAL_PATIENTS,
   INITIAL_TREATMENTS, INITIAL_INVOICES, INITIAL_HMO, INITIAL_INQUIRIES, INITIAL_CONVERSATIONS,
   INITIAL_NOTIFICATIONS, INITIAL_PRESCRIPTIONS, INITIAL_FOLLOWUPS, INITIAL_USERS, INITIAL_AUTOMATIONS,
   INITIAL_WORKFLOW_LOG, INITIAL_CAMPAIGNS, INITIAL_LOYALTY, INITIAL_AUDIT, INITIAL_BOOKING_DRAFTS
@@ -16,7 +16,8 @@ import { createIdentityBridge } from './identity-bridge.js'
 import { fetchReferenceData, deriveDentistServiceAssignments } from './reference-data-bridge.js'
 import * as appointmentsApi from './appointments-api.js'
 import * as visitsApi from './visits-api.js'
-import { buildServerProjection, classifyLegacy } from './appointment-projection.js'
+import * as queueApi from './queue-api.js'
+import { buildServerProjection, classifyLegacy, reanchorLocalEvidence } from './appointment-projection.js'
 import { createAppointmentFlow } from './appointment-flow.js'
 
 const ClinicContext=createContext(null)
@@ -59,7 +60,7 @@ const fullName=person=>[person?.firstName,person?.lastName].map(cleanNamePart).f
 // render-smoke.mjs renders ClinicProvider via renderToString, which runs render-phase code only — a real
 // fetch-on-mount effect never executes under SSR, so the script needs a synchronous alternative rather than
 // silently seeing empty reference data.
-export function ClinicProvider({ children, initialReferenceData, initialServerAppointments, initialServerVisits }) {
+export function ClinicProvider({ children, initialReferenceData, initialServerAppointments, initialServerVisits, initialServerQueue, initialMyQueue }) {
   const recoveryBlocked=useRef(false)
   const [persistenceErrors,setPersistenceErrors]=useState({})
   const reportPersistence=useCallback((key,message)=>setPersistenceErrors(previous=>{
@@ -88,7 +89,17 @@ export function ClinicProvider({ children, initialReferenceData, initialServerAp
   // latest GET /api/visits result in memory only — never persisted, never written by a local command. The old
   // `dentalops-v4-check-ins` browser collection is no longer read (it is not uploaded or cleared).
   const [serverVisitRows,setServerVisitRows]=useState(initialServerVisits??[])
-  const [queue,setQueue]=usePersist('queue',INITIAL_QUEUE,reportPersistence,recoveryBlocked)
+  // M9 cutover: the queue is server-authoritative. `serverQueueRows` (Staff/Dentist/Owner: GET /api/queue) and `myQueue`
+  // (a Patient's own current queue state: GET /api/queue/mine) are held in memory only — never persisted, never written
+  // by a local command. The old `dentalops-v4-queue` browser collection is no longer live state; it is read once, only
+  // for the exact-link evidence re-anchor below, and is never uploaded or cleared.
+  const [serverQueueRows,setServerQueueRows]=useState(initialServerQueue??[])
+  const [myQueue,setMyQueue]=useState(initialMyQueue??null)
+  const legacyLocalQueue=useMemo(()=>{
+    if(typeof localStorage==='undefined')return []
+    const result=readCollection(localStorage,`${STORAGE_PREFIX}queue`,[])
+    return !result.blocked&&Array.isArray(result.value)?result.value:[]
+  },[])
   const [treatments,setTreatments]=usePersist('treatments',INITIAL_TREATMENTS,reportPersistence,recoveryBlocked)
   const [invoices,setInvoices]=usePersist('invoices',INITIAL_INVOICES,reportPersistence,recoveryBlocked)
   const [hmo,setHmo]=usePersist('hmo',INITIAL_HMO,reportPersistence,recoveryBlocked)
@@ -185,23 +196,20 @@ export function ClinicProvider({ children, initialReferenceData, initialServerAp
     const name=role==='Dentist'&&base?`Dr. ${base}`:base||u.username
     return {...u,name,email:p?.email||'',phone:p?.phone||'',firstName:p?.firstName||'',lastName:p?.lastName||''}
   })
-  const serverProjection=buildServerProjection({rows:serverAppointmentRows,visitRows:serverVisitRows,directory:directoryPatients,session,users,patients})
-  // D5/M8: queue entries without a server Visit (pre-cutover appointments, browser-only walk-ins) are legacy history,
-  // kept out of the live queue; other records carry `legacyAppointment` so live decisions and KPIs can exclude them.
-  const legacy=classifyLegacy({queue,visits:serverProjection.visits,treatments,invoices,prescriptions,followups,hmo,conversations,inquiries})
-  const liveQueue=legacy.queue
-  const legacyRef=useRef({queue:[]})
-  legacyRef.current={queue:liveQueue.legacy}
+  const serverProjection=buildServerProjection({rows:serverAppointmentRows,visitRows:serverVisitRows,queueRows:serverQueueRows,directory:directoryPatients,session,users,patients})
+  // D5/M8/M9: records without a server Visit (pre-cutover appointments, browser-only encounters) carry
+  // `legacyAppointment` so live decisions and KPIs can exclude them. The live queue is the server queue only.
+  const legacy=classifyLegacy({treatments,invoices,prescriptions,followups,hmo,conversations,inquiries})
 
   const state={...normalizeClinicState({
     persons,services,branchServices,dentistServiceAssignments,branches,
     dentists:projectedDentists,staff:projectedStaff,patients:[...projectedPatients,...serverProjection.readModelPatients],appointments:serverProjection.appointments,
-    visits:serverProjection.visits,queue:liveQueue.live,treatments:legacy.treatments,invoices:legacy.invoices,hmo:legacy.hmo,inquiries:legacy.inquiries,
+    visits:serverProjection.visits,queue:serverProjection.queue,myQueue,treatments:legacy.treatments,invoices:legacy.invoices,hmo:legacy.hmo,inquiries:legacy.inquiries,
     conversations:legacy.conversations,notifications,prescriptions:legacy.prescriptions,followups:legacy.followups,users:projectedUsers,
     automations,workflowLog,campaigns,loyalty,audit,bookingDrafts,clock,today:clock.date,
     // Whether server Visits are part of this session's projection (Staff/Dentist/Owner). Derived, never persisted.
     visitsProjected:!!initialServerVisits||['staff','dentist','owner'].includes(session?.role)
-  }),legacyQueue:liveQueue.legacy}
+  })}
   stateRef.current=state
   const migrationDone=useRef(false)
   useEffect(()=>{
@@ -219,7 +227,6 @@ export function ClinicProvider({ children, initialReferenceData, initialServerAp
       const next=projected.find(x=>x.id===record.id)
       return next?{...record,...Object.fromEntries(keys.map(key=>[key,next[key]??null]))}:record
     })
-    setQueue(persistableCollection('queue',migrate(queue,state.queue,['branchId','serviceId','clinicDate','treatmentId','queueEntryId','visitId'])))
     setTreatments(persistableCollection('treatments',migrate(treatments,state.treatments,['branchId','queueEntryId'])))
     setInvoices(persistableCollection('invoices',migrate(invoices,state.invoices,['branchId'])))
     setFollowups(migrate(followups,state.followups,['branchId']))
@@ -233,7 +240,7 @@ export function ClinicProvider({ children, initialReferenceData, initialServerAp
   },[refDataStatus])
   const setters={
     setPersons,setServices,setBranchServices,setBranches,setDentists,setStaff,setPatients,
-    setQueue,setTreatments,setInvoices,setHmo,setInquiries,setConversations,setNotifications,
+    setTreatments,setInvoices,setHmo,setInquiries,setConversations,setNotifications,
     setPrescriptions,setFollowups,setUsers,setAutomations,setWorkflowLog,setCampaigns,setLoyalty,setAudit,
     setBookingDrafts
   }
@@ -250,16 +257,12 @@ export function ClinicProvider({ children, initialReferenceData, initialServerAp
   }
   const actions={}
   const commit=rawPatch=>{
-    // Appointments and Visits are server-authoritative: no local command may write them (the projection is refreshed
-    // from the server instead), so `appointments`/`visits` keys are never applied or persisted.
-    const {appointments:_ignored,visits:_ignoredVisits,...patch}=rawPatch
+    // Appointments, Visits and the queue are server-authoritative: no local command may write them (the projection is
+    // refreshed from the server instead), so `appointments`/`visits`/`queue` keys are never applied or persisted.
+    const {appointments:_ignored,visits:_ignoredVisits,queue:_ignoredQueue,myQueue:_ignoredMyQueue,...patch}=rawPatch
     // Advance immediately so repeated clicks before React renders see the commit.
-    stateRef.current={...normalizeClinicState({...stateRef.current,...patch}),legacyQueue:stateRef.current.legacyQueue}
-    for(const [key,value] of Object.entries(patch)){
-      // The live queue excludes D5/M8 legacy records; keep those stored alongside.
-      const rows=key==='queue'?[...value,...legacyRef.current.queue]:value
-      setters[`set${key[0].toUpperCase()}${key.slice(1)}`]?.(persistableCollection(key,rows))
-    }
+    stateRef.current=normalizeClinicState({...stateRef.current,...patch})
+    for(const [key,value] of Object.entries(patch))setters[`set${key[0].toUpperCase()}${key.slice(1)}`]?.(persistableCollection(key,value))
   }
 
   Object.assign(actions,createWorkflowActions({
@@ -285,32 +288,42 @@ export function ClinicProvider({ children, initialReferenceData, initialServerAp
   // ---- M6 server appointments ------------------------------------------------------------------------------------
   // Applies fresh server rows to the in-memory projection immediately (so a local adapter command that follows a server
   // command sees the new status before React re-renders) and to React state.
-  // The live queue is re-derived too, so an entry re-linked to a freshly loaded Visit is live for the very next command.
-  const applyServerRows=(rows,directory=directoryRef.current,visitRows=visitRowsRef.current)=>{
+  const applyServerRows=(rows,directory=directoryRef.current,visitRows=visitRowsRef.current,queueRows=queueRowsRef.current,mine=myQueueRef.current)=>{
     const current=stateRef.current
-    const projection=buildServerProjection({rows,visitRows,directory,session:sessionRef.current,users:current.users,patients:current.patients.filter(p=>!p.serverProjection)})
-    const allQueue=[...current.queue,...current.legacyQueue]
-    const split=classifyLegacy({queue:allQueue,visits:projection.visits}).queue
-    legacyRef.current={queue:split.legacy}
-    stateRef.current={...normalizeClinicState({...current,appointments:projection.appointments,visits:projection.visits,queue:split.live,patients:[...current.patients.filter(p=>!p.serverProjection),...projection.readModelPatients]}),legacyQueue:split.legacy}
+    const projection=buildServerProjection({rows,visitRows,queueRows,directory,session:sessionRef.current,users:current.users,patients:current.patients.filter(p=>!p.serverProjection)})
+    stateRef.current=normalizeClinicState({...current,appointments:projection.appointments,visits:projection.visits,queue:projection.queue,myQueue:mine,patients:[...current.patients.filter(p=>!p.serverProjection),...projection.readModelPatients]})
     rowsRef.current=rows
     visitRowsRef.current=visitRows
+    queueRowsRef.current=queueRows
+    myQueueRef.current=mine
     setServerAppointmentRows(rows)
     setServerVisitRows(visitRows)
+    setServerQueueRows(queueRows)
+    setMyQueue(mine)
   }
   const rowsRef=useRef(serverAppointmentRows)
   const visitRowsRef=useRef(serverVisitRows)
+  const queueRowsRef=useRef(serverQueueRows)
+  const myQueueRef=useRef(myQueue)
   const directoryRef=useRef(directoryPatients)
-  // Loads server appointments and (for Staff/Dentist/Owner — there is no Patient Visit API yet, D9) server Visits.
+  // Loads server appointments and — for Staff/Dentist/Owner — server Visits and today's queue (there is no Patient Visit
+  // API yet, D9); a Patient loads only their own current queue state.
   const refreshAppointments=async()=>{
     if(!sessionRef.current)return {ok:false,kind:'unauthenticated'}
     setAppointmentsStatus(status=>status==='ready'?status:'loading')
     const today=clinicNow().date
-    const withVisits=['staff','dentist','owner'].includes(sessionRef.current.role)
-    const [result,visits]=await Promise.all([appointmentsApi.loadAppointments(today),withVisits?visitsApi.loadVisits(today):Promise.resolve({ok:true,rows:[],truncated:false})])
-    const failed=!result.ok?result:!visits.ok?visits:null
+    const role=sessionRef.current.role
+    const operational=['staff','dentist','owner'].includes(role)
+    const none=Promise.resolve({ok:true,rows:[],truncated:false,data:null})
+    const [result,visits,queue,mine]=await Promise.all([
+      appointmentsApi.loadAppointments(today),
+      operational?visitsApi.loadVisits(today):none,
+      operational?queueApi.loadQueue(today):none,
+      role==='patient'?queueApi.loadMyQueue():none,
+    ])
+    const failed=[result,visits,queue,mine].find(r=>!r.ok)
     if(failed){setAppointmentsStatus('error');setAppointmentsError(failed.message);return failed}
-    applyServerRows(result.rows,directoryRef.current,visits.rows)
+    applyServerRows(result.rows,directoryRef.current,visits.rows,queue.rows,mine.data??null)
     setAppointmentsTruncated(result.truncated||visits.truncated)
     setAppointmentsError('')
     setAppointmentsStatus('ready')
@@ -338,10 +351,10 @@ export function ClinicProvider({ children, initialReferenceData, initialServerAp
 
   // Load server appointments after sign-in (once reference data is ready), and again when the window regains focus.
   useEffect(()=>{
-    if(initialServerAppointments||initialServerVisits)return
+    if(initialServerAppointments||initialServerVisits||initialServerQueue)return
     if(!session?.role){
-      rowsRef.current=[];visitRowsRef.current=[];directoryRef.current=[]
-      setServerAppointmentRows([]);setServerVisitRows([]);setDirectoryPatients([]);setAppointmentsStatus('idle');setAppointmentsError('')
+      rowsRef.current=[];visitRowsRef.current=[];queueRowsRef.current=[];myQueueRef.current=null;directoryRef.current=[]
+      setServerAppointmentRows([]);setServerVisitRows([]);setServerQueueRows([]);setMyQueue(null);setDirectoryPatients([]);setAppointmentsStatus('idle');setAppointmentsError('')
       return
     }
     if(refDataStatus!=='ready')return
@@ -350,9 +363,23 @@ export function ClinicProvider({ children, initialReferenceData, initialServerAp
     const onFocus=()=>{if(sessionRef.current)refreshAppointments()}
     window.addEventListener('focus',onFocus)
     return ()=>window.removeEventListener('focus',onFocus)
-  },[session?.role,session?.userId,refDataStatus,initialServerAppointments,initialServerVisits])
+  },[session?.role,session?.userId,refDataStatus,initialServerAppointments,initialServerVisits,initialServerQueue])
 
-  const value=useMemo(()=>({state,setters,actions,appointmentFlow,appointmentsStatus,appointmentsError,appointmentsTruncated,directoryPatients,toast,log,workflow,toasts,session,setSession,adoptSession,persistenceErrors,refDataStatus,retryReferenceData}),[persons,services,branchServices,dentistServiceAssignments,branches,dentists,staff,patients,serverAppointmentRows,serverVisitRows,directoryPatients,appointmentsStatus,appointmentsError,appointmentsTruncated,queue,treatments,invoices,hmo,inquiries,conversations,notifications,prescriptions,followups,users,automations,workflowLog,campaigns,loyalty,audit,toasts,bookingDrafts,session,clock,persistenceErrors,refDataStatus])
+  // M9 one-time local evidence re-anchor (compatibility only; remove with the M5/M11 backends). Once server Visits and
+  // the server queue are loaded for a Staff/Dentist/Owner session, local treatments and invoices that reach a server
+  // Visit through an EXACT link (their browser queue row's canonical visitId or server appointment id) persist that
+  // visitId, and point at the server queue entry for the same Visit when one exists. Idempotent; see
+  // reanchorLocalEvidence. Records without an exact link stay historical.
+  useEffect(()=>{
+    if(recoveryBlocked.current||appointmentsStatus!=='ready'||!['staff','dentist','owner'].includes(session?.role))return
+    const {visits,queue:serverQueue}=stateRef.current
+    const t=reanchorLocalEvidence({records:treatments,localQueue:legacyLocalQueue,visits,serverQueue})
+    if(t.changed)setTreatments(persistableCollection('treatments',t.records))
+    const i=reanchorLocalEvidence({records:invoices,localQueue:legacyLocalQueue,visits,serverQueue})
+    if(i.changed)setInvoices(persistableCollection('invoices',i.records))
+  },[appointmentsStatus,serverVisitRows,serverQueueRows,session?.role])
+
+  const value=useMemo(()=>({state,setters,actions,appointmentFlow,appointmentsStatus,appointmentsError,appointmentsTruncated,directoryPatients,toast,log,workflow,toasts,session,setSession,adoptSession,persistenceErrors,refDataStatus,retryReferenceData}),[persons,services,branchServices,dentistServiceAssignments,branches,dentists,staff,patients,serverAppointmentRows,serverVisitRows,serverQueueRows,myQueue,directoryPatients,appointmentsStatus,appointmentsError,appointmentsTruncated,treatments,invoices,hmo,inquiries,conversations,notifications,prescriptions,followups,users,automations,workflowLog,campaigns,loyalty,audit,toasts,bookingDrafts,session,clock,persistenceErrors,refDataStatus])
   return <ClinicContext.Provider value={value}>{children}</ClinicContext.Provider>
 }
 

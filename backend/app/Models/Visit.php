@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 // VISITS — the shared Visit / Clinical Encounter (see the create_visits_table migration). The bigint id stays
 // internal; routes bind and resources expose the ULID public_id. Status changes happen only through VisitService's
@@ -64,6 +65,12 @@ class Visit extends Model
     public function requestedService(): BelongsTo
     {
         return $this->belongsTo(Service::class, 'requested_service_id');
+    }
+
+    /** The M9 queue entry opened with this Visit's arrival (at most one; none for a Visit without a Dentist). */
+    public function queueEntry(): HasOne
+    {
+        return $this->hasOne(QueueEntry::class);
     }
 
     public function history(): HasMany

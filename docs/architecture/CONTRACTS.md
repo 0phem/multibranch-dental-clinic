@@ -85,8 +85,10 @@ One first-class **Visit** is the operational bridge between arrival and clinical
   ERD diagram and data dictionary are updated only with explicit approval when M8/M5 are implemented.
 - **Current:** implemented (M8). `visits` (PostgreSQL) is the arrival record and encounter anchor; scheduled Check-In
   moves the appointment to Checked In and opens the Visit in one transaction; walk-ins open a Visit with no appointment.
-  C2 is resolved in this direction (approved D10; data dictionary updated). The M9 queue and M5 treatment records are
-  still browser-local and reference the Visit by `visitId`; their backends will reference `visits.id`.
+  C2 is resolved in this direction (approved D10; data dictionary updated). Since M9 the queue is server-authoritative
+  too: a Visit with a responsible Dentist is queued in the same arrival transaction (`queue_entries.visit_id`, unique).
+  M5 treatment records are still browser-local and reference the Visit by `visitId`; the M5 backend will reference
+  `visits.id`.
 
 ## 4. Dentist professional data (M3 → M19)
 
@@ -287,17 +289,21 @@ decision); earliest check-in and late-arrival rules remain unresolved policies P
 ### Queue entry (M9)
 | From | To | By / condition |
 | --- | --- | --- |
-| Waiting | Called, Temporarily Away | Staff (Dentist may Call) |
-| Called | Treatment Ready, Temporarily Away | Staff |
-| Treatment Ready | Temporarily Away | Staff |
-| Temporarily Away | Waiting (return, arrival time kept) | Staff |
-| Called / Treatment Ready | In Treatment | Only by the linked treatment starting |
-| In Treatment | Completed | Only by the linked treatment completing |
-| active | Cancelled | Appointment cancelled before clinical documentation |
+| (new) | Waiting | Created by M8 arrival in the same transaction, for a Visit with a responsible Dentist |
+| Waiting | Called, Temporarily Away | Staff / Owner (the queue's own Dentist may Call) |
+| Called | Treatment Ready, Temporarily Away | Staff / Owner |
+| Treatment Ready | Temporarily Away | Staff / Owner |
+| Temporarily Away | Waiting (return, original arrival order kept) | Staff / Owner |
+| Called / Treatment Ready | Served | Only by the Visit start-treatment command, in the same transaction |
+| Served | — | Terminal: the Patient left the waiting queue because treatment started (not Visit completion) |
 
-Priority (Normal / Priority / Urgent) changes require an authorized reason and never change the state. Every queue
-entry is the handoff of one checked-in Visit, so it is never marked No-show (since M8); leaving after Check-In awaits
-the Visit/Queue policy above. Completed is terminal (Cancelled/No-show remain only on historical prototype records).
+**Current (M9, server-authoritative):** the queue has no In Treatment, Completed, Cancelled or No-show state — the Visit
+owns the clinical lifecycle and the appointment owns the pre-arrival No-show. Numbers are issued by the server per
+branch + Dentist + Asia/Manila clinic day starting at 1 (`dentist_queues`); positions are computed by the server
+(Waiting / Called / Treatment Ready only; priority Urgent > Priority > Normal, then exact Visit arrival, then number).
+Priority is an operational flag (Staff/Owner, reason required, recorded in history), not clinical triage. Commands need an
+Idempotency-Key and the expected revision and apply only to today's queue. Leaving after Check-In and end-of-day
+handling remain **TBD BEFORE IMPLEMENTATION** (Visit/Queue clinic policy).
 
 ### Treatment (M5)
 | From | To | By / condition |

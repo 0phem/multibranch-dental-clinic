@@ -1,7 +1,7 @@
 import { validSession } from './safeguards.js'
 import { clinicNow, clinicDate, addDays } from './clock.js'
-import { inScope, isActiveQueue, isTodayQueue, TERMINAL } from './contracts.js'
-import { dateLabel, nextAppointment, peso, queueWaitEstimate } from './logic.js'
+import { inScope, TERMINAL } from './contracts.js'
+import { dateLabel, nextAppointment, peso } from './logic.js'
 import { followupDisplayState, linkedTreatment, visibleInvoices, visiblePrescriptions } from './phase2.js'
 import { LOYALTY_PROGRAM, accountsOf, ledgerIssue, needMoreMessage } from './loyalty.js'
 import { HMO_PROVIDERS, notificationDestination, patientProvidesRequirement, visibleConversations, visibleHmo, visibleNotifications } from './phase3-contracts.js'
@@ -178,33 +178,33 @@ export function patientConversations(state,session) {
   return visibleConversations(state,session).map(c=>conversationView(state,session,c))
 }
 
-// ---- Queue: the Patient's own place and aggregate estimate only --------------------------------------
-const PHASES={Waiting:'waiting',Called:'called','Treatment Ready':'ready','Temporarily Away':'away','In Treatment':'in-treatment',Completed:'completed','No-show':'no-show',Cancelled:'cancelled'}
+// ---- Queue: the Patient's own place only ------------------------------------------------------------
+// M9: a Patient's queue state comes from the server's own-queue endpoint (`state.myQueue`, GET /api/queue/mine): their
+// own number, phase and position only — never other Patients and never a wait estimate (M10 stays client-side for the
+// clinic's operational views). `checked-in` means the arrival is recorded but the Visit is not in a Dentist's queue yet.
+const PHASE_LABELS={waiting:'Waiting',called:'Called',ready:'Treatment Ready',away:'Temporarily Away','in-treatment':'In Treatment','checked-in':'Checked In'}
 export function patientQueueView(state,session) {
   if(!patientContext(state,session))return null
   const today=clinicDate()
-  const entries=state.queue.filter(q=>inScope(q,session,state)&&isTodayQueue(q,today))
-  const entry=entries.find(isActiveQueue)||[...entries].sort((a,b)=>String(b.completedAt||b.checkedIn||'').localeCompare(String(a.completedAt||a.checkedIn||'')))[0]
-  if(!entry){
+  const mine=state.myQueue
+  if(!mine||mine.clinic_date!==today){
     const expected=appointmentGroups(state,session,today).upcoming.find(a=>a.date===today&&['Confirmed','Pending'].includes(a.status))
     return expected?{phase:'not-checked-in',appointment:{id:expected.id,service:expected.service,start:expected.start,branch:expected.branch,dentist:dentistLabel(state,expected.dentistId)}}:{phase:'none'}
   }
-  const phase=PHASES[entry.status]||'waiting'
-  const appointment=entry.appointmentId?state.appointments.find(a=>a.id===entry.appointmentId&&inScope(a,session,state)):null
   return {
-    phase,status:entry.status,active:isActiveQueue(entry),
-    position:phase==='waiting'&&entry.position?entry.position:null,
-    waitMinutes:phase==='waiting'?queueWaitEstimate(entry,state.queue,state.appointments,state.treatments,state.dentists):null,
-    dentist:dentistLabel(state,entry.dentistId),branch:entry.branch||'',
-    service:state.services.find(s=>s.id===entry.serviceId)?.name||appointment?.service||'',
-    start:appointment?.start||null,checkedIn:entry.checkedIn||null,
+    phase:mine.phase,status:PHASE_LABELS[mine.phase]||'Checked In',active:true,
+    position:mine.phase==='waiting'&&mine.position?mine.position:null,
+    queueNumber:mine.queue_number??null,
+    waitMinutes:null,
+    dentist:mine.dentist?.name||'',branch:mine.branch?.name||'',service:mine.service?.name||'',
+    start:mine.appointment?.start_time||null,checkedIn:typeof mine.arrived_at==='string'?mine.arrived_at.slice(11,16):null,
   }
 }
 
 export function queueSentence(q) {
   if(!q)return ''
   if(q.phase==='waiting')return q.position?`You’re #${q.position} in line${q.branch?` at ${q.branch}`:''}.`:'You’re in line.'
-  return {called:'The clinic has called you.',ready:'You’re ready for treatment.',away:'Your place in line is paused.','in-treatment':'Your visit is in progress.',completed:'Your visit is complete.','no-show':'This visit was recorded as a no-show.',cancelled:'This visit was cancelled.'}[q.phase]||''
+  return {called:'The clinic has called you.',ready:'You’re ready for treatment.',away:'Your place in line is paused.','in-treatment':'Your visit is in progress.','checked-in':'Your arrival is recorded. The clinic will add you to a Dentist’s queue.',completed:'Your visit is complete.','no-show':'This visit was recorded as a no-show.',cancelled:'This visit was cancelled.'}[q.phase]||''
 }
 
 // ---- Journey Hub -------------------------------------------------------------------------------------
@@ -244,7 +244,7 @@ export function patientHome(state,session) {
   const now=clinicNow()
   const groups=appointmentGroups(state,session,now.date)
   const queue=patientQueueView(state,session)
-  const live=queue&&['waiting','called','ready','away','in-treatment'].includes(queue.phase)?queue:null
+  const live=queue&&['waiting','called','ready','away','in-treatment','checked-in'].includes(queue.phase)?queue:null
   const summary=a=>({id:a.id,service:a.service,date:a.date,start:a.start,branch:a.branch,status:a.status,dentist:dentistLabel(state,a.dentistId)})
   const today=groups.upcoming.find(a=>a.date===now.date)
   const next=nextAppointment(ctx.patientId,groups.upcoming)

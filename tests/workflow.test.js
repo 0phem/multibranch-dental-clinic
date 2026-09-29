@@ -132,7 +132,7 @@ test('treatment completes only its exact encounter; repeating commands creates n
   const count=f.state.workflowLog.length
   assert.equal(f.actions.completeTreatment({queueEntryId:qa.id,id:t.id}).unchanged,true)
   assert.equal(f.state.workflowLog.length,count)
-  assert.equal(f.state.queue.find(q=>q.id===qa.id).status,'Completed')
+  assert.equal(f.state.queue.find(q=>q.id===qa.id).status,'Served');assert.equal(f.state.queue.find(q=>q.id===qa.id).displayStatus,'Completed')
   assert.equal(f.state.queue.find(q=>q.id===qb.id).status,'Waiting')
   assert.equal(f.state.appointments.find(a=>a.id===b.id).status,'Checked In')
   assert.equal(f.state.appointments.find(visit=>visit.id===qa.appointmentId).status,'Completed')
