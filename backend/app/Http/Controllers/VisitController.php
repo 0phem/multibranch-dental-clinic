@@ -1,0 +1,107 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Http\Controllers\Concerns\ReadsIdempotencyKey;
+use App\Http\Requests\Visit\CheckInVisitRequest;
+use App\Http\Requests\Visit\TransitionVisitRequest;
+use App\Http\Requests\Visit\WalkInVisitRequest;
+use App\Http\Resources\VisitResource;
+use App\Models\Appointment;
+use App\Models\Branch;
+use App\Models\DentistProfile;
+use App\Models\Patient;
+use App\Models\Service;
+use App\Models\Visit;
+use App\Services\Visits\VisitService;
+use App\Support\ClinicClock;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
+use Illuminate\Validation\ValidationException;
+
+// M8 Patient Check-In and the shared Visit API. Controllers only resolve references and authorize; every rule and
+// state change lives in VisitService's named commands (no generic status PATCH).
+class VisitController extends Controller
+{
+    use ReadsIdempotencyKey;
+
+    private const RELATIONS = ['patient.person', 'branch', 'appointment.service', 'dentist.person', 'requestedService'];
+
+    // Same bounded window as the appointment list (about three months back and three ahead), always paginated.
+    private const MAX_RANGE_DAYS = 184;
+
+    public function __construct(private readonly VisitService $visits) {}
+
+    public function index(Request $request)
+    {
+        $validated = $request->validate([
+            'date' => ['nullable', 'date_format:Y-m-d', 'prohibits:from,to'],
+            'from' => ['nullable', 'date_format:Y-m-d', 'required_with:to'],
+            'to' => ['nullable', 'date_format:Y-m-d', 'required_with:from', 'after_or_equal:from'],
+            'status' => ['nullable', 'string'],
+            'branch_ref' => ['nullable', 'string'],
+            'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
+        ]);
+        [$from, $to] = isset($validated['date']) ? [$validated['date'], $validated['date']] : [$validated['from'] ?? null, $validated['to'] ?? null];
+        if (! $from) {
+            $from = $to = ClinicClock::today();
+        }
+        if (ClinicClock::at($from, '00:00')->diffInDays(ClinicClock::at($to, '00:00')) >= self::MAX_RANGE_DAYS) {
+            throw ValidationException::withMessages(['to' => 'A date range may cover at most '.self::MAX_RANGE_DAYS.' days.']);
+        }
+        $query = Visit::visibleTo($request->user())->with(self::RELATIONS)
+            ->whereBetween('clinic_date', [$from, $to])
+            ->when($validated['status'] ?? null, fn ($q, $status) => $q->where('status', $status))
+            ->when($validated['branch_ref'] ?? null, fn ($q, $ref) => $q->whereHas('branch', fn ($b) => $b->where('legacy_ref', $ref)))
+            ->orderBy('arrived_at')->orderBy('id');
+
+        return VisitResource::collection($query->paginate($validated['per_page'] ?? 50)->withQueryString());
+    }
+
+    public function show(Visit $visit): VisitResource
+    {
+        Gate::authorize('view', $visit);
+
+        return new VisitResource($visit->load([...self::RELATIONS, 'history']));
+    }
+
+    public function checkIn(CheckInVisitRequest $request): JsonResponse
+    {
+        $appointment = Appointment::where('public_id', $request->validated('appointment_id'))->firstOrFail();
+        Gate::authorize('checkIn', [Visit::class, $appointment]);
+
+        return $this->visits->checkInScheduled($request->user(), $appointment, (int) $request->validated('expected_revision'), $this->idempotencyKey($request, true));
+    }
+
+    public function walkIn(WalkInVisitRequest $request): JsonResponse
+    {
+        $branch = Branch::where('legacy_ref', $request->validated('branch_ref'))->firstOrFail();
+        Gate::authorize('walkIn', [Visit::class, $branch]);
+        $serviceRef = $request->validated('service_ref');
+        $dentistRef = $request->validated('dentist_ref');
+
+        return $this->visits->walkIn(
+            $request->user(),
+            Patient::where('public_id', $request->validated('patient_id'))->firstOrFail(),
+            $branch,
+            $serviceRef ? Service::where('legacy_ref', $serviceRef)->firstOrFail() : null,
+            $dentistRef ? DentistProfile::where('legacy_ref', $dentistRef)->firstOrFail() : null,
+            $this->idempotencyKey($request, true),
+        );
+    }
+
+    public function startTreatment(TransitionVisitRequest $request, Visit $visit): JsonResponse
+    {
+        Gate::authorize('clinical', $visit);
+
+        return $this->visits->startTreatment($request->user(), $visit, (int) $request->validated('expected_revision'), $this->idempotencyKey($request));
+    }
+
+    public function complete(TransitionVisitRequest $request, Visit $visit): JsonResponse
+    {
+        Gate::authorize('clinical', $visit);
+
+        return $this->visits->complete($request->user(), $visit, (int) $request->validated('expected_revision'), $this->idempotencyKey($request));
+    }
+}

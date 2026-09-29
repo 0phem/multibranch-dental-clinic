@@ -5,8 +5,10 @@ use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\RegisteredPatientController;
 use App\Http\Controllers\CurrentUserController;
 use App\Http\Controllers\PatientDirectoryController;
+use App\Http\Controllers\PatientRegistrationController;
 use App\Http\Controllers\UserBranchScopeController;
 use App\Http\Controllers\UserManagementController;
+use App\Http\Controllers\VisitController;
 use App\Http\Controllers\Rbac\RbacDemoController;
 use App\Http\Controllers\Reference\BranchController;
 use App\Http\Controllers\Reference\BranchServiceController;
@@ -69,6 +71,8 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Minimal M4 Patient directory for Staff/Owner selection (public ids only; not the full M4 record).
     Route::get('/patients', [PatientDirectoryController::class, 'index'])->middleware('role:staff,owner');
+    // Minimal M4 front-desk registration for walk-ins: Person + Patient, no login account (decision D4).
+    Route::post('/patients', [PatientRegistrationController::class, 'store'])->middleware('role:staff,owner');
 
     // M6 Appointment Booking & Smart Scheduling. {appointment} binds on the ULID public_id. State changes are named
     // commands only (no generic status PATCH); per-record access is decided by AppointmentPolicy. Dentists may read
@@ -81,10 +85,21 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/{appointment}', [AppointmentController::class, 'show'])->middleware('role:patient,staff,dentist,owner');
         Route::post('/{appointment}/reschedule', [AppointmentController::class, 'reschedule'])->middleware('role:patient,staff,owner');
         Route::post('/{appointment}/cancel', [AppointmentController::class, 'cancel'])->middleware('role:patient,staff,owner');
-        // Lifecycle transitions from the frozen state table, invoked by the (still browser-local) M8/M9/M5 workflows.
-        // Per-command role/scope rules live in AppointmentPolicy::transition.
+        // The pre-arrival No-show (the Patient did not arrive; no Visit). Check-In and treatment start/completion are
+        // Visit commands below — there is no second appointment path for them.
         Route::post('/{appointment}/{command}', [AppointmentController::class, 'transition'])
-            ->whereIn('command', ['check-in', 'no-show', 'start-treatment', 'complete'])
-            ->middleware('role:staff,dentist,owner');
+            ->whereIn('command', ['no-show'])
+            ->middleware('role:staff,owner');
+    });
+
+    // M8 Patient Check-In and the shared Visit / Clinical Encounter. {visit} binds on the ULID public_id. Patients have
+    // no Visit API in this wave (D9). Per-record access is decided by VisitPolicy.
+    Route::prefix('visits')->group(function () {
+        Route::get('/', [VisitController::class, 'index'])->middleware('role:staff,dentist,owner');
+        Route::post('/check-in', [VisitController::class, 'checkIn'])->middleware('role:staff,owner');
+        Route::post('/walk-in', [VisitController::class, 'walkIn'])->middleware('role:staff,owner');
+        Route::get('/{visit}', [VisitController::class, 'show'])->middleware('role:staff,dentist,owner');
+        Route::post('/{visit}/start-treatment', [VisitController::class, 'startTreatment'])->middleware('role:dentist');
+        Route::post('/{visit}/complete', [VisitController::class, 'complete'])->middleware('role:dentist');
     });
 });

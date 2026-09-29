@@ -14,7 +14,7 @@ import { inScope, sessionForRole } from '../contracts.js'
 // Dentist-requested follow-up. The Patient comes from the server Patient directory (public_id), branches are limited to
 // the account's server authorization scopes (Owner: every open branch), start times come from server availability on the
 // 30-minute Staff grid, and the server validates and assigns on confirm. Nothing here writes an appointment locally.
-function bookableBranches(state,session){
+export function bookableBranches(state,session){
   const open=state.branches.filter(b=>b.status==='Open')
   if(session?.role==='staff')return open.filter(b=>Array.isArray(session.branchScopes)?session.branchScopes.includes(b.id):b.id===session.branchId)
   return open
@@ -138,6 +138,7 @@ export function AppointmentsPage({ role, store, setPage, context }) {
   const session=store.session||sessionForRole(role,state)
   const [reschedule,setReschedule]=useState(null)
   const [cancelling,setCancelling]=useState(null)
+  const [missed,setMissed]=useState(null)
   const [newOpen,setNewOpen]=useState(false)
   if(role==='patient')return <PatientAppointmentsPage store={store} setPage={setPage} context={context}/>
   const visible=state.appointments.filter(a=>inScope(a,session,state)).sort((a,b)=>`${a.date}${a.start}`.localeCompare(`${b.date}${b.start}`))
@@ -146,6 +147,14 @@ export function AppointmentsPage({ role, store, setPage, context }) {
     const result=await store.appointmentFlow.cancel(a,commandKey())
     if(result.ok&&result.warning)toast(result.warning,'warning')
     toast(result.ok?'Appointment cancelled.':result.message,result.ok?'success':'warning')
+  }
+  // Pre-arrival No-show (M6): a manual same-day Staff decision that the scheduled Patient did not arrive. No Visit is
+  // created; once the Patient has checked in, No-show is no longer possible.
+  const markNoShow=async()=>{
+    const a=missed;setMissed(null)
+    const result=await store.appointmentFlow.noShow(a,commandKey())
+    if(result.ok&&result.warning)toast(result.warning,'warning')
+    toast(result.ok?'Marked as No-show.':result.message,result.ok?'success':'warning')
   }
   return <>
     <PageHeader kicker="Scheduling" title="Appointment management" text="Create, reschedule and cancel visits. Every change is validated and stored by the clinic server." aside={<div className="row-actions"><Button variant="ghost" onClick={()=>store.appointmentFlow.refresh()}>Refresh</Button><Button onClick={()=>setNewOpen(true)} icon="plusCalendar">New appointment</Button></div>}/>
@@ -157,13 +166,16 @@ export function AppointmentsPage({ role, store, setPage, context }) {
         {key:'patient',label:'Patient',render:a=>a.patientName||patientName(a.patientId,state.patients)},
         {key:'service',label:'Service'},{key:'dentist',label:'Dentist',render:a=>a.dentistName||dentistName(a.dentistId,state.dentists)},
         {key:'status',label:'Status',render:a=><Status>{a.status}</Status>},
-        {key:'actions',label:'Actions',render:a=><div className="row-actions">{['Confirmed','Pending'].includes(a.status)&&<><Button size="sm" variant="soft" onClick={()=>setReschedule(a)}>Reschedule</Button><Button size="sm" variant="ghost" onClick={()=>setCancelling(a)}>Cancel</Button></>}</div>}
+        {key:'actions',label:'Actions',render:a=><div className="row-actions">{['Confirmed','Pending'].includes(a.status)&&<><Button size="sm" variant="soft" onClick={()=>setReschedule(a)}>Reschedule</Button><Button size="sm" variant="ghost" onClick={()=>setCancelling(a)}>Cancel</Button>{a.date===clinicDate()&&<Button size="sm" variant="ghost" onClick={()=>setMissed(a)}>No-show</Button>}</>}</div>}
       ]}/>
     </Card>
     <Modal open={newOpen} title="Create appointment" subtitle="The clinic server validates the slot and assigns an eligible Dentist unless you choose one." wide onClose={()=>setNewOpen(false)}><AppointmentForm role={role} store={store} onSaved={()=>setNewOpen(false)}/></Modal>
     <Modal open={!!reschedule} title="Reschedule appointment" subtitle="The new time must pass the same conflict-prevention rules as a new booking." wide onClose={()=>setReschedule(null)}>{reschedule&&<AppointmentForm role={role} store={store} appointment={reschedule} submitLabel="Save new time" onSaved={()=>setReschedule(null)}/>}</Modal>
     <ConfirmDialog open={!!cancelling} title="Cancel this appointment?" confirmLabel="Cancel appointment" cancelLabel="Keep appointment" tone="danger" onConfirm={cancel} onCancel={()=>setCancelling(null)}>
       {cancelling&&<p>{cancelling.appointmentNo} • {dateLabel(cancelling.date)} at {displayTime(cancelling.start)} • {cancelling.patientName}. The reserved time will be released.</p>}
+    </ConfirmDialog>
+    <ConfirmDialog open={!!missed} title="Mark as No-show?" confirmLabel="Mark No-show" cancelLabel="Keep appointment" tone="danger" onConfirm={markNoShow} onCancel={()=>setMissed(null)}>
+      {missed&&<p>{missed.appointmentNo} • today at {displayTime(missed.start)} • {missed.patientName}. Use this only when the patient did not arrive; no visit is created. A patient who has already checked in can’t be marked No-show.</p>}
     </ConfirmDialog>
   </>
 }

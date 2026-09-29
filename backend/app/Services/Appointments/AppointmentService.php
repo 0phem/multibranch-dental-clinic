@@ -15,15 +15,16 @@ use App\Models\User;
 use App\Services\Scheduling\SchedulingService;
 use App\Services\Scheduling\SlotRequest;
 use App\Support\ClinicClock;
+use App\Support\IdempotentCommand;
 use Closure;
 use Illuminate\Database\QueryException;
-use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Support\Facades\DB;
 
-// M6 named commands: create, reschedule, cancel (src/workflow.js saveAppointment / cancelAppointment). Each runs in
-// one transaction, revalidates through SchedulingService, appends history, and is optionally idempotent. The
-// PostgreSQL exclusion constraints are the final guard against concurrent overlapping bookings (SQLSTATE 23P01).
+// M6 named commands: create, reschedule, cancel and the pre-arrival No-show. Each runs in one transaction,
+// revalidates through SchedulingService, appends history, and is optionally idempotent. The PostgreSQL exclusion
+// constraints are the final guard against concurrent overlapping bookings (SQLSTATE 23P01). Arrival (Check-In) and the
+// clinical progression (treatment start/completion) are Visit commands (App\Services\Visits\VisitService), which
+// move the linked appointment in the same transaction — there is no second path for them here.
 final class AppointmentService
 {
     private const RELATIONS = ['patient.person', 'branch', 'service', 'dentist.person'];
@@ -136,7 +137,12 @@ final class AppointmentService
             if ($current->revision !== (int) $input['expected_revision']) {
                 throw AppointmentCommandException::staleRevision();
             }
-            if (! in_array($current->status, ['Pending', 'Confirmed', 'Checked In'], true)) {
+            // Once the Patient has arrived there is a Visit, and leaving or cancelling after Check-In needs a future
+            // Visit/Queue clinic-policy decision (no Visit Cancelled state exists yet), so it is refused here.
+            if ($current->status === 'Checked In' || $current->visit()->exists()) {
+                throw AppointmentCommandException::rule('appointment_admitted', 'This patient has already checked in. Cancelling after Check-In isn’t available yet — the clinic needs to decide how an admitted visit is closed.', 'status');
+            }
+            if (! in_array($current->status, ['Pending', 'Confirmed'], true)) {
                 throw AppointmentCommandException::rule('appointment_not_cancellable', 'This appointment can no longer be cancelled.', 'status');
             }
             $now = ClinicClock::now();
@@ -158,10 +164,10 @@ final class AppointmentService
     }
 
     /**
-     * Named lifecycle transitions from the frozen appointment state table (CONTRACTS.md): Check-In, No-show, treatment
-     * start and completion. M6 keeps the appointment's lifecycle truth; the M8/M9/M5 workflows that decide when these
-     * happen stay separate and invoke these commands. A repeat of an already-applied transition returns the current
-     * record unchanged (safe retry); anything else needs the expected revision and an allowed source status.
+     * Appointment-only lifecycle transitions (CONTRACTS.md): today only the pre-arrival No-show — the scheduled Patient
+     * did not arrive, so no Visit exists or is created. It is a manual same-day Staff decision; no lateness threshold
+     * is applied (unresolved policy P4). A repeat of an already-applied transition returns the current record unchanged
+     * (safe retry); anything else needs the expected revision and an allowed source status.
      */
     public function transition(User $actor, Appointment $appointment, string $command, array $input, ?string $key): JsonResponse
     {
@@ -179,10 +185,11 @@ final class AppointmentService
             if (! in_array($current->status, $from, true)) {
                 throw AppointmentCommandException::rule('invalid_transition', "An appointment that is {$current->status} cannot move to {$to}.", 'status');
             }
-            // Existing approved Check-In rule (src/workflow.js checkInAppointment): only today's appointments. The
-            // earliest-arrival and late-arrival windows remain unresolved clinic policies and are not invented here.
-            if ($command === 'check-in' && ClinicClock::local($current->starts_at)->toDateString() !== ClinicClock::today()) {
-                throw AppointmentCommandException::rule('not_today', 'Only today’s appointments can be checked in.', 'status');
+            if ($current->visit()->exists()) {
+                throw AppointmentCommandException::rule('appointment_admitted', 'This patient has already checked in, so the appointment can’t be marked No-show.', 'status');
+            }
+            if (ClinicClock::local($current->starts_at)->toDateString() !== ClinicClock::today()) {
+                throw AppointmentCommandException::rule('not_today', 'Only today’s appointments can be marked No-show.', 'status');
             }
 
             $previous = $current->status;
@@ -199,10 +206,7 @@ final class AppointmentService
 
     /** command => [allowed source statuses, target status, history event] */
     public const TRANSITIONS = [
-        'check-in' => [['Pending', 'Confirmed'], 'Checked In', 'appointment.checked_in'],
-        'no-show' => [['Checked In'], 'No-show', 'appointment.no_show'],
-        'start-treatment' => [['Checked In'], 'In Treatment', 'appointment.treatment_started'],
-        'complete' => [['In Treatment'], 'Completed', 'appointment.completed'],
+        'no-show' => [['Pending', 'Confirmed'], 'No-show', 'appointment.no_show'],
     ];
 
     /** Up to five valid start times on the requested date (src/logic.js alternatives). */
@@ -216,7 +220,8 @@ final class AppointmentService
         return array_map(fn (array $slot) => $slot['start_time'], $this->scheduling->slotsOn($request, $request->date, $pool, null, null, 5));
     }
 
-    private function record(Appointment $appointment, User $actor, string $event, ?string $from): void
+    /** Appends appointment history; also used by VisitService when a Visit command moves the linked appointment. */
+    public function record(Appointment $appointment, User $actor, string $event, ?string $from): void
     {
         AppointmentHistory::create([
             'appointment_id' => $appointment->id,
@@ -235,57 +240,26 @@ final class AppointmentService
         ]);
     }
 
-    /**
-     * Runs a command once per (account, Idempotency-Key). A replay with the same request returns the stored original
-     * response; the same key with a different request is refused (422 idempotency_key_reused). Failed commands store
-     * nothing, so they can be retried with the same key.
-     */
+    /** One command per (account, Idempotency-Key) — the shared mechanism in App\Support\IdempotentCommand. */
     private function idempotent(User $actor, ?string $key, string $command, array $payload, Closure $work): JsonResponse
     {
-        ksort($payload);
-        $hash = hash('sha256', json_encode([$command, $payload]));
-        if ($key !== null && ($replay = $this->replay($actor, $key, $hash))) {
-            return $replay;
-        }
-
-        try {
-            [$body, $status] = DB::transaction(function () use ($actor, $key, $command, $hash, $work) {
-                $record = $key === null ? null : AppointmentCommandKey::create([
-                    'user_id' => $actor->id, 'idempotency_key' => $key, 'command' => $command, 'request_hash' => $hash, 'created_at' => now(),
-                ]);
+        return IdempotentCommand::run(
+            AppointmentCommandKey::class, $actor, $key, $command, $payload,
+            function () use ($work) {
                 [$appointment, $status] = $work();
                 $body = (new AppointmentResource($appointment->fresh(self::RELATIONS)))->response()->getData(true);
-                $record?->update(['appointment_id' => $appointment->id, 'response_status' => $status, 'response_body' => $body]);
 
-                return [$body, $status];
-            }, self::ATTEMPTS);
-        } catch (UniqueConstraintViolationException $e) {
-            if ($key !== null && ($replay = $this->replay($actor, $key, $hash))) {
-                return $replay;
-            }
-            throw $e;
-        } catch (QueryException $e) {
-            // 23P01 exclusion violation: another request took the time first. 40P01/40001: two competing inserts
-            // deadlocked on each other's exclusion check and retries were exhausted — also a lost race.
-            if (in_array($e->getCode(), ['23P01', '40P01', '40001'], true)) {
-                throw AppointmentCommandException::conflict();
-            }
-            throw $e;
-        }
-
-        return response()->json($body, $status);
-    }
-
-    private function replay(User $actor, string $key, string $hash): ?JsonResponse
-    {
-        $existing = AppointmentCommandKey::where('user_id', $actor->id)->where('idempotency_key', $key)->first();
-        if (! $existing) {
-            return null;
-        }
-        if (! hash_equals($existing->request_hash, $hash)) {
-            throw AppointmentCommandException::rule('idempotency_key_reused', 'This Idempotency-Key was already used for a different request.', 'idempotency_key');
-        }
-
-        return response()->json($existing->response_body, $existing->response_status)->header('Idempotent-Replayed', 'true');
+                return [$body, $status, ['appointment_id' => $appointment->id]];
+            },
+            fn () => AppointmentCommandException::rule('idempotency_key_reused', 'This Idempotency-Key was already used for a different request.', 'idempotency_key'),
+            function (QueryException $e) {
+                // 23P01 exclusion violation: another request took the time first. 40P01/40001: two competing inserts
+                // deadlocked on each other's exclusion check and retries were exhausted — also a lost race.
+                if (in_array($e->getCode(), ['23P01', '40P01', '40001'], true)) {
+                    throw AppointmentCommandException::conflict();
+                }
+            },
+            self::ATTEMPTS,
+        );
     }
 }

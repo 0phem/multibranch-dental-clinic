@@ -75,6 +75,11 @@ const describeFailure = result => {
     const reasons = result.errors?.schedule || []
     return reasons.length ? `This time can’t be booked. Checks not met: ${reasons.join('; ')}.` : result.message
   }
+  if (result.kind === 'conflict' && result.code === 'visit_exists') return 'This appointment is already checked in. The list has been refreshed.'
+  if (result.kind === 'validation' && result.code === 'walk_in_invalid') {
+    const reasons = result.errors?.walk_in || []
+    return reasons.length ? `This walk-in can’t be admitted. Checks not met: ${reasons.join('; ')}.` : result.message
+  }
   if (result.kind === 'unauthenticated') return 'Your session has ended. Sign in again.'
   if (result.kind === 'forbidden') return 'This is outside your access.'
   if (result.kind === 'validation') return Object.values(result.errors || {})[0]?.[0] || result.message
@@ -165,7 +170,7 @@ export async function cancelAppointment(appointment, key) {
   return commandResult(await api.cancelAppointmentRemote(appointment.id, { expected_revision: appointment.revision }, key))
 }
 
-/** Lifecycle transitions: 'check-in' | 'no-show' | 'start-treatment' | 'complete'. */
+/** The appointment-only lifecycle command: 'no-show' (the scheduled Patient did not arrive; no Visit exists). */
 export async function transitionAppointment(appointment, name, key) {
   return commandResult(await api.transitionAppointment(appointment.id, name, { expected_revision: appointment.revision }, key))
 }

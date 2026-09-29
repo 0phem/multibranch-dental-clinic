@@ -83,8 +83,10 @@ One first-class **Visit** is the operational bridge between arrival and clinical
 - Relationships are stored as IDs; never infer a Visit from display text or from Patient + Dentist + day.
 - This resolves the direction of retained conflict **C2** (optional appointment, required encounter evidence). The
   ERD diagram and data dictionary are updated only with explicit approval when M8/M5 are implemented.
-- **Current:** the prototype represents the encounter through the check-in and queue records (walk-ins have
-  `appointmentId: null`); there is no Visit entity yet.
+- **Current:** implemented (M8). `visits` (PostgreSQL) is the arrival record and encounter anchor; scheduled Check-In
+  moves the appointment to Checked In and opens the Visit in one transaction; walk-ins open a Visit with no appointment.
+  C2 is resolved in this direction (approved D10; data dictionary updated). The M9 queue and M5 treatment records are
+  still browser-local and reference the Visit by `visitId`; their backends will reference `visits.id`.
 
 ## 4. Dentist professional data (M3 → M19)
 
@@ -261,38 +263,46 @@ them unless a row says otherwise. Anything unapproved is marked TBD.
 | --- | --- | --- |
 | (new) | Confirmed | Validated booking (Patient, Staff, Owner) |
 | Pending / Confirmed | Confirmed (rescheduled) | Unadmitted; Patient changes date/time only |
-| Pending / Confirmed | Checked In | Check-In recorded (M8) |
-| Pending / Confirmed / Checked In | Cancelled | Before clinical documentation exists |
-| Checked In | No-show | Staff queue No-show, only if no clinical documentation |
-| Checked In | In Treatment | Linked treatment started by the Dentist |
-| In Treatment | Completed | Linked treatment completed |
+| Pending / Confirmed | Checked In | Only through the M8 Visit Check-In command, atomically with opening the Visit (today, Asia/Manila) |
+| Pending / Confirmed | Cancelled | Before arrival. Once a Visit exists, cancellation is refused until a Visit/Queue clinic policy exists |
+| Pending / Confirmed | No-show | Staff/Owner, same clinic day, the Patient did not arrive (no Visit). Manual; no lateness threshold (P4) |
+| Checked In | In Treatment | Only through the linked Visit's start-treatment command (same transaction) |
+| In Treatment | Completed | Only through the linked Visit's complete command (same transaction) |
 | Completed / Cancelled / No-show | — | Terminal |
 
 Patient cancellation/reschedule cutoffs remain unresolved policies P1/P2.
 
-### Visit / Clinical Encounter (M8)
-Existing check-in record states are **Checked In**, **Cancelled** and **No-show**; completion follows the linked
-treatment. The full Visit state machine is **TBD BEFORE MODULE IMPLEMENTATION** (earliest check-in and late-arrival
-rules remain unresolved policies P3/P4).
+### Visit / Clinical Encounter (M8; shared infrastructure)
+| From | To | By / condition |
+| --- | --- | --- |
+| (new) | Checked In | M8: scheduled Check-In (Staff in scope / Owner; today; opens with the appointment's Checked In) or Walk-In (no appointment) |
+| Checked In | In Treatment | The responsible Dentist (must be set); cascades to a linked appointment |
+| In Treatment | Completed | The responsible Dentist; cascades to a linked appointment; sets `closed_at` |
+| Completed | — | Terminal |
+
+A Visit has no No-show state (No-show means the Patient never arrived — an appointment decision before Check-In).
+Leaving early, abandonment and cancellation after Check-In are **TBD BEFORE IMPLEMENTATION** (a future M9/clinic-policy
+decision); earliest check-in and late-arrival rules remain unresolved policies P3/P4 (the current rule is "today").
 
 ### Queue entry (M9)
 | From | To | By / condition |
 | --- | --- | --- |
-| Waiting | Called, Temporarily Away, No-show | Staff (Dentist may Call) |
-| Called | Treatment Ready, Temporarily Away, No-show | Staff |
-| Treatment Ready | Temporarily Away, No-show | Staff |
-| Temporarily Away | Waiting (return, arrival time kept), No-show | Staff |
+| Waiting | Called, Temporarily Away | Staff (Dentist may Call) |
+| Called | Treatment Ready, Temporarily Away | Staff |
+| Treatment Ready | Temporarily Away | Staff |
+| Temporarily Away | Waiting (return, arrival time kept) | Staff |
 | Called / Treatment Ready | In Treatment | Only by the linked treatment starting |
 | In Treatment | Completed | Only by the linked treatment completing |
 | active | Cancelled | Appointment cancelled before clinical documentation |
 
-Priority (Normal / Priority / Urgent) changes require an authorized reason and never change the state. No-show is
-refused once clinical documentation exists. Completed, Cancelled and No-show are terminal.
+Priority (Normal / Priority / Urgent) changes require an authorized reason and never change the state. Every queue
+entry is the handoff of one checked-in Visit, so it is never marked No-show (since M8); leaving after Check-In awaits
+the Visit/Queue policy above. Completed is terminal (Cancelled/No-show remain only on historical prototype records).
 
 ### Treatment (M5)
 | From | To | By / condition |
 | --- | --- | --- |
-| (new) | In Treatment | Dentist, from an exact Called / Treatment Ready queue encounter |
+| (new) | In Treatment | Dentist, from an exact Called / Treatment Ready queue encounter, after the Visit's start-treatment command |
 | In Treatment | In Treatment (draft saved) | Dentist, with revision check |
 | In Treatment | Completed | Dentist; triggers invoice draft and only the requested prescription/follow-up |
 | Completed | — | Terminal; amendments are unresolved policy P6 |

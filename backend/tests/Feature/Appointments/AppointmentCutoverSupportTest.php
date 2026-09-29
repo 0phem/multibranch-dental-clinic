@@ -4,13 +4,15 @@ namespace Tests\Feature\Appointments;
 
 use App\Models\Appointment;
 use App\Models\AppointmentHistory;
+use App\Models\Visit;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 // Backend additions for the M6 React cutover: bounded list ranges, the server-owned appointment_code, the minimal
-// Patient directory and the named lifecycle transitions (check-in, no-show, start-treatment, complete).
+// Patient directory and the appointment-only lifecycle command (the pre-arrival No-show). Check-In and the clinical
+// progression moved to Visit commands in M8 (tests/Feature/Visits).
 class AppointmentCutoverSupportTest extends TestCase
 {
     use RefreshDatabase, SchedulingFixture;
@@ -143,89 +145,75 @@ class AppointmentCutoverSupportTest extends TestCase
         $this->getJson('/api/appointments/availability?branch_ref=b1&service_ref=svc1&date=2026-10-02&dentist_ref=d1')->assertStatus(422)->assertJsonValidationErrors('dentist_ref');
     }
 
-    // ---- LIFECYCLE -------------------------------------------------------------------------------------------
+    // ---- APPOINTMENT LIFECYCLE (after M8) ---------------------------------------------------------------------
 
-    public function test_check_in_start_and_complete_follow_the_state_table_with_history(): void
+    public function test_retired_appointment_commands_no_longer_exist(): void
     {
         $a = $this->existing('A', 'd1', 'b1', 'svc1', '2026-09-28', '11:00');
-
-        $this->actingAsUser('staffB1');
-        $this->command($a, 'check-in')->assertOk()->assertJsonPath('data.status', 'Checked In')->assertJsonPath('data.revision', 2);
-
-        $this->actingAsUser('dentist1');
-        $this->command($a, 'start-treatment')->assertOk()->assertJsonPath('data.status', 'In Treatment');
-        $this->command($a, 'complete')->assertOk()->assertJsonPath('data.status', 'Completed')->assertJsonPath('data.revision', 4);
-
-        $this->assertSame(['appointment.checked_in', 'appointment.treatment_started', 'appointment.completed'],
-            AppointmentHistory::where('appointment_id', $a->id)->orderBy('id')->pluck('event')->all());
-        // Completed frees the slot for others (terminal statuses never occupy time).
-        $this->assertSame('Completed', $a->fresh()->status);
+        foreach (['staffB1', 'dentist1', 'owner'] as $who) {
+            $this->actingAsUser($who);
+            foreach (['check-in', 'start-treatment', 'complete', 'set-status'] as $retired) {
+                $this->command($a, $retired)->assertNotFound();
+            }
+        }
+        $this->assertSame('Confirmed', $a->fresh()->status);
+        $this->assertSame(0, AppointmentHistory::where('appointment_id', $a->id)->count());
     }
 
-    public function test_no_show_only_from_checked_in(): void
+    public function test_no_show_is_a_pre_arrival_same_day_decision_and_creates_no_visit(): void
     {
         $a = $this->existing('A', 'd1', 'b1', 'svc1', '2026-09-28', '11:00');
         $this->actingAsUser('staffB1');
+        $this->command($a, 'no-show')->assertOk()->assertJsonPath('data.status', 'No-show')->assertJsonPath('data.revision', 2);
+        $this->assertSame(['appointment.no_show'], AppointmentHistory::where('appointment_id', $a->id)->pluck('event')->all());
+        $this->assertSame(0, Visit::count());
+        // Terminal: it cannot be checked in afterwards.
+        $this->postJson('/api/visits/check-in', ['appointment_id' => $a->public_id, 'expected_revision' => 2], ['Idempotency-Key' => 'late'])
+            ->assertStatus(422)->assertJsonPath('code', 'invalid_transition');
+
+        $future = $this->existing('B', 'd1', 'b1', 'svc1', '2026-09-29', '11:00');
+        $this->command($future, 'no-show')->assertStatus(422)->assertJsonPath('code', 'not_today');
+    }
+
+    public function test_no_show_and_cancel_are_refused_once_a_visit_exists(): void
+    {
+        $a = $this->existing('A', 'd1', 'b1', 'svc1', '2026-09-28', '11:00');
+        $this->actingAsUser('staffB1');
+        $this->postJson('/api/visits/check-in', ['appointment_id' => $a->public_id, 'expected_revision' => 1], ['Idempotency-Key' => 'arrive'])->assertCreated();
+
         $this->command($a, 'no-show')->assertStatus(422)->assertJsonPath('code', 'invalid_transition');
-        $this->command($a, 'check-in')->assertOk();
-        $this->command($a, 'no-show')->assertOk()->assertJsonPath('data.status', 'No-show');
-        $this->command($a, 'check-in', 3)->assertStatus(422)->assertJsonPath('code', 'invalid_transition');
+        $this->postJson("/api/appointments/{$a->public_id}/cancel", ['expected_revision' => 2])->assertStatus(422)->assertJsonPath('code', 'appointment_admitted');
+        $this->assertSame('Checked In', $a->fresh()->status);
+        $this->assertSame('Checked In', Visit::sole()->status);
     }
 
-    public function test_invalid_transitions_and_stale_revisions_are_rejected(): void
-    {
-        $a = $this->existing('A', 'd1', 'b1', 'svc1', '2026-09-28', '11:00');
-        $this->actingAsUser('dentist1');
-        $this->command($a, 'complete')->assertStatus(422)->assertJsonPath('code', 'invalid_transition');
-        $this->command($a, 'start-treatment')->assertStatus(422)->assertJsonPath('code', 'invalid_transition');
-
-        $this->actingAsUser('staffB1');
-        $this->command($a, 'check-in', 7)->assertStatus(409)->assertJsonPath('code', 'stale_revision');
-        $this->command($a, 'check-in')->assertOk();
-        // Once admitted the appointment can no longer be rescheduled (admitted-appointment protection).
-        $this->postJson("/api/appointments/{$a->public_id}/reschedule", ['expected_revision' => 2, 'date' => '2026-09-29', 'start_time' => '10:00'])
-            ->assertStatus(422)->assertJsonPath('code', 'appointment_not_reschedulable');
-        $this->postJson("/api/appointments/{$a->public_id}/set-status", ['expected_revision' => 2])->assertNotFound();
-    }
-
-    public function test_repeating_an_applied_transition_is_a_safe_no_op_and_keys_replay(): void
+    public function test_stale_no_show_is_rejected_and_replays_are_safe(): void
     {
         $a = $this->existing('A', 'd1', 'b1', 'svc1', '2026-09-28', '11:00');
         $this->actingAsUser('staffB1');
-        $headers = ['Idempotency-Key' => 'checkin-1'];
-        $this->withHeaders($headers)->postJson("/api/appointments/{$a->public_id}/check-in", ['expected_revision' => 1])->assertOk();
-        $this->withHeaders($headers)->postJson("/api/appointments/{$a->public_id}/check-in", ['expected_revision' => 1])->assertOk()
+        $this->command($a, 'no-show', 7)->assertStatus(409)->assertJsonPath('code', 'stale_revision');
+        $headers = ['Idempotency-Key' => 'noshow-1'];
+        $this->postJson("/api/appointments/{$a->public_id}/no-show", ['expected_revision' => 1], $headers)->assertOk();
+        $this->postJson("/api/appointments/{$a->public_id}/no-show", ['expected_revision' => 1], $headers)->assertOk()
             ->assertHeader('Idempotent-Replayed', 'true')->assertJsonPath('data.revision', 2);
         // A plain retry after success returns the current record unchanged.
-        $this->command($a, 'check-in', 1)->assertOk()->assertJsonPath('data.revision', 2);
+        $this->command($a, 'no-show', 1)->assertOk()->assertJsonPath('data.revision', 2);
         $this->assertSame(1, AppointmentHistory::where('appointment_id', $a->id)->count());
     }
 
-    public function test_check_in_is_limited_to_todays_appointments(): void
-    {
-        $a = $this->existing('A', 'd1', 'b1', 'svc1', '2026-09-29', '11:00');
-        $this->actingAsUser('staffB1');
-        $this->command($a, 'check-in')->assertStatus(422)->assertJsonPath('code', 'not_today');
-    }
-
-    public function test_transition_authorization(): void
+    public function test_no_show_authorization(): void
     {
         $a = $this->existing('A', 'd1', 'b1', 'svc1', '2026-09-28', '11:00');
         $b = $this->existing('B', 'd3', 'b2', 'svc1', '2026-09-28', '11:00');
 
-        $this->postJson("/api/appointments/{$a->public_id}/check-in", ['expected_revision' => 1])->assertUnauthorized();
-
+        $this->postJson("/api/appointments/{$a->public_id}/no-show", ['expected_revision' => 1])->assertUnauthorized();
         $this->actingAsUser('patientA');
-        $this->command($a, 'check-in')->assertForbidden();
-        $this->actingAsUser('staffB1');
-        $this->command($b, 'check-in')->assertForbidden();           // out of scope
-        $this->command($a, 'start-treatment')->assertForbidden();    // clinical transitions are Dentist-only
+        $this->command($a, 'no-show')->assertForbidden();
         $this->actingAsUser('dentist1');
-        $this->command($a, 'check-in')->assertForbidden();           // arrival is a front-desk action
-        $this->command($b, 'start-treatment')->assertForbidden();    // not this Dentist's appointment
-
+        $this->command($a, 'no-show')->assertForbidden();          // a front-desk decision
+        $this->actingAsUser('staffB1');
+        $this->command($b, 'no-show')->assertForbidden();          // out of scope
         $this->actingAsUser('owner');
-        $this->command($b, 'check-in')->assertOk();                  // documented Owner administrative exception
-        $this->command($b, 'start-treatment')->assertForbidden();
+        $this->command($b, 'no-show')->assertOk();                 // documented Owner administrative exception
     }
 }

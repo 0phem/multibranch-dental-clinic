@@ -1,6 +1,5 @@
-import { validTime, isRecord } from './safeguards.js'
 import { SERVICES } from './data.js'
-import { clinicNow, clinicDate, validDate } from './clock.js'
+import { clinicNow, clinicDate } from './clock.js'
 import { TERMINAL, isTodayQueue, isWaitingQueue } from './contracts.js'
 
 export const uid = (prefix='id') => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2,7)}`
@@ -55,67 +54,6 @@ export function statusTone(value='') {
   if (['cancel','failed','missing','rejected','overload','no-show','inactive','unavailable','conflict','escalat'].some(x=>s.includes(x))) return 'danger'
   if (['complete','closed','responded','returned'].some(x=>s.includes(x))) return 'info'
   return 'neutral'
-}
-
-export function overlap(startA, durationA, startB, durationB) {
-  const a1=toMinutes(startA), a2=a1+Number(durationA||0)
-  const b1=toMinutes(startB), b2=b1+Number(durationB||0)
-  return a1 < b2 && b1 < a2
-}
-
-export function validateAppointment(form, state, ignoreId=null, now=clinicNow(), suggest=true, maxDate=null) {
-  form=isRecord(form)?form:{}
-  const branch=state.branches.find(b=>form.branchId?b.id===form.branchId:b.name===form.branch)
-  const dentist=state.dentists.find(d=>d.id===form.dentistId)
-  const service=state.services.find(s=>s.id===form.serviceId)
-  const patient=state.patients.find(p=>p.id===form.patientId)
-  const assignment=state.branchServices.find(bs=>bs.branchId===branch?.id&&bs.serviceId===service?.id&&bs.active!==false)
-  const duration=Number(assignment?.durationOverride??service?.duration)
-  const start=toMinutes(form.start), end=start+duration
-  const checks=[]
-  const check=(key,label,ok,detail=label)=>checks.push({key,label,ok:!!ok,detail})
-  check('patient','Patient exists',patient)
-  check('branch-status','Branch is open',branch&&branch.status==='Open')
-  check('service-exists','Service is active',service&&service.status==='Active')
-  check('service','Service available at branch',assignment)
-  check('dentist','Dentist exists',dentist)
-  check('dentist-branch','Dentist assigned to branch',dentist?.branchIds?.includes(branch?.id) || (!dentist?.branchIds&&dentist?.branches?.includes(branch?.name)))
-  check('dentist-service','Dentist can perform selected service',state.dentistServiceAssignments.some(a=>a.dentistId===dentist?.id&&a.serviceId===service?.id&&a.isAuthorized!==false))
-  const account=state.users?.find(u=>u.id===dentist?.userId)
-  check('dentist-active','Dentist currently available',dentist?.available&&account&&(account.accountStatus||account.status)==='Active')
-  check('date','Date is not in the past',validDate(form.date)&&form.date>=now.date)
-  // Patient-only booking horizon (threaded in by saveAppointment); null for every other caller (Staff
-  // booking, existing tests) so this check is a no-op unless a caller explicitly opts in.
-  if(maxDate)check('date-horizon',`Date is within the booking horizon (through ${maxDate})`,validDate(form.date)&&form.date<=maxDate)
-  check('time','Valid future start time',validTime(form.start)&&(form.date!==now.date||form.start>now.time))
-  check('duration','Valid service duration',Number.isFinite(duration)&&duration>0)
-  check('branch-hours','Within branch operating hours',branch&&validTime(branch.open)&&validTime(branch.close)&&start>=toMinutes(branch.open)&&end<=toMinutes(branch.close))
-  check('dentist-shift','Within dentist shift',dentist&&validTime(dentist.shiftStart)&&validTime(dentist.shiftEnd)&&start>=toMinutes(dentist.shiftStart)&&end<=toMinutes(dentist.shiftEnd))
-  const overlaps=state.appointments.filter(a=>a.id!==ignoreId&&!TERMINAL.includes(a.status)&&a.date===form.date&&overlap(form.start,duration,a.start,a.duration))
-  const conflict=overlaps.find(a=>a.dentistId===form.dentistId)
-  check('overlap','No overlapping dentist appointment',!conflict)
-  check('patient-overlap','No overlapping patient appointment',!overlaps.some(a=>a.patientId===form.patientId))
-  const valid=checks.every(c=>c.ok)
-  const alternatives=[]
-  if(suggest&&!valid&&branch&&dentist&&duration>0){
-    for(let minute=Math.max(toMinutes(branch.open),toMinutes(dentist.shiftStart));minute+duration<=Math.min(toMinutes(branch.close),toMinutes(dentist.shiftEnd));minute+=30){
-      const time=addMinutes('00:00',minute)
-      if(validateAppointment({...form,start:time},state,ignoreId,now,false).valid) alternatives.push(time)
-      if(alternatives.length===5)break
-    }
-  }
-  return {valid,checks,alternatives,duration,conflict,service,branch}
-}
-
-export function availableSlots(form,state,ignoreId=null,now=clinicNow()) {
-  const branch=state.branches.find(b=>b.id===form.branchId)
-  if(!branch)return []
-  const slots=[]
-  for(let minute=toMinutes(branch.open);minute<toMinutes(branch.close);minute+=30){
-    const start=addMinutes('00:00',minute)
-    if(validateAppointment({...form,start},state,ignoreId,now,false).valid)slots.push(start)
-  }
-  return slots
 }
 
 export function recalcQueue(queue) {

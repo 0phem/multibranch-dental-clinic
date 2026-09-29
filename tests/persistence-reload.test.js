@@ -4,10 +4,10 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import * as data from '../src/data.js'
 import { readCollection, writeCollection } from '../src/persistence.js'
-import { clinicNow, setClockSource } from '../src/clock.js'
+import { setClockSource } from '../src/clock.js'
 import { normalizeClinicState, sessionForRole } from '../src/contracts.js'
 import { createWorkflowActions } from '../src/workflow.js'
-import { validateAppointment } from '../src/logic.js'
+import { dentistsFor, servicesAt } from '../src/scheduling.js'
 
 beforeEach(()=>setClockSource(()=>new Date('2026-09-19T02:08:00Z')))
 
@@ -55,16 +55,17 @@ test('store persistence inventory is fully discovered',()=>{
   // backend-authoritative and deliberately no longer usePersist-backed (no localStorage for this slice,
   // refetched fresh every session — see the Phase 2A plan, section J, and src/store.jsx's own comment
   // above its reference-data useState declarations). 26 collections minus those 6 leaves 20; the M6 cutover then removed
-  // `appointments` (server-authoritative, held in memory only), leaving 19.
-  assert.equal(keys.length,19)
+  // `appointments` and the M8 cutover `check-ins` (both server-authoritative, held in memory only), leaving 18.
+  assert.equal(keys.length,18)
   assert.ok(!keys.includes('appointments'),'appointments are never persisted in the browser')
+  assert.ok(!keys.includes('check-ins'),'arrival records are server Visits, never persisted in the browser')
+  assert.ok(!keys.includes('visits'),'Visits are never persisted in the browser')
   assert.ok(!keys.includes('dentist-service-assignments'))
   assert.ok(!keys.includes('branches'))
   assert.ok(!keys.includes('services'))
   assert.ok(!keys.includes('branch-services'))
   assert.ok(!keys.includes('dentists'))
   assert.ok(!keys.includes('staff'))
-  assert.ok(keys.includes('check-ins'))
   assert.ok(keys.includes('booking-drafts'))
 })
 
@@ -152,7 +153,8 @@ test('scheduler capability filtering is unchanged after a legacy-storage reload'
     branches:data.INITIAL_BRANCHES,dentists:data.INITIAL_DENTISTS,staff:data.INITIAL_STAFF,patients:data.INITIAL_PATIENTS,users:data.INITIAL_USERS,
     appointments:[],queue:[],checkIns:[],treatments:[],invoices:[],prescriptions:[],followups:[],hmo:[],conversations:[],inquiries:[],notifications:[],workflowLog:[],audit:[],
   })
-  const capable=(dentistId,branchId,serviceId)=>validateAppointment({patientId:'p1',branchId,dentistId,serviceId,date:'2026-09-19',start:'11:00'},state,null,clinicNow(),false).checks.find(c=>c.key==='dentist-service').ok
+  // The Dentist × Service capability rule (M3 data; the server enforces it for bookings and walk-ins).
+  const capable=(dentistId,branchId,serviceId)=>state.dentistServiceAssignments.some(a=>a.dentistId===dentistId&&a.serviceId===serviceId&&a.isAuthorized!==false)
   for(const [d,s] of SEED_PAIRS)assert.equal(capable(d,'b1',s),true,`${d}/${s}`)
   assert.equal(capable('d2','b1','svc2'),false)
   assert.equal(capable('d1','b1','svc6'),false)
@@ -314,7 +316,7 @@ function workspace(assignments) {
 }
 // The capability check is Dentist × Service; branch availability is a separate check (covered above).
 const capabilityMatrix=state=>data.INITIAL_DENTISTS.flatMap(d=>data.INITIAL_SERVICES.filter(s=>
-  validateAppointment({patientId:'p1',branchId:'b1',dentistId:d.id,serviceId:s.id,date:'2026-09-19',start:'11:00'},state,null,clinicNow(),false).checks.find(c=>c.key==='dentist-service').ok
+  state.dentistServiceAssignments.some(a=>a.dentistId===d.id&&a.serviceId===s.id&&a.isAuthorized!==false)
 ).map(s=>`${d.id}/${s.id}`)).sort()
 
 test('a structurally valid assignment for a nonexistent Dentist and Service loads without recovery and is preserved, not dropped',()=>{
@@ -337,23 +339,26 @@ test('dangling assignments reach canonical state unchanged and grant no Dentist 
   assert.deepEqual(capabilityMatrix(withOrphans.state),SEED_PAIRS.map(p=>p.join('/')).sort())
 })
 
-test('the exact nonexistent Dentist/Service pair fails the shared scheduler on existence, not just capability',()=>{
+test('the exact nonexistent Dentist/Service pair is never offered as a scheduling choice',()=>{
+  // Scheduling authority is the M6 server; the browser only filters choices from reference data, and a dangling
+  // assignment never makes a nonexistent Dentist or Service selectable.
   const {state}=workspace([...seed(),ORPHAN])
-  const check=validateAppointment({patientId:'p1',branchId:'b1',dentistId:ORPHAN.dentistId,serviceId:ORPHAN.serviceId,date:'2026-09-19',start:'11:00'},state,null,clinicNow(),false)
-  const failed=check.checks.filter(c=>!c.ok).map(c=>c.key)
-  assert.equal(check.valid,false)
-  for(const key of ['service-exists','service','dentist','dentist-service'])assert.ok(failed.includes(key),key)
+  assert.equal(state.dentists.some(d=>d.id===ORPHAN.dentistId),false)
+  assert.equal(servicesAt(state,'b1').some(s=>s.id===ORPHAN.serviceId),false)
+  assert.equal(dentistsFor(state,'b1',ORPHAN.serviceId).length,0)
+  assert.equal(state.branches.flatMap(b=>data.INITIAL_SERVICES.flatMap(s=>dentistsFor(state,b.id,s.id))).some(d=>d.id===ORPHAN.dentistId),false)
 })
 
-test('walk-in admission rejects every dangling assignment and creates no encounter',()=>{
-  // Appointment booking is server-authoritative (M6); the browser-local walk-in admission (M8 prototype) still uses the
-  // shared validator, so it is the remaining local path that must refuse a dangling assignment.
+test('a dangling assignment never offers a walk-in Dentist, and the queue handoff refuses an unknown Dentist',()=>{
+  // Walk-in eligibility (branch, service, Dentist) is enforced by the M8 server (VisitService). The browser only filters
+  // the choices it offers and hands a server Visit to the local queue, which refuses a Dentist it does not know.
   const f=workspace([...seed(),...ORPHANS])
-  const form={patientId:'p1',branchId:'b1'}
-  for(const [dentistId,serviceId] of [[ORPHAN.dentistId,ORPHAN.serviceId],['nonexistent-dentist','svc1'],['d1','nonexistent-service']])
-    assert.equal(f.actions.admitWalkIn({...form,dentistId,serviceId},`walk-${dentistId}-${serviceId}`).ok,false,`${dentistId}/${serviceId}`)
-  assert.equal(f.state.queue.length,0)
-  assert.equal(f.actions.admitWalkIn({...form,dentistId:'d1',serviceId:'svc1'},'walk-ok').ok,true)
+  assert.equal(data.INITIAL_SERVICES.some(svc=>dentistsFor(f.state,'b1',svc.id).some(d=>d.id===ORPHAN.dentistId)),false)
+  assert.equal(servicesAt(f.state,'b1').some(svc=>svc.id===ORPHAN.serviceId),false)
+  for(const dentistId of [ORPHAN.dentistId,'nonexistent-dentist'])
+    assert.equal(f.actions.admitWalkIn({patientId:'p1',branchId:'b1',dentistId,serviceId:'svc1'},`walk-${dentistId}`).ok,false,dentistId)
+  assert.deepEqual([f.state.queue.length,f.state.visits.length],[0,0])
+  assert.equal(f.actions.admitWalkIn({patientId:'p1',branchId:'b1',dentistId:'d1',serviceId:'svc1'},'walk-ok').ok,true)
 })
 
 test('a dangling assignment cannot authorize a performed procedure for a real encounter',()=>{

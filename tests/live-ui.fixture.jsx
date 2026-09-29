@@ -7,7 +7,7 @@ import { setClockSource } from '../src/clock.js'
 import { createWorkflowActions } from '../src/workflow.js'
 import { normalizeClinicState, sessionForRole } from '../src/contracts.js'
 import * as data from '../src/data.js'
-import { serverFlow, serverFirstActions, serverRow } from './support/server-appointments.js'
+import { serverFlow, serverFirstActions, serverRow, serverVisitRow } from './support/server-appointments.js'
 import '../src/styles.css'
 import '../src/foundation.css'
 import '../src/patient.css'
@@ -24,12 +24,12 @@ function seedPaidJourney() {
     persons:structuredClone(data.INITIAL_PERSONS),patients:structuredClone(data.INITIAL_PATIENTS),users:structuredClone(data.INITIAL_USERS),
     branches:structuredClone(data.INITIAL_BRANCHES),services:structuredClone(data.INITIAL_SERVICES),branchServices:structuredClone(data.INITIAL_BRANCH_SERVICES),
     dentists:structuredClone(data.INITIAL_DENTISTS),staff:structuredClone(data.INITIAL_STAFF),dentistServiceAssignments:structuredClone(data.INITIAL_DENTIST_SERVICE_ASSIGNMENTS),
-    appointments:[],queue:[],checkIns:[],treatments:[],invoices:[],followups:[],prescriptions:[],notifications:[],hmo:[],conversations:[],inquiries:[],workflowLog:[],audit:[],bookingDrafts:[],
+    appointments:[],visits:[],queue:[],treatments:[],invoices:[],followups:[],prescriptions:[],notifications:[],hmo:[],conversations:[],inquiries:[],workflowLog:[],audit:[],bookingDrafts:[],
   })
   let session=sessionForRole('staff',state)
   const raw=createWorkflowActions({getState:()=>state,getSession:()=>session,commit:patch=>{state=normalizeClinicState({...state,...patch})}})
-  // M6 cutover: the appointment is a server row; Check-In/treatment run server-first as in the store.
-  const flow=serverFlow({actions:()=>raw,getState:()=>state,getSession:()=>session,setAppointments:rows=>{state=normalizeClinicState({...state,appointments:rows})}})
+  // M6/M8 cutovers: the appointment and Visit are server rows; Check-In/treatment run server-first as in the store.
+  const flow=serverFlow({actions:()=>raw,getState:()=>state,getSession:()=>session,patchState:patch=>{state=normalizeClinicState({...state,...patch})}})
   const actions=serverFirstActions(raw,flow)
   const ok=result=>{if(!result.ok)throw new Error(result.message);return result.record}
   const appointment=flow.book({patientId:'p1',branchId:'b1',dentistId:'d1',serviceId:'svc1',date:'2026-09-19',start:'11:00'})
@@ -43,12 +43,11 @@ function seedPaidJourney() {
   ok(actions.reviewInvoice(invoice.id));ok(actions.issueInvoice(invoice.id))
   if(!['payment','payment-reload'].includes(screen))ok(actions.postPayment(invoice.id,'Cash',invoice.total))
   state.invoices.push(structuredClone(data.INITIAL_INVOICES[1])) // Existing Branch B fixture for scope verification.
-  // Appointments are never stored in the browser: keep the server rows for ClinicProvider's initialServerAppointments.
+  // Appointments and Visits are never stored in the browser: keep the server rows for ClinicProvider's
+  // initialServerAppointments / initialServerVisits.
   localStorage.setItem('qa-live-server-rows',JSON.stringify(state.appointments.map(a=>serverRow({...a,code:a.appointmentNo}))))
-  for(const key of ['queue','checkIns','treatments','invoices','patients','persons','users']){
-    const storageKey=key==='checkIns'?'check-ins':key
-    localStorage.setItem(`dentalops-v4-${storageKey}`,JSON.stringify(state[key]))
-  }
+  localStorage.setItem('qa-live-server-visits',JSON.stringify(state.visits.map(v=>serverVisitRow(v))))
+  for(const key of ['queue','treatments','invoices','patients','persons','users'])localStorage.setItem(`dentalops-v4-${key}`,JSON.stringify(state[key]))
   if(!['payment','payment-reload'].includes(screen))localStorage.setItem('qa-live-receipt',state.invoices.find(i=>i.id===invoice.id).receipt)
   localStorage.setItem('qa-live-seeded','1')
 }
@@ -64,7 +63,7 @@ function Fixture() {
     <button type="button" hidden onClick={()=>setRole(role==='staff'?'patient':'staff')}>Switch role</button>
   </main></div>
 }
-createRoot(document.getElementById('root')).render(<ClinicProvider initialReferenceData={referenceData} initialServerAppointments={JSON.parse(localStorage.getItem('qa-live-server-rows')||'[]')}><Fixture/></ClinicProvider>)
+createRoot(document.getElementById('root')).render(<ClinicProvider initialReferenceData={referenceData} initialServerAppointments={JSON.parse(localStorage.getItem('qa-live-server-rows')||'[]')} initialServerVisits={JSON.parse(localStorage.getItem('qa-live-server-visits')||'[]')}><Fixture/></ClinicProvider>)
 
 const waitFor=async selector=>{
   for(let n=0;n<100;n++){

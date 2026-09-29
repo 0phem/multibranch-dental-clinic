@@ -1,9 +1,10 @@
 # Backend Integration (Foundation 1B + Phase 2A)
 
 Scope: authentication, registration, session restoration, logout and RBAC (Foundation 1B), branch/service/
-staff/dentist reference data (Phase 2A), M1/M4 identity, and M6 appointments (server-authoritative since the M6
-React cutover — see "M6 React cutover" below). Every other business module (queue, treatments, HMO, billing,
-prescriptions, messages, loyalty, marketing) is still frontend-local — see "Frontend-local boundary" below.
+staff/dentist reference data (Phase 2A), M1/M4 identity, M6 appointments (server-authoritative since the M6
+React cutover) and M8 Patient Check-In with the shared Visit / Clinical Encounter (see "M8 Check-In and Visit" below).
+Every other business module (queue, treatments, HMO, billing, prescriptions, messages, loyalty, marketing) is still
+frontend-local — see "Frontend-local boundary" below.
 
 ## Running it locally
 
@@ -103,8 +104,8 @@ token) triggers exactly one automatic refetch-and-retry — never a loop.
 
 Everything below `App.jsx`'s auth gate — Dashboards, Scheduling, PatientFlow, Clinical, FinanceCommunication,
 Admin, HMO, Messages, Loyalty, etc. — is unchanged and still reads/writes the same `localStorage` collections
-it always has, **except** the six reference-data collections Phase 2A covers (below) and appointments (M6, below),
-which are never stored in the browser any more. The identity bridge
+it always has, **except** the six reference-data collections Phase 2A covers (below), appointments (M6) and arrival
+records / Visits (M8, below), which are never stored in the browser any more. The identity bridge
 exists only so those still-local pages can keep working before their own data moves to PostgreSQL in a later
 checkpoint.
 
@@ -228,7 +229,8 @@ React reads and writes appointments only through the M6 API:
 - Staff branch reach in the UI follows `/api/me` `branch_scopes`; Staff pick Patients from `GET /api/patients`.
 - Appointment additions for the cutover: bounded `from`/`to` list range (max 184 days), server-generated immutable
   `appointment_code` (APT-YYYY-NNNNNN), `dentist_ref` on availability (Staff/Owner only; a Patient reschedule search is
-  limited to the current Dentist), and `POST /api/appointments/{id}/check-in|no-show|start-treatment|complete`.
+  limited to the current Dentist), and named lifecycle commands (since M8: only the pre-arrival `no-show` remains an
+  appointment command — see "M8 Check-In and Visit").
 - Follow-ups (approved transitional rule until M20 is backend-authoritative): the Dentist records/recommends the
   follow-up; clinic Staff (or the Owner) book it as a normal server appointment and the local follow-up stores only the
   returned public id (`linkFollowupAppointment`). Dentists and Patients have no booking path through this bridge.
@@ -238,5 +240,54 @@ React reads and writes appointments only through the M6 API:
 - The appointment list is a bounded working window (`appointmentWindow`), never all-time history; Analytics labels the
   Scheduling metric with that window.
 - Old `dentalops-v4-appointments` browser data is not read, uploaded or cleared. `INITIAL_APPOINTMENTS` is gone.
-- Queue, check-in and treatment records are still per-browser prototypes: a Dentist sees a queue entry only in the
-  browser where the arrival was recorded (M8/M9 backend work removes this).
+- Queue and treatment records are still per-browser prototypes: a Dentist sees a queue entry only in the browser where
+  the arrival was handed to the queue (M9/M5 backend work removes this).
+
+## M8 Check-In and Visit
+
+Laravel/PostgreSQL is the only authority for Patient arrival and for the Visit / Clinical Encounter (CONTRACTS.md §3).
+A Visit is shared infrastructure, not a numbered module.
+
+- **Schema** (`2026_09_30_000100_create_visits_table`): `visits` (ULID `public_id`; Patient and branch required;
+  optional appointment; `source` `appointment`|`walk_in`; `status` Checked In → In Treatment → Completed; nullable
+  responsible Dentist; optional requested service; server `arrived_at` and Asia/Manila `clinic_date`; `revision`;
+  actors; `closed_at`), append-only `visit_history` (trigger) and `command_keys` (idempotency for the M8 commands).
+  PostgreSQL enforces: source ⇔ appointment presence (no fake appointments), one Visit per appointment, at most one
+  active Visit per Patient (any branch/day), `closed_at` exactly when Completed.
+- **Commands** (`VisitService`, all in one transaction, idempotent, with Visit history):
+  - `POST /api/visits/check-in` `{appointment_id, expected_revision}` + `Idempotency-Key` (required): locks the
+    appointment, checks revision/state/today/no Visit/no other active Visit, moves the appointment to Checked In (with
+    appointment history) and opens the Visit — both or neither.
+  - `POST /api/visits/walk-in` `{patient_id, branch_ref, service_ref?, dentist_ref?}` + `Idempotency-Key` (required):
+    branch Open and within hours, service Active and offered, and — when a Dentist is given — Dentist eligible,
+    available and within shift. No appointment is created and no Dentist time is reserved.
+  - `POST /api/visits/{visit}/start-treatment|complete` `{expected_revision}`: only the responsible Dentist; a Visit
+    without one is refused (`dentist_unresolved`); a scheduled Visit moves its appointment in the same transaction.
+  - `POST /api/patients` (Staff with a branch scope, or Owner) + `Idempotency-Key`: minimal front-desk registration —
+    Person + Patient, no User/login; an existing email is refused (`patient_email_exists`); no fuzzy matching/merging.
+- **Reads**: `GET /api/visits` (bounded `date`/`from`/`to`, default today, paginated; Staff by branch scope, Dentist
+  own responsible Visits, Owner all; Patients have no Visit API yet) and `GET /api/visits/{visit}` (with history).
+- **Retired M6 commands**: `POST /api/appointments/{id}/check-in|start-treatment|complete` no longer exist (404).
+  `no-show` remains an appointment command for a Pending/Confirmed appointment today (the Patient did not arrive; no
+  Visit). No-show and cancellation are refused once a Visit exists — closing an admitted visit needs a future
+  Visit/Queue clinic policy.
+- **Backfill** (`2026_09_30_000200_backfill_visits_from_appointments`, `App\Services\Visits\VisitBackfill`): Visits
+  for appointments already checked in through the retired commands, from server data only (exact `appointment.checked_in`
+  history time, canonical Patient/branch/Dentist). Missing facts or a second active Visit are reported, never guessed;
+  appointments checked in then closed as Cancelled/No-show are reported (no Visit state for them). Reversible.
+- **Shared idempotency**: `App\Support\IdempotentCommand` (extracted unchanged from the M6 service; M6 tests prove it).
+
+Frontend (`src/visits-api.js`, `src/appointment-flow.js`, `src/store.jsx`):
+
+- Visits load with appointments for Staff/Dentist/Owner (same bounded window) into an in-memory, never-persisted
+  `state.visits`; local patches can never write `visits`. 401s use the shared session-invalidated path.
+- Check-In / Walk-In: dry run of the local queue step → server command → refresh → `admitVisit(visitId)` creates the
+  local M9 queue entry from the Visit (idempotent; also the retry path — CheckInPage lists Visits without a local queue
+  entry). The walk-in form still requires a Dentist because the local queue is Dentist-organized.
+- Treatment: Visit command first → refresh → local M5 record (carries `visitId`); a local failure keeps server truth and
+  shows a retry state. Invoices also carry `visitId`.
+- Legacy: the `dentalops-v4-check-ins` collection is no longer read (not uploaded or cleared). A queue entry is live only
+  with a server `visitId`, or when its exact server appointment id matches a backfilled Visit (then re-linked); pre-cutover
+  appointment ids and browser-only walk-ins are read-only history, excluded from live views and KPIs.
+- Patient read views have no Visit projection yet (D9): they validate encounters from the local links alone
+  (`visitsProjected: false`); Staff/Dentist/Owner fail closed when a Visit is missing.

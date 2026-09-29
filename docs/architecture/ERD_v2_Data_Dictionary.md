@@ -35,10 +35,12 @@ logical-only, not yet implemented.
 |---|---|---|
 | PATIENTS | Patient-specific profile linked to PERSONS | A patient may exist without a login; a registered login shares the same PERSON identity |
 | APPOINTMENTS | Confirmed/planned visit | Past start times cannot be newly booked; status changes release/reserve slots |
-| CHECK_IN_RECORDS | Arrival/admission event | Scheduled appointment or walk-in is admitted once before queue creation |
+| VISITS | Visit / Clinical Encounter: the arrival record (formerly CHECK_IN_RECORDS) and the encounter anchor for queue, treatment, prescription, follow-up, invoice and HMO | Patient and branch required; appointment optional (walk-ins have none; one Visit per appointment); source appointment/walk-in; status Checked In → In Treatment → Completed; responsible Dentist nullable until resolved and required before clinical work; at most one active Visit per Patient; server arrival time and Asia/Manila clinic date (added with approval, M8 / D10) |
 | DENTIST_QUEUES | Per-dentist, per-branch/day queue container | Dentist UI reads the logged-in dentist's queue directly |
-| QUEUE_ENTRIES | Individual patient queue state | Priority override requires reason/audit; skip/no-show is Staff-controlled |
+| QUEUE_ENTRIES | Individual patient queue state | References exactly one VISIT; priority override requires reason/audit; a checked-in Visit is not marked no-show (no-show is a pre-arrival appointment decision) |
 | CAPACITY_EVENTS | Aggregate waiting/workload snapshots/events | Does not replace QUEUE_ENTRIES; it supports M10/M15/M21 |
+
+**VISITS (M8, approved D10):** this dictionary is the current text of record. The rendered ERD images (PNG/SVG) predate VISITS and are pending regeneration from the diagram source; they have not been hand-edited.
 
 ## Clinical / Billing
 
@@ -46,7 +48,7 @@ logical-only, not yet implemented.
 |---|---|---|
 | PATIENT_DOCUMENTS | Generic patient-uploaded/visit/HMO document reference | File bytes belong in controlled storage; DB stores metadata/URI |
 | CLINICAL_TEMPLATES | Structured documentation aid | Suggestions/templates never authorize diagnosis/treatment automatically |
-| TREATMENT_PLANS | Clinical encounter/treatment record | Dentist identity and visit context are loaded from queue/schedule; dentist retains judgment |
+| TREATMENT_PLANS | Clinical encounter/treatment record | Requires a VISIT (`visit_id`); `appointment_id` is optional (walk-in care); dentist identity and visit context are loaded from the Visit/queue; dentist retains judgment |
 | TREATMENT_PROCEDURES | Actual performed procedure line(s) | Completed procedure is the normal source of billing line items |
 | PRESCRIPTIONS | Dentist-authorized prescription header/version | No prescription becomes valid without dentist authorization |
 | PRESCRIPTION_ITEMS | Medication/dose/instructions | Linked to one prescription version |
@@ -97,7 +99,7 @@ logical-only, not yet implemented.
 1. USER_ROLE_ASSIGNMENTS must not grant branch access outside authorized scope.
 2. A Staff/Dentist profile must reference the same PERSON used by its USER account.
 3. Appointment must reference an active branch-service combination and a dentist authorized/available for that service/time.
-4. Check-In must not create duplicate active queue entries for the same arrival.
+4. Check-In opens exactly one VISIT per scheduled appointment (atomically with the appointment's Checked In transition), a Patient has at most one active VISIT, and a VISIT has at most one queue entry.
 5. Emergency priority changes require authorized user, reason and audit entry.
 6. Treatment completion is required before normal invoice generation.
 7. Prescription authorization is dentist-only.

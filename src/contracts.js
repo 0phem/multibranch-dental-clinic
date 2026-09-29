@@ -65,7 +65,7 @@ export function patientInScope(patient, state, session) {
   return [...state.appointments,...state.queue,...state.treatments].some(x=>x.patientId===patient.id&&inScope(x,session))
 }
 export function encounterContext(entry) {
-  return entry ? {queueEntryId:entry.id,patientId:entry.patientId,appointmentId:entry.appointmentId||null,dentistId:entry.dentistId,branchId:entry.branchId,serviceId:entry.serviceId,treatmentId:entry.treatmentId||null} : null
+  return entry ? {queueEntryId:entry.id,visitId:entry.visitId||null,patientId:entry.patientId,appointmentId:entry.appointmentId||null,dentistId:entry.dentistId,branchId:entry.branchId,serviceId:entry.serviceId,treatmentId:entry.treatmentId||null} : null
 }
 
 // Display projections must not become duplicate sources of identity or branch data.
@@ -120,9 +120,12 @@ export function normalizeClinicState(state) {
     const clinicDay=q.clinicDate||q.arrivedAt?.slice(0,10)||appointment?.date||q.queueId?.match(/\d{4}-\d{2}-\d{2}$/)?.[0]||null
     return withBranch({...q,queueEntryId:q.id,branchId:q.branchId||appointment?.branchId||branchIdFor(q,branches),serviceId:q.serviceId||appointment?.serviceId||treatment?.serviceId||null,clinicDate:clinicDay,treatmentId:treatment?.id||q.treatmentId||null,currentState:q.status})
   })
-  const checkIns=[...(state.checkIns||[])]
-  for (const q of queue) if(q.checkInId&&!checkIns.some(c=>c.id===q.checkInId)) checkIns.push({id:q.checkInId,queueEntryId:q.id,appointmentId:q.appointmentId||null,patientId:q.patientId,dentistId:q.dentistId,branchId:q.branchId,serviceId:q.serviceId,clinicDate:q.clinicDate,arrivedAt:q.arrivedAt||(q.clinicDate?`${q.clinicDate}T${q.checkedIn}:00+08:00`:null),status:TERMINAL.includes(q.status)?q.status:'Checked In',legacy:true})
-  const normalized={...state,appointments,queue,checkIns,treatments:treatments.map(t=>({...t,queueEntryId:t.queueEntryId||queue.find(q=>q.treatmentId===t.id)?.id||null})),
+  // M8: arrival records are server Visits (`state.visits`, an in-memory read model); no browser check-in collection
+  // exists or is synthesized. A treatment carries its encounter's Visit id, taken from its exact queue entry.
+  const normalized={...state,appointments,queue,visits:Array.isArray(state.visits)?state.visits:[],treatments:treatments.map(t=>{
+    const queueEntryId=t.queueEntryId||queue.find(q=>q.treatmentId===t.id)?.id||null
+    return {...t,queueEntryId,visitId:t.visitId||(queueEntryId&&queue.find(q=>q.id===queueEntryId)?.visitId)||null}
+  }),
     // Phase 4B.3C-1 Booking Drafts: not part of the ERD-aligned collections above, so no branch/identity projection
     // applies. Defaults a fixture/legacy state that never mentioned the collection to empty, same as any other
     // never-initialized array; genuinely corrupt persisted data is still caught by the persistence recovery gate.

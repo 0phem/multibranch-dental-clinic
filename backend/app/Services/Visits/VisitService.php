@@ -1,0 +1,268 @@
+<?php
+
+namespace App\Services\Visits;
+
+use App\Http\Resources\VisitResource;
+use App\Models\Appointment;
+use App\Models\Branch;
+use App\Models\CommandKey;
+use App\Models\DentistProfile;
+use App\Models\Patient;
+use App\Models\Service;
+use App\Models\User;
+use App\Models\Visit;
+use App\Models\VisitHistory;
+use App\Services\Appointments\AppointmentService;
+use App\Services\Scheduling\SchedulingService;
+use App\Support\ClinicClock;
+use App\Support\IdempotentCommand;
+use Closure;
+use Illuminate\Database\QueryException;
+use Illuminate\Http\JsonResponse;
+
+// M8 Patient Check-In and the shared Visit / Clinical Encounter lifecycle (CONTRACTS.md §3). Every command runs in one
+// transaction through the shared idempotency mechanism and appends Visit history:
+//   - checkInScheduled: Appointment (Pending/Confirmed, today) -> Checked In AND a new Visit, atomically;
+//   - walkIn:           a new Visit with no appointment (never a fake appointment);
+//   - startTreatment / complete: the Visit's clinical progression, cascading to the linked appointment.
+// Lock order is always appointment, then Visit, so concurrent commands cannot deadlock on each other.
+final class VisitService
+{
+    private const RELATIONS = ['patient.person', 'branch', 'appointment.service', 'dentist.person', 'requestedService'];
+
+    private const ATTEMPTS = 3;
+
+    public function __construct(
+        private readonly AppointmentService $appointments,
+        private readonly SchedulingService $scheduling,
+    ) {}
+
+    public function checkInScheduled(User $actor, Appointment $appointment, int $expectedRevision, string $key): JsonResponse
+    {
+        $payload = ['appointment' => $appointment->id, 'expected_revision' => $expectedRevision];
+
+        return $this->idempotent($actor, $key, 'visit.check_in', $payload, function () use ($actor, $appointment, $expectedRevision) {
+            $current = Appointment::whereKey($appointment->id)->lockForUpdate()->firstOrFail();
+            if (Visit::where('appointment_id', $current->id)->exists()) {
+                throw VisitCommandException::visitExists();
+            }
+            if ($current->revision !== $expectedRevision) {
+                throw VisitCommandException::staleAppointment();
+            }
+            if (! in_array($current->status, ['Pending', 'Confirmed'], true)) {
+                throw VisitCommandException::rule('invalid_transition', "An appointment that is {$current->status} cannot be checked in.", 'status');
+            }
+            // Existing approved rule: only today's appointments (Asia/Manila business date). The earliest-arrival and
+            // late-arrival windows remain unresolved clinic policies (P3/P4) and are not invented here.
+            if (ClinicClock::local($current->starts_at)->toDateString() !== ClinicClock::today()) {
+                throw VisitCommandException::rule('not_today', 'Only today’s appointments can be checked in.', 'status');
+            }
+            $this->assertNoActiveVisit($current->patient_id);
+
+            $from = $current->status;
+            $current->update(['status' => 'Checked In', 'revision' => $current->revision + 1, 'updated_by_user_id' => $actor->id]);
+            $this->appointments->record($current, $actor, 'appointment.checked_in', $from);
+
+            $visit = $this->open($actor, [
+                'patient_id' => $current->patient_id,
+                'branch_id' => $current->branch_id,
+                'appointment_id' => $current->id,
+                'source' => 'appointment',
+                'responsible_dentist_profile_id' => $current->dentist_profile_id,
+            ]);
+
+            return [$visit, 201];
+        });
+    }
+
+    public function walkIn(User $actor, Patient $patient, Branch $branch, ?Service $service, ?DentistProfile $dentist, string $key): JsonResponse
+    {
+        $payload = ['patient' => $patient->id, 'branch' => $branch->id, 'service' => $service?->id, 'dentist' => $dentist?->id];
+
+        return $this->idempotent($actor, $key, 'visit.walk_in', $payload, function () use ($actor, $patient, $branch, $service, $dentist) {
+            $failures = $this->walkInFailures($branch, $service, $dentist);
+            if ($failures) {
+                throw VisitCommandException::ineligible($failures);
+            }
+            $this->assertNoActiveVisit($patient->id);
+
+            $visit = $this->open($actor, [
+                'patient_id' => $patient->id,
+                'branch_id' => $branch->id,
+                'appointment_id' => null,
+                'source' => 'walk_in',
+                'responsible_dentist_profile_id' => $dentist?->id,
+                'requested_service_id' => $service?->id,
+            ]);
+
+            return [$visit, 201];
+        });
+    }
+
+    public function startTreatment(User $actor, Visit $visit, int $expectedRevision, ?string $key): JsonResponse
+    {
+        return $this->transition($actor, $visit, $expectedRevision, $key, 'start-treatment');
+    }
+
+    public function complete(User $actor, Visit $visit, int $expectedRevision, ?string $key): JsonResponse
+    {
+        return $this->transition($actor, $visit, $expectedRevision, $key, 'complete');
+    }
+
+    /** command => [source status, target status, Visit event, appointment event] */
+    public const TRANSITIONS = [
+        'start-treatment' => ['Checked In', 'In Treatment', 'visit.treatment_started', 'appointment.treatment_started'],
+        'complete' => ['In Treatment', 'Completed', 'visit.completed', 'appointment.completed'],
+    ];
+
+    private function transition(User $actor, Visit $visit, int $expectedRevision, ?string $key, string $command): JsonResponse
+    {
+        [$from, $to, $visitEvent, $appointmentEvent] = self::TRANSITIONS[$command];
+        $payload = ['visit' => $visit->id, 'expected_revision' => $expectedRevision];
+
+        return $this->idempotent($actor, $key, 'visit.'.$command, $payload, function () use ($actor, $visit, $expectedRevision, $from, $to, $visitEvent, $appointmentEvent) {
+            // appointment_id never changes after creation, so it is safe to read before taking the locks.
+            $appointment = $visit->appointment_id ? Appointment::whereKey($visit->appointment_id)->lockForUpdate()->firstOrFail() : null;
+            $current = Visit::whereKey($visit->id)->lockForUpdate()->firstOrFail();
+            if ($current->status === $to) {
+                return [$current, 200];
+            }
+            if ($current->revision !== $expectedRevision) {
+                throw VisitCommandException::staleVisit();
+            }
+            if ($current->status !== $from) {
+                throw VisitCommandException::rule('invalid_transition', "A visit that is {$current->status} cannot move to {$to}.", 'status');
+            }
+            if ($current->responsible_dentist_profile_id === null) {
+                throw VisitCommandException::rule('dentist_unresolved', 'Assign a responsible Dentist to this visit before clinical work starts.', 'dentist');
+            }
+            // The linked appointment mirrors the Visit's clinical progression; a mismatch is refused, never repaired.
+            if ($appointment && $appointment->status !== $from) {
+                throw VisitCommandException::rule('appointment_mismatch', "The linked appointment is {$appointment->status}; this visit needs clinic review.", 'appointment');
+            }
+
+            $current->update([
+                'status' => $to,
+                'revision' => $current->revision + 1,
+                'updated_by_user_id' => $actor->id,
+                'closed_at' => $to === 'Completed' ? ClinicClock::now() : null,
+            ]);
+            $this->history($current, $actor, $visitEvent, $from);
+            if ($appointment) {
+                $appointment->update(['status' => $to, 'revision' => $appointment->revision + 1, 'updated_by_user_id' => $actor->id]);
+                $this->appointments->record($appointment, $actor, $appointmentEvent, $from);
+            }
+
+            return [$current, 200];
+        });
+    }
+
+    /**
+     * Walk-in admission checks at the arrival instant (decision D7). Branch open state and hours come from M2 data;
+     * the service and Dentist checks mirror SchedulingService eligibility. No Dentist time is reserved and no overlap
+     * with appointments is checked — walk-ins do not occupy scheduling time yet.
+     *
+     * @return list<array{key:string,label:string}>
+     */
+    private function walkInFailures(Branch $branch, ?Service $service, ?DentistProfile $dentist): array
+    {
+        $now = ClinicClock::now()->format('H:i');
+        $within = fn ($start, $end) => $start !== null && $end !== null && substr((string) $start, 0, 5) <= $now && $now < substr((string) $end, 0, 5);
+        $failures = [];
+        $fail = function (string $key, string $label) use (&$failures) {
+            $failures[] = ['key' => $key, 'label' => $label];
+        };
+
+        if ($branch->status !== 'Open') {
+            $fail('branch-open', 'The branch is open');
+        } elseif (! $within($branch->open_time, $branch->close_time)) {
+            $fail('branch-hours', 'The branch is within its operating hours');
+        }
+        if ($service) {
+            if ($service->status !== 'Active') {
+                $fail('service-active', 'The service is active');
+            } elseif (! $this->scheduling->branchService($branch, $service)) {
+                $fail('branch-service', 'The branch offers this service');
+            }
+        }
+        if ($dentist) {
+            if (! $service) {
+                $fail('dentist-service', 'Choose the service before assigning a Dentist');
+            } elseif (! $this->scheduling->eligibleDentists($branch, $service)->contains('id', $dentist->id)) {
+                $fail('dentist-eligible', 'The Dentist works at this branch, is authorized for this service and is available');
+            }
+            if (! $within($dentist->shift_start, $dentist->shift_end)) {
+                $fail('dentist-shift', 'The Dentist is within their shift');
+            }
+        }
+
+        return $failures;
+    }
+
+    private function assertNoActiveVisit(int $patientId): void
+    {
+        if (Visit::where('patient_id', $patientId)->whereIn('status', Visit::ACTIVE_STATUSES)->exists()) {
+            throw VisitCommandException::activeVisitExists();
+        }
+    }
+
+    private function open(User $actor, array $attributes): Visit
+    {
+        $now = ClinicClock::now();
+        $visit = Visit::create($attributes + [
+            'requested_service_id' => null,
+            'status' => 'Checked In',
+            'arrived_at' => $now,
+            'clinic_date' => $now->toDateString(),
+            'revision' => 1,
+            'created_by_user_id' => $actor->id,
+            'updated_by_user_id' => $actor->id,
+        ]);
+        $this->history($visit, $actor, 'visit.checked_in', null);
+
+        return $visit;
+    }
+
+    private function history(Visit $visit, User $actor, string $event, ?string $from): void
+    {
+        VisitHistory::create([
+            'visit_id' => $visit->id,
+            'event' => $event,
+            'from_status' => $from,
+            'to_status' => $visit->status,
+            'revision' => $visit->revision,
+            'responsible_dentist_profile_id' => $visit->responsible_dentist_profile_id,
+            'actor_user_id' => $actor->id,
+            'actor_role' => $actor->role->value,
+            'occurred_at' => ClinicClock::now(),
+        ]);
+    }
+
+    private function idempotent(User $actor, ?string $key, string $command, array $payload, Closure $work): JsonResponse
+    {
+        return IdempotentCommand::run(
+            CommandKey::class, $actor, $key, $command, $payload,
+            function () use ($work) {
+                [$visit, $status] = $work();
+                $body = (new VisitResource($visit->fresh(self::RELATIONS)))->response()->getData(true);
+
+                return [$body, $status];
+            },
+            fn () => VisitCommandException::rule('idempotency_key_reused', 'This Idempotency-Key was already used for a different request.', 'idempotency_key'),
+            function (QueryException $e) {
+                // The database constraints are the final guard against concurrent duplicates.
+                $message = $e->getMessage();
+                if (str_contains($message, 'visits_one_per_appointment')) {
+                    throw VisitCommandException::visitExists();
+                }
+                if (str_contains($message, 'visits_one_active_per_patient')) {
+                    throw VisitCommandException::activeVisitExists();
+                }
+                if (in_array($e->getCode(), ['40P01', '40001'], true)) {
+                    throw new VisitCommandException(409, 'conflict', 'Another request changed this record at the same time. Reload and try again.');
+                }
+            },
+            self::ATTEMPTS,
+        );
+    }
+}

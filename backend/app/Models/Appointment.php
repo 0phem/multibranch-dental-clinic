@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 // APPOINTMENTS (M6) — see the create_appointments_table migration. The bigint id stays internal; routes bind and
 // resources expose the ULID public_id (CONTRACTS.md §1). Status changes happen only through AppointmentService's
@@ -64,6 +65,12 @@ class Appointment extends Model
     public function dentist(): BelongsTo
     {
         return $this->belongsTo(DentistProfile::class, 'dentist_profile_id');
+    }
+
+    /** The Visit opened by this appointment's Check-In (M8), if any — at most one (visits_one_per_appointment). */
+    public function visit(): HasOne
+    {
+        return $this->hasOne(Visit::class);
     }
 
     public function history(): HasMany

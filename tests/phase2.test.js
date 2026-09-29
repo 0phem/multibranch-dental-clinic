@@ -10,7 +10,7 @@ import { withServerAppointments } from './support/server-appointments.js'
 setClockSource(()=>new Date('2026-09-19T02:08:00Z'))
 const seedKeys={persons:'PERSONS',services:'SERVICES',branchServices:'BRANCH_SERVICES',dentistServiceAssignments:'DENTIST_SERVICE_ASSIGNMENTS',branches:'BRANCHES',dentists:'DENTISTS',staff:'STAFF',patients:'PATIENTS',users:'USERS'}
 function fixture(){
-  let state=normalizeClinicState({...Object.fromEntries(Object.entries(seedKeys).map(([k,v])=>[k,structuredClone(data[`INITIAL_${v}`])])),appointments:[],queue:[],checkIns:[],treatments:[],invoices:[],followups:[],prescriptions:[],notifications:[],workflowLog:[],audit:[]})
+  let state=normalizeClinicState({...Object.fromEntries(Object.entries(seedKeys).map(([k,v])=>[k,structuredClone(data[`INITIAL_${v}`])])),appointments:[],visits:[],queue:[],treatments:[],invoices:[],followups:[],prescriptions:[],notifications:[],workflowLog:[],audit:[]})
   let session=sessionForRole('staff',state)
   const raw=createWorkflowActions({getState:()=>state,getSession:()=>session,commit:patch=>{state=normalizeClinicState({...state,...patch})}})
   // M6 cutover: appointments come from the server; Check-In/No-show/treatment transitions run server-first.
@@ -134,12 +134,13 @@ test('follow-up linking needs follow-up scheduling permission',()=>{
   const f=fixture();complete(f,{followupRequired:true});f.role('patient');const a=f.flow.book({...form,start:'13:00'})
   assert.equal(f.actions.linkFollowupAppointment(f.state.followups[0].id,a.id).ok,false)
 })
-for(const corruption of ['missing patient','missing appointment','wrong patient appointment','wrong queue appointment'])test(`completion blocks ${corruption} atomically`,()=>{
+for(const corruption of ['missing patient','missing appointment','wrong patient appointment','missing visit','wrong patient visit'])test(`completion blocks ${corruption} atomically`,()=>{
   const f=fixture();const q=encounter(f)
   if(corruption==='missing patient')f.patch({patients:[]})
   if(corruption==='missing appointment')f.patch({appointments:[]})
   if(corruption==='wrong patient appointment')f.patch({appointments:f.state.appointments.map(a=>({...a,patientId:'p2'}))})
-  if(corruption==='wrong queue appointment')f.patch({appointments:f.state.appointments.map(a=>({...a,queueEntryId:'another'}))})
+  if(corruption==='missing visit')f.patch({visits:[]})
+  if(corruption==='wrong patient visit')f.patch({visits:f.state.visits.map(v=>({...v,patientId:'p2'}))})
   const before=structuredClone(f.state);assert.equal(f.actions.completeTreatment({queueEntryId:q.id,procedure:'Documented',procedures:lines}).ok,false);assert.deepEqual(f.state,before)
 })
 test('nested procedure, invoice, payment and prescription references survive persistence',()=>{

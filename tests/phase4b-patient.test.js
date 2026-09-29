@@ -7,7 +7,6 @@ import { normalizeClinicState, sessionForRole } from '../src/contracts.js'
 import { createWorkflowActions } from '../src/workflow.js'
 import { withServerAppointments } from './support/server-appointments.js'
 import { notificationDestination } from '../src/phase3-contracts.js'
-import { validateAppointment } from '../src/logic.js'
 import * as view from '../src/patient-view.js'
 
 beforeEach(()=>setClockSource(()=>new Date('2026-09-19T02:08:00Z')))
@@ -17,10 +16,10 @@ function fixture(patch={}) {
   const seeds=Object.fromEntries(Object.entries(seedKeys).map(([k,v])=>[k,structuredClone(data[`INITIAL_${v}`])]))
   seeds.users.push({id:'u13',personId:'per-p2',roleName:'Patient',status:'Active',permissions:['patient-portal']})
   seeds.patients=seeds.patients.map(p=>p.id==='p2'?{...p,userId:'u13'}:p)
-  let state=normalizeClinicState({...seeds,appointments:[],queue:[],checkIns:[],treatments:[],invoices:[],prescriptions:[],followups:[],hmo:[],conversations:[],inquiries:[],notifications:[],workflowLog:[],audit:[],...patch})
+  let state=normalizeClinicState({...seeds,appointments:[],visits:[],queue:[],treatments:[],invoices:[],prescriptions:[],followups:[],hmo:[],conversations:[],inquiries:[],notifications:[],workflowLog:[],audit:[],...patch})
   let session=sessionForRole('staff',state)
   const raw=createWorkflowActions({getState:()=>state,getSession:()=>session,commit:p=>{state=normalizeClinicState({...state,...p})}})
-  // M6 cutover: server appointments; Check-In/No-show/treatment transitions run server-first.
+  // M6/M8 cutovers: server appointments and Visits; Check-In, No-show and treatment transitions run server-first.
   const server=withServerAppointments({getState:()=>state,setState:next=>{state=normalizeClinicState(next)},getSession:()=>session,rawActions:()=>raw})
   return {get actions(){return server.actions()},flow:server.flow,get state(){return state},get session(){return session},role(role,overrides={}){session={...sessionForRole(role,state),...overrides}},patch(p){state=normalizeClinicState({...state,...p})}}
 }
@@ -232,7 +231,12 @@ test('not checked in and no-visit states never invent an arrival rule',()=>{
   const a=book(f,{start:'14:00'}),state=view.patientQueueView(f.state,maria(f))
   assert.equal(state.phase,'not-checked-in');assert.equal(state.appointment.id,a.id)
   f.role('staff');ok(f.actions.checkInAppointment(a.id));f.role('staff')
-  const noShow=book(f,{start:'16:00',serviceId:'svc2'});ok(f.actions.checkInAppointment(noShow.id))
+  // One active Visit per Patient (D5): a second appointment the same day cannot be checked in while the first visit is
+  // active; if the Patient never comes for it, Staff mark it No-show before arrival (no Visit is created).
+  const later=book(f,{start:'16:00',serviceId:'svc2'})
+  assert.equal(f.actions.checkInAppointment(later.id).ok,false)
+  assert.equal(f.actions.markNoShow(later.id).ok,true)
+  assert.equal(f.state.visits.filter(v=>v.patientId===later.patientId).length,1)
   assert.ok(view.patientQueueView(f.state,maria(f)).phase)
 })
 

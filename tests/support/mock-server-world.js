@@ -1,0 +1,108 @@
+import * as data from '../../src/data.js'
+import { normalizeClinicState, sessionForRole } from '../../src/contracts.js'
+import { createWorkflowActions } from '../../src/workflow.js'
+import * as api from '../../src/appointments-api.js'
+import { mapVisit } from '../../src/visits-api.js'
+import { createAppointmentFlow } from '../../src/appointment-flow.js'
+import { clinicNow } from '../../src/clock.js'
+import { serverId } from './server-appointments.js'
+
+// The REAL appointment-flow.js (store.jsx's server-first flows) over a tiny in-memory "server" that mirrors the Laravel
+// M6/M8 command rules (AppointmentService / VisitService; covered by the backend tests). Commands mutate the server
+// maps; refresh() copies them into the read projection exactly like the store does.
+
+/** A GET /api/appointments row. Patient serverId(500) is the seeded local Patient p1. */
+export const row = (fields = {}) => ({
+  id: fields.id || serverId(900), code: fields.code || 'APT-2026-000900', status: 'Confirmed', source: 'front_desk', assignment_method: 'auto', revision: 1,
+  date: '2026-09-19', start_time: '11:00', end_time: '11:30', starts_at: '2026-09-19T11:00:00+08:00', ends_at: '2026-09-19T11:30:00+08:00', duration_minutes: 30,
+  patient: { id: serverId(500), code: 'PAT-0500', name: 'Server Patient' }, branch: { id: 'b1', name: 'Branch A' }, service: { id: 'svc1', name: 'Dental Consultation' },
+  dentist: { id: 'd1', name: 'Dr. Miguel Reyes' }, notes: null, ...fields,
+})
+
+const seedKeys = { persons: 'PERSONS', services: 'SERVICES', branchServices: 'BRANCH_SERVICES', dentistServiceAssignments: 'DENTIST_SERVICE_ASSIGNMENTS', branches: 'BRANCHES', dentists: 'DENTISTS', staff: 'STAFF', patients: 'PATIENTS', users: 'USERS' }
+const keyFor = id => (id === serverId(500) ? 'p1' : id)
+
+export function world() {
+  const seeds = Object.fromEntries(Object.entries(seedKeys).map(([k, v]) => [k, structuredClone(data[`INITIAL_${v}`])]))
+  let state = normalizeClinicState({ ...seeds, appointments: [], visits: [], queue: [], treatments: [], invoices: [], followups: [], prescriptions: [], notifications: [], hmo: [], conversations: [], inquiries: [], workflowLog: [], audit: [], bookingDrafts: [] })
+  let session = sessionForRole('staff', state)
+  const patches = []
+  const actions = createWorkflowActions({ getState: () => state, getSession: () => session, commit: patch => { patches.push(patch); state = normalizeClinicState({ ...state, ...patch }) } })
+  const server = new Map()
+  const visits = new Map()
+  const log = []
+  let createResult = null
+  const project = () => {
+    state = normalizeClinicState({ ...state, appointments: [...server.values()].map(r => api.mapAppointment(r, keyFor)), visits: [...visits.values()].map(v => mapVisit(v, keyFor)) })
+  }
+  const accept = (id, changes) => { const current = server.get(id); const next = { ...current, ...changes, revision: current.revision + 1 }; server.set(id, next); return { ok: true, row: next } }
+  const visitFor = appointmentId => [...visits.values()].find(v => v.appointment?.id === appointmentId)
+  const refuse = (kind, code, message) => ({ ok: false, kind, code, message })
+  const openVisit = fields => {
+    const now = clinicNow()
+    const v = { id: serverId(800000 + visits.size), status: 'Checked In', revision: 1, arrived_at: now.timestamp, clinic_date: now.date, closed_at: null, ...fields }
+    visits.set(v.id, v)
+    return { ok: true, row: v }
+  }
+
+  const mock = {
+    commandKey: () => `k-${log.length}`,
+    async createAppointment(form, key) {
+      log.push(['create', key])
+      if (createResult) return createResult
+      const r = row({ id: serverId(700 + server.size), code: `APT-2026-00070${server.size}`, date: form.date, start_time: form.start, dentist: { id: form.dentistId || 'd1', name: 'Dr' } })
+      server.set(r.id, r); return { ok: true, row: r }
+    },
+    async rescheduleAppointment(a, form) { log.push(['reschedule', a.revision]); if (server.get(a.id).revision !== a.revision) return refuse('conflict', 'stale_revision', 'changed'); return accept(a.id, { date: form.date, start_time: form.start }) },
+    async cancelAppointment(a) {
+      log.push(['cancel', a.revision])
+      if (visitFor(a.id)) return refuse('validation', 'appointment_admitted', 'This patient has already checked in.')
+      return accept(a.id, { status: 'Cancelled' })
+    },
+    async transitionAppointment(a, name) {
+      log.push([name, a.revision])
+      if (name !== 'no-show') return refuse('not_found', null, 'Not found.')
+      if (visitFor(a.id) || !['Pending', 'Confirmed'].includes(server.get(a.id).status)) return refuse('validation', 'invalid_transition', 'This appointment cannot be marked No-show.')
+      return accept(a.id, { status: 'No-show' })
+    },
+  }
+  const visitsMock = {
+    async checkIn(a, key) {
+      log.push(['check-in', key])
+      const current = server.get(a.id)
+      if (visitFor(a.id)) return refuse('conflict', 'visit_exists', 'This appointment is already checked in.')
+      if (current.revision !== a.revision) return refuse('conflict', 'stale_revision', 'changed')
+      if (current.date !== clinicNow().date) return refuse('validation', 'not_today', 'Only today’s appointments can be checked in.')
+      accept(a.id, { status: 'Checked In' })
+      const r = server.get(a.id)
+      return openVisit({ source: 'appointment', patient: r.patient, branch: r.branch, dentist: r.dentist, service: r.service, appointment: { id: r.id, code: r.code, status: r.status, revision: r.revision } })
+    },
+    async walkIn(form, key) {
+      log.push(['walk-in', key])
+      return openVisit({ source: 'walk_in', patient: { id: form.patientPublicId, code: '', name: '' }, branch: { id: form.branchId, name: '' },
+        dentist: form.dentistId ? { id: form.dentistId, name: '' } : null, service: form.serviceId ? { id: form.serviceId, name: '' } : null, appointment: null })
+    },
+    async transitionVisit(v, name) {
+      log.push([name, v.revision])
+      const current = visits.get(v.id)
+      const [from, to] = { 'start-treatment': ['Checked In', 'In Treatment'], complete: ['In Treatment', 'Completed'] }[name]
+      if (current.revision !== v.revision) return refuse('conflict', 'stale_revision', 'changed')
+      if (current.status !== from) return refuse('validation', 'invalid_transition', 'invalid')
+      const next = { ...current, status: to, revision: current.revision + 1, closed_at: to === 'Completed' ? clinicNow().timestamp : null }
+      if (current.appointment) { accept(current.appointment.id, { status: to }); next.appointment = { ...current.appointment, status: to } }
+      visits.set(v.id, next)
+      return { ok: true, row: next }
+    },
+    async registerPatient(form) { log.push(['register']); return { ok: true, patient: { id: serverId(600), patientCode: 'PAT-0600', name: `${form.firstName} ${form.lastName}` } } },
+  }
+  const flow = createAppointmentFlow({ getState: () => state, getSession: () => session, getActions: () => actions, refresh: async () => { log.push(['refresh']); project(); return { ok: true } }, api: mock, visits: visitsMock })
+  return {
+    flow, actions, log, server, visits, patches,
+    get state() { return state },
+    set state(next) { state = next },
+    get session() { return session },
+    role(r) { session = sessionForRole(r, state) },
+    failCreateWith(result) { createResult = result },
+    seed(r) { server.set(r.id, r); project(); return state.appointments.find(a => a.id === r.id) },
+  }
+}

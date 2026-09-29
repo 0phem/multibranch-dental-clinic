@@ -184,6 +184,15 @@ export function appointmentRecommendation(params) { return request(`/api/appoint
 export function createAppointment(payload, key) { return command('/api/appointments', payload, key) }
 export function rescheduleAppointment(id, payload, key) { return command(`/api/appointments/${encodeURIComponent(id)}/reschedule`, payload, key) }
 export function cancelAppointmentRemote(id, payload, key) { return command(`/api/appointments/${encodeURIComponent(id)}/cancel`, payload, key) }
+// Appointment-only lifecycle command: the pre-arrival 'no-show' (Check-In and treatment progression are Visit commands).
 export function transitionAppointment(id, name, payload, key) { return command(`/api/appointments/${encodeURIComponent(id)}/${encodeURIComponent(name)}`, payload, key) }
-// Minimal M4 Patient directory (Staff/Owner selection).
+// Minimal M4 Patient directory (Staff/Owner selection) and front-desk registration (Person + Patient, no login).
 export function searchPatients(params) { return request(`/api/patients${query(params)}`) }
+export function registerPatient(payload, key) { return command('/api/patients', payload, key) }
+
+// M8 Patient Check-In and the shared Visit / Clinical Encounter. Raw calls only; src/visits-api.js owns mapping.
+export function listVisits(params) { return request(`/api/visits${query(params)}`) }
+export function getVisit(id) { return request(`/api/visits/${encodeURIComponent(id)}`) }
+export function checkInVisit(payload, key) { return command('/api/visits/check-in', payload, key) }
+export function walkInVisit(payload, key) { return command('/api/visits/walk-in', payload, key) }
+export function transitionVisit(id, name, payload, key) { return command(`/api/visits/${encodeURIComponent(id)}/${encodeURIComponent(name)}`, payload, key) }

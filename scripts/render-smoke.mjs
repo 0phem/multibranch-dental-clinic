@@ -55,9 +55,9 @@ const rawActions=m.createWorkflowActions({getState:()=>state,getSession:()=>sess
   state.patients=state.patients.map(p=>m.patientProjection(p,state.persons.find(person=>person.id===p.personId)))
   store={...store,state,actions}
 }})
-// M6 cutover: appointments are server-authoritative. The smoke run stands in for "the server accepted the command and
-// the projection was refreshed" and runs Check-In/No-show/treatment server-first, exactly like the store's flow.
-const flow=m.serverFlow({actions:()=>rawActions,getState:()=>state,getSession:()=>session,setAppointments:rows=>{state=m.normalizeClinicState({...state,appointments:rows});store={...store,state,actions}}})
+// M6/M8 cutovers: appointments and Visits are server-authoritative. The smoke run stands in for "the server accepted
+// the command and the projection was refreshed" and runs Check-In/Walk-In/treatment server-first, like the store's flow.
+const flow=m.serverFlow({actions:()=>rawActions,getState:()=>state,getSession:()=>session,patchState:patch=>{state=m.normalizeClinicState({...state,...patch});store={...store,state,actions}}})
 const actions=m.serverFirstActions(rawActions,flow)
 const bookServer=form=>({ok:true,record:flow.book(form)})
 const patient=actions.createPatientRecord({person:{firstName:'PhaseOne',lastName:'Patient',phone:'0917-audit-new'},patient:{preferredBranchId:'b1',allergies:'None'}})
@@ -180,21 +180,24 @@ m.setClockSource(()=>new Date('2026-09-19T02:08:00Z'))
 console.log('PASS: Phase 3 HMO correction/resubmission/escalation, Patient privacy, notification navigation/read scope, participant messages, monitor failures, render purity')
 
 // Exercise ClinicProvider's synchronous snapshot with commands issued before any render.
-// The server already recorded the arrival (Checked In); the local check-in adapter must stay idempotent before a render.
+// The server already recorded the arrival (appointment Checked In + an open Visit); the local queue handoff must stay
+// idempotent before a render.
 const quickRow=m.serverRow({patientId:'p1',branchId:'b1',dentistId:'d1',serviceId:'svc1',date:'2026-09-19',start:'16:00',status:'Checked In'})
+const quickVisit=m.serverVisitRow({appointmentId:quickRow.id,patientId:'p1',branchId:'b1',dentistId:'d1',serviceId:'svc1',arrivedAt:'2026-09-19T10:05:00+08:00'})
 let serverStore
-renderToString(React.createElement(m.ClinicProvider,{initialReferenceData,initialServerAppointments:[quickRow]},React.createElement(function(){serverStore=m.useClinic();return null})))
+renderToString(React.createElement(m.ClinicProvider,{initialReferenceData,initialServerAppointments:[quickRow],initialServerVisits:[quickVisit]},React.createElement(function(){serverStore=m.useClinic();return null})))
 serverStore.setSession('staff')
 assert.equal(serverStore.state.appointments[0].id,quickRow.id,'server rows reach the in-memory projection')
-const check1=serverStore.actions.checkInAppointment(quickRow.id),check2=serverStore.actions.checkInAppointment(quickRow.id)
-assert.equal(check1.ok,true);assert.equal(check2.unchanged,true)
+assert.equal(serverStore.state.visits[0].id,quickVisit.id,'server Visits reach the in-memory projection')
+const check1=serverStore.actions.admitVisit(quickVisit.id),check2=serverStore.actions.admitVisit(quickVisit.id)
+assert.equal(check1.ok,true,check1.message);assert.equal(check2.unchanged,true)
+assert.equal(check2.record.id,check1.record.id);assert.equal(check1.record.visitId,quickVisit.id)
 console.log('PASS: immediate repeated command integration')
 
 // Reload persisted ID-only records, including an old record missing branch entirely.
 const persisted=new Map()
-for(const key of ['persons','patients','appointments','queue','treatments','invoices','followups','prescriptions','hmo','notifications','conversations','inquiries','dentists','staff','checkIns']){
-  const storageKey=key==='checkIns'?'check-ins':key
-  persisted.set(`dentalops-v4-${storageKey}`,JSON.stringify(m.persistableCollection(key,state[key])))
+for(const key of ['persons','patients','appointments','queue','treatments','invoices','followups','prescriptions','hmo','notifications','conversations','inquiries','dentists','staff']){
+  persisted.set(`dentalops-v4-${key}`,JSON.stringify(m.persistableCollection(key,state[key])))
 }
 globalThis.localStorage={getItem:key=>persisted.get(key)||null}
 // Phase 2A: 'dentists'/'staff' in the manually-populated localStorage map above are now inert (nothing

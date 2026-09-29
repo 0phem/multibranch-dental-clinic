@@ -16,8 +16,8 @@ Reviewed against protected checkpoint `dac864e`, the [Data Dictionary](docs/arch
 | STAFF_SCHEDULES | Inline profile shifts and availability. **Backend Phase 2A**: the same flat `shift_start`/`shift_end`/`available` fields now live on `staff_profiles`/`dentist_profiles` (PostgreSQL) | No complete date-specific schedule/exception collection — this remains a frontend/backend gap alike, not newly introduced or newly closed by Phase 2A |
 | DENTIST_SERVICE_ASSIGNMENTS | `dentistServiceAssignments`. **Backend Phase 2A**: derived from the `dentist_service_assignments` table (PostgreSQL) via the Dentist read endpoint, not its own fetch | Shared scheduler and performed-procedure authorization |
 | APPOINTMENTS | `appointments` | Patient, branch, Dentist, service IDs; current validator; revision/retry context; immutable Patient on reschedule |
-| CHECK_IN_RECORDS | `checkIns` | Distinct arrival linked to appointment or walk-in, exact queue and clinic day |
-| DENTIST_QUEUES / QUEUE_ENTRIES | `queue`, with per-Dentist/branch/day `queueId` | Container identity embedded rather than separate queue table; exact appointment/check-in/treatment links |
+| CHECK_IN_RECORDS → VISITS | **M8 (backend)**: the `visits` table (PostgreSQL) is the arrival record and the Visit / Clinical Encounter; the browser holds an in-memory projection only (`state.visits`). The former `checkIns` collection is no longer read | One Visit per scheduled appointment; walk-ins have no appointment; at most one active Visit per Patient; server arrival time and Asia/Manila clinic date |
+| DENTIST_QUEUES / QUEUE_ENTRIES | `queue`, with per-Dentist/branch/day `queueId` | Container identity embedded rather than separate queue table; each live entry references exactly one server Visit (`visitId`), with the appointment id kept only as derived compatibility data |
 | CAPACITY_EVENTS | Derived queue/capacity views and workflow events | No independent persisted aggregate snapshot table; estimates do not replace queue entries |
 | AUDIT_LOGS | `audit` alongside `workflowLog` | Local audit projection (recent audit list capped); not immutable server security evidence. The tamper-resistant audit trail belongs to the planned M22 |
 
@@ -52,7 +52,7 @@ field, which this checkpoint does not redefine.
 | --- | --- | --- |
 | PATIENT_DOCUMENTS | HMO requirement document metadata; general chart document cards are illustrative | No file bytes, controlled upload service or general document repository |
 | CLINICAL_TEMPLATES | No persisted template catalog | Documentation aid remains an approved concept; no automated diagnosis or clinical choice |
-| TREATMENT_PLANS | `treatments` | Exact `queueEntryId`, Patient, Dentist, branch, optional appointment; draft revisions; immutable completion |
+| TREATMENT_PLANS | `treatments` | Exact `queueEntryId` and `visitId` (the Visit is the required encounter; the appointment is optional), Patient, Dentist, branch; draft revisions; immutable completion |
 | TREATMENT_PROCEDURES | `treatment.procedures[]` | Child `id`, `treatmentId`, `serviceId`, quantity, configured unit fee snapshot, amount, notes; multiple lines |
 | PRESCRIPTIONS / PRESCRIPTION_ITEMS | `prescriptions` / `prescription.items[]` | Exact treatment/Patient/Dentist, private draft, explicit authorization identity/time/version; requested tasks are derived before a record exists |
 | TREATMENT_FOLLOW_UPS | `followups` | Explicit clinical decision, source treatment and linked return `appointmentId`; Open/Awaiting Scheduling → Scheduled → Completed |
@@ -61,7 +61,7 @@ field, which this checkpoint does not redefine.
 
 Fees are snapshots of configured fees for the performed work, not a competing editable catalog. A later catalog change does not rewrite completed charges. Review/issuance validates child links/arithmetic and completed encounter evidence. Patient receipt visibility requires supported payment evidence; malformed/historical financial records are retained for scoped review rather than supplied with invented evidence.
 
-**Known walk-in difference:** the diagram labels `TREATMENT_PLANS.appointment_id` as FK without NULL, while approved Check-In supports walk-ins. Phases 1–3.5 use `appointmentId: null` and an explicit Check-In/Queue encounter for those treatments. This intentional frontend decision is retained, but the logical schema ambiguity requires approval before backend constraints are finalized. Do not invent a scheduled appointment just to satisfy the drawing. See [conflict C2](DOCUMENTATION_RECONCILIATION.md#conflicts-retained-for-review).
+**Walk-in difference — resolved (C2, M8, approved decision D10):** the model is Visit-anchored. `VISITS` is added to the data dictionary: Treatment → required Visit; Visit → optional Appointment. Scheduled care is Appointment → Visit → Treatment; walk-in care is Visit → Treatment, with no fabricated appointment. `TREATMENT_PLANS.appointment_id` is therefore optional and the required encounter link is `visit_id` (enforced when the M5 backend is built). The generated ERD diagram images (PNG/SVG) predate this decision and have not been regenerated (no diagram source is in the repository); the data dictionary is the current text of record until they are. See [conflict C2](DOCUMENTATION_RECONCILIATION.md#c2--required-appointment-in-the-diagram-versus-approved-walk-in-care).
 
 ## HMO
 

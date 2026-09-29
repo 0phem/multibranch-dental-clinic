@@ -3,17 +3,18 @@ import assert from 'node:assert/strict'
 import * as data from '../src/data.js'
 import { clinicNow, setClockSource, rebaseDemoRecords } from '../src/clock.js'
 import { normalizeClinicState, sessionForRole, encounterContext, inScope, isTodayQueue } from '../src/contracts.js'
-import { availableSlots, validateAppointment, branchCapacity } from '../src/logic.js'
+import * as logic from '../src/logic.js'
+import { branchCapacity } from '../src/logic.js'
 import { createWorkflowActions } from '../src/workflow.js'
 import { withServerAppointments } from './support/server-appointments.js'
 
 setClockSource(()=>new Date('2026-09-19T02:08:00Z'))
 const seedKeys={persons:'PERSONS',services:'SERVICES',branchServices:'BRANCH_SERVICES',dentistServiceAssignments:'DENTIST_SERVICE_ASSIGNMENTS',branches:'BRANCHES',dentists:'DENTISTS',staff:'STAFF',patients:'PATIENTS',users:'USERS'}
 function fixture(overrides={}) {
-  let state=normalizeClinicState({...Object.fromEntries(Object.entries(seedKeys).map(([key,seed])=>[key,structuredClone(data[`INITIAL_${seed}`])])),appointments:[],queue:[],checkIns:[],treatments:[],invoices:[],followups:[],prescriptions:[],notifications:[],workflowLog:[],audit:[],...overrides})
+  let state=normalizeClinicState({...Object.fromEntries(Object.entries(seedKeys).map(([key,seed])=>[key,structuredClone(data[`INITIAL_${seed}`])])),appointments:[],visits:[],queue:[],treatments:[],invoices:[],followups:[],prescriptions:[],notifications:[],workflowLog:[],audit:[],...overrides})
   let session=sessionForRole('staff',state)
   const raw=createWorkflowActions({getState:()=>state,getSession:()=>session,commit:patch=>{state=normalizeClinicState({...state,...patch})}})
-  // M6 cutover: server appointments; Check-In/No-show/treatment transitions run server-first.
+  // M6/M8 cutovers: server appointments and Visits; Check-In, Walk-In, No-show and treatment run server-first.
   const server=withServerAppointments({getState:()=>state,setState:next=>{state=normalizeClinicState(next)},getSession:()=>session,rawActions:()=>raw})
   return {get actions(){return server.actions()},flow:server.flow,get session(){return session},get state(){return state},role:role=>{session=sessionForRole(role,state)},patch:patch=>{state=normalizeClinicState({...state,...patch})}}
 }
@@ -30,7 +31,6 @@ test('server appointments keep their branch ID and derive renamed labels',()=>{
   const changed=f.state.appointments[0]
   f.patch({branches:f.state.branches.map(b=>b.id==='b1'?{...b,name:'Renamed clinic'}:b)})
   assert.equal(f.state.appointments[0].branch,'Renamed clinic')
-  assert.equal(validateAppointment({...form,start:'13:00'},f.state).valid,true)
   const q=arrive(f,changed);assert.equal(q.branchId,'b1')
   assert.equal(f.state.queue[0].branch,'Renamed clinic')
   assert.equal(branchCapacity('Renamed clinic',f.state).booked,1)
@@ -51,11 +51,12 @@ test('patient creation returns patient ID, separately linked to its PERSON',()=>
   assert.equal(f.actions.createPatientRecord({person:{firstName:'New',lastName:'Patient',phone:'09170009999'},patient:{}}).ok,false)
 })
 
-test('scheduled check-in creates one check-in and one queue entry, including repeated calls',()=>{
+test('scheduled check-in opens one server Visit and one queue entry, including repeated calls',()=>{
   const f=fixture();const a=book(f);const q=arrive(f,a);const events=f.state.workflowLog.length
   const repeat=f.actions.checkInAppointment(a.id)
   assert.equal(repeat.ok,true);assert.equal(repeat.unchanged,true);assert.equal(repeat.record.id,q.id)
-  assert.equal(f.state.queue.length,1);assert.equal(f.state.checkIns.length,1)
+  assert.equal(f.state.queue.length,1);assert.equal(f.state.visits.length,1)
+  assert.equal(q.visitId,f.state.visits[0].id);assert.equal(f.state.visits[0].appointmentId,a.id)
   assert.equal(f.state.appointments[0].status,'Checked In');assert.equal(f.state.workflowLog.length,events)
 })
 
@@ -67,50 +68,32 @@ for(const status of ['Cancelled','Completed','No-show'])test(`${status} appointm
 test('walk-in preserves service and retries do not duplicate arrival',()=>{
   const f=fixture();const r=f.actions.admitWalkIn({...form,serviceId:'svc2'},'walk-1')
   assert.equal(r.ok,true,r.message);assert.equal(r.record.serviceId,'svc2');assert.equal(r.record.appointmentId,null)
+  assert.equal(r.record.visitId,f.state.visits[0].id);assert.equal(f.state.visits[0].walkIn,true)
   assert.equal(f.actions.admitWalkIn({...form,serviceId:'svc2'},'walk-1').unchanged,true)
-  assert.equal(f.actions.admitWalkIn({...form,serviceId:'svc2'},'walk-2').ok,false)
-  assert.equal(f.state.queue.length,1);assert.equal(f.state.checkIns[0].serviceId,'svc2')
+  assert.equal(f.actions.admitWalkIn({...form,serviceId:'svc2'},'walk-2').ok,false,'one active Visit per Patient')
+  assert.equal(f.state.queue.length,1);assert.equal(f.state.visits.length,1);assert.equal(f.state.visits[0].serviceId,'svc2')
   start(f,r.record,{procedure:'Oral prophylaxis'})
   assert.equal(f.actions.completeTreatment({queueEntryId:r.record.id,procedure:'Oral prophylaxis'}).ok,true)
   assert.equal(f.state.invoices[0].branchId,'b1');assert.equal(f.state.invoices[0].total,1200)
 })
 
-for(const [name,patch] of [['patient',{patientId:'missing'}],['branch',{branchId:'missing'}],['service',{serviceId:'missing'}],['dentist',{dentistId:'missing'}],['branch assignment',{branchId:'b2'}],['dentist capability',{dentistId:'d2',serviceId:'svc2'}],['branch service',{serviceId:'svc9'}],['past date',{date:'2026-09-18'}],['same-day past time',{start:'10:00'}],['invalid time',{start:'99:00'}],['invalid date',{date:'2026-02-30'}],['branch hours',{start:'18:00'}]])test(`validation blocks invalid ${name}`,()=>{
-  const f=fixture();assert.equal(validateAppointment({...form,...patch},f.state).valid,false)
-})
-
-test('closed branch and inactive dentist cannot be booked',()=>{
-  const f=fixture();f.patch({branches:f.state.branches.map(b=>b.id==='b1'?{...b,status:'Inactive'}:b)})
-  assert.equal(validateAppointment(form,f.state).valid,false)
-  const other=fixture();other.patch({users:other.state.users.map(u=>u.id==='u3'?{...u,status:'Inactive',accountStatus:'Inactive'}:u)})
-  assert.equal(validateAppointment(form,other.state).valid,false)
-})
-
-test('dentist and patient overlaps are independently blocked',()=>{
-  const f=fixture();book(f)
-  assert.equal(validateAppointment({...form,patientId:'p3'},f.state).checks.find(c=>c.key==='overlap').ok,false)
-  assert.equal(validateAppointment({...form,dentistId:'d2'},f.state).checks.find(c=>c.key==='patient-overlap').ok,false)
-  assert.equal(validateAppointment({...form,start:'11:30'},f.state).valid,true)
-})
-
-test('available slots and suggested alternatives pass exactly the same validator',()=>{
-  const f=fixture();book(f)
-  const slots=availableSlots(form,f.state);assert.ok(slots.length)
-  for(const start of slots){assert.ok(start>clinicNow().time);assert.equal(validateAppointment({...form,start},f.state).valid,true)}
-  for(const start of validateAppointment(form,f.state).alternatives)assert.equal(validateAppointment({...form,start},f.state).valid,true)
+test('the browser holds no local scheduling validator (booking and walk-in rules are server-authoritative)',()=>{
+  // Branch/service/Dentist eligibility, hours, shifts, overlaps and walk-in admission are enforced by the M6/M8 server
+  // (SchedulingService / VisitService; backend tests). The old local validator and slot search are gone.
+  for(const name of ['validateAppointment','availableSlots','overlap'])assert.equal(name in logic,false,name)
 })
 
 test('front desk scope cannot operate another branch; patient cannot act on another patient',()=>{
   const f=fixture()
   f.role('owner');const b=book(f,{branchId:'b2',dentistId:'d3',patientId:'p2'})
-  f.role('staff');assert.equal(f.actions.checkInAppointment(b.id).ok,false);f.flow.setStatus(b.id,'Cancelled');assert.equal(f.actions.applyAppointmentCancellation(b.id).ok,false)
+  f.role('staff');assert.equal(f.actions.checkInAppointment(b.id).ok,false);f.flow.setAppointment(b.id,{status:'Cancelled'});assert.equal(f.actions.applyAppointmentCancellation(b.id).ok,false)
   f.role('patient');assert.equal(f.actions.applyAppointmentCancellation(b.id).ok,false)
   assert.equal(f.actions.checkInAppointment(b.id).ok,false)
 })
 
 test('exact queue context carries all encounter references and dentist cannot complete queue',()=>{
   const f=fixture();const a=book(f);const q=arrive(f,a);const context=encounterContext(q)
-  assert.deepEqual(context,{queueEntryId:q.id,patientId:'p1',appointmentId:a.id,dentistId:'d1',branchId:'b1',serviceId:'svc1',treatmentId:null})
+  assert.deepEqual(context,{queueEntryId:q.id,visitId:q.visitId,patientId:'p1',appointmentId:a.id,dentistId:'d1',branchId:'b1',serviceId:'svc1',treatmentId:null})
   f.role('dentist');assert.equal(f.actions.updateQueue(q.id,'Completed').ok,false)
   assert.equal(f.actions.updateQueue(q.id,'No-show').ok,false)
   assert.equal(f.actions.updateQueue(q.id,'Temporarily Away').ok,false)
@@ -118,20 +101,29 @@ test('exact queue context carries all encounter references and dentist cannot co
   assert.equal(f.actions.completeTreatment({queueEntryId:q.id,procedure:'Consultation'}).ok,false)
 })
 
-test('away and return preserve arrival; emergency changes require reason; no-show closes appointment',()=>{
+test('away and return preserve arrival; emergency changes require reason; a checked-in visit is never No-show',()=>{
   const f=fixture();const a=book(f);const q=arrive(f,a)
   assert.equal(f.actions.updateQueue(q.id,'Temporarily Away').ok,true)
   assert.equal(f.state.queue[0].checkedIn,q.checkedIn);assert.equal(f.state.queue[0].position,null)
   assert.equal(f.actions.updateQueue(q.id,'Waiting').ok,true)
   assert.equal(f.actions.updateQueue(q.id,'Waiting',{priority:'Urgent'}).ok,false)
   assert.equal(f.actions.updateQueue(q.id,'Waiting',{priority:'Urgent',reason:'Staff-recorded emergency'}).ok,true)
-  assert.equal(f.actions.updateQueue(q.id,'No-show').ok,true)
-  assert.equal(f.state.appointments[0].status,'No-show')
-  assert.equal(f.actions.checkInAppointment(a.id).ok,false)
+  assert.equal(f.actions.updateQueue(q.id,'No-show').ok,false)
+  assert.equal(f.state.appointments[0].status,'Checked In');assert.equal(f.state.visits[0].status,'Checked In')
+  assert.equal(f.actions.markNoShow(a.id).ok,false,'No-show is a pre-arrival decision only')
+})
+
+test('pre-arrival No-show creates no Visit and reopens a linked follow-up',()=>{
+  const f=fixture();const a=book(f)
+  f.patch({followups:[{id:'f',patientId:a.patientId,branchId:'b1',appointmentId:a.id,status:'Scheduled'}]})
+  assert.equal(f.actions.markNoShow(a.id).ok,true)
+  assert.equal(f.state.appointments[0].status,'No-show');assert.deepEqual([f.state.visits.length,f.state.queue.length],[0,0])
+  assert.equal(f.state.followups[0].status,'Open');assert.equal(f.state.followups[0].appointmentId,null)
+  assert.equal(f.actions.checkInAppointment(a.id).ok,false,'a No-show appointment cannot be admitted')
 })
 
 test('treatment completes only its exact encounter; repeating commands creates no downstream duplicates',()=>{
-  const f=fixture();const a=book(f);const b=book(f,{start:'13:00'},'book-2')
+  const f=fixture();const a=book(f);const b=book(f,{start:'13:00',patientId:'p3'})
   const qa=arrive(f,a),qb=arrive(f,b)
   const t=start(f,qa,{procedure:'Consultation',followupRequired:true,prescriptionRequired:true})
   assert.equal(f.actions.saveTreatment({queueEntryId:qa.id,id:t.id,procedure:'Consultation',followupRequired:true,prescriptionRequired:true}).unchanged,true)
@@ -155,13 +147,15 @@ test('dentist-selected performed service drives draft charges, not original book
   assert.equal(f.state.treatments[0].requestedServiceId,'svc1');assert.equal(f.state.invoices[0].items[0].serviceId,'svc2');assert.equal(f.state.invoices[0].total,1200)
 })
 
-test('server cancellation reconciles the linked local queue and follow-up',()=>{
-  const f=fixture();const a=book(f);const q=arrive(f,a)
+test('server cancellation reopens a linked follow-up and is refused once the patient has checked in',()=>{
+  const f=fixture();const a=book(f)
   f.patch({followups:[{id:'f',patientId:a.patientId,branchId:'b1',appointmentId:a.id,status:'Scheduled'}]})
-  assert.equal(f.state.appointments[0].status,'Checked In','the arrival was recorded on the server appointment first')
   assert.equal(f.flow.cancel(a.id).ok,true)
-  assert.equal(f.state.queue[0].status,'Cancelled');assert.equal(f.state.checkIns[0].status,'Cancelled');assert.equal(f.state.followups[0].status,'Open');assert.equal(f.state.followups[0].appointmentId,null)
-  assert.equal(f.actions.checkInAppointment(a.id).ok,false,'a cancelled appointment cannot be admitted again')
+  assert.equal(f.state.followups[0].status,'Open');assert.equal(f.state.followups[0].appointmentId,null)
+  assert.equal(f.actions.checkInAppointment(a.id).ok,false,'a cancelled appointment cannot be admitted')
+  const b=book(f,{start:'13:00'});arrive(f,b)
+  assert.equal(f.flow.cancel(b.id).ok,false,'cancelling after Check-In needs a future clinic policy')
+  assert.equal(f.state.queue[0].status,'Waiting');assert.equal(f.state.visits[0].status,'Checked In')
 })
 
 test('day rollover excludes old queues and prevents clinical edits; saved data never rebases',()=>{
@@ -204,14 +198,16 @@ test('prior-day and another dentist’s encounter cannot be opened for treatment
   assert.equal(f.actions.saveTreatment({queueEntryId:q.id}).ok,false)
 })
 
-test('invalid walk-in capability never records admission',()=>{
-  for(const patch of [{patientId:'missing'},{serviceId:'missing'},{dentistId:'d3'},{serviceId:'svc6',dentistId:'d1'},{branchId:'b2'}]){
-    const f=fixture();assert.equal(f.actions.admitWalkIn({...form,...patch},'walk-invalid').ok,false);assert.equal(f.state.queue.length,0);assert.equal(f.state.checkIns.length,0)
+test('a walk-in the queue handoff cannot accept never reaches the server',()=>{
+  // Service/Dentist eligibility, branch hours and shifts are server rules (VisitService; backend VisitTest). The local
+  // dry run still refuses an unknown Patient or Dentist and a branch outside the Staff member's scope before any command.
+  for(const patch of [{patientId:'missing'},{dentistId:'missing'},{branchId:'b2',dentistId:'d3'}]){
+    const f=fixture();assert.equal(f.actions.admitWalkIn({...form,...patch},'walk-invalid').ok,false);assert.deepEqual([f.state.queue.length,f.state.visits.length],[0,0])
   }
 })
 
 test('malformed direct treatment links cannot overwrite another encounter',()=>{
-  const f=fixture();const qa=arrive(f,book(f));const qb=arrive(f,book(f,{start:'13:00'},'other-visit'))
+  const f=fixture();const qa=arrive(f,book(f));const qb=arrive(f,book(f,{start:'13:00',patientId:'p3'}))
   const t=start(f,qa,{procedure:'Consultation'})
   f.patch({queue:f.state.queue.map(q=>q.id===qb.id?{...q,status:'Called',treatmentId:t.id}:q)})
   assert.equal(f.actions.saveTreatment({queueEntryId:qb.id,id:t.id,procedure:'Wrong encounter'}).ok,false)

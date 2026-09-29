@@ -46,17 +46,13 @@ class AppointmentPolicy
     }
 
     /**
-     * Lifecycle transitions. Arrival (check-in) and No-show are front-desk actions: in-scope Staff, or Owner under the
-     * documented Phase 1 administrative exception. Treatment start/completion are clinical: only the Dentist assigned
-     * to this appointment.
+     * Appointment-only transitions: the pre-arrival No-show is a front-desk action — in-scope Staff, or Owner under the
+     * documented Phase 1 administrative exception. Check-In and treatment start/completion are Visit commands
+     * (VisitPolicy).
      */
     public function transition(User $user, Appointment $appointment, string $command): bool
     {
-        return match ($command) {
-            'check-in', 'no-show' => in_array($user->role, [Role::Staff, Role::Owner], true) && $this->view($user, $appointment),
-            'start-treatment', 'complete' => $user->role === Role::Dentist && $this->view($user, $appointment),
-            default => false,
-        };
+        return $command === 'no-show' && in_array($user->role, [Role::Staff, Role::Owner], true) && $this->view($user, $appointment);
     }
 
     private function staffScope(User $user, int $branchId): bool

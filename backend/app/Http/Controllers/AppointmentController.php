@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Enums\Role;
+use App\Http\Controllers\Concerns\ReadsIdempotencyKey;
 use App\Http\Requests\Appointment\AvailabilityRequest;
 use App\Http\Requests\Appointment\CancelAppointmentRequest;
 use App\Http\Requests\Appointment\RecommendationRequest;
@@ -28,6 +29,8 @@ use Illuminate\Validation\ValidationException;
 // SchedulingService and every state change in AppointmentService's named commands.
 class AppointmentController extends Controller
 {
+    use ReadsIdempotencyKey;
+
     private const RELATIONS = ['patient.person', 'branch', 'service', 'dentist.person'];
 
     public function __construct(
@@ -111,7 +114,7 @@ class AppointmentController extends Controller
         return $this->appointments->cancel($request->user(), $appointment, $request->safe()->only(['expected_revision']), $this->idempotencyKey($request));
     }
 
-    /** Named lifecycle commands: check-in, no-show, start-treatment, complete (see AppointmentService::TRANSITIONS). */
+    /** Appointment-only lifecycle command: the pre-arrival No-show (see AppointmentService::TRANSITIONS). */
     public function transition(TransitionAppointmentRequest $request, Appointment $appointment, string $command): JsonResponse
     {
         Gate::authorize('transition', [$appointment, $command]);
@@ -207,18 +210,5 @@ class AppointmentController extends Controller
         return $patient
             ? ['start_grid_minutes' => SchedulingService::PATIENT_GRID_MINUTES, 'window' => ['first_date' => $first, 'last_date' => $last]]
             : ['start_grid_minutes' => SchedulingService::STAFF_GRID_MINUTES, 'window' => null];
-    }
-
-    private function idempotencyKey(Request $request): ?string
-    {
-        $key = $request->header('Idempotency-Key');
-        if ($key === null) {
-            return null;
-        }
-        if (! is_string($key) || $key === '' || strlen($key) > 255 || preg_match('/[^\x21-\x7E]/', $key)) {
-            throw ValidationException::withMessages(['idempotency_key' => 'The Idempotency-Key header must be 1–255 visible ASCII characters.']);
-        }
-
-        return $key;
     }
 }

@@ -4,12 +4,11 @@ import { readFileSync } from 'node:fs'
 import * as data from '../src/data.js'
 import { setClockSource } from '../src/clock.js'
 import { normalizeClinicState, sessionForRole } from '../src/contracts.js'
-import { createWorkflowActions } from '../src/workflow.js'
 import * as api from '../src/appointments-api.js'
 import { __resetCsrfCacheForTests, onSessionInvalidated, sessionStillValid } from '../src/api-client.js'
-import { createAppointmentFlow } from '../src/appointment-flow.js'
 import { patientAttention } from '../src/patient-view.js'
 import { serverId } from './support/server-appointments.js'
+import { row, world } from './support/mock-server-world.js'
 
 // M6 cutover final hardening: the transitional follow-up rule (Dentist recommends, clinic Staff schedule), the shared
 // expired-session path for M6 calls, and the bounded appointment window never presented as all-time data.
@@ -17,46 +16,7 @@ import { serverId } from './support/server-appointments.js'
 beforeEach(() => setClockSource(() => new Date('2026-09-19T02:08:00Z')))
 const read = path => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8')
 
-const row = (fields = {}) => ({
-  id: fields.id || serverId(900), code: fields.code || 'APT-2026-000900', status: 'Confirmed', source: 'front_desk', assignment_method: 'auto', revision: 1,
-  date: '2026-09-19', start_time: '11:00', end_time: '11:30', starts_at: '2026-09-19T11:00:00+08:00', ends_at: '2026-09-19T11:30:00+08:00', duration_minutes: 30,
-  patient: { id: serverId(500), code: 'PAT-0500', name: 'Server Patient' }, branch: { id: 'b1', name: 'Branch A' }, service: { id: 'svc1', name: 'Dental Consultation' },
-  dentist: { id: 'd1', name: 'Dr. Miguel Reyes' }, notes: null, ...fields,
-})
-
-// ---- follow-up world: real workflow actions + real appointment-flow.js against a tiny mocked server -------------------
-const seedKeys = { persons: 'PERSONS', services: 'SERVICES', branchServices: 'BRANCH_SERVICES', dentistServiceAssignments: 'DENTIST_SERVICE_ASSIGNMENTS', branches: 'BRANCHES', dentists: 'DENTISTS', staff: 'STAFF', patients: 'PATIENTS', users: 'USERS' }
-function world() {
-  const seeds = Object.fromEntries(Object.entries(seedKeys).map(([k, v]) => [k, structuredClone(data[`INITIAL_${v}`])]))
-  let state = normalizeClinicState({ ...seeds, appointments: [], queue: [], checkIns: [], treatments: [], invoices: [], followups: [], prescriptions: [], notifications: [], hmo: [], conversations: [], inquiries: [], workflowLog: [], audit: [], bookingDrafts: [] })
-  let session = sessionForRole('staff', state)
-  const patches = []
-  const actions = createWorkflowActions({ getState: () => state, getSession: () => session, commit: patch => { patches.push(patch); state = normalizeClinicState({ ...state, ...patch }) } })
-  const server = new Map()
-  const log = []
-  let createResult = null
-  const project = () => { state = normalizeClinicState({ ...state, appointments: [...server.values()].map(r => api.mapAppointment(r, id => (id === serverId(500) ? 'p1' : id))) }) }
-  const accept = (id, changes) => { const current = server.get(id); const next = { ...current, ...changes, revision: current.revision + 1 }; server.set(id, next); return { ok: true, row: next } }
-  const mock = {
-    commandKey: () => `k-${log.length}`,
-    async createAppointment(form, key) {
-      log.push(['create', key])
-      if (createResult) return createResult
-      const r = row({ id: serverId(700 + server.size), code: `APT-2026-00070${server.size}`, date: form.date, start_time: form.start, dentist: { id: form.dentistId || 'd1', name: 'Dr' } })
-      server.set(r.id, r); return { ok: true, row: r }
-    },
-    async transitionAppointment(a, name) { log.push([name]); const to = { 'check-in': 'Checked In', 'no-show': 'No-show', 'start-treatment': 'In Treatment', complete: 'Completed' }[name]; return accept(a.id, { status: to }) },
-  }
-  const flow = createAppointmentFlow({ getState: () => state, getSession: () => session, getActions: () => actions, refresh: async () => { log.push(['refresh']); project(); return { ok: true } }, api: mock })
-  return {
-    flow, actions, log, server, patches,
-    get state() { return state },
-    set state(next) { state = next },
-    role(r) { session = sessionForRole(r, state) },
-    failCreateWith(result) { createResult = result },
-    seed(r) { server.set(r.id, r); project(); return state.appointments.find(a => a.id === r.id) },
-  }
-}
+// The real appointment-flow.js over the mocked M6/M8 server (tests/support/mock-server-world.js).
 
 // A completed encounter whose Dentist indicated a required follow-up (the real server-first path).
 async function openFollowup() {
