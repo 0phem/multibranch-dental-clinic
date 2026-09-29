@@ -20,6 +20,8 @@ class AppointmentResource extends JsonResource
 
         return [
             'id' => $this->public_id,
+            // Server-generated, immutable human-readable reference (never derived by React).
+            'code' => $this->appointment_code,
             'status' => $this->status,
             'source' => $this->source,
             'assignment_method' => $this->assignment_method,

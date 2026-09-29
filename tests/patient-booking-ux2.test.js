@@ -2,10 +2,9 @@ import test, { beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import * as data from '../src/data.js'
-import { setClockSource, clinicNow, maxBookingDate, addDays } from '../src/clock.js'
+import { setClockSource, clinicNow, addDays } from '../src/clock.js'
 import { normalizeClinicState, sessionForRole } from '../src/contracts.js'
 import { createWorkflowActions } from '../src/workflow.js'
-import { findOpenTimes, FIND_TIME_DEFAULT_WINDOW_DAYS } from '../src/scheduling.js'
 import { hasUsableCoordinates, nearestBranch } from '../src/geo.js'
 import {
   buildDateStrip, groupSlotsByPeriod, relativeDateLabel, bookingExitOutcome,
@@ -34,38 +33,21 @@ const ok = result => { assert.equal(result.ok, true, result.message); return res
 // ================================================================================================================
 // SMART FIND DATE-STRIP EXHAUSTIVENESS — proves limit:Infinity searches the whole window; a low limit truncates it
 // ================================================================================================================
-test('a low result limit truncates the search before reaching a later day; limit:Infinity does not', () => {
-  const f = fixture()
-  const form = { branchId: 'b1', serviceId: 'svc1', patientId: 'p1' }
-  // Fresh seed data has no existing appointments, so day 1 alone already offers several open slots —
-  // easily enough to exceed a deliberately small limit before the day-loop ever reaches day 5.
-  const truncated = findOpenTimes(f.state, form, { windowDays: 5, limit: 2 })
-  assert.equal(truncated.length, 2, 'the small limit caps the result count')
-  assert.ok(truncated.every(r => r.date === truncated[0].date), 'every result came from the same (first) day — later days were never reached')
-  const laterDate = addDays('2026-09-19', 4)
-  assert.ok(!truncated.some(r => r.date === laterDate), 'the later day is absent from the truncated results')
-
-  const exhaustive = findOpenTimes(f.state, form, { windowDays: 5, limit: Number.POSITIVE_INFINITY })
-  assert.ok(exhaustive.some(r => r.date === laterDate), 'the later day is genuinely searched and its real opening appears once the limit cannot truncate the day loop')
-
-  // buildDateStrip must reflect this proven fact, not a guess from a truncated list.
-  const strip = buildDateStrip(exhaustive, '2026-09-19', 5)
-  const laterEntry = strip.find(d => d.date === laterDate)
-  assert.equal(laterEntry.hasOpenings, true, 'a genuinely-searched day with a real opening is never marked unavailable')
-  assert.equal(strip.length, 5, 'one entry per day across the whole window')
-  for (const day of strip) assert.ok('hasOpenings' in day && typeof day.hasOpenings === 'boolean', 'every day resolves to a real boolean — never a third "not checked" state')
+// M6 cutover: open-time search is server-side. The date strip is built from server availability fetched for every day
+// shown (booking-availability.js), so each day's hasOpenings is a server fact.
+test('the booking pages build their date strips from server availability for every day shown', () => {
+  const hook = read('src/booking-availability.js')
+  assert.match(hook, /Promise\.all\(dates\.map\(date => fetchAvailability/)
+  const book = read('src/pages/PatientBook.jsx')
+  assert.match(book, /useWindowAvailability\(/)
+  assert.match(book, /fetchRecommendation\(/)
 })
 
-test('findOpenTimes accepts limit:Infinity safely (no NaN/coercion issue)', () => {
-  const f = fixture()
-  const results = findOpenTimes(f.state, { branchId: 'b1', serviceId: 'svc1', patientId: 'p1' }, { windowDays: FIND_TIME_DEFAULT_WINDOW_DAYS, limit: Number.POSITIVE_INFINITY })
-  assert.ok(Array.isArray(results))
-  assert.ok(results.every(r => typeof r.date === 'string' && typeof r.start === 'string' && typeof r.dentistId === 'string'))
+test('a strip that starts tomorrow labels days from the clinic date, not from its first day', () => {
+  const days = buildDateStrip([], '2026-09-20', 3, '2026-09-19')
+  assert.deepEqual(days.map(d => d.label).slice(0, 1), ['Tomorrow'])
+  assert.notEqual(days[1].label, 'Tomorrow')
 })
-
-// ================================================================================================================
-// DATE-STRIP / TIME-CHIP HELPERS
-// ================================================================================================================
 test('buildDateStrip produces exactly windowDays entries with a real date/label/hasOpenings shape', () => {
   const results = [{ date: '2026-09-20', start: '09:00' }, { date: '2026-09-20', start: '10:00' }, { date: '2026-09-22', start: '14:00' }]
   const strip = buildDateStrip(results, '2026-09-19', 5)
@@ -105,28 +87,19 @@ test('a restored draft with a past date says the date has passed', () => {
   assert.ok(status.issues.some(m => /has passed/.test(m)), status.issues.join(' | '))
 })
 
-test('a restored draft beyond the two-month horizon says so, distinctly from a past date', () => {
+test('a restored future draft is left for the server to judge (no browser booking-window verdict)', () => {
   const f = fixture()
-  const beyond = addDays(maxBookingDate(), 5)
-  f.state = normalizeClinicState({ ...f.state, bookingDrafts: [{ id: 'draft2', patientId: 'p1', mode: 'manual', branchId: 'b1', serviceId: 'svc1', date: beyond, start: '11:00', paymentMethod: null, revision: 1, updatedAt: clinicNow().timestamp }] })
-  const draft = patientBookingDraft(f.state, f.session)
-  const status = draftStatus(f.state, f.session, draft)
-  assert.equal(status.slotValid, false)
-  assert.ok(status.issues.some(m => /two-month booking window/.test(m)), status.issues.join(' | '))
-  assert.ok(!status.issues.some(m => /has passed/.test(m)))
+  f.state = normalizeClinicState({ ...f.state, bookingDrafts: [{ id: 'draft2', patientId: 'p1', mode: 'manual', branchId: 'b1', serviceId: 'svc1', date: addDays(clinicNow().date, 90), start: '05:00', revision: 1, updatedAt: clinicNow().timestamp }] })
+  const status = draftStatus(f.state, f.session, patientBookingDraft(f.state, f.session))
+  assert.equal(status.slotValid, null, 'unknown until the booking page checks fresh server availability')
+  assert.deepEqual(status.issues, [])
 })
-
-test('a restored draft for a future, otherwise-unavailable slot gets the availability message', () => {
-  const f = fixture()
-  // A time genuinely outside branch operating hours fails validateAppointment's 'branch-hours' check for
-  // EVERY eligible dentist regardless of pool size — a real, deterministic unavailability, not fabricated.
-  const branch = f.state.branches.find(b => b.id === 'b1')
-  assert.ok(branch.open > '05:00', 'sanity: 05:00 is genuinely before this branch opens')
-  f.state = normalizeClinicState({ ...f.state, bookingDrafts: [{ id: 'draft3', patientId: 'p1', mode: 'manual', branchId: 'b1', serviceId: 'svc1', date: '2026-09-21', start: '05:00', paymentMethod: null, revision: 1, updatedAt: clinicNow().timestamp }] })
-  const draft = patientBookingDraft(f.state, f.session)
-  const status = draftStatus(f.state, f.session, draft)
-  assert.equal(status.slotValid, false)
-  assert.ok(status.issues.some(m => /no longer available/.test(m)), status.issues.join(' | '))
+test('resuming a draft rechecks the saved slot against fresh server availability before reusing it', () => {
+  const src = read('src/pages/PatientBook.jsx')
+  assert.match(src, /const resumeDraft=async\(\)=>\{/)
+  assert.match(src, /fetchAvailability\(\{branchId:draft\.branchId,serviceId:draft\.serviceId,date:draft\.date\}\)/)
+  assert.match(src, /outside the online booking window/)
+  assert.match(src, /no longer available/)
 })
 
 // ================================================================================================================
@@ -184,9 +157,11 @@ test('hasUsableCoordinates activates once a real Open branch carries finite coor
   assert.equal(nearestBranch(branches, { lat: 14.83, lng: 120.90 }).id, 'b1')
 })
 test('LocationBranchStep only renders "Use my location" behind a real hasUsableCoordinates gate (source guard)', () => {
+  // M6 cutover: the gate is the server's own report of real branch coordinates (eligible branches' hasCoordinates).
   const src = read('src/pages/PatientBook.jsx')
-  assert.match(src, /const locatable=hasUsableCoordinates\(openBranches\)/)
+  assert.match(src, /const locatable=lookup\.branches\.some\(b=>b\.hasCoordinates\)/)
   assert.match(src, /\{locatable&&<div className="pt-location-row">/)
+  assert.match(src, /locationRanking==='distance'/)
 })
 
 // ================================================================================================================
@@ -202,25 +177,15 @@ test('the first Smart Find result is labelled "Earliest available", never "Recom
   assert.match(src, /Earliest available/)
   assert.doesNotMatch(src, /Recommended/)
 })
-test('Smart Find searches the full window before rendering its date and time controls', () => {
-  const f=fixture()
-  const results=findOpenTimes(f.state,{branchId:'b1',serviceId:'svc1',patientId:'p1'},{limit:Number.POSITIVE_INFINITY})
-  const days=buildDateStrip(results,clinicNow().date,FIND_TIME_DEFAULT_WINDOW_DAYS)
-  assert.ok(days.some(day=>day.hasOpenings))
-  const first=results.find(result=>result.date===days.find(day=>day.hasOpenings).date)
-  assert.ok(first?.start)
-})
-test('the inline Card note states the exact required wording, with no modal introduced for it', () => {
+test('Smart Find shows the server suggestion as not reserved before confirmation', () => {
   const src = read('src/pages/PatientBook.jsx')
-  assert.match(src, /Selecting Card does not complete payment\. Once a card payment is successfully completed, this appointment can no longer be cancelled online\./)
-  assert.doesNotMatch(src, /About card payment/)
+  assert.match(src, /This suggestion is not reserved/)
+  assert.match(src, /appointmentFlow\.create\(/)
 })
-test('no Pass 2 source file describes the payment domain as server-authoritative/server-hardcoded', () => {
-  for (const file of ['src/pages/PatientBook.jsx', 'src/workflow.js']) {
-    const src = read(file)
-    assert.doesNotMatch(src, /server-authoritative/i)
-    assert.doesNotMatch(src, /server-hardcoded/i)
-    assert.doesNotMatch(src, /server-owned/i)
+test('no payment preference is collected or shown during booking (D4: payment belongs to M11)', () => {
+  for (const file of ['src/pages/PatientBook.jsx', 'src/booking-drafts.js', 'src/pages/PatientVisits.jsx']) {
+    const src = read(file).replace(/\/\/.*$/gm, '')
+    assert.doesNotMatch(src, /paymentMethod|PAYMENT_OPTIONS|Selecting Card/, file)
   }
 })
 test('no Patient-facing Dentist chooser exists anywhere in the Book page', () => {
@@ -233,21 +198,21 @@ test('no Patient-facing Dentist chooser exists anywhere in the Book page', () =>
 // ================================================================================================================
 test('mode change clears branch/service/date/start/paymentMethod (source guard on the exact call)', () => {
   const src = read('src/pages/PatientBook.jsx')
-  assert.match(src, /save\(\{mode:next,branchId:null,serviceId:null,date:null,start:null,paymentMethod:null\}\)/)
+  assert.match(src, /save\(\{mode:next,branchId:null,serviceId:null,date:null,start:null\}\)/)
 })
-test('branch change (Smart and Manual) clears service/date/start/paymentMethod', () => {
+test('branch change (Smart and Manual) clears dependent choices', () => {
   const src = read('src/pages/PatientBook.jsx')
-  assert.match(src, /save\(\{mode:'smart',branchId:value,serviceId:null,date:null,start:null,paymentMethod:null\}\)/)
-  assert.match(src, /save\(\{mode:'manual',branchId:value,serviceId:null,date:null,start:null,paymentMethod:null\}\)/)
+  assert.match(src, /save\(\{branchId:value,date:null,start:null\}\)/)
+  assert.match(src, /save\(\{mode:'manual',branchId:value,serviceId:null,date:null,start:null\}\)/)
 })
-test('service change clears date/start/paymentMethod', () => {
+test('service change clears date/start (Smart service comes first and also clears the branch)', () => {
   const src = read('src/pages/PatientBook.jsx')
-  const matches = [...src.matchAll(/save\(\{serviceId:value,date:null,start:null,paymentMethod:null\}\)/g)]
-  assert.equal(matches.length, 2, 'both Smart and Manual service-pick cascades')
+  assert.match(src, /save\(\{mode:'smart',serviceId:value,branchId:null,date:null,start:null\}\)/)
+  assert.match(src, /save\(\{serviceId:value,date:null,start:null\}\)/)
 })
-test('date change (Manual) clears start/paymentMethod', () => {
+test('date change (Manual) clears start', () => {
   const src = read('src/pages/PatientBook.jsx')
-  assert.match(src, /save\(\{date:value,start:'',paymentMethod:null\}\)/)
+  assert.match(src, /save\(\{date:value,start:''\}\)/)
 })
 
 // ================================================================================================================
@@ -258,9 +223,4 @@ test('Pass 1 Patient-only menu/assistant/logout source guards remain intact', ()
   assert.match(src, /role!==['"]patient['"]&&<button className="mobile-menu/)
   assert.match(src, /role==='patient'&&<ClinicAssistant/)
   assert.match(src, /registerPatientNavListener/)
-})
-test('Card selection alone never creates a paid state (existing accepted rule, reconfirmed)', () => {
-  const f = fixture()
-  const record = ok(f.actions.saveAppointment({ patientId: 'p1', branchId: 'b1', dentistId: 'd2', serviceId: 'svc1', date: '2026-09-20', start: '11:00', paymentMethod: 'card', paymentStatus: 'paid' }))
-  assert.equal(record.paymentStatus, 'unpaid')
 })

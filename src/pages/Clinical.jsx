@@ -120,9 +120,14 @@ export function TreatmentPage({ store, context, setPage }) {
   const [form,setForm]=useState(current?{...current,procedures:(Array.isArray(current.procedures)?current.procedures.filter(Boolean):null)||[{serviceId:current.serviceId,quantity:1,notes:current.procedure||''}]}:emptyForm)
   const closed=current?.status==='Completed'||['Completed','Cancelled','No-show'].includes(queueEntry?.status)
   const performedServices=state.services.filter(s=>s.status==='Active'&&state.branchServices.some(bs=>bs.branchId===queueEntry?.branchId&&bs.serviceId===s.id&&bs.active!==false)&&state.dentistServiceAssignments.some(a=>a.dentistId===session.dentistId&&a.serviceId===s.id&&a.isAuthorized!==false))
-  const save=status=>{
+  const [saving,setSaving]=useState(false)
+  // Appointment-linked encounters record start/completion on the server appointment first (M6 lifecycle), then the
+  // browser-local treatment record follows; walk-ins have no appointment and stay local.
+  const save=async status=>{
     if(!queueEntry)return toast('Open an encounter from My Queue.','warning')
-    const result=actions.saveTreatment({...form,id:current?.id,queueEntryId:queueEntry.id},status)
+    setSaving(true)
+    const result=await store.appointmentFlow.treatment({...form,id:current?.id,queueEntryId:queueEntry.id},status)
+    setSaving(false)
     if(!result.ok)return toast(result.message,'warning')
     setForm(result.record)
     toast(result.warnings?.length?`Treatment completed. Clinic review needed: ${result.warnings.join(' ')}`:status==='Completed'?'Treatment completed; this encounter is closed and downstream tasks prepared.':'Treatment progress saved.',result.warnings?.length?'warning':'success')
@@ -153,7 +158,7 @@ export function TreatmentPage({ store, context, setPage }) {
         <Field label="Clinical notes"><textarea value={form.notes||''} onChange={e=>setForm({...form,notes:e.target.value})}/></Field>
         <div className="check-pair"><label><input type="checkbox" checked={!!form.prescriptionRequired} onChange={e=>setForm({...form,prescriptionRequired:e.target.checked})}/> Dentist indicates prescription required</label><label><input type="checkbox" checked={!!form.followupRequired} onChange={e=>setForm({...form,followupRequired:e.target.checked})}/> Dentist indicates follow-up required</label></div>
         {form.followupRequired&&<div className="form-grid"><Field label="Recommended follow-up date"><input type="date" value={form.followupDate||''} onChange={e=>setForm({...form,followupDate:e.target.value})}/></Field><Field label="Follow-up reason / instructions"><input value={form.followupReason||''} onChange={e=>setForm({...form,followupReason:e.target.value})}/></Field><Field label="Recommended interval"><input value={form.followupInterval||''} onChange={e=>setForm({...form,followupInterval:e.target.value})}/></Field></div>}
-        <div className="form-actions"><Button variant="ghost" onClick={()=>save('In Treatment')}>{current?'Save Treatment Progress':'Start Treatment'}</Button><Button disabled={!current||current.status!=='In Treatment'} onClick={()=>save('Completed')}>Complete Treatment</Button></div>
+        <div className="form-actions"><Button variant="ghost" disabled={saving} onClick={()=>save('In Treatment')}>{current?'Save Treatment Progress':'Start Treatment'}</Button><Button disabled={saving||!current||current.status!=='In Treatment'} onClick={()=>save('Completed')}>Complete Treatment</Button></div>
       </div></fieldset></Card>
     </div>}
   </>
@@ -198,16 +203,17 @@ export function FollowupsPage({ role, store, setPage, context }) {
   const session=store.session||sessionForRole(role,state)
   const visible=state.followups.filter(f=>inScope(f,session,state)&&(role!=='patient'||linkedTreatment(state,f)))
   const [booking,setBooking]=useState(null)
-  const prefill=booking?{patientId:booking.patientId,branchId:booking.branchId,dentistId:booking.dentistId,date:booking.recommendedDate,service:'Follow-Up',source:'Follow-Up Task',notes:booking.reason}:{}
   if(role==='patient')return <PatientFollowupsPage store={store} setPage={setPage} context={context}/>
   return <>
     <PageHeader title="Treatment Follow-Up Scheduling" text="Return visits requested by the treating dentist. Scheduling uses normal appointment availability and conflict checks."/>
-    {role==='dentist'&&<Notice>Record the clinical follow-up requirement in the exact treatment encounter.</Notice>}
+    {/* Transitional M6/M20 rule (until M20 is backend-authoritative): the Dentist records/recommends the follow-up in the
+        treatment encounter; clinic Staff schedule the appointment through M6. Dentists get no booking action here. */}
+    {role==='dentist'&&<Notice title="Clinic Staff schedule follow-up visits">Indicate that a follow-up is required, with the recommended date and instructions, in the treatment encounter. Clinic Staff then book the appointment with you; you can’t book it from here.</Notice>}
     <Card title="Follow-up tasks">{!visible.length&&<Notice>No follow-up requirements.</Notice>}{visible.map(f=>{
       const appointment=state.appointments.find(a=>a.id===f.appointmentId)
       const effectiveStatus=followupDisplayState(state,f)
-      return <div className="clinical-history" key={f.id}><div><b>{patientName(f.patientId,state.patients)} • {f.reason}</b><p>{dateLabel(f.recommendedDate)} {f.interval} • {dentistName(f.dentistId,state.dentists)}</p>{!linkedTreatment(state,f)&&<p>Care record needs clinic review before scheduling.</p>}<small>{appointment?`${dateLabel(appointment.date)} • ${displayTime(appointment.start)}`:'Awaiting scheduling'}</small></div><Status>{effectiveStatus==='Open'?'Awaiting Scheduling':effectiveStatus}</Status>{effectiveStatus==='Open'&&linkedTreatment(state,f)&&['staff','patient'].includes(role)&&<Button size="sm" onClick={()=>setBooking(f)}>Schedule follow-up</Button>}</div>
+      return <div className="clinical-history" key={f.id}><div><b>{patientName(f.patientId,state.patients)} • {f.reason}</b><p>{dateLabel(f.recommendedDate)} {f.interval} • {dentistName(f.dentistId,state.dentists)}</p>{!linkedTreatment(state,f)&&<p>Care record needs clinic review before scheduling.</p>}<small>{appointment?`${dateLabel(appointment.date)} • ${displayTime(appointment.start)}`:'Awaiting scheduling'}</small></div><Status>{effectiveStatus==='Open'?'Awaiting Scheduling':effectiveStatus}</Status>{f.legacyAppointment&&<small className="block-muted">Historical demo record</small>}{effectiveStatus==='Open'&&linkedTreatment(state,f)&&!f.legacyAppointment&&role==='staff'&&<Button size="sm" onClick={()=>setBooking(f)}>Schedule follow-up</Button>}</div>
     })}</Card>
-    <Modal open={!!booking} onClose={()=>setBooking(null)} title="Schedule required follow-up" wide>{booking&&<AppointmentForm role={role} store={store} prefill={prefill} followupId={booking.id} onSaved={()=>{setBooking(null);toast('Follow-up appointment scheduled.','success')}} submitLabel="Validate & Schedule Follow-Up"/>}</Modal>
+    <Modal open={!!booking} onClose={()=>setBooking(null)} title="Schedule required follow-up" wide>{booking&&<AppointmentForm role={role} store={store} followup={booking} onSaved={()=>setBooking(null)} submitLabel="Schedule follow-up"/>}</Modal>
   </>
 }

@@ -1,3 +1,4 @@
+import { serverAppointment } from './support/server-appointments.js'
 import test, { beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync, existsSync } from 'node:fs'
@@ -26,6 +27,8 @@ function fixture(patch={}) {
     role(role,overrides={}){session={...sessionForRole(role,state),...overrides};return session},
     setSession(s){session=s},
     patch(p){state=normalizeClinicState({...state,...p})},
+    // M6 cutover: a server-confirmed appointment appears in the read projection.
+    addAppointments(...rows){state=normalizeClinicState({...state,appointments:[...state.appointments,...rows]})},
   }
 }
 const ok=result=>{assert.equal(result.ok,true,result.message);return result.record}
@@ -286,8 +289,8 @@ test('a first real appointment transitions the Patient naturally into the return
   const record=ok(f.register(validForm(),'reg-1'))
   let session=sessionForUser(f.state,record.userId)
   assert.equal(patientHomeMode(f.state,session),'first-use')
-  f.setSession(session)
-  ok(f.actions.saveAppointment({patientId:record.patientId,branchId:'b1',dentistId:'d1',serviceId:'svc1',date:'2026-09-20',start:'11:00'}))
+  // The server confirmed a booking; the Patient's projection now carries it.
+  f.addAppointments(serverAppointment({patientId:record.patientId,branchId:'b1',dentistId:'d1',serviceId:'svc1',date:'2026-09-20',start:'11:00'}))
   session=sessionForUser(f.state,record.userId)
   assert.equal(patientHomeMode(f.state,session),'returning')
 })
@@ -296,9 +299,7 @@ test('a Patient whose only appointment was cancelled remains a returning Patient
   const f=fixture()
   const record=ok(f.register(validForm(),'reg-1'))
   let session=sessionForUser(f.state,record.userId)
-  f.setSession(session)
-  const appt=ok(f.actions.saveAppointment({patientId:record.patientId,branchId:'b1',dentistId:'d1',serviceId:'svc1',date:'2026-09-20',start:'11:00'}))
-  ok(f.actions.cancelAppointment(appt.id))
+  f.addAppointments(serverAppointment({patientId:record.patientId,branchId:'b1',dentistId:'d1',serviceId:'svc1',date:'2026-09-20',start:'11:00',status:'Cancelled'}))
   session=sessionForUser(f.state,record.userId)
   assert.equal(patientHomeMode(f.state,session),'returning')
 })
@@ -313,8 +314,7 @@ test('there is no stored onboarding flag: mode is recomputed from real state, no
 
 test('a Patient with real history (an existing appointment) keeps the full returning Journey Hub',()=>{
   const f=fixture()
-  f.role('staff')
-  ok(f.actions.saveAppointment({patientId:'p1',branchId:'b1',dentistId:'d1',serviceId:'svc1',date:'2026-09-20',start:'11:00'}))
+  f.addAppointments(serverAppointment({patientId:'p1',branchId:'b1',dentistId:'d1',serviceId:'svc1',date:'2026-09-20',start:'11:00'}))
   assert.equal(patientHomeMode(f.state,sessionForRole('patient',f.state)),'returning')
 })
 

@@ -50,14 +50,19 @@ async function parseFailure(response) {
   let body = null
   try { body = await response.json() } catch { /* no JSON body */ }
   if (response.status === 401) return { ok: false, kind: 'unauthenticated' }
-  if (response.status === 403) return { ok: false, kind: 'forbidden' }
+  if (response.status === 403) return { ok: false, kind: 'forbidden', message: body?.message || 'This is outside your access.' }
+  if (response.status === 404) return { ok: false, kind: 'not_found', message: 'That record could not be found.' }
+  // Stale revision or a lost concurrent race (M6): the machine-readable code tells the UI which one.
+  if (response.status === 409) return { ok: false, kind: 'conflict', code: body?.code || null, message: body?.message || 'This changed on the server. Refresh and try again.' }
   if (response.status === 419) return { ok: false, kind: 'csrf' }
   if (response.status === 422) {
     const code = body?.code
     if (code === 'invalid_credentials' || code === 'inactive_account') {
       return { ok: false, kind: code, message: body?.message || 'Sign-in failed.' }
     }
-    return { ok: false, kind: 'validation', errors: body?.errors || {}, message: body?.message || 'Check the highlighted fields.' }
+    // M6 command refusals add a stable `code`, the failed scheduling checks and alternative start times.
+    return { ok: false, kind: 'validation', code: code || null, errors: body?.errors || {}, message: body?.message || 'Check the highlighted fields.',
+      failedChecks: Array.isArray(body?.failed_checks) ? body.failed_checks : [], alternatives: Array.isArray(body?.alternatives) ? body.alternatives : [] }
   }
   if (response.status >= 500) return { ok: false, kind: 'server', message: 'The clinic system is temporarily unavailable. Try again in a moment.' }
   return { ok: false, kind: 'server', message: 'Something unexpected happened. Try again.' }
@@ -75,7 +80,8 @@ async function request(path, options = {}, { allowCsrfRetry = true } = {}) {
   if (response.ok) {
     if (response.status === 204) return { ok: true, data: null }
     const body = await response.json().catch(() => null)
-    return { ok: true, data: body?.data ?? body }
+    // Paginated lists keep their meta/links so a client can page through a bounded range.
+    return { ok: true, data: body?.data ?? body, ...(body?.meta ? { meta: body.meta } : {}), ...(body?.links ? { links: body.links } : {}) }
   }
   const failure = await parseFailure(response)
   if (failure.kind === 'csrf') {
@@ -107,6 +113,24 @@ export async function logout() {
   resetCsrfCache()
   if (result.ok) return { ok: true, backendConfirmed: true }
   return { ok: false, backendConfirmed: false, kind: result.kind, message: result.message }
+}
+
+// Shared session-invalidated signal. A 401 from an authenticated call means the server session may be gone; the app
+// shell (App.jsx) subscribes once and revalidates/clears the frontend session through its normal auth path. This is a
+// notification only: nothing is retried here, and the failed call still returns its 401 result to its caller.
+const sessionInvalidatedListeners = new Set()
+export function onSessionInvalidated(listener) {
+  sessionInvalidatedListeners.add(listener)
+  return () => { sessionInvalidatedListeners.delete(listener) }
+}
+export function reportSessionInvalidated() {
+  resetCsrfCache()
+  for (const listener of [...sessionInvalidatedListeners]) listener()
+}
+// Revalidation after a reported 401: true only when /api/me confirms the same account (user public id) is still signed in.
+export async function sessionStillValid(serverUserId) {
+  const result = await me()
+  return !!(result.ok && serverUserId && result.data?.id === serverUserId)
 }
 
 // Test-only: reset the module-level CSRF cache between test cases (Node's ESM module cache would otherwise
@@ -145,3 +169,21 @@ export function listUserAccounts() { return request('/api/users') }
 export function createUserAccountRemote(payload) { return request('/api/users', { method: 'POST', body: JSON.stringify(payload) }) }
 export function updateUserAccountRemote(id, payload) { return request(`/api/users/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(payload) }) }
 export function deleteUserAccountRemote(id) { return request(`/api/users/${encodeURIComponent(id)}`, { method: 'DELETE' }) }
+
+// M6 Appointment API (server-authoritative appointments). Raw calls only; src/appointments-api.js owns paging,
+// Idempotency-Key handling and mapping. `key` is the Idempotency-Key for one user confirm attempt.
+const query = params => {
+  const entries = Object.entries(params || {}).filter(([, value]) => value !== null && value !== undefined && value !== '')
+  return entries.length ? `?${new URLSearchParams(entries).toString()}` : ''
+}
+const command = (path, payload, key) => request(path, { method: 'POST', body: JSON.stringify(payload), headers: key ? { 'Idempotency-Key': key } : {} })
+export function listAppointments(params) { return request(`/api/appointments${query(params)}`) }
+export function getAppointment(id) { return request(`/api/appointments/${encodeURIComponent(id)}`) }
+export function appointmentAvailability(params) { return request(`/api/appointments/availability${query(params)}`) }
+export function appointmentRecommendation(params) { return request(`/api/appointments/recommendation${query(params)}`) }
+export function createAppointment(payload, key) { return command('/api/appointments', payload, key) }
+export function rescheduleAppointment(id, payload, key) { return command(`/api/appointments/${encodeURIComponent(id)}/reschedule`, payload, key) }
+export function cancelAppointmentRemote(id, payload, key) { return command(`/api/appointments/${encodeURIComponent(id)}/cancel`, payload, key) }
+export function transitionAppointment(id, name, payload, key) { return command(`/api/appointments/${encodeURIComponent(id)}/${encodeURIComponent(name)}`, payload, key) }
+// Minimal M4 Patient directory (Staff/Owner selection).
+export function searchPatients(params) { return request(`/api/patients${query(params)}`) }

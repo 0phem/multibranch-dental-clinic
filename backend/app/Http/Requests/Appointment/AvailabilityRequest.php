@@ -25,6 +25,9 @@ class AvailabilityRequest extends FormRequest
             'patient_id' => $patient ? ['prohibited'] : ['nullable', 'string', 'exists:patients,public_id'],
             'patient_code' => ['prohibited'],
             'appointment_id' => ['nullable', 'string', 'exists:appointments,public_id'],
+            // Staff/Owner may check one specific eligible Dentist (explicit selection or a Dentist-requested follow-up);
+            // a Patient never chooses a Dentist.
+            'dentist_ref' => $patient ? ['prohibited'] : ['nullable', 'string', 'exists:dentist_profiles,legacy_ref'],
         ];
     }
 }

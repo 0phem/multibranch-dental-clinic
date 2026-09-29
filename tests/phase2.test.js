@@ -5,20 +5,23 @@ import { setClockSource } from '../src/clock.js'
 import { normalizeClinicState, sessionForRole, persistableCollection } from '../src/contracts.js'
 import { createWorkflowActions } from '../src/workflow.js'
 import { visibleInvoices, visiblePrescriptions, prescriptionTasks } from '../src/phase2.js'
+import { withServerAppointments } from './support/server-appointments.js'
 
 setClockSource(()=>new Date('2026-09-19T02:08:00Z'))
 const seedKeys={persons:'PERSONS',services:'SERVICES',branchServices:'BRANCH_SERVICES',dentistServiceAssignments:'DENTIST_SERVICE_ASSIGNMENTS',branches:'BRANCHES',dentists:'DENTISTS',staff:'STAFF',patients:'PATIENTS',users:'USERS'}
 function fixture(){
   let state=normalizeClinicState({...Object.fromEntries(Object.entries(seedKeys).map(([k,v])=>[k,structuredClone(data[`INITIAL_${v}`])])),appointments:[],queue:[],checkIns:[],treatments:[],invoices:[],followups:[],prescriptions:[],notifications:[],workflowLog:[],audit:[]})
   let session=sessionForRole('staff',state)
-  const actions=createWorkflowActions({getState:()=>state,getSession:()=>session,commit:patch=>{state=normalizeClinicState({...state,...patch})}})
-  return {actions,get state(){return state},get session(){return session},role(role,patch={}){session={...sessionForRole(role,state),...patch}},patch(patch){state=normalizeClinicState({...state,...patch})}}
+  const raw=createWorkflowActions({getState:()=>state,getSession:()=>session,commit:patch=>{state=normalizeClinicState({...state,...patch})}})
+  // M6 cutover: appointments come from the server; Check-In/No-show/treatment transitions run server-first.
+  const server=withServerAppointments({getState:()=>state,setState:next=>{state=normalizeClinicState(next)},getSession:()=>session,rawActions:()=>raw})
+  return {get actions(){return server.actions()},flow:server.flow,get state(){return state},get session(){return session},role(role,patch={}){session={...sessionForRole(role,state),...patch}},patch(patch){state=normalizeClinicState({...state,...patch})}}
 }
 const form={patientId:'p1',branchId:'b1',dentistId:'d1',serviceId:'svc1',date:'2026-09-19',start:'11:00'}
 const lines=[{serviceId:'svc1',quantity:1},{serviceId:'svc2',quantity:2,notes:'Performed cleaning'}]
 function ok(result){assert.equal(result.ok,true,result.message);return result.record}
 function encounter(f){
-  const a=ok(f.actions.saveAppointment(form));const q=ok(f.actions.checkInAppointment(a.id));f.role('dentist');ok(f.actions.updateQueue(q.id,'Called'));ok(f.actions.saveTreatment({queueEntryId:q.id}));return q
+  const a=f.flow.book(form);const q=ok(f.actions.checkInAppointment(a.id));f.role('dentist');ok(f.actions.updateQueue(q.id,'Called'));ok(f.actions.saveTreatment({queueEntryId:q.id}));return q
 }
 function complete(f,patch={}){const q=encounter(f);return ok(f.actions.completeTreatment({queueEntryId:q.id,procedure:'Consultation and cleaning',procedures:lines,...patch}))}
 function issue(f){f.role('staff');const i=f.state.invoices[0];ok(f.actions.reviewInvoice(i.id));ok(f.actions.issueInvoice(i.id));return f.state.invoices[0]}
@@ -99,24 +102,37 @@ for(const method of ['Cash','Card','Electronic'])test(`${method} payment and rec
 for(const role of ['patient','dentist','owner'])test(`${role} cannot issue invoices or record payment`,()=>{
   const f=fixture();complete(f);const i=issue(f);f.role(role);assert.equal(f.actions.reviewInvoice(i.id).ok,false);assert.equal(f.actions.issueInvoice(i.id).ok,false);assert.equal(f.actions.postPayment(i.id,'Cash',i.total).ok,false)
 })
+// Follow-up booking (M20 bridge): a Dentist-requested follow-up is booked as a normal SERVER appointment and the local
+// follow-up stores only its public id. Slot validation (dates, hours, capability, overlaps, closed branch/Dentist) is the
+// server's job and is covered by the backend M6 suite; these tests cover the local follow-up relationship.
 test('follow-up preserves exact treatment; scheduling, reschedule, cancellation and completion synchronize',()=>{
   const f=fixture();const t=complete(f,{followupRequired:true,followupReason:'Review healing',followupDate:'2026-09-20'});const follow=f.state.followups[0]
   assert.equal(follow.treatmentId,t.id);assert.equal(follow.patientId,t.patientId);assert.equal(follow.dentistId,t.dentistId)
-  f.role('staff');const a=ok(f.actions.saveAppointment({...form,start:'13:00'},{followupId:follow.id}));assert.equal(f.state.followups[0].status,'Scheduled');assert.equal(f.state.followups[0].appointmentId,a.id)
-  const moved=ok(f.actions.saveAppointment({...form,start:'14:00'},{appointmentId:a.id}));assert.equal(moved.id,a.id);assert.equal(f.state.followups[0].appointmentId,a.id)
-  ok(f.actions.cancelAppointment(a.id));assert.equal(f.state.followups[0].status,'Open');assert.equal(f.state.followups[0].appointmentId,null)
-  const replacement=ok(f.actions.saveAppointment({...form,start:'15:00'},{followupId:follow.id}));assert.notEqual(replacement.id,a.id)
+  f.role('staff');const a=f.flow.book({...form,start:'13:00'});ok(f.actions.linkFollowupAppointment(follow.id,a.id));assert.equal(f.state.followups[0].status,'Scheduled');assert.equal(f.state.followups[0].appointmentId,a.id)
+  // A server reschedule keeps the same appointment id, so the follow-up link is unchanged.
+  f.patch({appointments:f.state.appointments.map(x=>x.id===a.id?{...x,start:'14:00',revision:2}:x)});assert.equal(f.state.followups[0].appointmentId,a.id)
+  ok(f.flow.cancel(a.id));assert.equal(f.state.followups[0].status,'Open');assert.equal(f.state.followups[0].appointmentId,null)
+  const replacement=f.flow.book({...form,start:'15:00'});ok(f.actions.linkFollowupAppointment(follow.id,replacement.id));assert.notEqual(replacement.id,a.id)
   const q=ok(f.actions.checkInAppointment(replacement.id));f.role('dentist');ok(f.actions.updateQueue(q.id,'Called'));ok(f.actions.saveTreatment({queueEntryId:q.id}));ok(f.actions.completeTreatment({queueEntryId:q.id,procedure:'Review completed',procedures:[lines[0]]}));assert.equal(f.state.followups[0].status,'Completed');assert.equal(f.state.followups[0].appointmentId,replacement.id)
+  assert.equal(f.state.appointments.find(x=>x.id===replacement.id).status,'Completed','the server appointment was completed first')
 })
-for(const [label,patch] of [['missing patient',{patientId:'missing'}],['wrong branch',{branchId:'b2'}],['wrong dentist',{dentistId:'d2'}],['missing service',{serviceId:'bad'}],['past date',{date:'2026-09-18'}],['past time',{start:'09:00'}],['operating hours',{start:'20:00'}],['capability',{serviceId:'svc6'}]])test(`follow-up booking rejects ${label} using existing validation`,()=>{
-  const f=fixture();complete(f,{followupRequired:true});f.role('staff');assert.equal(f.actions.saveAppointment({...form,start:'13:00',...patch},{followupId:f.state.followups[0].id}).ok,false);assert.equal(f.state.followups[0].status,'Open')
+for(const [label,patch] of [['another patient',{patientId:'p2'}],['another branch',{branchId:'b2',dentistId:'d3'}],['another dentist',{dentistId:'d2'}]])test(`a follow-up is not linked to a server appointment for ${label}`,()=>{
+  const f=fixture();complete(f,{followupRequired:true});f.role('staff');const a=f.flow.book({...form,start:'13:00',...patch})
+  assert.equal(f.actions.linkFollowupAppointment(f.state.followups[0].id,a.id).ok,false);assert.equal(f.state.followups[0].status,'Open');assert.equal(f.state.followups[0].appointmentId,null)
 })
-for(const overlap of ['patient','dentist'])test(`follow-up booking respects ${overlap} overlap`,()=>{
-  const f=fixture();complete(f,{followupRequired:true});f.role('staff');ok(f.actions.saveAppointment({...form,patientId:overlap==='patient'?'p1':'p3',dentistId:overlap==='patient'?'d2':'d1',start:'13:00'}))
-  const r=f.actions.saveAppointment({...form,start:'13:00'},{followupId:f.state.followups[0].id});assert.equal(r.ok,false);assert.equal(r.validation.checks.find(c=>c.key===(overlap==='patient'?'patient-overlap':'overlap')).ok,false)
+test('malformed follow-up relationship cannot be linked to a booking',()=>{
+  const f=fixture();complete(f,{followupRequired:true});f.patch({followups:[{...f.state.followups[0],treatmentId:'missing'}]});f.role('staff');const a=f.flow.book({...form,start:'13:00'})
+  assert.equal(f.actions.linkFollowupAppointment(f.state.followups[0].id,a.id).ok,false)
 })
-test('malformed follow-up relationship cannot create a booking',()=>{
-  const f=fixture();complete(f,{followupRequired:true});f.patch({followups:[{...f.state.followups[0],treatmentId:'missing'}]});f.role('staff');assert.equal(f.actions.saveAppointment({...form,start:'13:00'},{followupId:f.state.followups[0].id}).ok,false)
+test('a follow-up cannot be linked to a missing or non-server appointment',()=>{
+  const f=fixture();complete(f,{followupRequired:true});f.role('staff');const follow=f.state.followups[0]
+  assert.equal(f.actions.linkFollowupAppointment(follow.id,'missing').ok,false)
+  assert.equal(f.actions.linkFollowupAppointment(follow.id,'a1').ok,false,'a pre-cutover browser appointment id is never linked')
+  assert.equal(f.state.followups[0].status,'Open')
+})
+test('follow-up linking needs follow-up scheduling permission',()=>{
+  const f=fixture();complete(f,{followupRequired:true});f.role('patient');const a=f.flow.book({...form,start:'13:00'})
+  assert.equal(f.actions.linkFollowupAppointment(f.state.followups[0].id,a.id).ok,false)
 })
 for(const corruption of ['missing patient','missing appointment','wrong patient appointment','wrong queue appointment'])test(`completion blocks ${corruption} atomically`,()=>{
   const f=fixture();const q=encounter(f)
@@ -143,23 +159,6 @@ test('duplicate independent invoices for a treatment cannot be issued or paid',(
 })
 test('invalid fee configuration rolls completion back',()=>{
   const f=fixture();const q=encounter(f);f.patch({services:f.state.services.map(s=>s.id==='svc2'?{...s,baseFee:NaN}:s)});assert.equal(f.actions.completeTreatment({queueEntryId:q.id,procedure:'Documented',procedures:lines}).ok,false);assert.equal(f.state.queue[0].status,'In Treatment');assert.equal(f.state.invoices.length,0)
-})
-test('closed branch, removed assignment, and inactive Dentist block follow-up booking',()=>{
-  for(const change of ['branch','assignment','dentist']){
-    const f=fixture();complete(f,{followupRequired:true});f.role('staff')
-    if(change==='branch')f.patch({branches:f.state.branches.map(b=>b.id==='b1'?{...b,status:'Closed'}:b)})
-    if(change==='assignment')f.patch({branchServices:[]})
-    if(change==='dentist')f.patch({dentists:f.state.dentists.map(d=>d.id==='d1'?{...d,available:false}:d)})
-    assert.equal(f.actions.saveAppointment({...form,start:'13:00'},{followupId:f.state.followups[0].id}).ok,false)
-  }
-})
-test('follow-up retries cannot reuse a missing or unrelated appointment',()=>{
-  const f=fixture();complete(f,{followupRequired:true});f.role('staff');const follow=f.state.followups[0]
-  f.patch({followups:[{...follow,status:'Scheduled',appointmentId:'missing'}]});assert.equal(f.actions.saveAppointment({...form,start:'13:00'},{followupId:follow.id}).ok,false)
-})
-test('follow-up appointment cannot be rescheduled to a different patient or Dentist',()=>{
-  const f=fixture();complete(f,{followupRequired:true});f.role('staff');const follow=f.state.followups[0];const a=ok(f.actions.saveAppointment({...form,start:'13:00'},{followupId:follow.id}))
-  for(const patch of [{patientId:'p2'},{dentistId:'d2'},{branchId:'b2'}])assert.equal(f.actions.saveAppointment({...form,start:'14:00',...patch},{appointmentId:a.id}).ok,false)
 })
 test('malformed follow-up on another patient is not closed by this treatment',()=>{
   const f=fixture();const q=encounter(f);f.patch({followups:[{id:'bad',patientId:'p2',appointmentId:q.appointmentId,status:'Scheduled'}]});ok(f.actions.completeTreatment({queueEntryId:q.id,procedure:'Documented',procedures:lines}));assert.equal(f.state.followups[0].status,'Scheduled')

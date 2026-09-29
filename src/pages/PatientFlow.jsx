@@ -10,7 +10,9 @@ export function CheckInPage({ store }) {
   const { state, actions, toast }=store
   const session=store.session||sessionForRole('staff',state)
   const [mode,setMode]=useState('scheduled')
-  const eligible=state.appointments.filter(a=>inScope(a,session,state)&&a.date===clinicDate()&&['Confirmed','Pending'].includes(a.status)&&!state.checkIns.some(c=>c.appointmentId===a.id)&&!state.queue.some(q=>q.appointmentId===a.id))
+  // Today's server appointments awaiting arrival. A server appointment already Checked In without a local arrival record
+  // (the local step failed after the server transition) is listed too, so Staff can retry completing it.
+  const eligible=state.appointments.filter(a=>inScope(a,session,state)&&a.date===clinicDate()&&['Confirmed','Pending','Checked In'].includes(a.status)&&!state.checkIns.some(c=>c.appointmentId===a.id)&&!state.queue.some(q=>q.appointmentId===a.id))
   const [appointmentId,setAppointmentId]=useState('')
   const [walkIn,setWalkIn]=useState({patientId:'',branchId:session.branchId||'',dentistId:'',serviceId:''})
   const walkCommand=useRef(uid('walkin'))
@@ -22,9 +24,13 @@ export function CheckInPage({ store }) {
     setWalkIn(previous=>({...previous,[key]:value,...(key==='branchId'?{serviceId:'',dentistId:''}:key==='serviceId'?{dentistId:''}:{})}))
   }
   const selectedAppointment=eligible.find(a=>a.id===appointmentId)
-  const checkScheduled=()=>{
-    if(!selectedAppointment)return
-    const result=actions.checkInAppointment(selectedAppointment.id)
+  const [busy,setBusy]=useState(false)
+  // Server-first: the appointment check-in command runs, then the local arrival/queue records are created.
+  const checkScheduled=async()=>{
+    if(!selectedAppointment||busy)return
+    setBusy(true)
+    const result=await store.appointmentFlow.checkIn(selectedAppointment.id)
+    setBusy(false)
     if(!result.ok)return toast(result.message,'warning')
     setAppointmentId('');toast(result.unchanged?'Arrival already recorded.':'Arrival recorded and queue entry created.','success')
   }
@@ -65,8 +71,9 @@ export function QueuePage({ role, activeBranch, store, setPage }) {
     if(statusFilter==='Active'&&!active(q))return false
     return ['Active','All'].includes(statusFilter)||q.status===statusFilter
   }).sort((a,b)=>String(a.branch||'').localeCompare(String(b.branch||''))||String(dentistName(a.dentistId,state.dentists)||'').localeCompare(String(dentistName(b.dentistId,state.dentists)||''))||(a.position||999)-(b.position||999))
-  const update=(id,status,extra={})=>{
-    const result=actions.updateQueue(id,status,extra)
+  // No-show on an appointment-linked encounter is recorded on the server appointment first (M6 lifecycle).
+  const update=async(id,status,extra={})=>{
+    const result=status==='No-show'&&!extra.priority?await store.appointmentFlow.noShow(id):actions.updateQueue(id,status,extra)
     toast(result.ok?'Queue updated.':result.message,result.ok?'success':'warning')
   }
   const priority=q=>{

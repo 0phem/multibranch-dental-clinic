@@ -51,7 +51,11 @@ export function inScope(record, session, state=null) {
   if (session.role==='owner') return !session.scopeBranchId || record.branchId===session.scopeBranchId
   if (session.role==='patient') return record.patientId===session.patientId
   if (session.role==='dentist') return record.dentistId===session.dentistId&&(!state||state.dentists.find(d=>d.id===session.dentistId)?.branchIds?.includes(record.branchId))
-  return session.role==='staff' && !!session.branchId && record.branchId===session.branchId
+  if (session.role!=='staff') return false
+  // Server authorization branch scopes (/api/me branch_scopes) decide Staff reach when the session carries them — an
+  // empty list means no branch. Sessions without server scopes (fixtures) keep the local assigned-branch rule.
+  if (Array.isArray(session.branchScopes)) return session.branchScopes.includes(record.branchId)
+  return !!session.branchId && record.branchId===session.branchId
 }
 export function patientInScope(patient, state, session) {
   if (!validSession(state,session)||!patient) return false
@@ -72,7 +76,11 @@ export function persistableCollection(key, rows) {
     patients:[...identity,'preferredBranch'],dentists:[...identity,'branches','assistant'],
     staff:[...identity,'branch'],users:identity,
   }[key]||[]
-  return rows.map(row=>Object.fromEntries(Object.entries(row).filter(([field])=>{
+  // M6 cutover read models are never stored: server Patient projections (serverProjection) are rebuilt from the API,
+  // and `legacyAppointment` is a derived D5 flag.
+  const stored=key==='patients'?rows.filter(row=>!row.serverProjection):rows
+  return stored.map(row=>Object.fromEntries(Object.entries(row).filter(([field])=>{
+    if(field==='legacyAppointment')return false
     if(['assignedTo','assignedRole','assigned'].includes(field)&&!row.assignedUserId)return true
     if(field==='provider'&&!row.providerId)return true
     if(field==='branch'&&!row.branchId)return true

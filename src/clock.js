@@ -34,10 +34,6 @@ export function addCalendarMonths(date, months) {
   const day = Math.min(d, daysInMonth(year, month))
   return `${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`
 }
-// Patients may book/reschedule no more than two calendar months ahead (inclusive maximum).
-export function maxBookingDate(today=clinicDate()) {
-  return addCalendarMonths(today, 2)
-}
 export function validDate(date) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date || '')) return false
   const value = new Date(`${date}T00:00:00Z`)

@@ -14,7 +14,9 @@ export function workflowContext(state,key) {
   }
   if(['prescription','rx-authorized'].includes(kind)){entityType='prescription';page='prescriptions';record=state.prescriptions.find(r=>r.id===part)}
   if(kind==='patient'){entityType='patient';page='patients';record=state.patients.find(p=>p.id===part)}
-  const context=record?{followupId:record.followupId,patientId:entityType==='patient'?record.id:record.patientId,branchId:record.branchId,dentistId:record.dentistId,treatmentId:entityType==='treatment'?record.id:record.treatmentId,appointmentId:entityType==='appointment'?record.id:record.appointmentId,queueEntryId:entityType==='queue'?record.id:record.queueEntryId,invoiceId:entityType==='invoice'?record.id:record.invoiceId,prescriptionId:entityType==='prescription'?record.id:undefined}:{}
+  // Server appointments carry no follow-up link (M6 cutover); it is derived from the follow-up that points at them.
+  const followupId=record?.followupId??(entityType==='appointment'?state.followups?.find(f=>f.appointmentId===record?.id)?.id:undefined)
+  const context=record?{followupId,patientId:entityType==='patient'?record.id:record.patientId,branchId:record.branchId,dentistId:record.dentistId,treatmentId:entityType==='treatment'?record.id:record.treatmentId,appointmentId:entityType==='appointment'?record.id:record.appointmentId,queueEntryId:entityType==='queue'?record.id:record.queueEntryId,invoiceId:entityType==='invoice'?record.id:record.invoiceId,prescriptionId:entityType==='prescription'?record.id:undefined}:{}
   return {entityType:entityType||'workflow',entityId:record?.id||null,...context,action:page?{page,context:{...context,entityId:record?.id}}:null}
 }
 export function notificationEventKey(state,key) {

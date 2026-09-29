@@ -8,6 +8,7 @@ use App\Http\Requests\Appointment\CancelAppointmentRequest;
 use App\Http\Requests\Appointment\RecommendationRequest;
 use App\Http\Requests\Appointment\RescheduleAppointmentRequest;
 use App\Http\Requests\Appointment\StoreAppointmentRequest;
+use App\Http\Requests\Appointment\TransitionAppointmentRequest;
 use App\Http\Resources\AppointmentResource;
 use App\Models\Appointment;
 use App\Models\Branch;
@@ -34,18 +35,30 @@ class AppointmentController extends Controller
         private readonly SchedulingService $scheduling,
     ) {}
 
+    // Longest clinic-date range one list request may cover (about three months back and three ahead); results stay
+    // paginated within it, so there is no unbounded "return everything" request.
+    private const MAX_RANGE_DAYS = 184;
+
     public function index(Request $request)
     {
-        $validated = $request->validate(['date' => ['nullable', 'date_format:Y-m-d'], 'status' => ['nullable', 'string']]);
+        $validated = $request->validate([
+            'date' => ['nullable', 'date_format:Y-m-d', 'prohibits:from,to'],
+            'from' => ['nullable', 'date_format:Y-m-d', 'required_with:to'],
+            'to' => ['nullable', 'date_format:Y-m-d', 'required_with:from', 'after_or_equal:from'],
+            'status' => ['nullable', 'string'],
+            'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
+        ]);
+        [$from, $to] = isset($validated['date']) ? [$validated['date'], $validated['date']] : [$validated['from'] ?? null, $validated['to'] ?? null];
+        if ($from && ClinicClock::at($from, '00:00')->diffInDays(ClinicClock::at($to, '00:00')) >= self::MAX_RANGE_DAYS) {
+            throw ValidationException::withMessages(['to' => 'A date range may cover at most '.self::MAX_RANGE_DAYS.' days.']);
+        }
         $query = Appointment::visibleTo($request->user())->with(self::RELATIONS)
             ->when($validated['status'] ?? null, fn ($q, $status) => $q->where('status', $status))
-            ->when($validated['date'] ?? null, function ($q, $date) {
-                $start = ClinicClock::at($date, '00:00');
-                $q->where('starts_at', '>=', SchedulingService::ts($start))->where('starts_at', '<', SchedulingService::ts($start->addDay()));
-            })
+            ->when($from, fn ($q) => $q->where('starts_at', '>=', SchedulingService::ts(ClinicClock::at($from, '00:00')))
+                ->where('starts_at', '<', SchedulingService::ts(ClinicClock::at($to, '00:00')->addDay())))
             ->orderBy('starts_at')->orderBy('id');
 
-        return AppointmentResource::collection($query->paginate(50));
+        return AppointmentResource::collection($query->paginate($validated['per_page'] ?? 50)->withQueryString());
     }
 
     public function show(Request $request, Appointment $appointment): AppointmentResource
@@ -98,6 +111,14 @@ class AppointmentController extends Controller
         return $this->appointments->cancel($request->user(), $appointment, $request->safe()->only(['expected_revision']), $this->idempotencyKey($request));
     }
 
+    /** Named lifecycle commands: check-in, no-show, start-treatment, complete (see AppointmentService::TRANSITIONS). */
+    public function transition(TransitionAppointmentRequest $request, Appointment $appointment, string $command): JsonResponse
+    {
+        Gate::authorize('transition', [$appointment, $command]);
+
+        return $this->appointments->transition($request->user(), $appointment, $command, $request->safe()->only(['expected_revision']), $this->idempotencyKey($request));
+    }
+
     public function availability(AvailabilityRequest $request): JsonResponse
     {
         $user = $request->user();
@@ -116,7 +137,12 @@ class AppointmentController extends Controller
 
         $date = $request->validated('date');
         $base = new SlotRequest($patient, $branch, $service, null, null, null, $isPatient, $ignore?->id, requirePatient: false);
-        $slots = $this->scheduling->slotsOn($base, $date);
+        // A Patient reschedule keeps the same Dentist (AppointmentService::reschedule), so its search is limited to
+        // that Dentist; Staff/Owner may move an appointment to any eligible Dentist.
+        $dentistRef = $request->validated('dentist_ref');
+        $pool = $isPatient && $ignore ? collect([$ignore->dentist])
+            : ($dentistRef ? collect([DentistProfile::where('legacy_ref', $dentistRef)->firstOrFail()]) : null);
+        $slots = $this->scheduling->slotsOn($base, $date, $pool);
 
         return response()->json(['data' => [
             'date' => $date,

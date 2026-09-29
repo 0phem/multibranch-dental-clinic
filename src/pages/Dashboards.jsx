@@ -1,3 +1,4 @@
+import { liveRecords } from '../appointment-projection.js'
 import React from 'react'
 import { PatientHome } from './PatientHome.jsx'
 import { ROLE_INFO } from '../data.js'
@@ -21,9 +22,9 @@ function StaffDashboard({ activeBranch, setPage, state, session }) {
   const branchFilter=x=>activeBranch==='All Branches'||x.branch===activeBranch
   const todays=state.appointments.filter(a=>a.date===clinicDate()&&a.status!=='Cancelled'&&branchFilter(a)).sort((a,b)=>a.start.localeCompare(b.start))
   const waiting=state.queue.filter(q=>q.status==='Waiting'&&isTodayQueue(q)&&branchFilter(q))
-  const pendingHmo=state.hmo.filter(h=>['Pending','Missing Requirements','Ready for Submission','Returned','Escalated'].includes(h.status)&&branchFilter(h))
+  const pendingHmo=liveRecords(state.hmo).filter(h=>['Pending','Missing Requirements','Ready for Submission','Returned','Escalated'].includes(h.status)&&branchFilter(h))
   const openInquiries=state.inquiries.filter(i=>i.status==='Open'&&i.assignedUserId===(session?.userId||ROLE_INFO.staff.userId)&&i.branchId===(session?.branchId||ROLE_INFO.staff.branchId))
-  const overdueHmo=state.hmo.filter(h=>['Pending','Escalated'].includes(h.status)&&pendingHours(h,state.clock)>=12&&branchFilter(h))
+  const overdueHmo=liveRecords(state.hmo).filter(h=>['Pending','Escalated'].includes(h.status)&&pendingHours(h,state.clock)>=12&&branchFilter(h))
   const branch=state.branches.find(b=>b.name===activeBranch)
   return <>
     <PageHeader kicker="Front desk workspace" title="Today’s clinic operations" text={`Keep arrivals, queues, appointments and patient requests moving smoothly${branch?` at ${branch.name}`:''}.`} aside={<Button onClick={()=>setPage('checkin')} icon="checkin">Check in patient</Button>}/>
@@ -54,9 +55,9 @@ function DentistDashboard({ setPage, state, session }) {
   const did=session?.dentistId||ROLE_INFO.dentist.dentistId
   const today=state.appointments.filter(a=>a.date===clinicDate()&&a.dentistId===did&&a.status!=='Cancelled').sort((a,b)=>a.start.localeCompare(b.start))
   const ownQueue=state.queue.filter(q=>q.dentistId===did&&isTodayQueue(q)&&isActiveQueue(q)&&q.status!=='Temporarily Away').sort((a,b)=>(a.position||99)-(b.position||99))
-  const activeTreatment=state.treatments.find(t=>t.dentistId===did&&t.date===clinicDate()&&t.status==='In Treatment')
+  const activeTreatment=liveRecords(state.treatments).find(t=>t.dentistId===did&&t.date===clinicDate()&&t.status==='In Treatment')
   const pendingRx=prescriptionTasks(state,session||sessionForRole('dentist',state)).length
-  const follow=state.followups.filter(f=>f.dentistId===did&&f.status==='Open').length
+  const follow=liveRecords(state.followups).filter(f=>f.dentistId===did&&f.status==='Open').length
   const next=ownQueue[0]
   return <>
     <PageHeader kicker="Clinical workspace" title="Your day, without the clutter" text="See who is next, open the chart, document treatment and keep follow-up tasks moving." aside={next?<Button onClick={()=>setPage('queue')} icon="queue">Open my queue</Button>:null}/>
@@ -77,8 +78,9 @@ function DentistDashboard({ setPage, state, session }) {
 function OwnerDashboard({ activeBranch, setPage, state }) {
   const branchData=state.branches.filter(b=>activeBranch==='All Branches'||b.name===activeBranch).map(b=>branchCapacity(b.name,state))
   const appointments=state.appointments.filter(a=>a.date===clinicDate()&&a.status!=='Cancelled'&&(activeBranch==='All Branches'||a.branch===activeBranch))
-  const pendingHmo=state.hmo.filter(h=>['Pending','Escalated'].includes(h.status)&&(activeBranch==='All Branches'||h.branch===activeBranch))
-  const revenue=state.invoices.filter(i=>i.status==='Paid'&&(activeBranch==='All Branches'||i.branch===activeBranch)).reduce((s,i)=>s+i.total,0)
+  const pendingHmo=liveRecords(state.hmo).filter(h=>['Pending','Escalated'].includes(h.status)&&(activeBranch==='All Branches'||h.branch===activeBranch))
+  // D5: revenue from legacy demo invoices (pre-cutover appointments) is excluded from live KPIs.
+  const revenue=liveRecords(state.invoices).filter(i=>i.status==='Paid'&&(activeBranch==='All Branches'||i.branch===activeBranch)).reduce((s,i)=>s+i.total,0)
   const exceptions=[...branchData.filter(c=>c.overloaded).map(c=>({title:`${c.branch} capacity exception`,detail:`${c.workload}% workload • ~${c.estimate} min wait`})),...pendingHmo.filter(h=>pendingHours(h,state.clock)>=12).map(h=>({title:'HMO follow-up threshold reached',detail:`${patientName(h.patientId,state.patients)} • ${h.provider} • ${pendingHours(h,state.clock).toFixed(1)}h pending`}))]
   const maxLoad=Math.max(100,...branchData.map(x=>x.workload))
   return <>
@@ -100,7 +102,7 @@ function OwnerDashboard({ activeBranch, setPage, state }) {
     </div>
     <div className="cards-3 top-gap">
       <Card title="Scheduling health"><MetricRow label="Confirmed today" value={appointments.filter(a=>a.status==='Confirmed').length}/><MetricRow label="Pending confirmation" value={appointments.filter(a=>a.status==='Pending').length}/><button className="card-link" onClick={()=>setPage('analytics')}>See scheduling report <Icon name="arrow" size={14}/></button></Card>
-      <Card title="HMO health"><MetricRow label="Pending provider response" value={pendingHmo.length}/><MetricRow label="Approved cases" value={state.hmo.filter(h=>h.status==='Approved').length}/><button className="card-link" onClick={()=>setPage('hmo')}>Open HMO overview <Icon name="arrow" size={14}/></button></Card>
+      <Card title="HMO health"><MetricRow label="Pending provider response" value={pendingHmo.length}/><MetricRow label="Approved cases" value={liveRecords(state.hmo).filter(h=>h.status==='Approved').length}/><button className="card-link" onClick={()=>setPage('hmo')}>Open HMO overview <Icon name="arrow" size={14}/></button></Card>
       <Card title="Patient communication"><MetricRow label="Open inquiries" value={state.inquiries.filter(i=>i.status==='Open').length}/><MetricRow label="Active conversations" value={state.conversations.filter(c=>c.status==='Open').length}/><button className="card-link" onClick={()=>setPage('engagement')}>View engagement <Icon name="arrow" size={14}/></button></Card>
     </div>
   </>

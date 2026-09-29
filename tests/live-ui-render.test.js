@@ -5,27 +5,33 @@ import { pathToFileURL } from 'node:url'
 import { build } from 'esbuild'
 import React from 'react'
 import { renderToString } from 'react-dom/server'
+import { withServerAppointments } from './support/server-appointments.js'
+import { setClockSource } from '../src/clock.js'
 
 const require=createRequire(import.meta.url)
 const files=['data.js','clock.js','contracts.js','safeguards.js','phase3-contracts.js','workflow.js','hmo-presentation.js','patient-ui.jsx','patient-view.js','pages/Scheduling.jsx','pages/FinanceCommunication.jsx','pages/PatientCare.jsx','pages/PatientMe.jsx']
 const bundle=await build({stdin:{contents:files.map(file=>`export * from './src/${file}';`).join('\n'),resolveDir:process.cwd()},bundle:true,write:false,platform:'node',format:'esm',plugins:[{name:'shared-react',setup(build){build.onResolve({filter:/^react$/},()=>({path:pathToFileURL(require.resolve('react')).href,external:true}))}}]})
 const m=await import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].text).toString('base64')}`)
 m.setClockSource(()=>new Date('2026-09-19T02:08:00Z'))
+// The server-flow helper's dry run uses the unbundled modules, so pin that clock too.
+setClockSource(()=>new Date('2026-09-19T02:08:00Z'))
 
 function fixture() {
   const seeds={persons:'PERSONS',patients:'PATIENTS',users:'USERS',branches:'BRANCHES',services:'SERVICES',branchServices:'BRANCH_SERVICES',dentists:'DENTISTS',staff:'STAFF',dentistServiceAssignments:'DENTIST_SERVICE_ASSIGNMENTS'}
   const reference=Object.fromEntries(Object.entries(seeds).map(([key,name])=>[key,structuredClone(m[`INITIAL_${name}`])]))
   let state=m.normalizeClinicState({...reference,appointments:[],queue:[],checkIns:[],treatments:[],invoices:[],followups:[],prescriptions:[],notifications:[],hmo:[],conversations:[],inquiries:[],workflowLog:[],audit:[],bookingDrafts:[]})
   let session=m.sessionForRole('staff',state)
-  const actions=m.createWorkflowActions({getState:()=>state,getSession:()=>session,commit:patch=>{state=m.normalizeClinicState({...state,...patch})}})
-  return {actions,get state(){return state},get session(){return session},role(next){session=m.sessionForRole(next,state)},addInvoice(invoice){state=m.normalizeClinicState({...state,invoices:[...state.invoices,invoice]})}}
+  const raw=m.createWorkflowActions({getState:()=>state,getSession:()=>session,commit:patch=>{state=m.normalizeClinicState({...state,...patch})}})
+  // M6 cutover: server appointments; Check-In/No-show/treatment transitions run server-first.
+  const server=withServerAppointments({getState:()=>state,setState:next=>{state=m.normalizeClinicState(next)},getSession:()=>session,rawActions:()=>raw})
+  return {get actions(){return server.actions()},flow:server.flow,get state(){return state},get session(){return session},role(next){session=m.sessionForRole(next,state)},addInvoice(invoice){state=m.normalizeClinicState({...state,invoices:[...state.invoices,invoice]})}}
 }
 const ok=result=>{assert.equal(result.ok,true,result.message);return result.record}
 const render=(Component,props)=>renderToString(React.createElement(Component,props))
 
 test('live HMO worklist uses scoped cases and detail reveals the three module sections',()=>{
   const f=fixture()
-  const appointment=ok(f.actions.saveAppointment({patientId:'p1',branchId:'b1',dentistId:'d1',serviceId:'svc1',date:'2026-09-19',start:'11:00'}))
+  const appointment=f.flow.book({patientId:'p1',branchId:'b1',dentistId:'d1',serviceId:'svc1',date:'2026-09-19',start:'11:00'})
   const h=ok(f.actions.createHmoCase({appointmentId:appointment.id}))
   const store={state:f.state,session:f.session,actions:f.actions,toast:()=>{}}
   const list=render(m.HmoPage,{role:'staff',store})
@@ -50,7 +56,7 @@ test('live HMO worklist uses scoped cases and detail reveals the three module se
 
 test('a Returned case corrected to Ready keeps Returned as the last provider response',()=>{
   const f=fixture()
-  const appointment=ok(f.actions.saveAppointment({patientId:'p1',branchId:'b1',dentistId:'d1',serviceId:'svc1',date:'2026-09-19',start:'11:00'}))
+  const appointment=f.flow.book({patientId:'p1',branchId:'b1',dentistId:'d1',serviceId:'svc1',date:'2026-09-19',start:'11:00'})
   const h=ok(f.actions.createHmoCase({appointmentId:appointment.id}))
   const validate=ruleId=>ok(f.actions.provideHmoRequirement(h.id,ruleId,{fileName:`${ruleId}.pdf`}))
   for(const rule of m.HMO_REQUIREMENT_RULES)validate(rule.id)
@@ -88,7 +94,7 @@ test('HMO attention and timeline derive from case state and dated events',()=>{
 
 test('Patient HMO hides operational data while Owner summary counts visible cases',()=>{
   const f=fixture()
-  const appointment=ok(f.actions.saveAppointment({patientId:'p1',branchId:'b1',dentistId:'d1',serviceId:'svc1',date:'2026-09-19',start:'11:00'}))
+  const appointment=f.flow.book({patientId:'p1',branchId:'b1',dentistId:'d1',serviceId:'svc1',date:'2026-09-19',start:'11:00'})
   const h=ok(f.actions.createHmoCase({appointmentId:appointment.id}))
   f.role('patient')
   const patient=render(m.HmoPage,{role:'patient',store:{state:f.state,session:f.session,actions:f.actions,toast:()=>{}}})
@@ -110,8 +116,8 @@ test('Patient HMO hides operational data while Owner summary counts visible case
 
 test('Owner reaches approved and other cases through a read-only All Cases view',()=>{
   const f=fixture()
-  const first=ok(f.actions.saveAppointment({patientId:'p1',branchId:'b1',dentistId:'d1',serviceId:'svc1',date:'2026-09-19',start:'11:00'}))
-  const second=ok(f.actions.saveAppointment({patientId:'p1',branchId:'b1',dentistId:'d1',serviceId:'svc1',date:'2026-09-19',start:'13:00'}))
+  const first=f.flow.book({patientId:'p1',branchId:'b1',dentistId:'d1',serviceId:'svc1',date:'2026-09-19',start:'11:00'})
+  const second=f.flow.book({patientId:'p1',branchId:'b1',dentistId:'d1',serviceId:'svc1',date:'2026-09-19',start:'13:00'})
   const approved=ok(f.actions.createHmoCase({appointmentId:first.id})),missing=ok(f.actions.createHmoCase({appointmentId:second.id}))
   for(const rule of m.HMO_REQUIREMENT_RULES)ok(f.actions.provideHmoRequirement(approved.id,rule.id,{fileName:`${rule.id}.pdf`}))
   const submitted=ok(f.actions.submitHmoCase(approved.id,{commandId:'owner-submit',method:'Portal',note:'Submitted externally'}))
@@ -165,7 +171,7 @@ test('live Staff Billing renders compact closed rows and excludes a Branch B inv
 
 test('completed payment reaches the live Patient Payments list with a View Receipt action',()=>{
   const f=fixture()
-  const appointment=ok(f.actions.saveAppointment({patientId:'p1',branchId:'b1',dentistId:'d1',serviceId:'svc1',date:'2026-09-19',start:'11:00'}))
+  const appointment=f.flow.book({patientId:'p1',branchId:'b1',dentistId:'d1',serviceId:'svc1',date:'2026-09-19',start:'11:00'})
   const queue=ok(f.actions.checkInAppointment(appointment.id))
   f.role('dentist')
   ok(f.actions.updateQueue(queue.id,'Called'))

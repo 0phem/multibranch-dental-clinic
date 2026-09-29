@@ -121,9 +121,8 @@ One first-class **Visit** is the operational bridge between arrival and clinical
   M6 features.
 - Final booking validation is server-authoritative; the frontend scheduler remains a UX pre-check.
 - Concurrent conflicting bookings must not both succeed (a database-level guarantee, not only an application check).
-- **Current:** the prototype still allows a same-day Patient booking with a future start, uses a two-calendar-month
-  Patient horizon and a 30-minute slot grid (see `MODULE_COVERAGE.md` M6). These change to the frozen target when M6
-  is implemented.
+- **Current:** implemented server-side (M6 API) and used by the React app since the M6 cutover (see
+  `MODULE_COVERAGE.md` M6 and `BACKEND_INTEGRATION.md`).
 
 ## 7. Financial authority (M11)
 

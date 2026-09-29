@@ -1,3 +1,4 @@
+import { withServerAppointments } from './support/server-appointments.js'
 import test, { beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
@@ -53,8 +54,10 @@ test('store persistence inventory is fully discovered',()=>{
   // Phase 2A: branches/services/branch-services/dentists/staff/dentist-service-assignments are
   // backend-authoritative and deliberately no longer usePersist-backed (no localStorage for this slice,
   // refetched fresh every session — see the Phase 2A plan, section J, and src/store.jsx's own comment
-  // above its reference-data useState declarations). 26 collections minus those 6 leaves 20.
-  assert.equal(keys.length,20)
+  // above its reference-data useState declarations). 26 collections minus those 6 leaves 20; the M6 cutover then removed
+  // `appointments` (server-authoritative, held in memory only), leaving 19.
+  assert.equal(keys.length,19)
+  assert.ok(!keys.includes('appointments'),'appointments are never persisted in the browser')
   assert.ok(!keys.includes('dentist-service-assignments'))
   assert.ok(!keys.includes('branches'))
   assert.ok(!keys.includes('services'))
@@ -305,8 +308,9 @@ function workspace(assignments) {
   }
   let state=normalizeClinicState({...base,dentistServiceAssignments:assignments})
   let session=sessionForRole('staff',state)
-  const actions=createWorkflowActions({getState:()=>state,getSession:()=>session,commit:p=>{state=normalizeClinicState({...state,...p})}})
-  return {actions,get state(){return state},role(role){session=sessionForRole(role,state)}}
+  const raw=createWorkflowActions({getState:()=>state,getSession:()=>session,commit:p=>{state=normalizeClinicState({...state,...p})}})
+  const server=withServerAppointments({getState:()=>state,setState:next=>{state=normalizeClinicState(next)},getSession:()=>session,rawActions:()=>raw})
+  return {get actions(){return server.actions()},flow:server.flow,get state(){return state},role(role){session=sessionForRole(role,state)}}
 }
 // The capability check is Dentist × Service; branch availability is a separate check (covered above).
 const capabilityMatrix=state=>data.INITIAL_DENTISTS.flatMap(d=>data.INITIAL_SERVICES.filter(s=>
@@ -341,18 +345,20 @@ test('the exact nonexistent Dentist/Service pair fails the shared scheduler on e
   for(const key of ['service-exists','service','dentist','dentist-service'])assert.ok(failed.includes(key),key)
 })
 
-test('shared booking command rejects every dangling assignment and creates no appointment',()=>{
+test('walk-in admission rejects every dangling assignment and creates no encounter',()=>{
+  // Appointment booking is server-authoritative (M6); the browser-local walk-in admission (M8 prototype) still uses the
+  // shared validator, so it is the remaining local path that must refuse a dangling assignment.
   const f=workspace([...seed(),...ORPHANS])
-  const form={patientId:'p1',branchId:'b1',date:'2026-09-19',start:'11:00'}
+  const form={patientId:'p1',branchId:'b1'}
   for(const [dentistId,serviceId] of [[ORPHAN.dentistId,ORPHAN.serviceId],['nonexistent-dentist','svc1'],['d1','nonexistent-service']])
-    assert.equal(f.actions.saveAppointment({...form,dentistId,serviceId}).ok,false,`${dentistId}/${serviceId}`)
-  assert.equal(f.state.appointments.length,0)
-  assert.equal(f.actions.saveAppointment({...form,dentistId:'d1',serviceId:'svc1'}).ok,true)
+    assert.equal(f.actions.admitWalkIn({...form,dentistId,serviceId},`walk-${dentistId}-${serviceId}`).ok,false,`${dentistId}/${serviceId}`)
+  assert.equal(f.state.queue.length,0)
+  assert.equal(f.actions.admitWalkIn({...form,dentistId:'d1',serviceId:'svc1'},'walk-ok').ok,true)
 })
 
 test('a dangling assignment cannot authorize a performed procedure for a real encounter',()=>{
   const f=workspace([...seed(),...ORPHANS])
-  const a=f.actions.saveAppointment({patientId:'p1',branchId:'b1',dentistId:'d1',serviceId:'svc1',date:'2026-09-19',start:'11:00'}).record
+  const a=f.flow.book({patientId:'p1',branchId:'b1',dentistId:'d1',serviceId:'svc1',date:'2026-09-19',start:'11:00'})
   const q=f.actions.checkInAppointment(a.id).record
   f.role('dentist')
   assert.equal(f.actions.updateQueue(q.id,'Called').ok,true)

@@ -7,7 +7,7 @@ import { normalizeClinicState, sessionForRole } from '../src/contracts.js'
 import { createWorkflowActions } from '../src/workflow.js'
 import { patientActionRequired, patientAttention, patientBookingDraft, patientHome, draftStatus } from '../src/patient-view.js'
 import { haversineKm, nearestBranch } from '../src/geo.js'
-import { findOpenTimes } from '../src/scheduling.js'
+import { serverAppointment } from './support/server-appointments.js'
 
 beforeEach(()=>setClockSource(()=>new Date('2026-09-19T02:08:00Z')))   // 2026-09-19 10:08 Manila
 
@@ -107,21 +107,25 @@ test('a successful new booking clears the Patient\'s draft atomically; a replaye
   const f=fixture()
   f.actions.saveBookingDraft({mode:'manual',branchId:'b1',serviceId:'svc1',date:'2026-09-20',start:'11:00'},'d1')
   assert.equal(f.state.bookingDrafts.length,1)
-  const confirm=f.actions.saveAppointment({branchId:'b1',serviceId:'svc1',date:'2026-09-20',start:'11:00'},{commandId:'confirm-1',autoAssign:true})
+  // M6 cutover: the server confirmed the booking (the Idempotency-Key replay is server-side); the local adapter then
+  // records the confirmation and clears this Patient's draft.
+  const booked=serverAppointment({patientId:'p1',branchId:'b1',dentistId:'d1',serviceId:'svc1',date:'2026-09-20',start:'11:00',assignmentMethod:'auto',source:'Patient Portal'})
+  f.patch({appointments:[booked]})
+  const confirm=f.actions.recordAppointmentEvent(booked.id,'created')
   assert.equal(confirm.ok,true,confirm.message)
-  assert.equal(confirm.record.assignmentMethod,'auto')
-  assert.equal(f.state.bookingDrafts.length,0,'the draft is gone in the same commit as the new appointment')
-  assert.equal(f.state.appointments.length,1)
-  const replay=f.actions.saveAppointment({branchId:'b1',serviceId:'svc1',date:'2026-09-20',start:'11:00'},{commandId:'confirm-1',autoAssign:true})
-  assert.equal(replay.unchanged,true)
-  assert.equal(f.state.appointments.length,1,'no duplicate appointment from the replay')
+  assert.equal(f.state.bookingDrafts.length,0,'the draft is cleared by the confirmation adapter')
+  const replay=f.actions.recordAppointmentEvent(booked.id,'created')
+  assert.equal(replay.ok,true)
+  assert.equal(f.state.appointments.length,1,'the adapter never creates an appointment')
 })
 
 test('a Staff reschedule or Staff booking never touches a Patient draft',()=>{
   const f=fixture()
   f.actions.saveBookingDraft({branchId:'b1'},'d1')
   f.role('staff')
-  const staffBooking=f.actions.saveAppointment({patientId:'p1',branchId:'b1',dentistId:'d1',serviceId:'svc1',date:'2026-09-20',start:'11:00'},{commandId:'staff-1'})
+  const booked=serverAppointment({patientId:'p1',branchId:'b1',dentistId:'d1',serviceId:'svc1',date:'2026-09-20',start:'11:00'})
+  f.patch({appointments:[booked]})
+  const staffBooking=f.actions.recordAppointmentEvent(booked.id,'created')
   assert.equal(staffBooking.ok,true,staffBooking.message)
   assert.equal(f.state.bookingDrafts.length,1,'Staff creating a Patient appointment does not clear the Patient\'s own draft (only the Patient\'s own new booking does)')
 })
@@ -134,7 +138,8 @@ test('draftStatus reports a closed branch, a dropped service and a stale time wi
   const session=sessionForRole('patient',f.state)
   f.actions.saveBookingDraft({mode:'manual',branchId:'b1',serviceId:'svc4',date:'2026-09-20',start:'11:00'},'d1')
   const okStatus=draftStatus(f.state,session,patientBookingDraft(f.state,session))
-  assert.equal(okStatus.slotValid,true);assert.equal(okStatus.issues.length,0)
+  // A future saved slot is unknown (null) until the booking page rechecks it against fresh server availability.
+  assert.equal(okStatus.slotValid,null);assert.equal(okStatus.issues.length,0)
 
   const closedBranch=fixture({branches:structuredClone(data.INITIAL_BRANCHES).map(b=>b.id==='b1'?{...b,status:'Inactive'}:b)})
   closedBranch.actions.saveBookingDraft({branchId:'b1',serviceId:'svc4'},'d1')
@@ -211,13 +216,12 @@ test('nearestBranch activates automatically once a branch carries real coordinat
 })
 
 // ================================================================================================================
-// Manual-mode single-date search reuses findOpenTimes (no duplicate scheduling implementation)
+// Manual-mode Time step reads one date of server availability (no browser scheduling implementation)
 // ================================================================================================================
-test('a 1-day findOpenTimes window returns only that date\'s legitimate times, matching Manual booking\'s Time step',()=>{
-  const f=fixture()
-  const results=findOpenTimes(f.state,{branchId:'b1',serviceId:'svc1',patientId:'p1'},{startDate:'2026-09-20',windowDays:1,limit:50})
-  assert.ok(results.length>0)
-  for(const slot of results)assert.equal(slot.date,'2026-09-20')
+test('the Manual Time step offers only the server\'s available times for the chosen date',()=>{
+  const src=read('src/pages/PatientBook.jsx')
+  assert.match(src,/const day=useDayAvailability\(\{branchId:form\.branchId,serviceId:form\.serviceId,date:form\.date\}\)/)
+  assert.match(src,/disabled=\{!form\.start\|\|!day\.slots\.some\(r=>r\.start===form\.start\)\}/)
 })
 
 // ================================================================================================================

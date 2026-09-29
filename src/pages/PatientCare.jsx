@@ -29,7 +29,7 @@ export function PatientBillingPage({ store, context }) {
   const items=patientInvoices(state,session).map(i=>invoiceView(state,i)).sort((a,b)=>String(b.date).localeCompare(String(a.date)))
   return <div className="pt-page">
     <PageHeader kicker="Your care" title="Receipts & Payments" text="Invoices the clinic has issued, and your receipts. The clinic records payments. Nothing is charged when you book."/>
-    <div className="pt-list">{items.length?items.map(inv=><RecordCard key={inv.id} id={`invoice-${inv.id}`} highlight={target===inv.id} title={inv.invoiceNo||'Invoice'} subtitle={`${dateLabel(inv.date)}${inv.branch?` • ${inv.branch}`:''}`} status={inv.status}>
+    <div className="pt-list">{items.length?items.map(inv=><RecordCard key={inv.id} id={`invoice-${inv.id}`} highlight={target===inv.id} title={inv.invoiceNo||'Invoice'} subtitle={`${dateLabel(inv.date)}${inv.branch?` • ${inv.branch}`:''}${inv.legacy?' • Historical demo record':''}`} status={inv.status}>
       <ul className="pt-charges" aria-label="Itemized charges">{inv.items.map(item=><li key={item.key}><span><b>{item.name}</b><small>{item.quantity} × {money(item.unit)}</small></span><span>{money(item.amount)}</span></li>)}</ul>
       <div className="pt-total"><span>Total</span><b>{money(inv.total)}</b></div>
       {inv.receipt&&<p className="pt-hint">Receipt available: {inv.receipt.number}</p>}

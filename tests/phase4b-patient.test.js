@@ -5,6 +5,7 @@ import * as data from '../src/data.js'
 import { setClockSource, clinicNow } from '../src/clock.js'
 import { normalizeClinicState, sessionForRole } from '../src/contracts.js'
 import { createWorkflowActions } from '../src/workflow.js'
+import { withServerAppointments } from './support/server-appointments.js'
 import { notificationDestination } from '../src/phase3-contracts.js'
 import { validateAppointment } from '../src/logic.js'
 import * as view from '../src/patient-view.js'
@@ -18,14 +19,16 @@ function fixture(patch={}) {
   seeds.patients=seeds.patients.map(p=>p.id==='p2'?{...p,userId:'u13'}:p)
   let state=normalizeClinicState({...seeds,appointments:[],queue:[],checkIns:[],treatments:[],invoices:[],prescriptions:[],followups:[],hmo:[],conversations:[],inquiries:[],notifications:[],workflowLog:[],audit:[],...patch})
   let session=sessionForRole('staff',state)
-  const actions=createWorkflowActions({getState:()=>state,getSession:()=>session,commit:p=>{state=normalizeClinicState({...state,...p})}})
-  return {actions,get state(){return state},get session(){return session},role(role,overrides={}){session={...sessionForRole(role,state),...overrides}},patch(p){state=normalizeClinicState({...state,...p})}}
+  const raw=createWorkflowActions({getState:()=>state,getSession:()=>session,commit:p=>{state=normalizeClinicState({...state,...p})}})
+  // M6 cutover: server appointments; Check-In/No-show/treatment transitions run server-first.
+  const server=withServerAppointments({getState:()=>state,setState:next=>{state=normalizeClinicState(next)},getSession:()=>session,rawActions:()=>raw})
+  return {get actions(){return server.actions()},flow:server.flow,get state(){return state},get session(){return session},role(role,overrides={}){session={...sessionForRole(role,state),...overrides}},patch(p){state=normalizeClinicState({...state,...p})}}
 }
 const maria=f=>sessionForRole('patient',f.state)
 const john=f=>({...sessionForRole('patient',f.state),userId:'u13',patientId:'p2',name:'John Dela Cruz'})
 const ok=result=>{assert.equal(result.ok,true,result.message);return result.record}
 const form={patientId:'p1',branchId:'b1',dentistId:'d1',serviceId:'svc1',date:'2026-09-19',start:'11:00'}
-const book=(f,patch={})=>ok(f.actions.saveAppointment({...form,...patch}))
+const book=(f,patch={})=>f.flow.book({...form,...patch})
 function checkIn(f,patch={}){const a=book(f,patch);return {a,q:ok(f.actions.checkInAppointment(a.id))}}
 function complete(f,patch={}) {
   const {q}=checkIn(f);f.role('dentist');ok(f.actions.updateQueue(q.id,'Called'));ok(f.actions.saveTreatment({queueEntryId:q.id}))
@@ -59,7 +62,7 @@ test('every Patient selector fails closed for forged, stale and non-Patient sess
     s=>view.patientAppointments(f.state,s),s=>view.patientCare(f.state,s),s=>view.patientFollowups(f.state,s),s=>view.patientPrescriptions(f.state,s),
     s=>view.patientInvoices(f.state,s),s=>view.patientHmo(f.state,s),s=>view.patientNotifications(f.state,s),s=>view.patientConversations(f.state,s),s=>view.patientAttention(f.state,s),
   ]
-  const nullSelectors=[s=>view.patientHome(f.state,s),s=>view.patientQueueView(f.state,s),s=>view.scheduleFormDefaults(f.state,s)]
+  const nullSelectors=[s=>view.patientHome(f.state,s),s=>view.patientQueueView(f.state,s),s=>view.patientBookingDraft(f.state,s)]
   for(const bad of [null,{},sessionForRole('staff',f.state),{...base,patientId:'p2'},{...base,active:false},{...base,userId:'u13'}]){
     for(const read of selectors)assert.deepEqual(read(bad),[])
     for(const read of nullSelectors)assert.equal(read(bad),null)
@@ -137,12 +140,13 @@ test('Journey Hub follow-up items and the Follow-Up page share one display state
   const open=()=>view.patientFollowups(f.state,maria(f)).filter(x=>x.display==='Open').length
   const attention=()=>view.patientAttention(f.state,maria(f)).filter(i=>i.kind==='followup').length
   assert.equal(open(),1);assert.equal(attention(),1)
-  f.role('patient')
+  // The clinic books a Dentist-requested follow-up as a server appointment and links it (M20 bridge).
+  f.role('staff')
   const followup=f.state.followups.find(x=>x.treatmentId===t.id)
-  const booked=ok(f.actions.saveAppointment({...form,serviceId:'svc11',date:'2026-09-26',start:'12:00',source:'Follow-Up Task'},{followupId:followup.id}))
+  const booked=book(f,{serviceId:'svc11',date:'2026-09-26',start:'12:00'});ok(f.actions.linkFollowupAppointment(followup.id,booked.id))
   assert.equal(open(),0);assert.equal(attention(),0)
   assert.equal(view.patientFollowups(f.state,maria(f))[0].display,'Scheduled')
-  ok(f.actions.cancelAppointment(booked.id))
+  ok(f.flow.cancel(booked.id))
   assert.equal(open(),1);assert.equal(attention(),1)
 })
 
@@ -170,54 +174,24 @@ test('appointment actions mirror established behavior and explain admitted visit
 
 test('appointment groups place visits in the established tabs',()=>{
   const f=fixture()
-  const upcoming=book(f,{date:'2026-09-25'}),cancelled=book(f,{date:'2026-09-26'});ok(f.actions.cancelAppointment(cancelled.id))
+  const upcoming=book(f,{date:'2026-09-25'}),cancelled=book(f,{date:'2026-09-26'});ok(f.flow.cancel(cancelled.id))
   const groups=view.appointmentGroups(f.state,maria(f))
   assert.deepEqual(groups.upcoming.map(a=>a.id),[upcoming.id]);assert.deepEqual(groups.cancelled.map(a=>a.id),[cancelled.id]);assert.deepEqual(groups.past,[])
   assert.equal(view.appointmentGroups(f.state,john(f)).upcoming.length,0)
 })
 
-test('cancel and reschedule keep using the shared commands with revisions and command IDs',()=>{
+test('cancel and reschedule are server commands; the projection reflects the server revision',()=>{
   const f=fixture(),a=book(f)
-  f.role('patient')
-  const moved=ok(f.actions.saveAppointment({...form,start:'12:00'},{appointmentId:a.id,expectedRevision:a.revision,commandId:'cmd-1'}))
-  assert.equal(moved.start,'12:00')
-  assert.equal(f.actions.saveAppointment({...form,start:'13:00'},{appointmentId:a.id,expectedRevision:a.revision,commandId:'cmd-2'}).ok,false,'stale revision is rejected')
-  ok(f.actions.cancelAppointment(a.id))
+  assert.equal(a.revision,1);assert.equal(a.server,true)
+  // A server reschedule keeps the same id and raises the revision the UI must send with its next command.
+  f.patch({appointments:f.state.appointments.map(x=>x.id===a.id?{...x,start:'12:00',revision:2}:x)})
+  assert.equal(view.patientAppointments(f.state,maria(f))[0].revision,2)
+  f.role('patient');ok(f.flow.cancel(a.id))
   assert.equal(view.appointmentGroups(f.state,maria(f)).cancelled.length,1)
+  assert.equal('saveAppointment' in f.actions,false);assert.equal('cancelAppointment' in f.actions,false)
 })
 
-// ---- Booking semantics (same validator as the shared command) ----------------------------------------
-
-test('scheduling options, cascades and suggestions all agree with the authoritative validator',()=>{
-  const f=fixture(),session=maria(f)
-  let state=f.state,current=view.scheduleFormDefaults(state,session)
-  assert.equal(current.patientId,'p1');assert.equal(current.branchId,'b1');assert.equal(current.serviceId,'','no service is silently preselected')
-  current=view.nextScheduleForm(state,current,'serviceId','svc2')
-  assert.equal(current.duration,45);assert.ok(view.dentistsFor(state,'b1','svc2').some(d=>d.id===current.dentistId))
-  current={...current,date:'2026-09-19'}
-  const slots=view.scheduleSlots(state,current)
-  assert.ok(Array.isArray(slots)&&slots.length>0)
-  for(const start of slots)assert.equal(validateAppointment({...current,start},state,null,clinicNow(),false).valid,true,start)
-  const suggestions=view.suggestTimes(state,current)
-  assert.ok(Array.isArray(suggestions)&&suggestions.length>0&&suggestions.length<=4)
-  assert.deepEqual(suggestions.map(s=>s.start),[...suggestions.map(s=>s.start)].sort())
-  for(const s of suggestions)assert.equal(validateAppointment({...current,dentistId:s.dentistId,start:s.start},state,null,clinicNow(),false).valid,true)
-  const booked=ok(createWorkflowActions({getState:()=>state,getSession:()=>session,commit:p=>{state=normalizeClinicState({...state,...p})}}).saveAppointment({...current,dentistId:suggestions[0].dentistId,start:suggestions[0].start}))
-  assert.ok(booked.id)
-  // A time outside the offered slots is not bookable.
-  assert.equal(validateAppointment({...current,start:'03:00'},state,null,clinicNow(),false).valid,false);assert.ok(!slots.includes('03:00'))
-})
-
-test('changing branch or service resets dependent choices and locks are enforced',()=>{
-  const f=fixture(),session=maria(f)
-  const base=view.nextScheduleForm(f.state,view.scheduleFormDefaults(f.state,session),'serviceId','svc4')
-  assert.equal(base.serviceId,'svc4')
-  const moved=view.nextScheduleForm(f.state,base,'branchId','b2')
-  assert.equal(moved.serviceId,'','a service not offered at the new branch is cleared');assert.equal(moved.dentistId,'')
-  assert.deepEqual(view.scheduleSlots(f.state,moved),[])
-  const locked=view.nextScheduleForm(f.state,view.nextScheduleForm(f.state,base,'serviceId','svc1'),'branchId','b2',{branchId:'b1',dentistId:'d1'})
-  assert.deepEqual([locked.branchId,locked.dentistId],['b1','d1'])
-})
+// ---- Booking reference data (the server validates every choice) ---------------------------------------------
 
 test('a Dentist whose assignment is revoked or whose account is inactive is not offered',()=>{
   const f=fixture()
@@ -226,15 +200,6 @@ test('a Dentist whose assignment is revoked or whose account is inactive is not 
   assert.ok(!view.dentistsFor(f.state,'b1','svc2').some(d=>d.id==='d1'))
   f.patch({users:f.state.users.map(u=>u.id==='u6'?{...u,accountStatus:'Inactive',status:'Inactive'}:u)})
   assert.ok(!view.dentistsFor(f.state,'b1','svc1').some(d=>d.id==='d2'))
-})
-
-test('reschedule and follow-up defaults come from the exact record',()=>{
-  const f=fixture(),a=book(f,{date:'2026-09-25',start:'12:00',notes:'Bring records'})
-  const defaults=view.scheduleFormDefaults(f.state,maria(f),{appointment:a})
-  assert.deepEqual([defaults.branchId,defaults.serviceId,defaults.dentistId,defaults.date,defaults.start,defaults.notes],[a.branchId,a.serviceId,a.dentistId,a.date,a.start,'Bring records'])
-  const g=fixture(),journey=fullJourney(g);const followup=g.state.followups.find(x=>x.treatmentId===journey.t.id)
-  const fd=view.scheduleFormDefaults(g.state,maria(g),{followup})
-  assert.deepEqual([fd.branchId,fd.dentistId,fd.serviceId],[followup.branchId,followup.dentistId,'svc11'])
 })
 
 // ---- Queue privacy ----------------------------------------------------------------------------------
@@ -383,7 +348,7 @@ test('Notification destinations stay revalidated and deep links focus only visib
 test('read selectors mutate nothing and create no workflow events',()=>{
   const f=fixture(),{t}=fullJourney(f);f.role('dentist');ok(f.actions.authorizePrescription({treatmentId:t.id}))
   const before=JSON.stringify(f.state)
-  for(let i=0;i<3;i++){const s=maria(f);view.patientHome(f.state,s);view.patientAttention(f.state,s);view.patientQueueView(f.state,s);view.patientConversations(f.state,s);view.appointmentGroups(f.state,s);view.patientFollowups(f.state,s);view.suggestTimes(f.state,view.scheduleFormDefaults(f.state,s))}
+  for(let i=0;i<3;i++){const s=maria(f);view.patientHome(f.state,s);view.patientAttention(f.state,s);view.patientQueueView(f.state,s);view.patientConversations(f.state,s);view.appointmentGroups(f.state,s);view.patientFollowups(f.state,s);view.patientBookingDraft(f.state,s)}
   assert.equal(JSON.stringify(f.state),before)
 })
 

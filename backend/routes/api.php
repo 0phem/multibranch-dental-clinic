@@ -4,6 +4,7 @@ use App\Http\Controllers\AppointmentController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\RegisteredPatientController;
 use App\Http\Controllers\CurrentUserController;
+use App\Http\Controllers\PatientDirectoryController;
 use App\Http\Controllers\UserBranchScopeController;
 use App\Http\Controllers\UserManagementController;
 use App\Http\Controllers\Rbac\RbacDemoController;
@@ -66,6 +67,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/dentists', [DentistProfileController::class, 'index']);
     Route::patch('/dentists/{dentistProfile}', [DentistProfileController::class, 'update'])->middleware('role:owner');
 
+    // Minimal M4 Patient directory for Staff/Owner selection (public ids only; not the full M4 record).
+    Route::get('/patients', [PatientDirectoryController::class, 'index'])->middleware('role:staff,owner');
+
     // M6 Appointment Booking & Smart Scheduling. {appointment} binds on the ULID public_id. State changes are named
     // commands only (no generic status PATCH); per-record access is decided by AppointmentPolicy. Dentists may read
     // their own assigned appointments but cannot book, reschedule or cancel.
@@ -77,5 +81,10 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/{appointment}', [AppointmentController::class, 'show'])->middleware('role:patient,staff,dentist,owner');
         Route::post('/{appointment}/reschedule', [AppointmentController::class, 'reschedule'])->middleware('role:patient,staff,owner');
         Route::post('/{appointment}/cancel', [AppointmentController::class, 'cancel'])->middleware('role:patient,staff,owner');
+        // Lifecycle transitions from the frozen state table, invoked by the (still browser-local) M8/M9/M5 workflows.
+        // Per-command role/scope rules live in AppointmentPolicy::transition.
+        Route::post('/{appointment}/{command}', [AppointmentController::class, 'transition'])
+            ->whereIn('command', ['check-in', 'no-show', 'start-treatment', 'complete'])
+            ->middleware('role:staff,dentist,owner');
     });
 });

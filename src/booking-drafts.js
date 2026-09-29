@@ -4,21 +4,17 @@ import { uid } from './logic.js'
 
 // Booking Drafts (Phase 4B.3C-1). BOOKING DRAFT != APPOINTMENT: a draft reserves no slot, consumes no Dentist
 // capacity, creates no queue entry and no appointment number, and appears in no Staff/Dentist operational view —
-// it is a Patient-only scratch record of in-progress booking-wizard choices. Exactly one draft per Patient. It
-// never stores a committed Dentist selection (Dentist is always recomputed by the scheduling domain at Review/
-// confirm time) and no referral code — those stay out of scope. It DOES store a booking-stage payment
-// preference (`paymentMethod`, see FIELDS/PAYMENT_METHODS below) — never a payment confirmation, and never a
-// real charge; saveAppointment alone decides the actual (always-unpaid-at-booking) paymentStatus.
+// it is a Patient-only scratch record of in-progress booking-wizard choices (browser-local form recovery only). Exactly
+// one draft per Patient. It never stores a committed Dentist selection (the server assigns the Dentist when the booking
+// is confirmed), no referral code and no payment preference (payment belongs to M11). A resumed draft is revalidated
+// against fresh server availability before any saved date/time is reused.
 const fail=message=>({ok:false,message})
 const clean=value=>typeof value==='string'?value.trim():''
 const MODES=['smart','manual']
-const PAYMENT_METHODS=['cash','card']
-const FIELDS=['mode','branchId','serviceId','date','start','paymentMethod']
+const FIELDS=['mode','branchId','serviceId','date','start']
 
 // The only fields a draft save may ever contain. Anything else fails the whole request closed, the same
-// allowlist discipline `registration.js` already established for a public boundary. paymentMethod is a
-// booking-stage intent only — never a payment confirmation, and never persisted anywhere but this draft
-// until saveAppointment records it on the confirmed appointment.
+// allowlist discipline `registration.js` already established for a public boundary.
 function sanitizePatch(patch) {
   if(!isRecord(patch)||Object.keys(patch).some(key=>!FIELDS.includes(key)))return null
   const out={}
@@ -27,7 +23,6 @@ function sanitizePatch(patch) {
   if('serviceId' in patch){if(patch.serviceId!=null&&typeof patch.serviceId!=='string')return null;out.serviceId=patch.serviceId||null}
   if('date' in patch){if(patch.date&&!validDate(patch.date))return null;out.date=patch.date||null}
   if('start' in patch){if(patch.start&&!validTime(patch.start))return null;out.start=patch.start||null}
-  if('paymentMethod' in patch){if(patch.paymentMethod!=null&&!PAYMENT_METHODS.includes(patch.paymentMethod))return null;out.paymentMethod=patch.paymentMethod||null}
   return out
 }
 
@@ -40,8 +35,9 @@ export function bookingDraftActions(run) {
     const sanitized=sanitizePatch(patch)
     if(!sanitized)return fail('Enter valid booking progress.')
     const existing=(state.bookingDrafts||[]).find(d=>d.patientId===session.patientId)
-    const next={mode:existing?.mode??null,branchId:existing?.branchId??null,serviceId:existing?.serviceId??null,date:existing?.date??null,start:existing?.start??null,paymentMethod:existing?.paymentMethod??null,...sanitized}
+    const next={mode:existing?.mode??null,branchId:existing?.branchId??null,serviceId:existing?.serviceId??null,date:existing?.date??null,start:existing?.start??null,...sanitized}
     if(existing&&FIELDS.every(key=>existing[key]===next[key]))return {ok:true,unchanged:true,record:existing}
+    // Only the current fields are kept, so a legacy saved payment preference is dropped on the next save.
     const record={id:existing?.id||uid('draft'),patientId:session.patientId,...next,revision:(existing?.revision||0)+1,updatedAt:now.timestamp}
     state.bookingDrafts=existing?(state.bookingDrafts||[]).map(d=>d.id===existing.id?record:d):[record,...(state.bookingDrafts||[])]
     return {ok:true,record}

@@ -1,9 +1,9 @@
 # Backend Integration (Foundation 1B + Phase 2A)
 
-Scope: authentication, registration, session restoration, logout and RBAC (Foundation 1B), plus branch/
-service/staff/dentist reference data (Phase 2A — see its own section below). Every other business module
-(appointments, scheduling execution, queue, treatments, HMO, billing, prescriptions, messages, loyalty,
-marketing) is still frontend-local — see "Frontend-local boundary" below.
+Scope: authentication, registration, session restoration, logout and RBAC (Foundation 1B), branch/service/
+staff/dentist reference data (Phase 2A), M1/M4 identity, and M6 appointments (server-authoritative since the M6
+React cutover — see "M6 React cutover" below). Every other business module (queue, treatments, HMO, billing,
+prescriptions, messages, loyalty, marketing) is still frontend-local — see "Frontend-local boundary" below.
 
 ## Running it locally
 
@@ -103,7 +103,8 @@ token) triggers exactly one automatic refetch-and-retry — never a loop.
 
 Everything below `App.jsx`'s auth gate — Dashboards, Scheduling, PatientFlow, Clinical, FinanceCommunication,
 Admin, HMO, Messages, Loyalty, etc. — is unchanged and still reads/writes the same `localStorage` collections
-it always has, **except** the six reference-data collections Phase 2A covers (below). The identity bridge
+it always has, **except** the six reference-data collections Phase 2A covers (below) and appointments (M6, below),
+which are never stored in the browser any more. The identity bridge
 exists only so those still-local pages can keep working before their own data moves to PostgreSQL in a later
 checkpoint.
 
@@ -162,11 +163,9 @@ such gate (structure must be identical in every environment; only demo/reference
 members get a real `persons` row (name/contact only) with no linked `users` row at all — nothing to log in
 with.
 
-## Backend Wave 1 — M6 Appointment Booking & Smart Scheduling (backend only, not wired to React yet)
+## Backend Wave 1 — M6 Appointment Booking & Smart Scheduling
 
-The authoritative appointment backend exists, but the React app still books through its browser-local
-appointment commands (`src/workflow.js`, `src/scheduling.js`, booking drafts). Frontend cutover is a separate,
-reviewed pass; until then the frontend scheduler is the parity reference and a UX pre-check only.
+Laravel/PostgreSQL is the only appointment authority (see "M6 React cutover" below for how the React app uses it).
 
 Tables: `appointments` (ULID `public_id`, FKs to `patients`/`branches`/`services`/`dentist_profiles`, `starts_at`/
 `ends_at` timestamptz, duration snapshot, status, source, assignment method, `revision`), append-only
@@ -207,3 +206,37 @@ requires an active account; that transitional difference goes away at cutover.) 
 coordinates (all NULL, so location ranking reports `location_ranking: "unavailable"`), payment-based cancellation
 rules (no backend payment data yet), follow-up-linked bookings, and a management endpoint for Staff scope (demo
 Staff logins are scoped to `b1` by `DemoStaffScopeSeeder`).
+
+## M6 React cutover
+
+React reads and writes appointments only through the M6 API:
+
+- `src/appointments-api.js` — the single client: bounded list loading (`from`/`to`, paged), availability,
+  recommendation, create/reschedule/cancel and lifecycle commands, one `Idempotency-Key` per confirm attempt, and
+  normalized failures (`409 schedule_conflict` → "That time was just taken"; `409 stale_revision` → refresh and
+  review; `422 schedule_invalid` → checks not met plus alternative start times).
+- `src/appointment-flow.js` — server-first command flows used by the store. Check-In, No-show and treatment
+  start/completion (still browser-local M8/M9/M5 prototypes) run a no-commit dry run of the local step, then the
+  server transition, then the local record; if only the local step fails the page says so and offers a retry (the
+  Check-In page lists server-Checked-In appointments without a local arrival record). Remove each adapter when its
+  module becomes backend-authoritative.
+- `src/appointment-projection.js` — the in-memory read model (`state.appointments`, never persisted) plus read-model
+  Patients for server Patients with no local projection, keyed by the server Patient `public_id` (the signed-in
+  Patient's own appointments map to their session). Legacy classification (D5): queue/check-in/treatment/invoice/
+  prescription/follow-up/HMO/conversation records that reference pre-cutover browser appointments (directly or through
+  a legacy treatment/queue entry) are read-only history, excluded from live worklists and KPIs.
+- Staff branch reach in the UI follows `/api/me` `branch_scopes`; Staff pick Patients from `GET /api/patients`.
+- Appointment additions for the cutover: bounded `from`/`to` list range (max 184 days), server-generated immutable
+  `appointment_code` (APT-YYYY-NNNNNN), `dentist_ref` on availability (Staff/Owner only; a Patient reschedule search is
+  limited to the current Dentist), and `POST /api/appointments/{id}/check-in|no-show|start-treatment|complete`.
+- Follow-ups (approved transitional rule until M20 is backend-authoritative): the Dentist records/recommends the
+  follow-up; clinic Staff (or the Owner) book it as a normal server appointment and the local follow-up stores only the
+  returned public id (`linkFollowupAppointment`). Dentists and Patients have no booking path through this bridge.
+- Expired server session: any M6 call answered with 401 reports `api.onSessionInvalidated` (`src/api-client.js`); the
+  app shell revalidates with `/api/me` and, unless the same account is confirmed, returns to the normal signed-out Login
+  state ("Your session has ended. Sign in again."). The failed command is never retried; Booking Drafts are kept.
+- The appointment list is a bounded working window (`appointmentWindow`), never all-time history; Analytics labels the
+  Scheduling metric with that window.
+- Old `dentalops-v4-appointments` browser data is not read, uploaded or cleared. `INITIAL_APPOINTMENTS` is gone.
+- Queue, check-in and treatment records are still per-browser prototypes: a Dentist sees a queue entry only in the
+  browser where the arrival was recorded (M8/M9 backend work removes this).

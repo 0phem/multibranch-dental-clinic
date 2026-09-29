@@ -5,6 +5,7 @@ import * as data from '../src/data.js'
 import { setClockSource } from '../src/clock.js'
 import { normalizeClinicState, sessionForRole } from '../src/contracts.js'
 import { createWorkflowActions } from '../src/workflow.js'
+import { serverAppointment } from './support/server-appointments.js'
 import { DOMAIN_MODULE, LEGACY_MODULE_DOMAIN, eventModuleLabel, legacyModuleDomains, recordDomains, ruleTargetLabel } from '../src/module-map.js'
 
 setClockSource(()=>new Date('2026-09-19T02:08:00Z'))
@@ -15,7 +16,7 @@ function fixture() {
   let state=normalizeClinicState({...seeds,appointments:[],queue:[],checkIns:[],treatments:[],invoices:[],prescriptions:[],followups:[],hmo:[],conversations:[],inquiries:[],notifications:[],workflowLog:[],audit:[]})
   const session=sessionForRole('staff',state)
   const actions=createWorkflowActions({getState:()=>state,getSession:()=>session,commit:patch=>{state=normalizeClinicState({...state,...patch})}})
-  return {actions,get state(){return state}}
+  return {actions,get state(){return state},addAppointment:row=>{state=normalizeClinicState({...state,appointments:[...state.appointments,row]})}}
 }
 const ok=result=>{assert.equal(result.ok,true,result.message);return result.record}
 
@@ -46,7 +47,10 @@ test('every current module has exactly one stable domain key',()=>{
 
 test('new workflow and audit records store stable domain keys, never module numbers',()=>{
   const f=fixture()
-  const appointment=ok(f.actions.saveAppointment({patientId:'p1',branchId:'b1',dentistId:'d1',serviceId:'svc1',date:'2026-09-19',start:'11:00'}))
+  // M6 cutover: the appointment is server-confirmed; the local adapter records its event under the domain key.
+  const appointment=serverAppointment({patientId:'p1',branchId:'b1',dentistId:'d1',serviceId:'svc1',date:'2026-09-19',start:'11:00'})
+  f.addAppointment(appointment)
+  ok(f.actions.recordAppointmentEvent(appointment.id,'created'))
   ok(f.actions.createHmoCase({appointmentId:appointment.id}))
   const created=f.state.workflowLog.find(e=>e.eventType==='appointment.created')
   assert.equal(created.domain,'appointment');assert.equal('module' in created,false)

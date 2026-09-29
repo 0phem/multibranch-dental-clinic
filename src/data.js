@@ -144,13 +144,9 @@ export const INITIAL_PATIENTS = [
   { id:'p4', personId:'per-p4', userId:null, patientCode:'PAT-0004', preferredBranch:'Branch C', hmo:'MediCare Plus', hmoMember:'MC-88912', allergies:'Latex', medicalHistory:'Asthma, controlled.', dentalHistory:'Extraction of #48; follow-up required.', emergencyContact:'Mina Garcia • 0916 220 1000', consent:true },
 ]
 
-export const INITIAL_APPOINTMENTS = [
-  { id:'a1', appointmentNo:'APT-2026-0001', patientId:'p1', branchId:'b1', branch:'Branch A', dentistId:'d1', serviceId:'svc2', date:'2026-09-19', start:'10:00', scheduledStart:'2026-09-19T10:00', duration:45, status:'Checked In', source:'Portal', notes:'Routine cleaning' },
-  { id:'a2', appointmentNo:'APT-2026-0002', patientId:'p2', branchId:'b2', branch:'Branch B', dentistId:'d3', serviceId:'svc1', date:'2026-09-19', start:'11:00', scheduledStart:'2026-09-19T11:00', duration:30, status:'Checked In', source:'Front Desk', notes:'Tooth sensitivity' },
-  { id:'a3', appointmentNo:'APT-2026-0003', patientId:'p3', branchId:'b1', branch:'Branch A', dentistId:'d2', serviceId:'svc6', date:'2026-09-19', start:'13:30', scheduledStart:'2026-09-19T13:30', duration:45, status:'Checked In', source:'Front Desk', notes:'Monthly adjustment' },
-  { id:'a4', appointmentNo:'APT-2026-0004', patientId:'p4', branchId:'b3', branch:'Branch C', dentistId:'d4', serviceId:'svc11', date:'2026-09-20', start:'10:30', scheduledStart:'2026-09-20T10:30', duration:30, status:'Confirmed', source:'Follow-Up Task', notes:'Post-extraction review' },
-  { id:'a5', appointmentNo:'APT-2026-0005', patientId:'p2', branchId:'b2', branch:'Branch B', dentistId:'d5', serviceId:'svc3', date:'2026-09-19', start:'14:00', scheduledStart:'2026-09-19T14:00', duration:60, status:'Pending', source:'Front Desk', notes:'Pending patient confirmation' },
-]
+// M6 cutover: appointments are server-authoritative (Laravel/PostgreSQL + backend seeders), so there is no frontend
+// appointment seed. The seeded queue/treatment/invoice records below still reference the former demo appointment ids
+// ('a1'…'a5'); they are D5 LEGACY HISTORY (read-only, excluded from live scheduling and KPIs).
 
 export const INITIAL_QUEUE = [
   { id:'q1', queueId:'dq1', clinicDate:'2026-09-19', checkInId:'ci1', queueNumber:1, appointmentId:'a1', patientId:'p1', branch:'Branch A', dentistId:'d1', checkedIn:'09:46', status:'Waiting', currentState:'Waiting', priority:'Normal', position:1, calledAt:null, readyAt:null, completedAt:null, skipCount:0 },

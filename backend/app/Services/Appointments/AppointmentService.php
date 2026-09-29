@@ -157,6 +157,54 @@ final class AppointmentService
         });
     }
 
+    /**
+     * Named lifecycle transitions from the frozen appointment state table (CONTRACTS.md): Check-In, No-show, treatment
+     * start and completion. M6 keeps the appointment's lifecycle truth; the M8/M9/M5 workflows that decide when these
+     * happen stay separate and invoke these commands. A repeat of an already-applied transition returns the current
+     * record unchanged (safe retry); anything else needs the expected revision and an allowed source status.
+     */
+    public function transition(User $actor, Appointment $appointment, string $command, array $input, ?string $key): JsonResponse
+    {
+        [$from, $to, $event] = self::TRANSITIONS[$command];
+        $payload = ['appointment' => $appointment->id] + $input;
+
+        return $this->idempotent($actor, $key, 'appointment.'.$command, $payload, function () use ($actor, $appointment, $command, $from, $to, $event, $input) {
+            $current = Appointment::whereKey($appointment->id)->lockForUpdate()->firstOrFail();
+            if ($current->status === $to) {
+                return [$current, 200];
+            }
+            if ($current->revision !== (int) $input['expected_revision']) {
+                throw AppointmentCommandException::staleRevision();
+            }
+            if (! in_array($current->status, $from, true)) {
+                throw AppointmentCommandException::rule('invalid_transition', "An appointment that is {$current->status} cannot move to {$to}.", 'status');
+            }
+            // Existing approved Check-In rule (src/workflow.js checkInAppointment): only today's appointments. The
+            // earliest-arrival and late-arrival windows remain unresolved clinic policies and are not invented here.
+            if ($command === 'check-in' && ClinicClock::local($current->starts_at)->toDateString() !== ClinicClock::today()) {
+                throw AppointmentCommandException::rule('not_today', 'Only today’s appointments can be checked in.', 'status');
+            }
+
+            $previous = $current->status;
+            $current->update([
+                'status' => $to,
+                'revision' => $current->revision + 1,
+                'updated_by_user_id' => $actor->id,
+            ]);
+            $this->record($current, $actor, $event, $previous);
+
+            return [$current, 200];
+        });
+    }
+
+    /** command => [allowed source statuses, target status, history event] */
+    public const TRANSITIONS = [
+        'check-in' => [['Pending', 'Confirmed'], 'Checked In', 'appointment.checked_in'],
+        'no-show' => [['Checked In'], 'No-show', 'appointment.no_show'],
+        'start-treatment' => [['Checked In'], 'In Treatment', 'appointment.treatment_started'],
+        'complete' => [['In Treatment'], 'Completed', 'appointment.completed'],
+    ];
+
     /** Up to five valid start times on the requested date (src/logic.js alternatives). */
     private function alternatives(SlotRequest $request, ?DentistProfile $dentist): array
     {

@@ -26,7 +26,10 @@ export function permitted(state,session,permission) {
 const same=(a,b,keys)=>keys.every(k=>(a?.[k]??null)===(b?.[k]??null))
 const contextKeys=['patientId','dentistId','branchId','appointmentId']
 // Missing legacy optional links remain readable; explicit contradictory links fail closed.
-export function encounterIssue(state,q,now=clinicNow()) {
+// `appliedAppointmentStatus` (M6 cutover): during a server-first transition the server appointment already carries the
+// new status while the local queue record is about to follow it. Only that exact status is tolerated in the
+// appointment-vs-queue status comparisons; every relationship check still applies.
+export function encounterIssue(state,q,now=clinicNow(),appliedAppointmentStatus=null) {
   if(!q||!state.patients.some(p=>p.id===q.patientId)||!state.branches.some(b=>b.id===q.branchId)||!state.dentists.some(d=>d.id===q.dentistId))return 'The encounter profile is missing. Ask the clinic to review this record.'
   if(!validDate(q.clinicDate)||q.arrivedAt&&(!strictTimestamp(q.arrivedAt)||Date.parse(strictTimestamp(q.arrivedAt))>Date.parse(now.timestamp)||clinicDateAt(strictTimestamp(q.arrivedAt))!==q.clinicDate))return 'The arrival date/time needs clinic review.'
   if(state.queue.filter(x=>x.id===q.id||q.appointmentId&&x.appointmentId===q.appointmentId).length!==1)return 'Duplicate encounter links need clinic review.'
@@ -38,10 +41,11 @@ export function encounterIssue(state,q,now=clinicNow()) {
   if(treatments.length>1)return 'Multiple treatments reference this encounter. Ask the clinic to review the links.'
   const t=treatments[0]
   if(q.treatmentId&&!t||t&&(!same(t,q,contextKeys)||t.queueEntryId!==q.id||q.treatmentId&&t.id!==q.treatmentId))return 'The treatment does not match this encounter.'
-  if(a&&['Cancelled','No-show','Completed'].includes(a.status)&&a.status!==q.status)return 'The appointment is already closed. Refresh the worklist; this queue requires clinic review.'
+  const transitioning=!!a&&!!appliedAppointmentStatus&&a.status===appliedAppointmentStatus
+  if(a&&!transitioning&&['Cancelled','No-show','Completed'].includes(a.status)&&a.status!==q.status)return 'The appointment is already closed. Refresh the worklist; this queue requires clinic review.'
   if(t&&t.status!==q.status)return 'Treatment and queue states disagree. Open the linked encounter for review.'
   if(q.status==='Completed'&&(!t||t.status!=='Completed'||a&&a.status!=='Completed'))return 'Completion links need clinic review.'
-  if(q.status==='In Treatment'&&(!t||a&&a.status!=='In Treatment'))return 'Active treatment links need clinic review.'
+  if(q.status==='In Treatment'&&(!t||a&&!transitioning&&a.status!=='In Treatment'))return 'Active treatment links need clinic review.'
   return null
 }
 export function completedEncounter(state,t) {

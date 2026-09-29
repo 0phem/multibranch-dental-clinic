@@ -9,7 +9,7 @@ import { renderToString } from 'react-dom/server'
 
 const require=createRequire(import.meta.url)
 const files=['components.jsx','store.jsx','layout.jsx','clock.js','contracts.js','workflow.js','phase2.js','phase3-contracts.js','orchestration.js','pages/Dashboards.jsx','pages/Scheduling.jsx','pages/PatientFlow.jsx','pages/Clinical.jsx','pages/FinanceCommunication.jsx','pages/Admin.jsx','pages/PatientLoyalty.jsx','pages/PatientRegister.jsx','pages/PatientBook.jsx','pages/PatientMe.jsx','pages/PatientVisits.jsx','pages/PatientHome.jsx','loyalty.js','registration.js','scheduling.js','booking-drafts.js','geo.js','patient-view.js','data.js']
-const result=await build({stdin:{contents:files.map(file=>`export * from './src/${file}';`).join('\n'),resolveDir:process.cwd()},bundle:true,write:false,platform:'node',format:'esm',plugins:[{name:'shared-react',setup(b){b.onResolve({filter:/^react$/},()=>({path:pathToFileURL(require.resolve('react')).href,external:true}))}}]})
+const result=await build({stdin:{contents:[...files.map(file=>`export * from './src/${file}';`),`export * from './tests/support/server-appointments.js';`].join('\n'),resolveDir:process.cwd()},bundle:true,write:false,platform:'node',format:'esm',plugins:[{name:'shared-react',setup(b){b.onResolve({filter:/^react$/},()=>({path:pathToFileURL(require.resolve('react')).href,external:true}))}}]})
 const m=await import('data:text/javascript;base64,'+Buffer.from(result.outputFiles[0].text).toString('base64'))
 m.setClockSource(()=>new Date('2026-09-19T02:08:00Z'))
 // Phase 2A: branches/services/branchServices/dentists/staff are backend-authoritative and populated only
@@ -50,15 +50,20 @@ console.log(`PASS: ${count} initial role/page renders, Login, production shell w
 const providerStore=store
 let state=store.state
 let session=m.sessionForRole('staff',state)
-const actions=m.createWorkflowActions({getState:()=>state,getSession:()=>session,clock:m.clinicNow,commit:patch=>{
+const rawActions=m.createWorkflowActions({getState:()=>state,getSession:()=>session,clock:m.clinicNow,commit:patch=>{
   state=m.normalizeClinicState({...state,...patch})
   state.patients=state.patients.map(p=>m.patientProjection(p,state.persons.find(person=>person.id===p.personId)))
   store={...store,state,actions}
 }})
+// M6 cutover: appointments are server-authoritative. The smoke run stands in for "the server accepted the command and
+// the projection was refreshed" and runs Check-In/No-show/treatment server-first, exactly like the store's flow.
+const flow=m.serverFlow({actions:()=>rawActions,getState:()=>state,getSession:()=>session,setAppointments:rows=>{state=m.normalizeClinicState({...state,appointments:rows});store={...store,state,actions}}})
+const actions=m.serverFirstActions(rawActions,flow)
+const bookServer=form=>({ok:true,record:flow.book(form)})
 const patient=actions.createPatientRecord({person:{firstName:'PhaseOne',lastName:'Patient',phone:'0917-audit-new'},patient:{preferredBranchId:'b1',allergies:'None'}})
 assert.equal(patient.ok,true,patient.message)
 assert.ok(render('patients','staff',{patientId:patient.record.id}).includes('PhaseOne Patient'))
-const booking=actions.saveAppointment({patientId:patient.record.id,branchId:'b1',dentistId:'d1',serviceId:'svc1',date:'2026-09-19',start:'12:00'},{commandId:'smoke-book'})
+const booking=bookServer({patientId:patient.record.id,branchId:'b1',dentistId:'d1',serviceId:'svc1',date:'2026-09-19',start:'12:00'})
 assert.equal(booking.ok,true,booking.message)
 assert.ok(render('checkin').includes('PhaseOne Patient'))
 const arrival=actions.checkInAppointment(booking.record.id);assert.equal(arrival.ok,true,arrival.message)
@@ -77,7 +82,14 @@ assert.ok(render('billing').includes('Draft'))
 console.log('PASS: created-patient chart, booking/check-in visibility, exact queue treatment, completion, billing renders')
 
 // Phase 2: exercise shared actions, then render the exact role-visible results.
-const ownQueue=state.queue.find(q=>q.patientId==='p1'&&q.status==='Waiting')
+// The seeded p1 queue entry points at a pre-cutover demo appointment (D5 legacy history), so build a live encounter:
+// a server-confirmed booking checked in server-first.
+session=m.sessionForRole('staff',state)
+const p1Visit=bookServer({patientId:'p1',branchId:'b1',dentistId:'d1',serviceId:'svc1',date:'2026-09-19',start:'13:00'})
+assert.equal(actions.checkInAppointment(p1Visit.record.id).ok,true)
+session=m.sessionForRole('dentist',state)
+assert.ok(!state.queue.some(q=>q.appointmentId==='a1'),'legacy queue entries stay out of the live queue')
+const ownQueue=state.queue.find(q=>q.patientId==='p1'&&q.status==='Waiting'&&q.appointmentId===p1Visit.record.id)
 assert.ok(ownQueue)
 assert.equal(actions.updateQueue(ownQueue.id,'Called').ok,true)
 assert.equal(actions.saveTreatment({queueEntryId:ownQueue.id,procedures:[]}).ok,true)
@@ -108,8 +120,16 @@ assert.ok(render('billing','patient').includes(payment.receipt))
 assert.ok(!render('billing','patient').includes('Record Payment'))
 const followup=state.followups.find(f=>f.treatmentId===completed.record.id)
 assert.ok(render('followups','staff').includes('Schedule follow-up'))
-const followBooking=actions.saveAppointment({patientId:'p1',branchId:'b1',dentistId:'d1',serviceId:'svc11',date:'2026-09-20',start:'12:00'},{followupId:followup.id})
-assert.equal(followBooking.ok,true,followBooking.message)
+// Transitional M6/M20 rule: the Dentist records the follow-up requirement; clinic Staff schedule it. No Dentist or
+// Patient booking control is rendered for the same open follow-up.
+assert.ok(render('followups','dentist').includes('Clinic Staff schedule follow-up visits'))
+assert.ok(/>Schedule follow-up</.test(render('followups','staff'))&&!/>Schedule follow-up</.test(render('followups','dentist')))
+assert.ok(render('followups','patient').includes('follow-ups can’t be booked online'))
+assert.ok(!/>Schedule follow-up</.test(render('followups','patient')))
+session=m.sessionForRole('staff',state)
+const followBooking=bookServer({patientId:'p1',branchId:'b1',dentistId:'d1',serviceId:'svc11',date:'2026-09-20',start:'12:00'})
+const followLink=actions.linkFollowupAppointment(followup.id,followBooking.record.id)
+assert.equal(followLink.ok,true,followLink.message)
 assert.ok(render('followups','patient').includes('Scheduled'))
 console.log('PASS: Phase 2 procedures, prescription draft privacy/authorization, patient care, invoice review/issue/payment/receipt and follow-up scheduling')
 
@@ -160,10 +180,13 @@ m.setClockSource(()=>new Date('2026-09-19T02:08:00Z'))
 console.log('PASS: Phase 3 HMO correction/resubmission/escalation, Patient privacy, notification navigation/read scope, participant messages, monitor failures, render purity')
 
 // Exercise ClinicProvider's synchronous snapshot with commands issued before any render.
-providerStore.setSession('staff')
-const quick=providerStore.actions.saveAppointment({patientId:'p1',branchId:'b1',dentistId:'d1',serviceId:'svc1',date:'2026-09-19',start:'16:00'},{commandId:'provider-double'})
-assert.equal(quick.ok,true,quick.message)
-const check1=providerStore.actions.checkInAppointment(quick.record.id),check2=providerStore.actions.checkInAppointment(quick.record.id)
+// The server already recorded the arrival (Checked In); the local check-in adapter must stay idempotent before a render.
+const quickRow=m.serverRow({patientId:'p1',branchId:'b1',dentistId:'d1',serviceId:'svc1',date:'2026-09-19',start:'16:00',status:'Checked In'})
+let serverStore
+renderToString(React.createElement(m.ClinicProvider,{initialReferenceData,initialServerAppointments:[quickRow]},React.createElement(function(){serverStore=m.useClinic();return null})))
+serverStore.setSession('staff')
+assert.equal(serverStore.state.appointments[0].id,quickRow.id,'server rows reach the in-memory projection')
+const check1=serverStore.actions.checkInAppointment(quickRow.id),check2=serverStore.actions.checkInAppointment(quickRow.id)
 assert.equal(check1.ok,true);assert.equal(check2.unchanged,true)
 console.log('PASS: immediate repeated command integration')
 
@@ -179,7 +202,12 @@ globalThis.localStorage={getItem:key=>persisted.get(key)||null}
 // than removed, since writing to an unused key is harmless and this loop's real job (persons/patients/
 // appointments/etc. reload) is unaffected. initialReferenceData is still required here for the same reason
 // as the first render.
+// M6 cutover: a saved `appointments` key is never read back — with only browser storage, no appointment appears.
 renderToString(React.createElement(m.ClinicProvider,{initialReferenceData},React.createElement(Capture)))
+assert.equal(store.state.appointments.length,0,'browser-stored appointments are ignored after the cutover')
+// Appointments return only from the server (here: the rows GET /api/appointments would return).
+const serverRows=state.appointments.map(a=>m.serverRow({...a,code:a.appointmentNo}))
+renderToString(React.createElement(m.ClinicProvider,{initialReferenceData,initialServerAppointments:serverRows},React.createElement(Capture)))
 assert.ok(render('patients','staff',{patientId:patient.record.id}).includes('PhaseOne Patient'))
 assert.ok(render('schedule','dentist').includes('Branch A'))
 assert.ok(render('appointments').includes('Appointment management'))
@@ -346,7 +374,7 @@ assert.ok(/Unread: /.test(renderPanel('patient')))
 // A live queue entry, built by the real Staff check-in command.
 m.setClockSource(()=>new Date('2026-09-19T02:08:00Z'))
 session=m.sessionForRole('staff',state)
-const liveVisit=actions.saveAppointment({patientId:'p1',branchId:'b1',dentistId:'d2',serviceId:'svc1',date:'2026-09-19',start:'16:30'},{commandId:'p4b-live'})
+const liveVisit=bookServer({patientId:'p1',branchId:'b1',dentistId:'d2',serviceId:'svc1',date:'2026-09-19',start:'16:30'})
 assert.equal(liveVisit.ok,true,liveVisit.message)
 assert.equal(actions.checkInAppointment(liveVisit.record.id).ok,true)
 store={...store,state}
@@ -466,8 +494,8 @@ assert.ok(!/PhaseOne|Phase Two|Phase Three|Maria|Santos|John|Dela Cruz/.test(new
 assert.ok(!newHome.includes('pt-first-use-aside'),'no Messages/Referral quick access is shown when neither exists yet')
 assert.ok(!render('dashboard','patient').includes('Jamie'),'Maria’s own Home shows nothing of the newly registered Patient')
 // A real booking (the shared command, not a flag) transitions the same Patient into the returning Home.
-const newAppt=m.createWorkflowActions({getState:()=>regState,getSession:()=>loginResult.session,commit:patch=>{regState=m.normalizeClinicState({...regState,...patch})}}).saveAppointment({patientId:newPatientId,branchId:'b1',dentistId:'d1',serviceId:'svc1',date:'2026-09-20',start:'11:00'})
-assert.equal(newAppt.ok,true,newAppt.message)
+// The server confirmed the Patient's first booking; the in-memory projection now carries it.
+regState=m.normalizeClinicState({...regState,appointments:[...regState.appointments,m.serverAppointment({patientId:newPatientId,branchId:'b1',dentistId:'d1',serviceId:'svc1',date:'2026-09-20',start:'11:00'})]})
 store={...store,state:regState}
 const returningHome=renderPatientAs('dashboard',loginResult.session)
 assert.ok(!returningHome.includes('Need a visit?')&&returningHome.includes('pt-home-quick')&&returningHome.includes('Upcoming visit'),'a real appointment naturally returns the Patient to the full returning Home')
@@ -527,19 +555,22 @@ const staleStatus=m.draftStatus(bookState,bookSession,m.patientBookingDraft(book
 assert.equal(staleStatus.slotValid,false,'a past/invalid saved time is reported invalid on resume')
 assert.ok(staleStatus.issues.length>0&&!/undefined/.test(staleStatus.issues.join(' ')))
 
-// Zero-eligible-Dentist Smart Find case is honest, never a fabricated result (Branch C has no Dentist for TMD).
-assert.deepEqual(m.findOpenTimes(bookState,{branchId:'b3',serviceId:'svc10',patientId:'p1'},{}),[])
+// Smart Find availability and zero-eligible results come from the server now; the browser search is gone.
+assert.equal(m.findOpenTimes,undefined,'no browser open-time search remains')
+assert.deepEqual(m.dentistsFor(bookState,'b3','svc10'),[],'no Dentist is configured for this branch/service')
 // No fake nearest-branch result: canonical branches carry no coordinates in this pass.
 assert.equal(m.nearestBranch(bookState.branches,{lat:14.8,lng:120.9}),null,'coordinates unavailable → no fake nearest-branch result')
 
 // Confirm a real Smart-Find-style auto-assigned booking; the draft is cleared atomically by the same command.
-const smartConfirm=bookActions.saveAppointment({branchId:'b1',serviceId:'svc1',date:'2026-09-21',start:'11:00'},{commandId:'smoke-smart-confirm',autoAssign:true})
+const smartBooked=m.serverAppointment({patientId:'p1',branchId:'b1',dentistId:'d1',serviceId:'svc1',date:'2026-09-21',start:'11:00',assignmentMethod:'auto',source:'Patient Portal'})
+bookState=m.normalizeClinicState({...bookState,appointments:[...bookState.appointments,smartBooked]})
+const appointmentsAfterConfirm=bookState.appointments.length
+const smartConfirm=bookActions.recordAppointmentEvent(smartBooked.id,'created')
 assert.equal(smartConfirm.ok,true,smartConfirm.message)
-assert.equal(smartConfirm.record.assignmentMethod,'auto')
-assert.equal(bookState.bookingDrafts.length,0,'a successful confirmation removes the Patient’s draft in the same atomic command')
-// Replay of the same confirmation command creates no second appointment.
-const smartReplay=bookActions.saveAppointment({branchId:'b1',serviceId:'svc1',date:'2026-09-21',start:'11:00'},{commandId:'smoke-smart-confirm',autoAssign:true})
-assert.equal(smartReplay.unchanged,true)
+assert.equal(bookState.bookingDrafts.length,0,'a server-confirmed booking removes the Patient’s draft')
+// Replaying the confirmation adapter never creates an appointment (the server owns creation and Idempotency-Key replay).
+assert.equal(bookActions.recordAppointmentEvent(smartBooked.id,'created').ok,true)
+assert.equal(bookState.appointments.length,appointmentsAfterConfirm)
 
 // Render checks: Home quick actions no longer include Book/Visits (already in primary nav); Me is profile-only;
 // the Menu sheet owns care/account destinations; mobile nav is exactly Home/Book/Visits/Menu; the assistant is a

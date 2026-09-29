@@ -50,7 +50,9 @@ export function validInvoice(state, invoice) {
   const queue=state.queue.find(q=>q.id===t.queueEntryId)
   const appointment=t.appointmentId?state.appointments.find(a=>a.id===t.appointmentId):null
   if(!queue||queue.status!=='Completed'||queue.treatmentId!==t.id||['patientId','dentistId','branchId','appointmentId'].some(k=>(queue[k]??null)!==(t[k]??null)))return false
-  if(t.appointmentId&&(!appointment||appointment.status!=='Completed'||appointment.treatmentId!==t.id||['patientId','dentistId','branchId'].some(k=>appointment[k]!==t[k])))return false
+  // The server appointment projection carries no treatment link (M6 cutover); the appointment -> treatment link is derived
+  // from the treatment records themselves and must be unique.
+  if(t.appointmentId&&(!appointment||appointment.status!=='Completed'||state.treatments.filter(x=>x.appointmentId===t.appointmentId).length!==1||['patientId','dentistId','branchId'].some(k=>appointment[k]!==t[k])))return false
   if(state.invoices.filter(i=>i.treatmentId===t.id).length!==1)return false
   const used=new Set()
   for(const item of invoice.items){

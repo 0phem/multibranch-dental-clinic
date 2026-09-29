@@ -1,6 +1,6 @@
 import { validSession, canAccessPage } from './safeguards.js'
 import { Notice } from './components.jsx'
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { ClinicProvider, useClinic } from './store.jsx'
 import { Brand, Login, Shell, ToastStack } from './layout.jsx'
 import { PatientRegister } from './pages/PatientRegister.jsx'
@@ -59,8 +59,10 @@ function AppBody() {
   // could leave behind — see identity-bridge.js for how it gets here.
   const role=store.session?.role??null
 
-  const enterSession=session=>{
-    store.adoptSession(session)
+  // Server identity fields from /api/me travel with the local compatibility session: the Patient public_id (M6/M4
+  // ownership, resolved server-side) and the Staff authorization branch scopes. Neither is ever taken from browser input.
+  const enterSession=(session,me)=>{
+    store.adoptSession({...session,serverUserId:me?.id??null,patientPublicId:me?.patient?.id??null,branchScopes:Array.isArray(me?.branch_scopes)?me.branch_scopes.map(b=>b.id):[]})
     setContext(null)
     setPageState(START_PAGE[session.role]||'dashboard')
     setActiveBranch(store.state.branches.find(b=>b.id===session.branchId)?.name||'All Branches')
@@ -74,7 +76,7 @@ function AppBody() {
     if(result.ok){
       const bridge=store.actions.bridgeBackendIdentity(result.data)
       if(bridge.ok){
-        enterSession(bridge.session)
+        enterSession(bridge.session,result.data)
         setAuthPhase('authenticated')
         return
       }
@@ -103,7 +105,7 @@ function AppBody() {
       await api.logout()
       return {ok:false,message:NO_WORKSPACE_MESSAGE}
     }
-    enterSession(bridge.session)
+    enterSession(bridge.session,result.data)
     setAuthPhase('authenticated')
     return {ok:true}
   }
@@ -114,23 +116,46 @@ function AppBody() {
     if(!result.ok)return result
     const bridge=store.actions.bridgeBackendIdentity(result.data)
     if(!bridge.ok)return {ok:false,message:'Something went wrong finishing your registration. Try signing in.'}
-    enterSession(bridge.session)
+    enterSession(bridge.session,result.data)
     setAuthPhase('authenticated')
     return {ok:true}
+  }
+
+  const signedOut=()=>{
+    store.adoptSession(null)
+    setContext(null);setPageState('dashboard');setActiveBranch('All Branches');setShowRegister(false)
+    setAuthPhase('unauthenticated')
   }
 
   const logout=async()=>{
     const result=await api.logout()
     // Always clears the local compatibility session — a stuck authenticated shell is never acceptable — but the
     // message told to the Patient/Staff/Dentist/Owner is honest about whether the backend actually confirmed it.
-    store.adoptSession(null)
-    setContext(null);setPageState('dashboard');setActiveBranch('All Branches');setShowRegister(false)
-    setAuthPhase('unauthenticated')
+    signedOut()
     store.toast(
       result.backendConfirmed?'You’re signed out.':'Signed out on this device, but the server session close could not be confirmed.',
       result.backendConfirmed?'default':'warning'
     )
   }
+
+  // A 401 from an authenticated call (M6 appointment reads, availability and commands report it through
+  // api.onSessionInvalidated) means the server session may be gone. Revalidate with /api/me: unless the server confirms
+  // the same account is still signed in, return to the normal signed-out Login state. Nothing is retried — the failed
+  // command already reported its failure — and browser-local Booking Drafts are left intact for the next sign-in.
+  const latest=useRef(null)
+  latest.current={session:store.session,signedOut}
+  const revalidating=useRef(false)
+  useEffect(()=>api.onSessionInvalidated(async()=>{
+    if(revalidating.current||!latest.current.session)return
+    revalidating.current=true
+    try{
+      const valid=await api.sessionStillValid(latest.current.session.serverUserId)
+      const current=latest.current
+      if(!current.session||valid)return
+      current.signedOut()
+      setAuthError('Your session has ended. Sign in again.')
+    }finally{revalidating.current=false}
+  }),[])
 
   const setPage=(next,record=null)=>{if(role&&canAccessPage(store.state,store.session,next)){setContext(record);setPageState(next)}}
 

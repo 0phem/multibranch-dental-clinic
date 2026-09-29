@@ -1,3 +1,5 @@
+import { liveRecords } from '../appointment-projection.js'
+import { appointmentWindow } from '../appointments-api.js'
 import { pendingHours } from '../phase3-contracts.js'
 import { automationSnapshot } from '../orchestration.js'
 import React, { useMemo, useRef, useState } from 'react'
@@ -5,6 +7,7 @@ import { ROLE_INFO } from '../data.js'
 import { eventModuleLabel, ruleTargetLabel } from '../module-map.js'
 import { LOYALTY_PROGRAM, canManageLoyalty, ledgerIssue } from '../loyalty.js'
 import { Button, Card, ConfirmDialog, Field, Modal, Notice, PageHeader, Progress, StatCard, Status, Table, Tabs } from '../components.jsx'
+import { clinicDate } from '../clock.js'
 import { branchCapacity, dateLabel, dentistName, makeCsv, patientName, peso, uid } from '../logic.js'
 import { syncBranchUpdate, syncBranchServiceToggle, syncPersonnelUpdate } from '../reference-data-bridge.js'
 import { createUserAccountRemote, deleteUserAccountRemote, fetchUserAccounts, updateUserAccountRemote } from '../user-management-bridge.js'
@@ -162,10 +165,15 @@ export function AnalyticsPage({ activeBranch, store }) {
   const branchFilter=x=>activeBranch==='All Branches'||x.branch===activeBranch
   const appts=state.appointments.filter(branchFilter)
   const queue=state.queue.filter(branchFilter)
-  const hmo=state.hmo.filter(branchFilter)
-  const paid=state.invoices.filter(i=>i.status==='Paid'&&branchFilter(i))
+  // D5: legacy demo records (pre-cutover appointments) never feed live analytics.
+  const hmo=liveRecords(state.hmo).filter(branchFilter)
+  const paid=liveRecords(state.invoices).filter(i=>i.status==='Paid'&&branchFilter(i))
+  // M6 appointments are loaded for a bounded working window, not all-time history, so the Scheduling metric names the
+  // window it covers (and says when even that window was cut short). The period selector does not apply to it.
+  const loaded=appointmentWindow(clinicDate())
+  const schedulingNote=`Confirmed appointments dated ${dateLabel(loaded.from)} – ${dateLabel(loaded.to)} (the loaded scheduling window, not all-time; the period selector does not apply)${store.appointmentsTruncated?'. Partial: the appointment list limit was reached.':''}`
   const metrics=[
-    {name:'Scheduling',value:appts.filter(a=>a.status==='Confirmed').length,note:'Confirmed appointment records',module:'M6'},
+    {name:'Scheduling',value:appts.filter(a=>a.status==='Confirmed').length,note:schedulingNote,module:'M6'},
     {name:'Queue / patient flow',value:queue.filter(q=>q.status==='Completed').length,note:'Completed queue records',module:'M9–M10'},
     {name:'HMO processing',value:hmo.filter(h=>h.status==='Approved').length,note:'Approved provider outcomes',module:'M12'},
     {name:'Communication',value:state.inquiries.filter(i=>i.status==='Responded').length+state.conversations.filter(c=>c.status==='Closed').length,note:'Responded/closed communication records',module:'M16–M18'},

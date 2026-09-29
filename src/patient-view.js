@@ -1,11 +1,11 @@
 import { validSession } from './safeguards.js'
-import { clinicNow, clinicDate, maxBookingDate, addDays } from './clock.js'
+import { clinicNow, clinicDate, addDays } from './clock.js'
 import { inScope, isActiveQueue, isTodayQueue, TERMINAL } from './contracts.js'
-import { availableSlots, dateLabel, nextAppointment, peso, queueWaitEstimate } from './logic.js'
+import { dateLabel, nextAppointment, peso, queueWaitEstimate } from './logic.js'
 import { followupDisplayState, linkedTreatment, visibleInvoices, visiblePrescriptions } from './phase2.js'
 import { LOYALTY_PROGRAM, accountsOf, ledgerIssue, needMoreMessage } from './loyalty.js'
 import { HMO_PROVIDERS, notificationDestination, patientProvidesRequirement, visibleConversations, visibleHmo, visibleNotifications } from './phase3-contracts.js'
-import { assignDentist, dentistsFor, servicesAt } from './scheduling.js'
+import { dentistsFor, servicesAt } from './scheduling.js'
 
 // Relocated to the scheduling domain (Phase 4B.3B); re-exported here so existing Patient-view callers are unaffected.
 export { dentistsFor, servicesAt }
@@ -57,18 +57,14 @@ export function appointmentGroups(state,session,today=clinicDate()) {
     cancelled:all.filter(a=>a.status==='Cancelled').reverse(),
   }
 }
-// Reschedule/Cancel are offered for Pending/Confirmed visits that have not been admitted. Cancellation adds
-// two Patient-specific rules (see workflow.js's cancelAppointment, the authoritative enforcement — this
-// selector only drives the UI's presentation of the same rule): a card appointment already marked paid
-// can't be cancelled online at all (cancelKind 'blocked-card-paid' — the button stays visible so the Patient
-// gets an explanation, never a silent disappearance); once the scheduled start has passed, online
-// cancellation is unavailable regardless of payment method. Reschedule itself has no separate cutoff here
-// (P2 remains otherwise unresolved) — only the cancellation timing above is this task's explicit rule.
+// Reschedule/Cancel are offered for Pending/Confirmed visits that have not been admitted. This selector only
+// presents the rule; the server (M6 cancel/reschedule commands) enforces it: once the scheduled start has passed,
+// online cancellation is unavailable. Reschedule has no separate cutoff (P2 remains unresolved). The former card-paid
+// cancellation rule is deferred until M11 owns payment data (no payment information exists on appointments).
 export function appointmentActionState(appointment,now=clinicNow()) {
   const today=now.date
   if(['Confirmed','Pending'].includes(appointment.status)&&appointment.date>=today){
     const started=appointment.date<today||(appointment.date===today&&appointment.start<=now.time)
-    if(appointment.paymentMethod==='card'&&appointment.paymentStatus==='paid')return {canReschedule:true,canCancel:true,cancelKind:'blocked-card-paid',reason:''}
     if(started)return {canReschedule:true,canCancel:false,cancelKind:'past-start',reason:'This appointment’s scheduled time has passed, so it can’t be cancelled online. Please contact the clinic for assistance.'}
     return {canReschedule:true,canCancel:true,cancelKind:'normal',reason:''}
   }
@@ -122,7 +118,7 @@ export function prescriptionView(state,r) {
 }
 export function invoiceView(state,i) {
   const payment=i.payment&&typeof i.payment==='object'?i.payment:null
-  return {id:i.id,invoiceNo:i.invoiceNo||'',status:i.status,date:i.visitDate,branch:state.branches.find(b=>b.id===i.branchId)?.name||'',branchId:i.branchId,appointmentId:i.appointmentId||null,treatmentId:i.treatmentId,
+  return {id:i.id,invoiceNo:i.invoiceNo||'',legacy:!!i.legacyAppointment,status:i.status,date:i.visitDate,branch:state.branches.find(b=>b.id===i.branchId)?.name||'',branchId:i.branchId,appointmentId:i.appointmentId||null,treatmentId:i.treatmentId,
     items:(Array.isArray(i.items)?i.items.filter(Boolean):[]).map((item,index)=>({key:item.id||index,name:state.services.find(s=>s.id===item.serviceId)?.name||item.name||'Service',quantity:item.quantity||1,unit:item.unitFee??item.amount,amount:item.amount})),
     total:i.total,
     receipt:i.receipt?{number:i.receipt,amount:payment?.amount??i.total,status:payment?.status||i.paymentStatus,method:payment?.method||(i.method&&i.method!=='—'?i.method:''),simulated:!!payment?.simulation,paidAt:payment?.recordedAt||i.paidAt||null}:null}
@@ -221,7 +217,7 @@ export function patientAttention(state,session) {
     if(needed)items.push({id:`hmo:${h.id}`,kind:'hmo',title:h.status==='Returned'?'Your HMO request was returned for correction':'HMO documents are needed',detail:`${view.provider} • ${needed} document${needed>1?'s':''} to provide`,page:'hmo',context:{hmoCaseId:h.id},action:'Review documents'})
   }
   for(const f of patientFollowups(state,session))
-    if(f.display==='Open')items.push({id:`followup:${f.record.id}`,kind:'followup',title:'A follow-up visit needs scheduling',detail:f.record.reason||'Your Dentist recommended a return visit.',page:'followups',context:{entityId:f.record.id},action:'Schedule follow-up'})
+    if(f.display==='Open')items.push({id:`followup:${f.record.id}`,kind:'followup',title:'Your Dentist recommended a follow-up visit',detail:`${f.record.reason||'Return visit'} • The clinic will schedule it with you.`,page:'followups',context:{entityId:f.record.id},action:'View follow-up'})
   for(const i of patientInvoices(state,session))
     if(['Issued','Open'].includes(i.status))items.push({id:`invoice:${i.id}`,kind:'invoice',title:'An invoice is ready to view',detail:`${i.invoiceNo} • ${money(i.total)}`,page:'billing',context:{entityId:i.id},action:'View invoice'})
   const notifications=patientNotifications(state,session)
@@ -325,48 +321,6 @@ export function resolveTarget(state,session,page,context) {
   return null
 }
 
-// ---- Scheduling helpers (same authoritative validator as the shared booking command) -----------------
-export function scheduleFormDefaults(state,session,{appointment=null,followup=null}={}) {
-  const ctx=patientContext(state,session)
-  const source=appointment||followup
-  if(!ctx)return null
-  const open=state.branches.filter(b=>b.status==='Open')
-  const branchId=source?.branchId||(open.some(b=>b.id===ctx.patient.preferredBranchId)?ctx.patient.preferredBranchId:open[0]?.id)||''
-  const followService=followup?state.services.find(s=>s.name==='Follow-Up'):null
-  const serviceId=appointment?.serviceId||followService?.id||''
-  const service=state.services.find(s=>s.id===serviceId)
-  const dentists=serviceId?dentistsFor(state,branchId,serviceId):[]
-  const dentistId=source?.dentistId||dentists[0]?.id||''
-  const today=clinicDate()
-  return {patientId:ctx.patientId,branchId,serviceId,dentistId,duration:service?.duration||0,
-    date:appointment?.date||(followup?.recommendedDate&&followup.recommendedDate>today?followup.recommendedDate:today),
-    start:appointment?.start||'',notes:appointment?.notes||followup?.reason||'',source:appointment?.source||(followup?'Follow-Up Task':'Portal')}
-}
-export function nextScheduleForm(state,form,key,value,lock={}) {
-  const next={...form,[key]:value}
-  if(key==='branchId'){
-    const services=servicesAt(state,value)
-    if(!services.some(s=>s.id===next.serviceId)){next.serviceId='';next.duration=0}
-  }
-  if(key==='serviceId')next.duration=state.services.find(s=>s.id===value)?.duration||0
-  if(key==='branchId'||key==='serviceId'){
-    const dentists=next.serviceId?dentistsFor(state,next.branchId,next.serviceId):[]
-    if(!dentists.some(d=>d.id===next.dentistId))next.dentistId=dentists[0]?.id||''
-  }
-  if(lock.branchId)next.branchId=lock.branchId
-  if(lock.serviceId)next.serviceId=lock.serviceId
-  if(lock.dentistId)next.dentistId=lock.dentistId
-  return next
-}
-export const scheduleSlots=(state,form,ignoreId=null)=>form.dentistId&&form.serviceId?availableSlots(form,state,ignoreId):[]
-// Chronological, not ranked: every entry passed the same validator for the chosen date.
-export function suggestTimes(state,form,ignoreId=null,limit=4,onlyDentistId=null) {
-  if(!form.serviceId)return []
-  return dentistsFor(state,form.branchId,form.serviceId).filter(d=>!onlyDentistId||d.id===onlyDentistId)
-    .flatMap(d=>availableSlots({...form,dentistId:d.id},state,ignoreId).map(start=>({dentistId:d.id,dentist:d.name,start})))
-    .sort((a,b)=>a.start.localeCompare(b.start)||a.dentist.localeCompare(b.dentist)).slice(0,limit)
-}
-
 // ---- Booking Drafts (Phase 4B.3C-1: BOOKING DRAFT != APPOINTMENT) --------------------------------------
 // The session Patient's own draft only — never a browser-supplied patientId. `state.bookingDrafts` is
 // session-Patient-scoped identically to every other Patient selector here (fail closed, no cross-Patient read).
@@ -385,20 +339,11 @@ export function draftStatus(state,session,draft) {
   const issues=[]
   if(draft.branchId&&!branch)issues.push('The branch you chose is no longer open. Choose another branch.')
   if(draft.branchId&&branch&&draft.serviceId&&!service)issues.push('That service is no longer offered at this branch. Choose another service.')
+  // The saved date/time is never trusted here: the booking page rechecks it against fresh server availability (the
+  // M6 authority) before reusing it, so `slotValid` is unknown (null) until that check runs. A date that is already
+  // before tomorrow can never be booked online, so that one case is reported immediately (a UX pre-check only).
   let slotValid=null
-  if(branch&&service&&draft.date&&draft.start){
-    // Threading the same 2-month horizon the shared saveAppointment command enforces means a stale,
-    // now-out-of-range draft date fails through the exact same path as an unavailable slot — no parallel
-    // horizon check needed here. `now` is captured once and reused for both the real validity check and
-    // the reason-specific message below — the authoritative clinic date, never a fresh browser-local one.
-    const now=clinicNow()
-    slotValid=assignDentist(state,{branchId:branch.id,serviceId:service.id,date:draft.date,start:draft.start,patientId:session.patientId},now,null,maxBookingDate()).ok
-    if(!slotValid){
-      if(draft.date<now.date)issues.push('Your saved date has passed. Choose another date.')
-      else if(draft.date>maxBookingDate())issues.push('Your saved date is beyond the two-month booking window. Choose another date.')
-      else issues.push('Your saved time is no longer available. Choose another time.')
-    }
-  }
+  if(draft.date&&draft.date<addDays(clinicDate(),1)){slotValid=false;issues.push('Your saved date has passed. Choose another date.')}
   return {branch,service,date:draft.date||null,start:draft.start||null,mode:draft.mode||null,slotValid,issues,hasProgress:!!(draft.branchId||draft.serviceId||draft.date||draft.start)}
 }
 
@@ -414,20 +359,21 @@ export function relativeDateLabel(date, today) {
   return `${asDate.toLocaleDateString('en-PH',{weekday:'short'})} ${asDate.getDate()}`
 }
 
-// One entry per day across the exhaustive Smart Find search window, `hasOpenings` a proven fact (not a
-// guess) once `results` came from an uncapped/exhaustive findOpenTimes call — every day in the window was
-// genuinely searched, so there is no third "not checked" state to represent.
-export function buildDateStrip(results, startDate, windowDays) {
+// One entry per day across a run of dates whose server availability was fetched for every day (booking-availability.js),
+// so `hasOpenings` is a fact from the server, not a guess.
+// `today` (the clinic date) drives the Today/Tomorrow labels; the strip itself may start later (e.g. the Patient booking
+// window starts tomorrow).
+export function buildDateStrip(results, startDate, windowDays, today=startDate) {
   const opened=new Set((results||[]).map(r=>r.date))
   return Array.from({length:windowDays},(_,offset)=>{
     const date=addDays(startDate,offset)
-    const dayLabel=relativeDateLabel(date,startDate)
+    const dayLabel=relativeDateLabel(date,today)
     const dayNumber=Number(date.slice(-2))
     return {date, label:dayLabel, dayLabel, dayNumber, fullLabel:dateLabel(date), hasOpenings:opened.has(date)}
   })
 }
 
-// Buckets real findOpenTimes results by time of day; Evening is only ever non-empty when a real slot
+// Buckets real server availability slots by time of day; Evening is only ever non-empty when a real slot
 // falls there — the caller decides whether to render an Evening heading at all based on that.
 export function groupSlotsByPeriod(results) {
   const groups={morning:[],afternoon:[],evening:[]}

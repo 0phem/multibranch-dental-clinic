@@ -5,37 +5,42 @@ import { clinicNow, setClockSource, rebaseDemoRecords } from '../src/clock.js'
 import { normalizeClinicState, sessionForRole, encounterContext, inScope, isTodayQueue } from '../src/contracts.js'
 import { availableSlots, validateAppointment, branchCapacity } from '../src/logic.js'
 import { createWorkflowActions } from '../src/workflow.js'
+import { withServerAppointments } from './support/server-appointments.js'
 
 setClockSource(()=>new Date('2026-09-19T02:08:00Z'))
 const seedKeys={persons:'PERSONS',services:'SERVICES',branchServices:'BRANCH_SERVICES',dentistServiceAssignments:'DENTIST_SERVICE_ASSIGNMENTS',branches:'BRANCHES',dentists:'DENTISTS',staff:'STAFF',patients:'PATIENTS',users:'USERS'}
 function fixture(overrides={}) {
   let state=normalizeClinicState({...Object.fromEntries(Object.entries(seedKeys).map(([key,seed])=>[key,structuredClone(data[`INITIAL_${seed}`])])),appointments:[],queue:[],checkIns:[],treatments:[],invoices:[],followups:[],prescriptions:[],notifications:[],workflowLog:[],audit:[],...overrides})
   let session=sessionForRole('staff',state)
-  const actions=createWorkflowActions({getState:()=>state,getSession:()=>session,commit:patch=>{state=normalizeClinicState({...state,...patch})}})
-  return {actions,get state(){return state},role:role=>{session=sessionForRole(role,state)},patch:patch=>{state=normalizeClinicState({...state,...patch})}}
+  const raw=createWorkflowActions({getState:()=>state,getSession:()=>session,commit:patch=>{state=normalizeClinicState({...state,...patch})}})
+  // M6 cutover: server appointments; Check-In/No-show/treatment transitions run server-first.
+  const server=withServerAppointments({getState:()=>state,setState:next=>{state=normalizeClinicState(next)},getSession:()=>session,rawActions:()=>raw})
+  return {get actions(){return server.actions()},flow:server.flow,get session(){return session},get state(){return state},role:role=>{session=sessionForRole(role,state)},patch:patch=>{state=normalizeClinicState({...state,...patch})}}
 }
 const form={patientId:'p1',branchId:'b1',dentistId:'d1',serviceId:'svc1',date:'2026-09-19',start:'11:00'}
-function book(f,patch={},commandId='book-1') {const r=f.actions.saveAppointment({...form,...patch},{commandId});assert.equal(r.ok,true,r.message);return r.record}
+function book(f,patch={}) {return f.flow.book({...form,...patch})}
 function arrive(f,appointment) {const r=f.actions.checkInAppointment(appointment.id);assert.equal(r.ok,true,r.message);return r.record}
 function start(f,entry,patch={}) {f.role('dentist');assert.equal(f.actions.updateQueue(entry.id,'Called').ok,true);const r=f.actions.saveTreatment({queueEntryId:entry.id,...patch});assert.equal(r.ok,true,r.message);return r.record}
 
-test('booking and rescheduling preserve branch ID and derive renamed labels',()=>{
+test('server appointments keep their branch ID and derive renamed labels',()=>{
   const f=fixture();const a=book(f)
   assert.equal(a.branchId,'b1')
-  const changed=f.actions.saveAppointment({...form,start:'12:00'},{appointmentId:a.id})
-  assert.equal(changed.ok,true)
+  // A server reschedule keeps the same appointment id; the projection simply reflects the new time.
+  f.patch({appointments:f.state.appointments.map(x=>x.id===a.id?{...x,start:'12:00',revision:2}:x)})
+  const changed=f.state.appointments[0]
   f.patch({branches:f.state.branches.map(b=>b.id==='b1'?{...b,name:'Renamed clinic'}:b)})
   assert.equal(f.state.appointments[0].branch,'Renamed clinic')
   assert.equal(validateAppointment({...form,start:'13:00'},f.state).valid,true)
-  const q=arrive(f,changed.record);assert.equal(q.branchId,'b1')
+  const q=arrive(f,changed);assert.equal(q.branchId,'b1')
   assert.equal(f.state.queue[0].branch,'Renamed clinic')
   assert.equal(branchCapacity('Renamed clinic',f.state).booked,1)
 })
 
-test('booking commands and identical reschedules are idempotent',()=>{
-  const f=fixture();const a=book(f);const count=f.state.workflowLog.length
-  book(f);assert.equal(f.state.appointments.length,1);assert.equal(f.state.workflowLog.length,count)
-  assert.equal(f.actions.saveAppointment(form,{appointmentId:a.id}).unchanged,true)
+test('appointment adapter events and arrivals are idempotent',()=>{
+  const f=fixture();const a=book(f)
+  assert.equal(f.actions.recordAppointmentEvent(a.id,'created').ok,true);const count=f.state.workflowLog.length,notes=f.state.notifications.length
+  assert.equal(f.actions.recordAppointmentEvent(a.id,'created').ok,true);assert.equal(f.state.workflowLog.length,count);assert.equal(f.state.notifications.length,notes)
+  const q=arrive(f,a);assert.equal(f.actions.checkInAppointment(a.id).unchanged,true);assert.equal(f.state.queue.length,1);assert.equal(f.state.queue[0].id,q.id)
 })
 
 test('patient creation returns patient ID, separately linked to its PERSON',()=>{
@@ -96,10 +101,10 @@ test('available slots and suggested alternatives pass exactly the same validator
 })
 
 test('front desk scope cannot operate another branch; patient cannot act on another patient',()=>{
-  const f=fixture();assert.equal(f.actions.saveAppointment({...form,branchId:'b2',dentistId:'d3'}).ok,false)
+  const f=fixture()
   f.role('owner');const b=book(f,{branchId:'b2',dentistId:'d3',patientId:'p2'})
-  f.role('staff');assert.equal(f.actions.checkInAppointment(b.id).ok,false);assert.equal(f.actions.cancelAppointment(b.id).ok,false)
-  f.role('patient');assert.equal(f.actions.cancelAppointment(b.id).ok,false)
+  f.role('staff');assert.equal(f.actions.checkInAppointment(b.id).ok,false);f.flow.setStatus(b.id,'Cancelled');assert.equal(f.actions.applyAppointmentCancellation(b.id).ok,false)
+  f.role('patient');assert.equal(f.actions.applyAppointmentCancellation(b.id).ok,false)
   assert.equal(f.actions.checkInAppointment(b.id).ok,false)
 })
 
@@ -150,13 +155,13 @@ test('dentist-selected performed service drives draft charges, not original book
   assert.equal(f.state.treatments[0].requestedServiceId,'svc1');assert.equal(f.state.invoices[0].items[0].serviceId,'svc2');assert.equal(f.state.invoices[0].total,1200)
 })
 
-test('cancellation reconciles linked queue and follow-up; admitted visits cannot reschedule',()=>{
+test('server cancellation reconciles the linked local queue and follow-up',()=>{
   const f=fixture();const a=book(f);const q=arrive(f,a)
   f.patch({followups:[{id:'f',patientId:a.patientId,branchId:'b1',appointmentId:a.id,status:'Scheduled'}]})
-  assert.equal(f.actions.saveAppointment({...form,start:'13:00'},{appointmentId:a.id}).ok,false)
-  assert.equal(f.actions.cancelAppointment(a.id).ok,true)
-  assert.equal(f.state.queue[0].status,'Cancelled');assert.equal(f.state.followups[0].status,'Open');assert.equal(f.state.followups[0].appointmentId,null)
-  assert.equal(f.actions.cancelAppointment(a.id).unchanged,true)
+  assert.equal(f.state.appointments[0].status,'Checked In','the arrival was recorded on the server appointment first')
+  assert.equal(f.flow.cancel(a.id).ok,true)
+  assert.equal(f.state.queue[0].status,'Cancelled');assert.equal(f.state.checkIns[0].status,'Cancelled');assert.equal(f.state.followups[0].status,'Open');assert.equal(f.state.followups[0].appointmentId,null)
+  assert.equal(f.actions.checkInAppointment(a.id).ok,false,'a cancelled appointment cannot be admitted again')
 })
 
 test('day rollover excludes old queues and prevents clinical edits; saved data never rebases',()=>{
