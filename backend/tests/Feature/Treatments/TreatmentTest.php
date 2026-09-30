@@ -380,7 +380,8 @@ class TreatmentTest extends TestCase
         Queue::assertNothingPushed();
         Event::assertNotDispatched(\Illuminate\Notifications\Events\NotificationSending::class);
         $this->assertSame(0, AppointmentHistory::count());
-        foreach (['invoices', 'prescriptions', 'followups', 'notifications', 'notification_deliveries'] as $table) {
+        $this->assertSame(0, DB::table('invoices')->count(), 'M5 completion creates no invoice');
+        foreach (['prescriptions', 'followups', 'notifications', 'notification_deliveries'] as $table) {
             $this->assertFalse(Schema::hasTable($table), "M5 must not create an authoritative {$table} table");
         }
         // M12 exists since its own checkpoint: completing a treatment still opens no HMO case (Staff open it explicitly).

@@ -237,3 +237,13 @@ export function endHmoMembership(visitId, payload, key) { return command(`/api/v
 export function openHmoCase(visitId, key) { return command(`/api/visits/${encodeURIComponent(visitId)}/hmo-case`, {}, key) }
 export function hmoSelfPay(visitId, payload, key) { return command(`/api/visits/${encodeURIComponent(visitId)}/hmo/self-pay`, payload, key) }
 export function hmoCaseCommand(id, name, payload, key) { return command(`/api/hmo-cases/${encodeURIComponent(id)}/${name}`, payload, key) }
+
+// M11 server-authoritative billing. These calls never write invoices, payments or receipts to browser storage.
+export function listBillingInvoices() { return request('/api/invoices') }
+export function listBillingTreatments() { return request('/api/billing/treatments') }
+export function createBillingDraft(treatmentId, key) { return command(`/api/invoices/from-treatment/${encodeURIComponent(treatmentId)}`, {}, key) }
+export function reviewBillingInvoice(id, payload, key) { return command(`/api/invoices/${encodeURIComponent(id)}/review`, payload, key) }
+export function issueBillingInvoice(id, payload, key) { return command(`/api/invoices/${encodeURIComponent(id)}/issue`, payload, key) }
+export function recordBillingPayment(id, payload, key) { return command(`/api/invoices/${encodeURIComponent(id)}/payment`, payload, key) }
+export function myBillingInvoices() { return request('/api/invoices/mine') }
+export function myBillingReceipts() { return request('/api/receipts/mine') }

@@ -356,9 +356,8 @@ class HmoTest extends TestCase
         $this->assertSame(1, HmoCase::count());
         $this->assertSame(['created', 'withdrawal'], HmoCaseEvent::orderBy('id')->pluck('kind')->all());
         $this->assertNotNull(HmoCase::sole()->final_at);
-        foreach (['invoices', 'payments'] as $table) {
-            $this->assertFalse(DB::getSchemaBuilder()->hasTable($table), 'M12 creates no invoice or payment');
-        }
+        $this->assertSame(0, DB::table('invoices')->count(), 'M12 creates no invoice');
+        $this->assertSame(0, DB::table('payments')->count(), 'M12 creates no payment');
     }
 
     // ---- FINANCIAL GATE ----------------------------------------------------------------------------------------------

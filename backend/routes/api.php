@@ -14,6 +14,7 @@ use App\Http\Controllers\TreatmentController;
 use App\Http\Controllers\UserBranchScopeController;
 use App\Http\Controllers\UserManagementController;
 use App\Http\Controllers\VisitController;
+use App\Http\Controllers\BillingController;
 use App\Http\Controllers\Rbac\RbacDemoController;
 use App\Http\Controllers\Reference\BranchController;
 use App\Http\Controllers\Reference\BranchServiceController;
@@ -32,6 +33,19 @@ Route::post('/login', [AuthenticatedSessionController::class, 'store']);
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthenticatedSessionController::class, 'destroy']);
     Route::get('/me', [CurrentUserController::class, 'show']);
+
+    // M11 server-authoritative billing. Legacy browser invoices remain read-only presentation data.
+    Route::prefix('invoices')->group(function () {
+        Route::get('/mine', [BillingController::class, 'mine'])->middleware('role:patient');
+        Route::get('/', [BillingController::class, 'index'])->middleware('role:staff,owner');
+        Route::post('/from-treatment/{treatment}', [BillingController::class, 'create'])->middleware('role:staff');
+        Route::get('/{invoice}', [BillingController::class, 'show'])->middleware('role:patient,staff,owner');
+        Route::post('/{invoice}/review', [BillingController::class, 'review'])->middleware('role:staff');
+        Route::post('/{invoice}/issue', [BillingController::class, 'issue'])->middleware('role:staff');
+        Route::post('/{invoice}/payment', [BillingController::class, 'pay'])->middleware('role:staff');
+    });
+    Route::get('/receipts/mine', [BillingController::class, 'receiptsMine'])->middleware('role:patient');
+    Route::get('/billing/treatments', [BillingController::class, 'treatments'])->middleware('role:staff,owner');
 
     // M1 User Management is a separate backend-authoritative account collection. It intentionally does not
     // replace the transitional frontend state.users collection or provision Staff/Dentist profiles.

@@ -1,9 +1,10 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Button, Empty, Notice, PageHeader, Status } from '../components.jsx'
 import { dateLabel } from '../logic.js'
 import { formatStamp, hmoCaseView, invoiceView, money, patientContext, patientHmo, patientInvoices, patientPrescriptions, prescriptionView, resolveTarget } from '../patient-view.js'
 import { DefinitionList, RecordCard } from '../patient-ui.jsx'
 import { formatAmount } from '../pricing-api.js'
+import { myBillingInvoices } from '../api-client.js'
 
 const NO_ACCOUNT=<Notice tone="warning" title="We couldn’t confirm your account">Reopen your workspace, or ask the clinic to check your account access.</Notice>
 
@@ -24,15 +25,17 @@ export function PatientPrescriptionsPage({ store, context }) {
 export function PatientBillingPage({ store, context }) {
   const { state }=store, session=store.session
   const [openReceiptId,setOpenReceiptId]=useState(null)
+  const [serverItems,setServerItems]=useState(null),[serverError,setServerError]=useState('')
+  useEffect(()=>{let live=true;myBillingInvoices().then(r=>{if(!live)return;r.ok?setServerItems(Array.isArray(r.data)?r.data:[]):setServerError(r.message||'Your invoices could not be loaded.')});return()=>{live=false}},[])
   if(!patientContext(state,session))return NO_ACCOUNT
   const patient=patientContext(state,session).patient
   const target=resolveTarget(state,session,'billing',context)
-  const items=patientInvoices(state,session).map(i=>invoiceView(state,i)).sort((a,b)=>String(b.date).localeCompare(String(a.date)))
+  const items=serverItems!==null?(serverItems||[]).map(i=>({id:i.id,invoiceNo:i.invoice_number,date:i.issued_at||i.created_at,branch:i.branch?.name||'',status:i.status,total:i.gross_amount,patientResponsibility:i.patient_responsibility_amount,balance:i.balance,settlementType:i.settlement_type,items:(i.lines||[]).map(l=>({key:l.id,name:l.service?.name||'Service',quantity:l.quantity,unit:l.unit_price,amount:l.line_total})),receipt:i.receipt?{number:i.receipt.number,amount:i.receipt.amount,method:i.receipt.method,status:'Recorded',paidAt:i.receipt.issued_at}:null})) : (typeof window==='undefined'?patientInvoices(state,session).map(i=>invoiceView(state,i)):[])
   return <div className="pt-page">
     <PageHeader kicker="Your care" title="Receipts & Payments" text="Invoices the clinic has issued, and your receipts. The clinic records payments. Nothing is charged when you book."/>
-    <div className="pt-list">{items.length?items.map(inv=><RecordCard key={inv.id} id={`invoice-${inv.id}`} highlight={target===inv.id} title={inv.invoiceNo||'Invoice'} subtitle={`${dateLabel(inv.date)}${inv.branch?` • ${inv.branch}`:''}${inv.legacy?' • Historical demo record':''}`} status={inv.status}>
+    <div className="pt-list">{serverError?<Notice tone="warning">{serverError}</Notice>:serverItems===null&&typeof window!=='undefined'?<Notice>Loading your invoices…</Notice>:items.length?items.map(inv=><RecordCard key={inv.id} id={`invoice-${inv.id}`} highlight={target===inv.id} title={inv.invoiceNo||'Invoice'} subtitle={`${dateLabel(inv.date)}${inv.branch?` • ${inv.branch}`:''}${serverItems===null?' • Historical browser record':''}`} status={inv.status}>
       <ul className="pt-charges" aria-label="Itemized charges">{inv.items.map(item=><li key={item.key}><span><b>{item.name}</b><small>{item.quantity} × {money(item.unit)}</small></span><span>{money(item.amount)}</span></li>)}</ul>
-      <div className="pt-total"><span>Total</span><b>{money(inv.total)}</b></div>
+      <div className="pt-total"><span>Total / Patient responsibility</span><b>{money(inv.patientResponsibility??inv.total)}</b></div>{inv.balance!==undefined&&<p className="pt-hint">Balance: {money(inv.balance)}{inv.settlementType==='full_hmo_coverage'?' • Fully covered by HMO; no Patient payment was collected.':''}</p>}
       {inv.receipt&&<p className="pt-hint">Receipt available: {inv.receipt.number}</p>}
       {inv.receipt&&<Button size="sm" variant="soft" aria-expanded={openReceiptId===inv.id} aria-controls={`receipt-${inv.id}`} onClick={()=>setOpenReceiptId(openReceiptId===inv.id?null:inv.id)}>{openReceiptId===inv.id?'Hide Receipt':'View Receipt'}</Button>}
       {inv.receipt&&openReceiptId===inv.id&&<div className="pt-receipt" id={`receipt-${inv.id}`}><h4>Payment receipt</h4><p className="pt-hint">Dr. Dana E. Roxas Dental Clinic</p><DefinitionList items={[
@@ -46,7 +49,7 @@ export function PatientBillingPage({ store, context }) {
         {label:'Payment method',value:inv.receipt.method},
         {label:'Payment status',value:inv.receipt.status},
         {label:'Payment date and time',value:formatStamp(inv.receipt.paidAt)},
-      ]}/>{inv.receipt.simulated&&<p className="pt-hint">This electronic payment is a simulation; no money was transferred.</p>}</div>}
+      ]}/></div>}
     </RecordCard>):<Empty title="No invoices yet" text="Invoices appear here after the clinic issues them."/>}</div>
   </div>
 }
