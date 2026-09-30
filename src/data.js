@@ -18,7 +18,7 @@ export const MODULES = [
   { no: 10, name: 'Clinic Capacity, Waiting-Time & Workforce Management', owner: 'Alejo, Hart Jaztin A.', area: 'Patient Flow', roles: ['patient','staff','owner'] },
   { no: 11, name: 'Billing, Payment & Receipt Management', owner: 'Ecal, Richmon', area: 'Finance', roles: ['patient','staff'] },
   { no: 12, name: 'HMO Case, Coverage & Follow-Up Management', owner: 'Delos Santos, Joevan', area: 'HMO', roles: ['patient','staff','owner'] },
-  { no: 13, name: 'Service, Procedure & Pricing Management', owner: 'Licanda, Celin', area: 'Administration', roles: ['owner'], coverage: 'partial', coverageNote: 'Partly represented: service catalog and branch service availability; price versions and effective dates are planned' },
+  { no: 13, name: 'Service, Procedure & Pricing Management', owner: 'Licanda, Celin', area: 'Administration', roles: ['owner'], coverage: 'partial', coverageNote: 'Partly represented: service catalog, branch service availability and Owner-confirmed, effective-dated price versions (pricing foundation); billing adopts them at the M11 cutover' },
   { no: 14, name: 'Patient Forms, Documents & Consent Management', owner: 'Delos Santos, Joevan', area: 'Documents', roles: ['patient','staff'], coverage: 'planned', coverageNote: 'Planned: only HMO document metadata is recorded today; no file storage, forms, consent records or extraction yet' },
   { no: 15, name: 'Clinic Configuration & Business Rules Management', owner: 'Licanda, Celin', area: 'Administration', roles: ['owner'], coverage: 'planned', coverageNote: 'Planned: clinic settings are still fixed in the application today' },
   { no: 16, name: 'Social Media Inquiry Management', owner: 'Millar, John Yzhekiel', area: 'Communication', roles: ['staff'] },
@@ -55,7 +55,7 @@ export const NAV = {
   ],
   owner: [
     ['dashboard','Executive Dashboard'], ['analytics','Analytics & Reports'], ['branches','Branches'], ['team','People & Team'], ['capacity','Capacity & Workload'],
-    ['hmo','HMO Management'], ['users','User Management'], ['automation','Automation Monitor'], ['engagement','Engagement']
+    ['hmo','HMO Management'], ['users','User Management'], ['pricing','Services & Pricing'], ['automation','Automation Monitor'], ['engagement','Engagement']
   ],
 }
 

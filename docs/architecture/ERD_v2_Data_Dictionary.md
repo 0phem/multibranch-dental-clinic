@@ -15,6 +15,7 @@ This is a logical ERD. Exact SQL types, indexes, security policies, file-storage
 | BRANCH_OPERATING_HOURS | Per-day hours | Smart Scheduling rejects closed periods |
 | SERVICES | Service catalog | Duration and fee must not remain hardcoded only in frontend |
 | BRANCH_SERVICES | Which services a branch offers + optional overrides | Booking only offers valid branch-service combinations |
+| SERVICE_PRICES | Owner-confirmed, effective-dated service price versions (implemented as `service_prices`, M13 pricing foundation) | The ONLY authoritative price source for billing. Service required; branch optional (none = base clinic price, set = that branch's price, allowed only for a branch that offers the service); kind priced (amount `numeric(12,2)` > 0) or ended (no price at that level from that date); effective from an Asia/Manila business date (today or later when created); source is server-assigned `owner_confirmed`. Append-only: a version applies until the next non-retracted version at the same level; only a not-yet-effective version may be retracted (kept, marked retracted); one non-retracted version per service + level + date. Resolution: branch price, else base price, else unavailable. `SERVICES.reference_fee_php` is reference/demo data, never copied into or used as a price |
 | STAFF_PROFILES | Operational dentist/staff profile | Created/synchronized from the account/person identity, not separately retyped |
 | STAFF_SCHEDULES | Branch/date shift and availability state | Availability is based on assignment/shift/exception state |
 | DENTIST_SERVICE_ASSIGNMENTS | Services a dentist may perform | M6 Smart Scheduling filters valid dentists by service capability |
@@ -40,7 +41,7 @@ logical-only, not yet implemented.
 | QUEUE_ENTRIES | Individual patient queue state | Requires exactly one VISIT (unique `visit_id`) and one DENTIST_QUEUE; unique number per queue; states Waiting / Called / Treatment Ready / Temporarily Away / Served (Served only when the Visit starts treatment); priority override requires reason and history; no no-show/in-treatment/completed queue state (M9) |
 | CAPACITY_EVENTS | Aggregate waiting/workload snapshots/events | Does not replace QUEUE_ENTRIES; it supports M10/M15/M21 |
 
-**VISITS (M8, approved D10), QUEUE_ENTRIES → VISIT (M9) and TREATMENT_PLANS → exactly one VISIT with price-free TREATMENT_PROCEDURES (M5):** this dictionary is the current text of record. The rendered ERD images (PNG/SVG) predate these changes and are pending regeneration from the diagram source; they have not been hand-edited.
+**VISITS (M8, approved D10), QUEUE_ENTRIES → VISIT (M9) and TREATMENT_PLANS → exactly one VISIT with price-free TREATMENT_PROCEDURES (M5) and SERVICE_PRICES (M13 pricing foundation):** this dictionary is the current text of record. The rendered ERD images (PNG/SVG) predate these changes and are pending regeneration from the diagram source; they have not been hand-edited.
 
 ## Clinical / Billing
 

@@ -208,3 +208,9 @@ export function treatmentCommand(id, name, payload, key) { return command(`/api/
 export function listQueue(params) { return request(`/api/queue${query(params)}`) }
 export function myQueue() { return request('/api/queue/mine') }
 export function queueCommand(id, name, payload, key) { return command(`/api/queue/${encodeURIComponent(id)}/${encodeURIComponent(name)}`, payload, key) }
+
+// M13 pricing foundation (Owner-confirmed, effective-dated prices). Raw calls only; src/pricing-api.js owns mapping.
+export function listServicePrices() { return request('/api/service-prices') }
+export function createServicePrice(serviceRef, payload, key) { return command(`/api/services/${encodeURIComponent(serviceRef)}/prices`, payload, key) }
+export function retractServicePrice(id, key) { return command(`/api/service-prices/${encodeURIComponent(id)}/retract`, {}, key) }
+export function resolveServicePrice(params) { return request(`/api/prices/resolve${query(params)}`) }

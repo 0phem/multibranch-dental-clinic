@@ -337,6 +337,36 @@ Frontend (`src/queue-api.js`, `src/appointment-flow.js`, `src/store.jsx`):
 - Completed-encounter evidence (billing, prescriptions, follow-ups) is the server Visit (`completedEncounter`), not a
   browser queue row. Wait estimates, capacity and workload stay client-side M10 calculations over the projection.
 
+## M13 pricing foundation
+
+The smallest authoritative pricing M11 needs; not the full M13 module.
+
+- **Schema** (`2026_10_03_000100_create_service_prices_table`): `service_prices` — ULID `public_id`, `service_id`,
+  nullable `branch_id` (null = base clinic price), `kind` priced / ended, `amount numeric(12,2)` (present exactly when
+  priced, > 0), `effective_from` (Asia/Manila date), server-assigned `source = owner_confirmed`, `created_by_user_id`,
+  `created_at`, and `retracted_at` / `retracted_by_user_id`. PostgreSQL enforces one non-retracted version per service +
+  level + date (`NULLS NOT DISTINCT`) and an append-only trigger: no DELETE, and the only UPDATE is a one-time retraction.
+  The migration creates **no** prices.
+- **Resolution** (`App\Services\Pricing\PriceResolver`, internal): the latest non-retracted branch version on or before
+  the date (priced → it; ended → fall back), else the latest base version (priced → it; ended → unavailable), else
+  **PriceUnavailable**. It never reads `reference_fee_php`, browser data, another branch or a previous invoice. A result
+  carries `price_public_id`, `level`, `service {id, code, name}`, `branch`, `date`, `effective_from`, `amount` (decimal
+  string, e.g. `"1500.00"`) and `source` — what M11 snapshots on an invoice line. M11 will resolve with the Treatment's
+  Visit `clinic_date`.
+- **API**: Owner — `GET /api/service-prices` (all versions), `GET /api/services/{service}/prices`,
+  `POST /api/services/{service}/prices` `{branch_ref?, kind, amount?, effective_from}` (amount as decimal text; today or
+  later; a branch price needs the branch to offer the service; `source`/actor fields refused),
+  `POST /api/service-prices/{price}/retract` (only before it takes effect), and `GET /api/prices/resolve?service_ref=&
+  branch_ref=&date=`. Staff — the resolve endpoint for **today only** and only for branches in scope. Dentists, Patients:
+  403; guests: 401. Create/retract require an Idempotency-Key (replay / `idempotency_key_reused`); a same-level same-date
+  race yields `409 price_version_exists`.
+- **Reference fee**: `services.reference_fee_php` is unchanged and stays reference/demo/unconfirmed. The Owner UI shows it
+  only as "Reference fee (unconfirmed)", and the confirmed-price field always starts blank. Deprecation waits for M11.
+- **Demo environments**: no seeder creates prices; the Owner enters confirmed prices on the Services & Pricing page.
+- **M11 dependency**: the current browser billing prototype is unchanged and still prices local Draft invoices from the
+  reference fee (not authoritative). The M11 cutover replaces it with `PriceResolver`; a Treatment whose performed
+  services have no confirmed price then shows as "pricing needed" without affecting the completed Treatment.
+
 ## M5 Treatment
 
 Laravel/PostgreSQL is the only authority for the clinical Treatment record. A Treatment is anchored to exactly one

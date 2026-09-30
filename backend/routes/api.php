@@ -6,6 +6,7 @@ use App\Http\Controllers\Auth\RegisteredPatientController;
 use App\Http\Controllers\CurrentUserController;
 use App\Http\Controllers\PatientDirectoryController;
 use App\Http\Controllers\PatientRegistrationController;
+use App\Http\Controllers\PricingController;
 use App\Http\Controllers\QueueController;
 use App\Http\Controllers\TreatmentController;
 use App\Http\Controllers\UserBranchScopeController;
@@ -60,6 +61,15 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/branches/{branch}/services', [BranchController::class, 'servicesForBranch']);
 
     Route::get('/services', [ServiceController::class, 'index']);
+
+    // M13 pricing foundation: Owner-confirmed, effective-dated price versions (the only authoritative price source;
+    // services.reference_fee_php stays reference/demo data). Owner manages and reads history; Staff may resolve only
+    // today's price within their branch scope.
+    Route::get('/service-prices', [PricingController::class, 'index'])->middleware('role:owner');
+    Route::post('/service-prices/{servicePrice}/retract', [PricingController::class, 'retract'])->middleware('role:owner');
+    Route::get('/services/{service:legacy_ref}/prices', [PricingController::class, 'history'])->middleware('role:owner');
+    Route::post('/services/{service:legacy_ref}/prices', [PricingController::class, 'store'])->middleware('role:owner');
+    Route::get('/prices/resolve', [PricingController::class, 'resolve'])->middleware('role:staff,owner');
 
     Route::get('/branch-services', [BranchServiceController::class, 'index']);
     Route::post('/branch-services', [BranchServiceController::class, 'store'])->middleware('role:owner');

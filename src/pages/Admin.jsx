@@ -52,7 +52,7 @@ export function BranchesPage({ store }) {
         <Field label="Capacity threshold"><input type="number" min="40" max="100" value={form.threshold||80} onChange={e=>setForm({...form,threshold:Number(e.target.value)})}/></Field>
         <Field label="Phone"><input value={form.phone||''} onChange={e=>setForm({...form,phone:e.target.value})}/></Field>
         <Field label="Address"><textarea value={form.address||''} onChange={e=>setForm({...form,address:e.target.value})}/></Field>
-        <div className="span-2"><label className="field-label">Available services <small>Branch services • scheduling reads this catalog directly</small></label><div className="permission-list">{state.services.filter(s=>s.status==='Active').map(service=><label className="check-control" key={service.id}><input type="checkbox" checked={serviceActive(service.id)} onChange={()=>toggleService(service.id)}/><span><b>{service.name}</b><small>{service.category} • {service.duration} min • {peso.format(service.baseFee)}</small></span></label>)}</div></div>
+        <div className="span-2"><label className="field-label">Available services <small>Branch services • scheduling reads this catalog directly</small></label><div className="permission-list">{state.services.filter(s=>s.status==='Active').map(service=><label className="check-control" key={service.id}><input type="checkbox" checked={serviceActive(service.id)} onChange={()=>toggleService(service.id)}/><span><b>{service.name}</b><small>{service.category} • {service.duration} min • Reference fee (unconfirmed): {peso.format(service.baseFee)}</small></span></label>)}</div></div>
         <Button className="span-2" onClick={save}>Publish Branch Changes</Button>
       </div></Card>}
     </div>

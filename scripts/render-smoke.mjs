@@ -8,7 +8,7 @@ import React from 'react'
 import { renderToString } from 'react-dom/server'
 
 const require=createRequire(import.meta.url)
-const files=['components.jsx','store.jsx','layout.jsx','clock.js','contracts.js','workflow.js','phase2.js','phase3-contracts.js','orchestration.js','pages/Dashboards.jsx','pages/Scheduling.jsx','pages/PatientFlow.jsx','pages/Clinical.jsx','pages/FinanceCommunication.jsx','pages/Admin.jsx','pages/PatientLoyalty.jsx','pages/PatientRegister.jsx','pages/PatientBook.jsx','pages/PatientMe.jsx','pages/PatientVisits.jsx','pages/PatientHome.jsx','loyalty.js','registration.js','scheduling.js','booking-drafts.js','geo.js','patient-view.js','data.js']
+const files=['components.jsx','store.jsx','layout.jsx','clock.js','contracts.js','workflow.js','phase2.js','phase3-contracts.js','orchestration.js','pages/Dashboards.jsx','pages/Scheduling.jsx','pages/PatientFlow.jsx','pages/Clinical.jsx','pages/FinanceCommunication.jsx','pages/Admin.jsx','pages/Pricing.jsx','pages/PatientLoyalty.jsx','pages/PatientRegister.jsx','pages/PatientBook.jsx','pages/PatientMe.jsx','pages/PatientVisits.jsx','pages/PatientHome.jsx','loyalty.js','registration.js','scheduling.js','booking-drafts.js','geo.js','patient-view.js','data.js']
 const result=await build({stdin:{contents:[...files.map(file=>`export * from './src/${file}';`),`export * from './tests/support/server-appointments.js';`].join('\n'),resolveDir:process.cwd()},bundle:true,write:false,platform:'node',format:'esm',plugins:[{name:'shared-react',setup(b){b.onResolve({filter:/^react$/},()=>({path:pathToFileURL(require.resolve('react')).href,external:true}))}}]})
 const m=await import('data:text/javascript;base64,'+Buffer.from(result.outputFiles[0].text).toString('base64'))
 m.setClockSource(()=>new Date('2026-09-19T02:08:00Z'))
@@ -33,7 +33,7 @@ const initialReferenceData={
 let store
 function Capture(){store=m.useClinic();return null}
 renderToString(React.createElement(m.ClinicProvider,{initialReferenceData},React.createElement(Capture)))
-const pages={dashboard:'DashboardPage',book:'BookingPage',appointments:'AppointmentsPage',schedule:'SchedulePage',checkin:'CheckInPage',queue:'QueuePage',capacity:'CapacityPage',patients:'PatientsPage',treatment:'TreatmentPage',billing:'BillingPage',hmo:'HmoPage',inquiries:'InquiriesPage',messages:'MessagesPage',prescriptions:'PrescriptionsPage',followups:'FollowupsPage',branches:'BranchesPage',team:'TeamPage',analytics:'AnalyticsPage',users:'UsersPage',automation:'AutomationPage',engagement:'EngagementPage',loyalty:'PatientLoyaltyPage',me:'PatientMePage'}
+const pages={dashboard:'DashboardPage',book:'BookingPage',appointments:'AppointmentsPage',schedule:'SchedulePage',checkin:'CheckInPage',queue:'QueuePage',capacity:'CapacityPage',patients:'PatientsPage',treatment:'TreatmentPage',billing:'BillingPage',hmo:'HmoPage',inquiries:'InquiriesPage',messages:'MessagesPage',prescriptions:'PrescriptionsPage',followups:'FollowupsPage',branches:'BranchesPage',team:'TeamPage',analytics:'AnalyticsPage',users:'UsersPage',pricing:'ServicesPricingPage',automation:'AutomationPage',engagement:'EngagementPage',loyalty:'PatientLoyaltyPage',me:'PatientMePage'}
 let count=0
 function render(page,role='staff',context=null){
   const session=m.sessionForRole(role,store.state)
@@ -45,6 +45,10 @@ renderToString(React.createElement(m.Login,{onLogin:()=>{}}))
 // Production shell: no demo-reset control and no presentation-only Module Coverage page for any role.
 for(const role of Object.keys(m.NAV)){const shell=render('dashboard',role);assert.ok(!/Reset demo|demo workspace/i.test(shell),`${role} shell exposes no demo reset`);assert.ok(shell.includes('Log out'),`${role} shell keeps Log out`)}
 assert.equal(m.ModulesPage,undefined,'the professor-facing Module Coverage page is removed')
+// M13: the Owner pricing page renders its honest loading state under SSR (no fetch runs) and the Branches screen labels
+// the reference fee as unconfirmed rather than as a price.
+{const pricing=render('pricing','owner');assert.ok(pricing.includes('Services &amp; Pricing')&&pricing.includes('Loading prices'),'pricing page renders');assert.ok(pricing.includes('Reference fees')||pricing.includes('reference fee (unconfirmed)'),'reference fees are explained as unconfirmed')}
+assert.ok(render('branches','owner').includes('Reference fee (unconfirmed)'),'the Branches screen labels the reference fee')
 console.log(`PASS: ${count} initial role/page renders, Login, production shell without demo reset`)
 
 const providerStore=store

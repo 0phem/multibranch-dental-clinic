@@ -12,6 +12,7 @@ import { BillingPage, HmoPage, InquiriesPage, MessagesPage } from './pages/Finan
 import { PatientLoyaltyPage } from './pages/PatientLoyalty.jsx'
 import { PatientMePage } from './pages/PatientMe.jsx'
 import { AnalyticsPage, AutomationPage, BranchesPage, EngagementPage, TeamPage, UsersPage } from './pages/Admin.jsx'
+import { ServicesPricingPage } from './pages/Pricing.jsx'
 import * as api from './api-client.js'
 
 const START_PAGE={patient:'dashboard',staff:'dashboard',dentist:'dashboard',owner:'dashboard'}
@@ -204,6 +205,7 @@ function AppBody() {
     case 'team': content=<TeamPage store={store}/>; break
     case 'analytics': content=<AnalyticsPage activeBranch={activeBranch} store={store}/>; break
     case 'users': content=<UsersPage store={store}/>; break
+    case 'pricing': content=<ServicesPricingPage store={store}/>; break
     case 'automation': content=<AutomationPage store={store}/>; break
     case 'engagement': content=<EngagementPage role={role} store={store}/>; break
     case 'loyalty': content=<PatientLoyaltyPage store={store}/>; break
