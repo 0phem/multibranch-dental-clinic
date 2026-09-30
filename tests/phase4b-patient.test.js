@@ -8,6 +8,7 @@ import { createWorkflowActions } from '../src/workflow.js'
 import { withServerAppointments, asPatient } from './support/server-appointments.js'
 import { notificationDestination } from '../src/phase3-contracts.js'
 import * as view from '../src/patient-view.js'
+import { mapPatientHmoCase } from '../src/hmo-api.js'
 
 beforeEach(()=>setClockSource(()=>new Date('2026-09-19T02:08:00Z')))
 
@@ -24,6 +25,9 @@ function fixture(patch={}) {
   return {get actions(){return server.actions()},flow:server.flow,get state(){return state},get session(){return session},role(role,overrides={}){session={...sessionForRole(role,state),...overrides}},patch(p){state=normalizeClinicState({...state,...p})}}
 }
 const maria=f=>sessionForRole('patient',f.state)
+// A GET /api/hmo-cases/mine row (the Patient's server safe subset).
+const REQS=[{rule:'hmo-card',label:'HMO Card',state:'Missing'},{rule:'valid-id',label:'Valid ID',state:'Missing'},{rule:'treatment-request',label:'Dentist treatment request',state:'Missing'}]
+const patientCase=(fields={})=>({id:'01jhmo0000000000000000000a',status:'Missing Requirements',provider_name:'Insurer One',member_number:'••••0123',visit_date:'2026-09-19',appointment:null,branch:{name:'Branch A'},requirements:REQS,submitted_at:null,final_at:null,approved_amount:null,...fields})
 const john=f=>({...sessionForRole('patient',f.state),userId:'u13',patientId:'p2',name:'John Dela Cruz'})
 const ok=result=>{assert.equal(result.ok,true,result.message);return result.record}
 const form={patientId:'p1',branchId:'b1',dentistId:'d1',serviceId:'svc1',date:'2026-09-19',start:'11:00'}
@@ -116,6 +120,8 @@ test('a brand-new Patient has a calm empty hub with no fabricated tasks',()=>{
 
 test('attention items are derived only from real Patient-visible state',()=>{
   const f=fixture(),{t,draft}=fullJourney(f)
+  // M12: the Patient's HMO case comes from the server (/api/hmo-cases/mine), never from treatment completion.
+  f.patch({hmo:[mapPatientHmoCase(patientCase(),'p1')]})
   // Draft prescription, draft invoice and no conversation yet: only real items exist.
   assert.equal(draft.status,'Draft')
   const kinds=()=>view.patientAttention(f.state,maria(f)).map(i=>i.kind)
@@ -293,21 +299,18 @@ test('HMO copy keeps local preparation, provider outcome and follow-up distinct'
   assert.deepEqual([stage('Pending').checked,stage('Pending').total],[1,2])
 })
 
-test('Patient HMO view is limited to the Patient projection and real provider evidence',()=>{
-  const f=fixture(),{t}=fullJourney(f);const c=f.state.hmo.find(h=>h.treatmentId===t.id)
-  f.role('staff')
-  for(const r of c.requirements)ok(f.actions.provideHmoRequirement(c.id,r.ruleId,{fileName:'x.pdf'}))
-  ok(f.actions.submitHmoCase(c.id,{commandId:'s1',method:'Portal',note:'INTERNAL-NOTE'}))
-  const [pending]=view.patientHmo(f.state,maria(f));assert.equal(view.hmoCaseView(pending).stage.includes('submission'),true)
-  ok(f.actions.recordHmoOutcome(c.id,{caseId:c.id,commandId:'r1',submissionCycle:1,outcome:'Returned',method:'Email',note:'INTERNAL-RETURN',requirementIds:['valid-id']}))
-  const returned=view.hmoCaseView(view.patientHmo(f.state,maria(f))[0])
+test('Patient HMO view is limited to the server Patient projection and real provider evidence',()=>{
+  const f=fixture()
+  const show=fields=>{f.patch({hmo:[mapPatientHmoCase(patientCase(fields),'p1')]});return view.patientHmo(f.state,maria(f))}
+  const [pending]=show({status:'Pending',submitted_at:'2026-09-19T09:00:00+08:00',requirements:REQS.map(r=>({...r,state:'Validated'}))})
+  assert.equal(view.hmoCaseView(pending).stage.includes('submission'),true)
+  const returned=view.hmoCaseView(show({status:'Returned',submitted_at:'2026-09-19T09:00:00+08:00',requirements:REQS.map(r=>({...r,state:r.rule==='valid-id'?'Missing':'Validated'}))})[0])
   assert.equal(returned.label,'Provider Returned');assert.deepEqual(returned.requirements.filter(r=>r.returned).map(r=>r.ruleId),['valid-id'])
   assert.ok(view.patientAttention(f.state,maria(f)).some(i=>i.kind==='hmo'&&i.title.includes('returned')))
-  ok(f.actions.provideHmoRequirement(c.id,'valid-id',{fileName:'fixed.pdf'}))
-  ok(f.actions.submitHmoCase(c.id,{commandId:'s2',method:'Portal',note:'INTERNAL-RESUBMIT'}))
-  ok(f.actions.recordHmoOutcome(c.id,{caseId:c.id,commandId:'a1',submissionCycle:2,outcome:'Approved',method:'Email',note:'INTERNAL-APPROVAL'}))
-  assert.equal(view.hmoCaseView(view.patientHmo(f.state,maria(f))[0]).label,'Provider Approved')
-  assert.doesNotMatch(JSON.stringify([view.patientHmo(f.state,maria(f)),view.hmoCaseView(view.patientHmo(f.state,maria(f))[0])]),/INTERNAL-|contacts|memberId/)
+  const approved=show({status:'Approved',submitted_at:'2026-09-19T09:00:00+08:00',final_at:'2026-09-19T11:00:00+08:00',approved_amount:'1200.00',requirements:REQS.map(r=>({...r,state:'Validated'}))})
+  assert.equal(view.hmoCaseView(approved[0]).label,'Provider Approved');assert.equal(view.hmoCaseView(approved[0]).approvedAmount,'1200.00')
+  // The server subset carries no notes, contacts, recorders or history; another Patient sees nothing.
+  assert.doesNotMatch(JSON.stringify([approved,view.hmoCaseView(approved[0])]),/INTERNAL-|note|recordedBy|"contacts":\[\{/)
   assert.deepEqual(view.patientHmo(f.state,john(f)),[])
 })
 

@@ -4,6 +4,7 @@ use App\Http\Controllers\AppointmentController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\RegisteredPatientController;
 use App\Http\Controllers\CurrentUserController;
+use App\Http\Controllers\HmoController;
 use App\Http\Controllers\PatientDirectoryController;
 use App\Http\Controllers\PatientRegistrationController;
 use App\Http\Controllers\PricingController;
@@ -104,6 +105,26 @@ Route::middleware('auth:sanctum')->group(function () {
             ->middleware('role:staff,owner');
     });
 
+    // Minimal M12 HMO foundation. {visit}/{hmoCase} bind on the ULID public_id; {patient} on the Patient public_id. Staff
+    // operate cases within the Visit's branch scope and change a Patient's (global) membership only through an in-scope
+    // Visit of that Patient (POST /visits/{visit}/hmo-membership); Owner and a responsible Dentist read;
+    // Patients read only their own cases (/mine). Every mutation needs an Idempotency-Key (and expected_revision on a case).
+    Route::prefix('patients/{patient:public_id}/hmo-membership')->group(function () {
+        Route::get('/', [HmoController::class, 'membership'])->middleware('role:staff,owner');
+    });
+    Route::get('/hmo/claim-decisions', [HmoController::class, 'claimDecisions'])->middleware('role:staff,owner');
+    Route::prefix('hmo-cases')->group(function () {
+        Route::get('/mine', [HmoController::class, 'mine'])->middleware('role:patient');
+        Route::get('/', [HmoController::class, 'index'])->middleware('role:staff,dentist,owner');
+        Route::get('/{hmoCase}', [HmoController::class, 'show'])->middleware('role:staff,dentist,owner');
+        Route::post('/{hmoCase}/requirements/{rule}', [HmoController::class, 'requirement'])->middleware('role:staff');
+        Route::post('/{hmoCase}/submit', [HmoController::class, 'submit'])->middleware('role:staff');
+        Route::post('/{hmoCase}/contact', [HmoController::class, 'contact'])->middleware('role:staff');
+        Route::post('/{hmoCase}/escalate', [HmoController::class, 'escalate'])->middleware('role:staff');
+        Route::post('/{hmoCase}/response', [HmoController::class, 'respond'])->middleware('role:staff');
+        Route::post('/{hmoCase}/withdraw', [HmoController::class, 'withdraw'])->middleware('role:staff');
+    });
+
     // M5 Treatment & Clinical Workflow. {treatment} binds on the ULID public_id. Reads are role-scoped and projected per
     // role (TreatmentPolicy); documentation and completion are named commands of the responsible Dentist only.
     Route::prefix('treatments')->group(function () {
@@ -124,6 +145,12 @@ Route::middleware('auth:sanctum')->group(function () {
         // M5: starting treatment is the atomic Treatment command (Queue Served + Visit/appointment In Treatment +
         // Treatment created). There is no standalone Visit start-treatment or complete endpoint.
         Route::post('/{visit}/treatment', [TreatmentController::class, 'start'])->middleware('role:dentist');
+        // M12: open the Visit's HMO case, or record the explicit self-pay / no-claim decision (terminal Withdrawn).
+        Route::post('/{visit}/hmo-membership', [HmoController::class, 'setMembership'])->middleware('role:staff');
+        Route::post('/{visit}/hmo-membership/end', [HmoController::class, 'endMembership'])->middleware('role:staff');
+        Route::post('/{visit}/hmo-case', [HmoController::class, 'open'])->middleware('role:staff');
+        Route::post('/{visit}/hmo/self-pay', [HmoController::class, 'selfPay'])->middleware('role:staff');
+        Route::get('/{visit}/hmo-gate', [HmoController::class, 'gate'])->middleware('role:staff,owner');
     });
 
     // M9 Patient Queue Management. {queueEntry} binds on the ULID public_id. Entries are created only by M8 arrival; state

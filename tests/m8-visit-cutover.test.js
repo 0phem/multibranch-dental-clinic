@@ -111,7 +111,7 @@ test('server Visits enter the read model; walk-in Patients become read-model Pat
   assert.equal(persistableCollection('patients', projection.readModelPatients).length, 0)
   const store = read('src/store.jsx')
   assert.doesNotMatch(store, /usePersist\('check-ins'/); assert.doesNotMatch(store, /usePersist\('visits'/)
-  assert.match(store, /const \{appointments:_ignored,visits:_ignoredVisits,queue:_ignoredQueue,myQueue:_ignoredMyQueue,treatments:_ignoredTreatments,\.\.\.patch\}=rawPatch/, 'a local patch can never write Visits, the queue or Treatments')
+  assert.match(store, /const \{appointments:_ignored,visits:_ignoredVisits,queue:_ignoredQueue,myQueue:_ignoredMyQueue,treatments:_ignoredTreatments,hmo:_ignoredHmo,claimDecisions:_ignoredClaimDecisions,\.\.\.patch\}=rawPatch/, 'a local patch can never write Visits, the queue or Treatments')
 })
 
 test('local evidence re-anchors to a server Visit only through an exact link; everything else is legacy (M9 Q11)', () => {

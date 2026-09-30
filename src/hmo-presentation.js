@@ -8,6 +8,8 @@ export function getHmoAttention(h, now) {
   const due=elapsed!==null&&elapsed>=HMO_PENDING_HOURS
   if(h.status==='Approved')return {label:'Approved',needsAction:false,followUp:false,elapsed}
   if(h.status==='Rejected')return {label:'Rejected',needsAction:false,followUp:false,elapsed}
+  // Withdrawn is the final no-claim / self-pay disposition: its unchecked requirements need no action.
+  if(h.status==='Withdrawn')return {label:'Withdrawn — self-pay',needsAction:false,followUp:false,elapsed}
   // A provider return is a provider response, not merely local preparation, so it is classified first.
   if(h.status==='Returned')return {label:'Returned by provider — correction needed',needsAction:true,followUp:false,elapsed}
   if(missing)return {label:'Missing requirements',needsAction:true,followUp:false,elapsed}

@@ -79,6 +79,12 @@ class Visit extends Model
         return $this->hasOne(Treatment::class);
     }
 
+    /** The M12 HMO case of this Visit (zero or one). */
+    public function hmoCase(): HasOne
+    {
+        return $this->hasOne(HmoCase::class);
+    }
+
     public function history(): HasMany
     {
         return $this->hasMany(VisitHistory::class)->orderBy('id');

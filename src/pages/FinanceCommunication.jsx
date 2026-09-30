@@ -1,15 +1,12 @@
-import { hmoDataValid } from '../hmo.js'
-import { clinicNow } from '../clock.js'
-import React, { useId, useState, useRef } from 'react'
+import React, { useState, useRef } from 'react'
 import { Button, Card, Field, Modal, Notice, PageHeader, Status, Table } from '../components.jsx'
 import { dateLabel, displayTime, patientName, peso, uid } from '../logic.js'
 
 import { visibleInvoices, validInvoice } from '../phase2.js'
-import { visibleHmo, HMO_PROVIDERS, HMO_REQUIREMENT_RULES, HMO_PENDING_HOURS, pendingHmo, pendingHours, validHmoContext, visibleConversations } from '../phase3-contracts.js'
+import { visibleConversations } from '../phase3-contracts.js'
 import { sessionForRole } from '../contracts.js'
-import { PatientBillingPage, PatientHmoPage } from './PatientCare.jsx'
+import { PatientBillingPage } from './PatientCare.jsx'
 import { PatientMessagesPage } from './PatientMessages.jsx'
-import { getHmoAttention, hmoCasesForView, hmoTimeline, latestProviderResponse } from '../hmo-presentation.js'
 
 function InvoiceCharges({invoice,state}) {
   return <>{(Array.isArray(invoice.items)?invoice.items.filter(Boolean):[]).map((item,index)=><p key={item.id||index}><b>{state.services.find(s=>s.id===item.serviceId)?.name||item.name||'Unknown procedure'}</b> • {item.quantity||1} × {peso.format(item.unitFee??item.amount)} = {peso.format(item.amount)}</p>)}<p>Subtotal: {peso.format(invoice.subtotal??invoice.total)}</p><p><b>Total: {peso.format(invoice.total)}</b></p></>
@@ -54,121 +51,8 @@ export function BillingPage({ role, store, context }) {
   </>
 }
 
-export function HmoPage({ role, activeBranch, store, context }) {
-  const {state,actions,toast}=store
-  const session=store.session||sessionForRole(role,state)
-  const visible=visibleHmo(state,session).filter(h=>role!=='owner'||!activeBranch||activeBranch==='All Branches'||state.branches.find(b=>b.id===h.branchId)?.name===activeBranch)
-  const [selectedId,setSelectedId]=useState(context?.hmoCaseId||'')
-  React.useEffect(()=>{if(context?.hmoCaseId)setSelectedId(context.hmoCaseId)},[context?.hmoCaseId])
-  const selected=visible.find(h=>h.id===selectedId)||null
-  const selectedRequirements=Array.isArray(selected?.requirements)?selected.requirements:[]
-  const selectedContacts=Array.isArray(selected?.contacts)?selected.contacts:[]
-  const selectedResponses=Array.isArray(selected?.responses)?selected.responses:[]
-  const selectedTasks=Array.isArray(selected?.followUpTasks)?selected.followUpTasks:[]
-  const [tab,setTab]=useState(role==='owner'?'action':'all'),[search,setSearch]=useState(''),[statusFilter,setStatusFilter]=useState(''),[providerFilter,setProviderFilter]=useState('')
-  const viewId=useId(), detailHeading=useRef(null), focusDetail=useRef(false)
-  // Focus moves to the detail only after an explicit worklist selection, never on page load or deep links.
-  const openCase=id=>{focusDetail.current=true;setSelectedId(id)}
-  React.useEffect(()=>{
-    if(!focusDetail.current||!selected)return
-    focusDetail.current=false
-    detailHeading.current?.closest('.hmo-case-detail')?.scrollIntoView?.({block:'start'})
-    detailHeading.current?.focus({preventScroll:true})
-  },[selectedId,selected])
-  const attention=h=>getHmoAttention(h,state.clock)
-  const filtered=hmoCasesForView(visible,tab,state.clock).filter(h=>(!statusFilter||h.status===statusFilter)&&(!providerFilter||h.providerId===providerFilter)&&patientName(h.patientId,state.patients).toLowerCase().includes(search.trim().toLowerCase()))
-  const [creating,setCreating]=useState(false),[encounter,setEncounter]=useState('')
-  const [operation,setOperation]=useState(null)
-  const [form,setForm]=useState({method:'',note:'',nextAction:'',outcome:'',requirementIds:[]})
-  const operate=(mode,h)=>{setOperation({mode,caseId:h.id,submissionCycle:h.submissionCycle,commandId:uid('hmo-command')});setForm({method:'',note:'',nextAction:'',outcome:'',requirementIds:[]})}
-  const report=(result,message)=>{toast(result.ok?message:result.message,result.ok?'success':'warning');return result.ok}
-  const create=()=>{
-    const [kind,id]=encounter.split(':')
-    const result=actions.createHmoCase(kind==='treatment'?{treatmentId:id}:{appointmentId:id})
-    if(report(result,'Clinic HMO case prepared.')){setCreating(false);setSelectedId(result.record.id)}
-  }
-  const submit=()=>{
-    if(!operation)return
-    const input={...form,...operation}
-    const result=operation.mode==='submit'?actions.submitHmoCase(operation.caseId,input):operation.mode==='contact'?actions.followUpHmo(operation.caseId,input):actions.recordHmoOutcome(operation.caseId,input)
-    if(report(result,operation.mode==='response'?'Externally received provider response recorded.':'Clinic-side tracking record saved.'))setOperation(null)
-  }
-  const eligible=[...state.appointments.filter(a=>a.branchId===session.branchId&&!['Cancelled','No-show'].includes(a.status)).map(a=>({key:`appointment:${a.id}`,record:a})),...state.treatments.filter(t=>t.server&&t.branchId===session.branchId&&!t.appointmentId).map(t=>({key:`treatment:${t.id}`,record:t}))].filter(x=>state.patients.find(p=>p.id===x.record.patientId)?.hmoProviderId)
-  const staff=role==='staff'
-  // Owner oversight is read-only: it gets views of the same cases, never the Staff mutation controls below.
-  const views=staff?[['all','All Cases'],['action','Needs Action'],['followups','Follow-Ups']]:role==='owner'?[['action','Needs Attention'],['all','All Cases']]:null
-  const listTitle=tab==='all'?'All cases':'Cases requiring attention'
-  const label=h=>h.legacy&&['Approved','Rejected','Returned'].includes(h.status)?`Historical recorded ${h.status}`:['Approved','Rejected','Returned'].includes(h.status)?`Provider ${h.status}`:h.status
-  if(role==='patient')return <PatientHmoPage store={store} context={context}/>
-  return <>
-    <PageHeader title="HMO Management" text={staff?'Track verification, external requests, and clinic follow-up in one worklist.':'Clinic-wide HMO case oversight.'}/>
-    {staff&&<div className="page-toolbar"><Button onClick={()=>setCreating(true)}>Prepare HMO Case</Button><Button variant="ghost" onClick={()=>report(actions.evaluateHmoTimers(),'Pending case timers checked.')}>Check overdue cases</Button></div>}
-    {role==='owner'&&<div className="hmo-metrics">{[
-      ['Pending',visible.filter(h=>pendingHmo(h)).length],
-      ['Missing requirements',visible.filter(h=>attention(h).label==='Missing requirements').length],
-      ['Approved',visible.filter(h=>h.status==='Approved').length],
-      ['Needs attention',visible.filter(h=>attention(h).needsAction).length],
-    ].map(([name,count])=><div className="mini-stat" key={name}><span>{name}</span><b>{count}</b></div>)}</div>}
-    {views&&<div className="hmo-tabs" role="group" aria-label="HMO case views">{views.map(([key,name])=>{const count=hmoCasesForView(visible,key,state.clock).length;return <button type="button" aria-pressed={tab===key} aria-describedby={`${viewId}-${key}`} key={key} onClick={()=>{setTab(key);setSelectedId('')}}>{name}<span aria-hidden="true">{count}</span><span hidden id={`${viewId}-${key}`}>{count} {count===1?'case':'cases'}</span></button>})}</div>}
-    {role==='owner'&&<h2 className="hmo-section-title">{listTitle}</h2>}
-    {staff&&<div className="hmo-filters">
-      <label>Search patient<input type="search" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Patient name"/></label>
-      <label>Status<select value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}><option value="">All statuses</option>{[...new Set(visible.map(h=>h.status))].sort().map(value=><option key={value}>{value}</option>)}</select></label>
-      <label>Provider<select value={providerFilter} onChange={e=>setProviderFilter(e.target.value)}><option value="">All providers</option>{HMO_PROVIDERS.filter(p=>visible.some(h=>h.providerId===p.id)).map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
-    </div>}
-    <div className="hmo-workspace">
-      <section className="hmo-case-list" aria-label={staff?'HMO cases':listTitle}>
-        {!filtered.length&&<Notice>{visible.length?'No cases match this view.':'No HMO cases are available in your scope.'}</Notice>}
-        {filtered.map(h=><button type="button" className={`hmo-case-row${selectedId===h.id?' selected':''}`} key={h.id} onClick={()=>openCase(h.id)} aria-pressed={selectedId===h.id}>
-          <span className="hmo-case-identity"><b>{patientName(h.patientId,state.patients)}</b><small>{state.branches.find(b=>b.id===h.branchId)?.name}</small></span>
-          <span>{HMO_PROVIDERS.find(p=>p.id===h.providerId)?.name||'Provider unavailable'}</span>
-          <Status>{label(h)}</Status>
-          <span className="hmo-case-age">{attention(h).elapsed!==null?`${Math.floor(attention(h).elapsed)}h pending`:''}</span>
-          <span className="hmo-case-attention">{attention(h).label}</span><span aria-hidden="true">›</span>
-        </button>)}
-      </section>
-      {selected&&<section className="hmo-case-detail" aria-label="HMO case detail">
-        <div className="hmo-detail-head"><div><small>Case detail</small><h2 ref={detailHeading} tabIndex={-1}>{patientName(selected.patientId,state.patients)}</h2><Status>{label(selected)}</Status></div><button type="button" onClick={()=>setSelectedId('')} aria-label="Close case detail">×</button></div>
-        {(!validHmoContext(state,selected)||!hmoDataValid(selected,clinicNow()))&&<Notice tone="warning">Case relationships need clinic review before processing.</Notice>}
-        <div className="hmo-detail-grid">
-          <section><h3>Patient</h3><p>{patientName(selected.patientId,state.patients)} · {state.branches.find(b=>b.id===selected.branchId)?.name}</p><p>Treatment / service: {selected.treatment||state.services.find(s=>s.id===state.appointments.find(a=>a.id===selected.appointmentId)?.serviceId)?.name||'Not recorded'}</p></section>
-          <section><h3>HMO Provider</h3><p>{HMO_PROVIDERS.find(p=>p.id===selected.providerId)?.name||'Provider unavailable'}</p><p>Member ID: {selected.memberId||'Not recorded'}</p></section>
-          <section><h3>Verification</h3><p>Local checklist · {selectedRequirements.filter(r=>r?.state==='Validated locally').length} of {selectedRequirements.length} checked</p>
-            <ul className="hmo-checklist">{selectedRequirements.filter(Boolean).map(r=><li key={r.id}><span aria-hidden="true">{r.state==='Validated locally'?'✓':r.state==='Missing'?'!':'○'}</span><div><b id={`${viewId}-req-${r.id}`}>{r.label}</b><small>{r.state}</small></div>{staff&&['Draft','Missing Requirements','Ready for Submission','Returned'].includes(selected.status)&&r.state!=='Validated locally'&&<HmoRequirement requirement={r} canEdit compact describedBy={`${viewId}-req-${r.id}`} onProvide={metadata=>report(actions.provideHmoRequirement(selected.id,r.ruleId,metadata),'Requirement checked locally.')}/>}</li>)}</ul>
-          </section>
-          <section><h3>Request Status</h3><p>Current status: <b>{label(selected)}</b></p>{latestProviderResponse(selected)&&<p>Last provider response: <b>{latestProviderResponse(selected).outcome}</b></p>}<p>Submitted: {selected.submittedAt||'Not submitted'}</p>{selected.reference&&<p>Reference: {selected.reference}</p>}{selected.providerRespondedAt&&<p>Response recorded: {selected.providerRespondedAt}</p>}
-            {selectedResponses.filter(Boolean).map(r=><p key={r.id}><b>Provider response recorded: {r.outcome}</b><br/>{r.recordedAt} · {r.method}<br/>{r.note}</p>)}
-            {staff&&validHmoContext(state,selected)&&hmoDataValid(selected,clinicNow())&&<div className="row-actions">{selected.status==='Ready for Submission'&&<Button size="sm" onClick={()=>operate('submit',selected)}>{selected.submissionCycle?'Record Resubmission':'Record External Submission'}</Button>}{pendingHmo(selected)&&<Button size="sm" onClick={()=>operate('response',selected)}>Record Provider Response</Button>}</div>}
-          </section>
-          <section><h3>Follow-Up</h3><p>{attention(selected).label}</p>{selected.submittedAt&&pendingHmo(selected)&&<p>Pending since {selected.submittedAt} · {Math.floor(attention(selected).elapsed||0)}h elapsed</p>}
-            <p>Project follow-up threshold: {HMO_PENDING_HOURS} hours. This is a clinic-side prototype setting, not a provider response promise.</p>
-            {!!selectedContacts.length&&<p>Last contact: {selectedContacts.at(-1).at}</p>}
-            {selectedTasks.filter(t=>t?.submissionCycle===selected.submissionCycle).map(t=><p key={t.id}>Follow-up task: {t.status}</p>)}
-            <h4>Follow-Up History</h4>
-            {!selectedContacts.length&&<p>No contact attempts recorded.</p>}
-            {selectedContacts.filter(Boolean).map(c=><p key={c.id}><b>{c.at} · {c.method}</b><br/>{c.note}<br/>Next action: {c.nextAction}</p>)}
-            {staff&&validHmoContext(state,selected)&&hmoDataValid(selected,clinicNow())&&pendingHmo(selected)&&<div className="row-actions"><Button size="sm" variant="ghost" onClick={()=>operate('contact',selected)}>Record Contact Attempt</Button>{selected.status!=='Escalated'&&pendingHours(selected,state.clock)>=HMO_PENDING_HOURS&&<Button size="sm" variant="danger" onClick={()=>report(actions.escalateHmo(selected.id),'Case escalated for clinic attention.')}>Escalate Case</Button>}</div>}
-          </section>
-          <section><h3>Case Timeline</h3>{hmoTimeline(selected).length?<ol className="hmo-timeline">{hmoTimeline(selected).map(e=><li key={e.key}><b>{e.label}</b><time>{e.at}</time></li>)}</ol>:<p>No dated case events are available.</p>}</section>
-        </div>
-      </section>}
-    </div>
-    <Modal open={creating} onClose={()=>setCreating(false)} title="Prepare HMO case"><Field label="Insured encounter" required><select value={encounter} onChange={e=>setEncounter(e.target.value)}><option value="">Select encounter</option>{eligible.map(({key,record:r})=><option key={key} value={key}>{patientName(r.patientId,state.patients)} • {r.date} • {state.services.find(s=>s.id===r.serviceId)?.name} • {r.id}</option>)}</select></Field><Notice>Patient, membership, branch, and encounter details are prefilled from the selected visit.</Notice><Button onClick={create}>Prepare Case</Button></Modal>
-    <Modal open={!!operation} onClose={()=>setOperation(null)} title={operation?.mode==='response'?'Record externally received provider response':operation?.mode==='contact'?'Record clinic contact attempt':'Record external submission'}>
-      <Notice>No provider is contacted by this application. Record an action or response handled outside the app.</Notice>
-      <Field label="Channel" required><select value={form.method} onChange={e=>setForm({...form,method:e.target.value})}><option value="">Select channel</option>{['Portal','Email','Phone','In person'].map(m=><option key={m}>{m}</option>)}</select></Field>
-      {operation?.mode==='response'&&<><Field label="Provider outcome received" required><select value={form.outcome} onChange={e=>setForm({...form,outcome:e.target.value})}><option value="">Select received outcome</option><option>Approved</option><option>Rejected</option><option>Returned</option></select></Field>{form.outcome==='Returned'&&<fieldset><legend>Requirements returned for correction</legend>{HMO_REQUIREMENT_RULES.map(r=><label className="check-control" key={r.id}><input type="checkbox" checked={form.requirementIds.includes(r.id)} onChange={e=>setForm({...form,requirementIds:e.target.checked?[...form.requirementIds,r.id]:form.requirementIds.filter(id=>id!==r.id)})}/>{r.label}</label>)}</fieldset>}</>}
-      <Field label="Internal tracking note / result" required><textarea value={form.note} onChange={e=>setForm({...form,note:e.target.value})}/></Field>
-      {operation?.mode==='contact'&&<Field label="Next action" required><input value={form.nextAction} onChange={e=>setForm({...form,nextAction:e.target.value})}/></Field>}
-      <Button onClick={submit}>Save Tracking Record</Button>
-    </Modal>
-  </>
-}
-// `compact` renders only the controls, for a parent that already shows the requirement name and status once.
-function HmoRequirement({requirement:r,canEdit,patient,onProvide,compact=false,describedBy}) {
-  const [metadata,setMetadata]=useState({fileName:r.document?.fileName||''})
-  return <div className="clinical-history"><div>{!compact&&<><b>{r.label}</b><Status>{r.state}</Status></>}{canEdit&&r.state!=='Validated locally'&&<><Field label={patient?'Select document (metadata only)':'Document name / clinic record'}>{patient?<input type="file" aria-describedby={describedBy} onChange={e=>{const file=e.target.files?.[0];setMetadata(file?{fileName:file.name,size:file.size}:{fileName:''})}}/>:<input aria-describedby={describedBy} value={metadata.fileName} onChange={e=>setMetadata({...metadata,fileName:e.target.value})}/>}</Field><Button size="sm" aria-describedby={describedBy} onClick={()=>onProvide(metadata)}>{patient?'Record Document Metadata':'Validate Locally'}</Button><small className="block-muted">No file is uploaded or stored. Local validation is not provider approval.</small></>}</div></div>
-}
+// M12: the HMO workspace lives in ./Hmo.jsx (server-authoritative minimal foundation).
+export { HmoPage } from './Hmo.jsx'
 
 export function InquiriesPage({ store }) {
   const { state, actions, toast }=store

@@ -41,7 +41,7 @@ logical-only, not yet implemented.
 | QUEUE_ENTRIES | Individual patient queue state | Requires exactly one VISIT (unique `visit_id`) and one DENTIST_QUEUE; unique number per queue; states Waiting / Called / Treatment Ready / Temporarily Away / Served (Served only when the Visit starts treatment); priority override requires reason and history; no no-show/in-treatment/completed queue state (M9) |
 | CAPACITY_EVENTS | Aggregate waiting/workload snapshots/events | Does not replace QUEUE_ENTRIES; it supports M10/M15/M21 |
 
-**VISITS (M8, approved D10), QUEUE_ENTRIES → VISIT (M9) and TREATMENT_PLANS → exactly one VISIT with price-free TREATMENT_PROCEDURES (M5) and SERVICE_PRICES (M13 pricing foundation):** this dictionary is the current text of record. The rendered ERD images (PNG/SVG) predate these changes and are pending regeneration from the diagram source; they have not been hand-edited.
+**VISITS (M8, approved D10), QUEUE_ENTRIES → VISIT (M9) and TREATMENT_PLANS → exactly one VISIT with price-free TREATMENT_PROCEDURES (M5) SERVICE_PRICES (M13 pricing foundation) and Visit-anchored HMO_CASES with PATIENT_HMO_POLICIES memberships (minimal M12):** this dictionary is the current text of record. The rendered ERD images (PNG/SVG) predate these changes and are pending regeneration from the diagram source; they have not been hand-edited.
 
 ## Clinical / Billing
 
@@ -63,10 +63,10 @@ logical-only, not yet implemented.
 | Table | Purpose | Key integrity rule |
 |---|---|---|
 | HMO_PROVIDERS | Provider master/integration metadata | Integration type may be NONE/API/WEBHOOK/etc.; do not assume all providers expose APIs |
-| PATIENT_HMO_POLICIES | Patient membership/policy | Expired/inactive policies should not be treated as verified eligibility |
+| PATIENT_HMO_POLICIES | Patient membership/policy (implemented minimally as `patient_hmo_memberships`, M12) | Staff-entered provider name and member number for the server Patient; at most one active membership per Patient; a change ends the active row and adds a new one (history kept). No validity dates or plan yet. Expired/inactive policies should not be treated as verified eligibility |
 | HMO_REQUIREMENT_RULES | Provider/service requirement checklist | Drives automatic local completeness checks |
-| HMO_CASES | Verification/request/provider response state | Provider remains approval authority |
-| HMO_CASE_REQUIREMENTS | Per-case requirement status/document linkage | Missing requirement triggers notification/upload loop |
+| HMO_CASES | Verification/request/provider response state (implemented minimally as `hmo_cases` + append-only `hmo_case_events`, M12) | Zero or one case per VISIT; Patient and branch from the Visit; provider/member snapshot from the membership; Missing Requirements → Ready for Submission → Pending ↔ Escalated → Approved (approved amount) / Rejected / Returned → correction and resubmission; Withdrawn is the terminal pre-submission no-claim / self-pay disposition. Final cases are read-only. Provider remains approval authority |
+| HMO_CASE_REQUIREMENTS | Per-case requirement status/document linkage (implemented as `hmo_case_requirements`, M12) | The three project rules (HMO card, valid ID, Dentist treatment request — satisfied by the Visit's completed Treatment); Missing / Validated with a metadata label only (documents are M14) |
 | HMO_CLAIMS | Claim/invoice linkage where applicable | Claim state is distinct from local case completeness |
 | HMO_FOLLOW_UP_TASKS | Pending follow-up/escalation work | Escalation means unresolved/high-attention, not approved/rejected |
 

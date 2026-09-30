@@ -51,12 +51,11 @@ test('new workflow and audit records store stable domain keys, never module numb
   const appointment=serverAppointment({patientId:'p1',branchId:'b1',dentistId:'d1',serviceId:'svc1',date:'2026-09-19',start:'11:00'})
   f.addAppointment(appointment)
   ok(f.actions.recordAppointmentEvent(appointment.id,'created'))
-  ok(f.actions.createHmoCase({appointmentId:appointment.id}))
   const created=f.state.workflowLog.find(e=>e.eventType==='appointment.created')
   assert.equal(created.domain,'appointment');assert.equal('module' in created,false)
   assert.equal(eventModuleLabel(created),'M6')
-  const hmo=f.state.workflowLog.filter(e=>e.eventType?.startsWith('hmo.'))
-  assert.ok(hmo.length>0);assert.ok(hmo.every(e=>e.domain==='hmo'&&!('module' in e)))
+  // M12: HMO events are server case history (hmo_case_events) now; the browser no longer records hmo.* workflow events.
+  assert.equal(f.state.workflowLog.some(e=>e.eventType?.startsWith('hmo.')),false)
   assert.ok(f.state.audit.every(a=>!('module' in a)&&typeof a.domain==='string'))
 })
 
@@ -95,7 +94,7 @@ test('seeded workflow and audit records use valid domain keys',()=>{
 })
 
 test('event writers no longer emit numbered module tags as durable identity',()=>{
-  for(const path of ['src/workflow.js','src/hmo.js','src/communication.js','src/loyalty.js','src/phase2.js','src/administration.js','src/booking-drafts.js','src/registration.js','src/identity-bridge.js','src/orchestration.js','src/store.jsx','src/data.js']){
+  for(const path of ['src/workflow.js','src/communication.js','src/loyalty.js','src/phase2.js','src/administration.js','src/booking-drafts.js','src/registration.js','src/identity-bridge.js','src/orchestration.js','src/store.jsx','src/data.js']){
     const source=read(path).replace(/\/\/.*$/gm,'')
     assert.doesNotMatch(source,/module:\s*'M\d|,\s*'M\d+(?:\s*[→–/]\s*M?\d+)*'\s*,/,path)
   }

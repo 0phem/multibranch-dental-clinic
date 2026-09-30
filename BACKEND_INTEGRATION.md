@@ -3,8 +3,9 @@
 Scope: authentication, registration, session restoration, logout and RBAC (Foundation 1B), branch/service/
 staff/dentist reference data (Phase 2A), M1/M4 identity, M6 appointments (server-authoritative since the M6
 React cutover), M8 Patient Check-In with the shared Visit / Clinical Encounter (see "M8 Check-In and Visit") and M9
-Patient Queue Management (see "M9 Queue" below). Every other business module (treatments, HMO, billing, prescriptions,
-messages, loyalty, marketing) is still frontend-local — see "Frontend-local boundary" below.
+Patient Queue Management (see "M9 Queue" below), M5 Treatment, the M13 pricing foundation and the minimal M12 HMO
+foundation (see "M12 HMO foundation"). Every other business module (billing, prescriptions, messages, loyalty,
+marketing) is still frontend-local — see "Frontend-local boundary" below.
 
 ## Running it locally
 
@@ -427,14 +428,92 @@ Frontend (`src/treatments-api.js`, `src/appointment-flow.js`, `src/store.jsx`):
 - **Transitional downstream adapters** (`reconcileTreatmentHandoffs`, remove as each module's backend lands): in any
   authorized Staff/Dentist browser, every completed server Treatment in scope gets — once, keyed by its public id — the
   M11 Draft invoice (`inv-<id>`, priced from the local fee configuration; an unconfigured fee is flagged for review
-  instead of invented), the M20 follow-up task (`f-<id>`), the M19 prescription-required task and the M12 HMO handoff.
-  Idempotent, role-appropriate, and it never writes the Treatment. **M18 boundary:** it creates no notification of any
-  kind (no in-app record, email, SMS, delivery status, retry or schedule) — only M23 workflow-log events. The M12 HMO
-  adapter it invokes is unchanged M12 prototype code and, when it opens a case, records M12's own in-app case notices
-  exactly as a manually created HMO case does (local records only; nothing is delivered).
+  instead of invented), the M20 follow-up task (`f-<id>`) and the M19 prescription-required task. Idempotent,
+  role-appropriate, and it never writes the Treatment. **M18 boundary:** it creates no notification of any kind (no
+  in-app record, email, SMS, delivery status, retry or schedule) — only M23 workflow-log events. Since the M12 foundation
+  it no longer opens any HMO case: HMO cases are opened only on the server by Staff (see "M12 HMO foundation").
 - Completion no longer appends to the Patient's `dentalHistory` text; existing text stays as earlier, read-only notes.
 - **Known limitation (pre-existing, not M5):** the frontend identity bridge maps `patient@example.test` onto the seeded
   local Patient `p1`, while Staff/Dentist server workflows key the same Patient by its server public id. A local M11
   invoice reconciled/issued in a Staff browser therefore carries the public id, and the Patient's local billing filter
   (which compares the session's local key) may not show it. The Patient Treatment API is deliberately not widened for
   this; the fix belongs to future identity-bridge / M11 backend work.
+
+## M12 HMO foundation
+
+The smallest server-authoritative M12 that M11 needs; not the full module. Laravel/PostgreSQL is the only authority for
+Patient HMO memberships, HMO cases, their lifecycle and the approved amount.
+
+- **Schema** (`2026_10_04_000100_create_hmo_tables`):
+  - `patient_hmo_memberships` — ULID `public_id`, `patient_id`, Staff-entered `provider_name` and `member_number`
+    (non-empty text; there is no provider directory and nothing is seeded), status active / ended, actors and
+    timestamps. At most one active membership per Patient (partial unique index); a change ends the active row and
+    creates a new one, so history is kept; the only permitted update is active → ended.
+  - `hmo_cases` — ULID `public_id`, **UNIQUE `visit_id`** (zero or one case per Visit), `patient_id` / `branch_id`
+    (a trigger requires them to match the Visit), `membership_id` with immutable `provider_name` / `member_number`
+    snapshots, status (Missing Requirements, Ready for Submission, Pending, Escalated, Returned, Approved, Rejected,
+    Withdrawn), `submission_cycle`, `submitted_at`, `escalated_at`, `approved_amount numeric(12,2)` (present exactly
+    when Approved, ≥ 0), `final_at` (exactly when Approved / Rejected / Withdrawn), `revision`, actors. Checks tie the
+    cycle to submission (cycle 0 ⇔ never submitted; Withdrawn only at cycle 0). The guard trigger forbids DELETE and
+    any change to a final case or to the anchor/snapshot columns.
+  - `hmo_case_requirements` — one row per case and project rule (`hmo-card`, `valid-id`, `treatment-request`), state
+    Missing / Validated with an optional metadata `document_label` only (no file — documents are M14).
+  - `hmo_case_events` — append-only case history (created, requirement, submission, contact, escalation, response,
+    withdrawal) with actor, method, note, outcome, provider reference and approved amount; at most one submission and
+    one response per cycle (unique indexes). No UPDATE or DELETE.
+- **Lifecycle** (`App\Services\Hmo\HmoCaseService`; every command needs an `Idempotency-Key`, case commands also
+  `expected_revision` → `409 stale_revision`; a final case → `422 case_final`):
+  - Membership: `POST /api/visits/{visit}/hmo-membership` `{provider_name, member_number, expected_active_id}`
+    (replaces the active one; a mismatch → `409 stale_membership`) and `POST /api/visits/{visit}/hmo-membership/end`.
+    A change needs an operational context: Staff scoped to the **Visit's** branch; the Patient is derived from that
+    Visit, and a submitted `patient_id` / `patient_ref` / `branch_id` / `branch_ref` is refused (422). Any branch scope
+    alone is not enough. The membership stays global to the Patient (no branch column). Reads are unchanged:
+    `GET /api/patients/{patient}/hmo-membership` for Staff/Owner.
+  - Open: `POST /api/visits/{visit}/hmo-case` — needs an active membership (`422 membership_required`); a second case
+    for the Visit → `409 hmo_case_exists`. New cases start at Missing Requirements; the treatment-request requirement is
+    validated automatically when the Visit's Treatment is already Completed ("Completed treatment record").
+  - Self-pay: `POST /api/visits/{visit}/hmo/self-pay` `{reason}` — for a Visit whose Patient has a membership but no
+    case; creates the case directly as **Withdrawn** (created + withdrawal events).
+  - `POST /api/hmo-cases/{case}/requirements/{rule}` validates a requirement (treatment-request needs the completed
+    Treatment); all three → Ready for Submission. `…/submit` (all requirements validated) starts cycle n+1 → Pending.
+    `…/contact` records a follow-up contact. `…/escalate` is allowed only while Pending, once the follow-up due time has
+    passed and after a contact in this cycle. `…/response` records the Staff-confirmed external provider response for
+    the **current** cycle (`wrong_cycle` otherwise): Approved (with `approved_amount` as decimal text), Rejected, or
+    Returned (listed requirements go back to Missing; resubmission is a new cycle). `…/withdraw` `{reason}` is allowed
+    only before any submission (Missing / Ready, cycle 0).
+  - Escalated is never an outcome; local completeness is never provider approval; no approval is inferred.
+- **Follow-up threshold**: 12 hours after submission is a **project value** (`HmoCase::FOLLOW_UP_HOURS`), exposed only as
+  the derived `follow_up_due_at`. No job, scheduler, task row, notification or automatic escalation exists (M18 / M23
+  are later).
+- **Financial gate** (`App\Services\Hmo\HmoFinancialGate::forTreatment` / `forVisit`; read by Staff/Owner at
+  `GET /api/visits/{visit}/hmo-gate`): no membership and no case → nothing held, coverage none; membership but no case →
+  `requires_claim_decision`, issue and payment held, coverage pending; Missing / Ready (preparation), Pending / Escalated
+  (waiting) and Returned (action required) → issue and payment held, coverage pending; Approved → not held, coverage =
+  the approved amount; Rejected → not held, coverage `"0.00"`; Withdrawn → not held, coverage none. Amounts are decimal
+  strings. `GET /api/hmo/claim-decisions` lists in-scope Visits (bounded window) whose Patient has a membership but no
+  case.
+- **Authorization**: Staff — reads and every command, only for branches in their scope (membership changes only
+  through a Visit of that Patient in their scope). Owner — read-only (cases,
+  memberships, gate, claim decisions). Dentist — case summary (no member number, no history) for Visits where they are
+  the responsible Dentist. Patient — `GET /api/hmo-cases/mine` only: own cases, identity from the session (`patient_id`
+  refused), a safe subset (status, provider, masked member number, visit date, appointment code, branch name,
+  requirement states, submitted/final times, approved amount) with no notes, contacts, actors or history. Guest: 401.
+- **M11 dependency**: M11 does not consume the gate yet. When the M11 backend lands, invoice issue and payment must call
+  `HmoFinancialGate::forTreatment` and be refused while it holds them; the covered amount it reports is what M11 may
+  apply. The browser billing prototype is unchanged and is not held by server HMO state in this phase.
+- **Operational cutover** (browser HMO records are never uploaded): 1) finish or note any open browser HMO claims
+  outside the system; 2) deploy and migrate (the migration creates no cases or memberships); 3) Staff enter each HMO
+  Patient's membership on the HMO page; 4) for each current Visit listed under "Claim decisions needed", open the HMO
+  case or record self-pay; 5) continue earlier claims on the server case only by re-checking requirements with the
+  Patient — earlier browser progress is not carried over; 6) earlier browser cases stay visible as read-only history.
+
+Frontend (`src/hmo-api.js`, `src/pages/Hmo.jsx`, `src/store.jsx`):
+
+- Staff/Dentist/Owner load server cases in the same bounded window as appointments, Staff/Owner also the claim
+  decisions; a Patient loads only `/api/hmo-cases/mine`. They form the in-memory `state.hmo` projection
+  (`server: true`), never persisted and never written locally (`commit()` drops `hmo` and `claimDecisions`).
+- The browser-local HMO key (`dentalops-v4-hmo`) is read once as read-only history (`legacy`, `preServer`): shown in a
+  collapsed "Earlier browser records" section, never counted in worklists or the gate, never uploaded and never cleared.
+  The browser HMO timers, the local HMO commands (`src/hmo.js`) and the Treatment-completion HMO handoff are removed.
+- The Patient's HMO page is read-only (no upload — M14). The Patient's earlier `hmo` / `hmoMember` profile text is
+  shown only as a read-only earlier note and can no longer be edited locally.

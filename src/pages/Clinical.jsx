@@ -6,7 +6,7 @@ import { AppointmentForm } from './Scheduling.jsx'
 import { PatientPrescriptionsPage } from './PatientCare.jsx'
 import { PatientFollowupsPage } from './PatientVisits.jsx'
 
-import { visibleHmo, HMO_PROVIDERS } from '../phase3-contracts.js'
+import { visibleHmo } from '../phase3-contracts.js'
 import { visiblePrescriptions, prescriptionTasks, linkedTreatment, followupDisplayState } from '../phase2.js'
 import { inScope, isTodayQueue, patientInScope, sessionForRole } from '../contracts.js'
 
@@ -36,7 +36,7 @@ export function PatientsPage({ role, store, context, setPage }) {
     if(role!=='staff')return
     const result=actions.createPatientRecord({
       person:{firstName:newPatient.firstName,lastName:newPatient.lastName,dob:newPatient.dob,sex:newPatient.sex,phone:newPatient.phone,email:newPatient.email,address:newPatient.address},
-      patient:{preferredBranch:newPatient.preferredBranch,hmo:newPatient.hmo,hmoMember:newPatient.hmoMember,allergies:newPatient.allergies,medicalHistory:newPatient.medicalHistory,dentalHistory:newPatient.dentalHistory,emergencyContact:newPatient.emergencyContact,consent:newPatient.consent},
+      patient:{preferredBranch:newPatient.preferredBranch,allergies:newPatient.allergies,medicalHistory:newPatient.medicalHistory,dentalHistory:newPatient.dentalHistory,emergencyContact:newPatient.emergencyContact,consent:newPatient.consent},
       createPortalAccount:newPatient.createPortalAccount
     })
     if(!result.ok)return toast(result.message,'warning')
@@ -50,12 +50,12 @@ export function PatientsPage({ role, store, context, setPage }) {
     {!patient?<Notice>The selected patient is unavailable in your current scope. {availablePatients.length>0&&<Button onClick={()=>setSelected(availablePatients[0].id)}>Open an available patient</Button>}{role==='staff'&&<Button onClick={()=>setNewOpen(true)}>New Patient</Button>}</Notice>:<div className="records-layout">
       <Card className="patient-list" title="Patients" actions={role==='staff'?<Button size="sm" onClick={()=>setNewOpen(true)}>New Patient</Button>:null}><input className="search-input" aria-label="Search patients" placeholder="Search patient..." value={search} onChange={e=>setSearch(e.target.value)}/><div className="patient-list-scroll">{availablePatients.filter(p=>`${p.name} ${p.patientCode||''}`.toLowerCase().includes(search.trim().toLowerCase())).map(p=><button key={p.id} className={selected===p.id?'selected':''} onClick={()=>{setSelected(p.id);setTab('summary')}}><span className="avatar">{p.name.split(' ').map(x=>x[0]).slice(0,2).join('')}</span><div><b>{p.name}</b><small>{p.patientCode||p.id} • {p.preferredBranch} • {p.hmo}</small></div></button>)}</div></Card>
       <div>
-        <Card className="patient-header-card"><div className="patient-record-head"><div className="avatar xl">{patient.name.split(' ').map(x=>x[0]).slice(0,2).join('')}</div><div><h2>{patient.name}</h2><p>{patient.patientCode||patient.id} • {patient.dob||'DOB not set'} • {patient.sex||'—'} • {patient.preferredBranch}</p><div className="chip-row"><span className="mini-chip">HMO: {patient.hmo}</span><span className="mini-chip">Allergies: {patient.allergies}</span>{patient.consent&&<span className="mini-chip success">Consent on file</span>}</div></div></div></Card>
+        <Card className="patient-header-card"><div className="patient-record-head"><div className="avatar xl">{patient.name.split(' ').map(x=>x[0]).slice(0,2).join('')}</div><div><h2>{patient.name}</h2><p>{patient.patientCode||patient.id} • {patient.dob||'DOB not set'} • {patient.sex||'—'} • {patient.preferredBranch}</p><div className="chip-row"><span className="mini-chip">Allergies: {patient.allergies}</span>{patient.consent&&<span className="mini-chip success">Consent on file</span>}</div></div></div></Card>
         <Tabs tabs={tabs} active={tab} onChange={setTab}/>
         {tab==='summary'&&<SummaryTab key={patient.id} patient={patient} role={role} onSave={saveRecord}/>}
         {tab==='visits'&&<Card title="Cross-branch visit history"><Table rows={visits} columns={[{key:'date',label:'Date',render:a=>dateLabel(a.date)},{key:'branch',label:'Branch'},{key:'service',label:'Service'},{key:'dentist',label:'Dentist',render:a=>dentistName(a.dentistId,state.dentists)},{key:'status',label:'Status',render:a=><Status>{a.status}</Status>}]} /></Card>}
         {tab==='clinical'&&<Card title="Treatment history" subtitle={role==='dentist'?'Clinic server records you may read: your own treatments and, while you treat this patient, their earlier completed treatments. Read-only unless you are the treating Dentist.':'Staff read-only clinical record'}>{treatments.length?treatments.map(t=><div className="clinical-history" key={t.id}><div><b>{dateLabel(t.date)} • {t.procedure||t.plan||'Treatment in progress'}</b>{t.complaint&&<p>Complaint: {t.complaint}</p>}{t.plan&&<p>Plan: {t.plan}</p>}{t.notes&&<p>{t.notes}</p>}{Array.isArray(t.procedures)&&t.procedures.length>0&&<p>{t.procedures.map(p=>`${p.serviceName||state.services.find(s=>s.id===p.serviceId)?.name||'Service'} × ${p.quantity}`).join(', ')}</p>}<small>{t.dentistName||dentistName(t.dentistId,state.dentists)} • {t.status}</small>{!t.server&&<small className="block-muted">{t.legacyAppointment?'Historical demo record':'Recorded before server treatment records'} — read-only</small>}</div><Status>{t.status}</Status></div>):<Notice>No treatment history recorded.</Notice>}</Card>}
-        {tab==='hmo'&&<Card title="HMO record"><Table rows={hmo} columns={[{key:'provider',label:'Provider'},{key:'memberId',label:'Member ID'},{key:'treatment',label:'Requested treatment'},{key:'eligibility',label:'Eligibility',render:h=><Status>{h.eligibility}</Status>},{key:'status',label:'Status',render:h=><Status>{h.status}</Status>}]} /></Card>}
+        {tab==='hmo'&&<Card title="HMO record" subtitle="Server HMO cases for this patient's visits; earlier browser records are marked as history. Membership is recorded in HMO Management."><Table rows={hmo} columns={[{key:'provider',label:'Provider'},{key:'memberId',label:'Member ID'},{key:'clinicDate',label:'Visit',render:h=>h.clinicDate?dateLabel(h.clinicDate):h.legacy?'Earlier record':'—'},{key:'eligibility',label:'Eligibility',render:h=><Status>{h.eligibility}</Status>},{key:'status',label:'Status',render:h=><Status>{h.status}</Status>}]} /></Card>}
         {tab==='documents'&&<Card title="Visit documents"><Notice tone="info">Document upload/storage is represented in the UI only. A backend will store file metadata and protected object-storage references linked to this patient.</Notice><div className="document-grid"><div><span>PDF</span><b>Consent Form</b><small>Verified • 2026-09-12</small></div><div><span>IMG</span><b>Visit Attachment</b><small>Branch A • 2026-09-12</small></div></div></Card>}
       </div>
     </div>}
@@ -67,8 +67,6 @@ export function PatientsPage({ role, store, context, setPage }) {
       <Field label="Sex"><select value={newPatient.sex} onChange={e=>setNewPatient({...newPatient,sex:e.target.value})}><option>Female</option><option>Male</option><option>Other</option></select></Field>
       <Field label="Email"><input type="email" value={newPatient.email} onChange={e=>setNewPatient({...newPatient,email:e.target.value})}/></Field>
       <Field label="Preferred branch"><select value={newPatient.preferredBranch} onChange={e=>setNewPatient({...newPatient,preferredBranch:e.target.value})}>{state.branches.filter(b=>role==='owner'||b.id===session.branchId).map(b=><option key={b.id}>{b.name}</option>)}</select></Field>
-      <Field label="HMO provider"><input value={newPatient.hmo} onChange={e=>setNewPatient({...newPatient,hmo:e.target.value})}/></Field>
-      <Field label="HMO member ID"><input value={newPatient.hmoMember} onChange={e=>setNewPatient({...newPatient,hmoMember:e.target.value})}/></Field>
       <Field label="Address"><textarea value={newPatient.address} onChange={e=>setNewPatient({...newPatient,address:e.target.value})}/></Field>
       <Field label="Emergency contact"><textarea value={newPatient.emergencyContact} onChange={e=>setNewPatient({...newPatient,emergencyContact:e.target.value})}/></Field>
       <label className="check-control"><input type="checkbox" checked={newPatient.consent} onChange={e=>setNewPatient({...newPatient,consent:e.target.checked})}/><span><b>Consent recorded</b><small>Frontend marker only; real consent evidence is stored separately.</small></span></label>
@@ -85,7 +83,7 @@ function SummaryTab({ patient, role, onSave }) {
   const staff=role==='staff', dentist=role==='dentist'
   const save=()=>onSave({
     person:staff?{firstName:form.firstName,lastName:form.lastName,phone:form.phone,email:form.email,dob:form.dob,sex:form.sex,address:form.address}:{},
-    patient:staff?{preferredBranch:form.preferredBranch,hmo:form.hmo,hmoMember:form.hmoMember,emergencyContact:form.emergencyContact,consent:form.consent}:{allergies:form.allergies,medicalHistory:form.medicalHistory,dentalHistory:form.dentalHistory}
+    patient:staff?{preferredBranch:form.preferredBranch,emergencyContact:form.emergencyContact,consent:form.consent}:{allergies:form.allergies,medicalHistory:form.medicalHistory,dentalHistory:form.dentalHistory}
   })
   return <Card title="Patient summary" subtitle={staff?'Staff maintains approved demographics/contact/HMO fields. Clinical history remains read-only.':'Patient identity/contact information is read-only for the dentist; only clinical fields can be updated.'}>
     <div className="form-grid">
@@ -98,8 +96,7 @@ function SummaryTab({ patient, role, onSave }) {
       <Field label="Date of birth"><input type="date" value={form.dob||''} disabled={dentist} onChange={e=>update('dob',e.target.value)}/></Field>
       <Field label="Sex"><input value={form.sex||''} disabled={dentist} onChange={e=>update('sex',e.target.value)}/></Field>
       <Field label="Address"><textarea value={form.address||''} disabled={dentist} onChange={e=>update('address',e.target.value)}/></Field>
-      <Field label="HMO provider"><input value={form.hmo||''} disabled={dentist} onChange={e=>update('hmo',e.target.value)}/></Field>
-      <Field label="HMO member ID"><input value={form.hmoMember||''} disabled={dentist} onChange={e=>update('hmoMember',e.target.value)}/></Field>
+      {(form.hmo&&form.hmo!=='None'||form.hmoMember&&form.hmoMember!=='—')&&<Field label="Earlier HMO note" hint="Read-only earlier browser note. HMO membership is recorded on the clinic server in HMO Management."><input value={[form.hmo,form.hmoMember].filter(v=>v&&v!=='None'&&v!=='—').join(' • ')} disabled/></Field>}
       <Field label="Allergies" hint={staff?'Read-only for staff; clinical changes require a dentist.':''}><textarea value={form.allergies||''} disabled={staff} onChange={e=>update('allergies',e.target.value)}/></Field>
       <Field label="Medical history" hint={staff?'Read-only clinical field':''}><textarea value={form.medicalHistory||''} disabled={staff} onChange={e=>update('medicalHistory',e.target.value)}/></Field>
       <Field label="Dental history" hint={staff?'Read-only clinical field':''}><textarea value={form.dentalHistory||''} disabled={staff} onChange={e=>update('dentalHistory',e.target.value)}/></Field>
@@ -168,7 +165,7 @@ export function TreatmentPage({ store, context, setPage }) {
         <div className="patient-summary"><b>{patientName(patientId,state.patients)}</b><p>{state.services.find(s=>s.id===(queueEntry?.serviceId||treatment?.requestedServiceId))?.name||'Unknown requested service'} • {state.branches.find(b=>b.id===(treatment?.branchId||queueEntry?.branchId))?.name} • {treatment?.dentistName||dentist?.name}</p><p>Allergies: {patient?.allergies}</p>
           {patient?.dentalHistory&&<p>Earlier dental history notes (read-only, recorded before server treatment records): {patient.dentalHistory}</p>}
           <p>{priorCare.length?`${priorCare.length} earlier completed treatment record${priorCare.length===1?'':'s'} available in the chart.`:'No earlier server treatment records you can view.'}</p></div>
-        {visibleHmo(state,session).filter(h=>treatment?.id&&h.treatmentId===treatment.id||queueEntry?.appointmentId&&h.appointmentId===queueEntry.appointmentId).map(h=><p key={h.id}>HMO: {HMO_PROVIDERS.find(p=>p.id===h.providerId)?.name} • {h.status} • Provider decisions are external.</p>)}
+        {visibleHmo(state,session).filter(h=>h.server?h.visitId&&h.visitId===visitId:treatment?.id&&h.treatmentId===treatment.id).map(h=><p key={h.id}>HMO: {h.providerName||h.provider} • {h.status}{h.legacy?' (earlier record)':''} • Provider decisions are external.</p>)}
         <Notice tone="info">The system does not diagnose, prescribe, or choose treatment. It only loads known context and automates downstream handoffs after the dentist’s decisions.</Notice>
       </Card>
       <Card title="Clinical documentation" subtitle={treatment?`Clinic server record • revision ${treatment.revision}`:'Starting treatment serves the queue entry and creates the clinic server record.'}>

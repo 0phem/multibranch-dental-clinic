@@ -144,18 +144,20 @@ const HMO_STAGE={
   Escalated:'The clinic is following up with the provider. No provider decision has been recorded.',
   Approved:'Your HMO provider’s approval was recorded by the clinic.',
   Rejected:'Your HMO provider’s rejection was recorded by the clinic. Please contact the clinic about next steps.',
+  Withdrawn:'No HMO claim is being made for this visit; it is handled as self-pay.',
 }
 export function hmoCaseView(h) {
   const outcome=['Approved','Rejected','Returned'].includes(h.status)
   const historical=!!h.legacy&&outcome
   const requirements=(h.requirements||[]).filter(Boolean)
+  // Server cases (M12): the Patient brings missing documents to the clinic; nothing is uploaded or recorded in this app.
   const canProvide=['Draft','Missing Requirements','Ready for Submission','Returned'].includes(h.status)
   return {
-    id:h.id,provider:HMO_PROVIDERS.find(p=>p.id===h.providerId)?.name||'HMO',
+    id:h.id,provider:h.providerName||HMO_PROVIDERS.find(p=>p.id===h.providerId)?.name||'HMO',server:!!h.server,approvedAmount:h.status==='Approved'?h.approvedAmount??null:null,
     label:historical?`Historical recorded ${h.status}`:outcome?`Provider ${h.status}`:h.status,
     stage:historical?'This outcome comes from an earlier record. It has not been verified as a provider response in this system.':HMO_STAGE[h.status]||`Status: ${h.status}`,
     checked:requirements.filter(r=>r.state==='Validated locally').length,total:requirements.length,
-    submittedAt:h.submittedAt||null,respondedAt:h.providerRespondedAt||null,escalated:h.status==='Escalated',canProvide,
+    submittedAt:h.submittedAt||null,respondedAt:h.providerRespondedAt||(h.server&&['Approved','Rejected'].includes(h.status)?h.finalAt:null)||null,escalated:h.status==='Escalated',canProvide,
     // needsAction is Patient-actionable only; a clinic-provided requirement is never presented as the Patient's task.
     requirements:requirements.map(r=>{const clinicSide=!patientProvidesRequirement(r.ruleId);return {id:r.id,ruleId:r.ruleId,label:r.label,state:r.state,clinicSide,needsAction:canProvide&&r.state==='Missing'&&!clinicSide,returned:h.status==='Returned'&&r.state==='Missing'}}),
   }

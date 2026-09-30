@@ -93,7 +93,7 @@ test('the server queue is an in-memory projection; nothing about the queue is pe
   assert.doesNotMatch(store, /usePersist\('queue'/)
   assert.doesNotMatch(store, /INITIAL_QUEUE/)
   assert.equal('INITIAL_QUEUE' in data, false)
-  assert.match(store, /const \{appointments:_ignored,visits:_ignoredVisits,queue:_ignoredQueue,myQueue:_ignoredMyQueue,treatments:_ignoredTreatments,\.\.\.patch\}=rawPatch/)
+  assert.match(store, /const \{appointments:_ignored,visits:_ignoredVisits,queue:_ignoredQueue,myQueue:_ignoredMyQueue,treatments:_ignoredTreatments,hmo:_ignoredHmo,claimDecisions:_ignoredClaimDecisions,\.\.\.patch\}=rawPatch/)
   assert.equal('recalcQueue' in logic, false, 'no browser position authority')
   const workflow = read('src/workflow.js')
   assert.doesNotMatch(workflow, /queueNumber|queueId:`DQ|state\.queue=|admitVisit|updateQueue|recalcQueue/, 'no React queue numbers, ids, writes or commands')

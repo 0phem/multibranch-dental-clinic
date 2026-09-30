@@ -42,13 +42,16 @@ export function visibleHmo(state,session) {
   if(!validSession(state,session))return []
   if(session.role==='dentist'&&!state.dentists.some(d=>d.id===session.dentistId&&d.userId===session.userId))return []
   return (state.hmo||[]).filter(h=>{
+    // M12 server cases were scoped and projected per role by the server (Staff branch scope, Owner all, responsible
+    // Dentist summary, Patient own safe subset); a Patient additionally only ever sees their own session's rows.
+    if(h.server)return session.role!=='patient'||h.patientId===session.patientId
     if(!validHmoContext(state,h)||!validProviderOutcome(h))return session.role==='owner'&&(!session.scopeBranchId||session.scopeBranchId===h.branchId)
     if(session.role==='patient')return h.patientId===session.patientId&&state.patients.find(p=>p.id===h.patientId)?.userId===session.userId
     if(session.role==='staff')return canProcessHmo(state,session,h)
     if(session.role==='owner')return !session.scopeBranchId||session.scopeBranchId===h.branchId
     if(session.role==='dentist')return state.treatments.some(t=>t.id===h.treatmentId&&t.dentistId===session.dentistId)||state.appointments.some(a=>a.id===h.appointmentId&&a.dentistId===session.dentistId)
     return false
-  }).map(h=>['staff','owner'].includes(session.role)?h:{id:h.id,legacy:!!h.legacy,patientId:h.patientId,branchId:h.branchId,treatmentId:h.treatmentId,appointmentId:h.appointmentId,providerId:h.providerId,treatment:h.treatment,status:h.status,providerOutcome:h.providerOutcome,submittedAt:h.submittedAt,providerRespondedAt:h.providerRespondedAt,requirements:h.requirements.map((r,index)=>r?{id:r.id,ruleId:r.ruleId,label:r.label,state:r.state}:{id:`invalid-${index}`,label:'Unknown requirement',state:'Needs clinic review'}),missing:h.missing})
+  }).map(h=>h.server||['staff','owner'].includes(session.role)?h:{id:h.id,legacy:!!h.legacy,patientId:h.patientId,branchId:h.branchId,treatmentId:h.treatmentId,appointmentId:h.appointmentId,providerId:h.providerId,treatment:h.treatment,status:h.status,providerOutcome:h.providerOutcome,submittedAt:h.submittedAt,providerRespondedAt:h.providerRespondedAt,requirements:h.requirements.map((r,index)=>r?{id:r.id,ruleId:r.ruleId,label:r.label,state:r.state}:{id:`invalid-${index}`,label:'Unknown requirement',state:'Needs clinic review'}),missing:h.missing})
 }
 export function ownsNotification(state,session,n) {
   if(!validSession(state,session)||n.recipientUserId!==session.userId||!activeUser(state.users.find(u=>u.id===session.userId)))return false
@@ -80,6 +83,9 @@ export function normalizePhase3(state) {
   }
   const patients=state.patients.map(p=>({...p,hmoProviderId:p.hmoProviderId||HMO_PROVIDERS.find(h=>h.name===p.hmo)?.id||null}))
   const hmo=(state.hmo||[]).map(h=>{
+    // M12 server cases arrive already shaped by src/hmo-api.js (Staff-entered provider name; no provider directory).
+    if(h.server)return {...h,branch:state.branches.find(b=>b.id===h.branchId)?.name||h.branchName||'Unknown branch',provider:h.providerName||'Provider not recorded',
+      eligibility:['Approved','Rejected','Returned'].includes(h.status)?`Provider response recorded: ${h.status}`:h.status==='Withdrawn'?'No HMO claim (self-pay)':pendingHmo(h)?'Awaiting external provider response':'Not provider-verified'}
     const branchId=h.branchId||state.branches.find(b=>b.name===h.branch)?.id||null
     const providerId=h.providerId||HMO_PROVIDERS.find(p=>p.name===h.provider)?.id||null
     const requirements=Array.isArray(h.requirements)?h.requirements:HMO_REQUIREMENT_RULES.map(r=>({id:`${h.id}:${r.id}`,ruleId:r.id,label:r.label,state:(Array.isArray(h.documents)?h.documents:[]).some(d=>d===r.label||r.id==='valid-id'&&d==='ID'||r.id==='treatment-request'&&d==='Treatment Request')?'Validated locally':'Missing',legacy:true}))

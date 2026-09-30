@@ -8,7 +8,7 @@ import React from 'react'
 import { renderToString } from 'react-dom/server'
 
 const require=createRequire(import.meta.url)
-const files=['components.jsx','store.jsx','layout.jsx','clock.js','contracts.js','workflow.js','phase2.js','phase3-contracts.js','orchestration.js','pages/Dashboards.jsx','pages/Scheduling.jsx','pages/PatientFlow.jsx','pages/Clinical.jsx','pages/FinanceCommunication.jsx','pages/Admin.jsx','pages/Pricing.jsx','pages/PatientLoyalty.jsx','pages/PatientRegister.jsx','pages/PatientBook.jsx','pages/PatientMe.jsx','pages/PatientVisits.jsx','pages/PatientHome.jsx','loyalty.js','registration.js','scheduling.js','booking-drafts.js','geo.js','patient-view.js','data.js']
+const files=['components.jsx','store.jsx','layout.jsx','clock.js','contracts.js','workflow.js','phase2.js','phase3-contracts.js','orchestration.js','pages/Dashboards.jsx','pages/Scheduling.jsx','pages/PatientFlow.jsx','pages/Clinical.jsx','pages/FinanceCommunication.jsx','pages/Admin.jsx','pages/Pricing.jsx','hmo-api.js','pages/PatientLoyalty.jsx','pages/PatientRegister.jsx','pages/PatientBook.jsx','pages/PatientMe.jsx','pages/PatientVisits.jsx','pages/PatientHome.jsx','loyalty.js','registration.js','scheduling.js','booking-drafts.js','geo.js','patient-view.js','data.js']
 const result=await build({stdin:{contents:[...files.map(file=>`export * from './src/${file}';`),`export * from './tests/support/server-appointments.js';`].join('\n'),resolveDir:process.cwd()},bundle:true,write:false,platform:'node',format:'esm',plugins:[{name:'shared-react',setup(b){b.onResolve({filter:/^react$/},()=>({path:pathToFileURL(require.resolve('react')).href,external:true}))}}]})
 const m=await import('data:text/javascript;base64,'+Buffer.from(result.outputFiles[0].text).toString('base64'))
 m.setClockSource(()=>new Date('2026-09-19T02:08:00Z'))
@@ -139,29 +139,37 @@ assert.ok(render('followups','patient').includes('Scheduled'))
 console.log('PASS: Phase 2 procedures, prescription draft privacy/authorization, patient care, invoice review/issue/payment/receipt and follow-up scheduling')
 
 // Phase 3 operational flows: no real provider, delivery, or server transport.
-const hmoCase=state.hmo.find(h=>h.treatmentId===completed.record.id)
-assert.ok(hmoCase)
+// M12: HMO cases are server-authoritative. The smoke run stands in for the rows GET /api/hmo-cases (Staff) and
+// /api/hmo-cases/mine (Patient) return for p1's completed Visit; the browser holds no HMO commands.
+const hmoRow=(fields={})=>({id:'01jsmokehmo00000000000000a',status:'Pending',revision:5,submission_cycle:1,provider_name:'Insurer One',member_number:'M-000123',
+  visit:{id:completed.record.visitId,clinic_date:'2026-09-19',status:'Completed'},patient:{id:'p1',code:'PAT-0001',name:'Maria Santos'},branch:{id:'b1',name:'Branch A'},
+  dentist:{id:'d1',name:'Miguel Reyes'},appointment:{id:p1Visit.record.id,code:p1Visit.record.appointmentNo},submitted_at:'2026-09-19T10:00:00+08:00',follow_up_due_at:'2026-09-19T22:00:00+08:00',
+  escalated_at:null,final_at:null,approved_amount:null,created_at:'2026-09-19T09:30:00+08:00',
+  requirements:['hmo-card','valid-id','treatment-request'].map(rule=>({rule,label:rule,state:'Validated'})),
+  events:[{kind:'submission',submission_cycle:1,to_status:'Pending',method:'Portal',note:'Internal submission note',occurred_at:'2026-09-19T10:00:00+08:00',actor:{role:'staff',name:'Alyssa Cruz'}},
+    {kind:'contact',submission_cycle:1,to_status:'Pending',method:'Phone',note:'Internal contact history',next_action:'Await provider',occurred_at:'2026-09-19T11:00:00+08:00',actor:{role:'staff',name:'Alyssa Cruz'}}],...fields})
+const patientHmoRow=row=>({id:row.id,status:row.status,provider_name:row.provider_name,member_number:'••••0123',visit_date:'2026-09-19',appointment:row.appointment,branch:{name:'Branch A'},
+  requirements:row.requirements,submitted_at:row.submitted_at,final_at:row.final_at,approved_amount:row.status==='Approved'?row.approved_amount:null})
+const withHmo=(role,row)=>{state={...state,hmo:[role==='patient'?m.mapPatientHmoCase(patientHmoRow(row),'p1'):m.mapHmoCase(row)]};store={...store,state,actions}}
+const hmoCase={id:'01jsmokehmo00000000000000a'}
+withHmo('patient',hmoRow())
 assert.ok(render('hmo','patient').includes('HMO Coverage'))
-assert.ok(render('hmo','patient').includes('Record Document Metadata'))
-for(const requirement of hmoCase.requirements)assert.equal(actions.provideHmoRequirement(hmoCase.id,requirement.ruleId,{fileName:'clinic-document.pdf'}).ok,true)
-assert.equal(actions.submitHmoCase(hmoCase.id,{commandId:'smoke-submit',method:'Portal',note:'Internal submission note'}).ok,true)
-m.setClockSource(()=>new Date('2026-09-19T15:08:00Z'))
-assert.equal(actions.evaluateHmoTimers().ok,true)
-const followContact={commandId:'smoke-contact',submissionCycle:1,method:'Phone',note:'Internal contact history',nextAction:'Await provider'}
-assert.equal(actions.followUpHmo(hmoCase.id,followContact).ok,true)
-assert.equal(actions.escalateHmo(hmoCase.id).ok,true)
+assert.ok(!render('hmo','patient').includes('Record Document Metadata'),'no Patient document upload in this wave (M14)')
+withHmo('staff',hmoRow())
 assert.ok(render('hmo','staff',{hmoCaseId:hmoCase.id}).includes('Record Provider Response'))
+assert.ok(render('hmo','staff',{hmoCaseId:hmoCase.id}).includes('Internal contact history'),'Staff see their contact log')
+withHmo('patient',hmoRow())
 assert.ok(!render('hmo','patient',{hmoCaseId:hmoCase.id}).includes('Internal contact history'))
 assert.ok(!render('hmo','patient',{hmoCaseId:hmoCase.id}).includes('Record Provider Response'))
-assert.equal(actions.recordHmoOutcome(hmoCase.id,{caseId:hmoCase.id,commandId:'smoke-return',submissionCycle:1,outcome:'Returned',method:'Email',note:'Internal correction request',requirementIds:['valid-id']}).ok,true)
-assert.equal(actions.provideHmoRequirement(hmoCase.id,'valid-id',{fileName:'corrected.pdf'}).ok,true)
-assert.equal(actions.submitHmoCase(hmoCase.id,{commandId:'smoke-resubmit',method:'Portal',note:'Internal resubmission'}).ok,true)
-assert.equal(actions.recordHmoOutcome(hmoCase.id,{caseId:hmoCase.id,commandId:'smoke-approve',submissionCycle:2,outcome:'Approved',method:'Email',note:'Internal recorded outcome'}).ok,true)
+const approvedHmo=hmoRow({status:'Approved',revision:9,submission_cycle:2,final_at:'2026-09-19T15:00:00+08:00',approved_amount:'1200.00'})
+withHmo('patient',approvedHmo)
 assert.ok(render('hmo','patient',{hmoCaseId:hmoCase.id}).includes('Provider Approved'))
-const ownNotification=state.notifications.find(n=>n.recipientUserId==='u12'&&n.entityId===hmoCase.id)
+// Notification navigation and read scope, through the Patient's own appointment notification.
+assert.equal(actions.recordAppointmentEvent(p1Visit.record.id,'created').ok,true)
+const ownNotification=state.notifications.find(n=>n.recipientUserId==='u12'&&n.entityId===p1Visit.record.id)
 session=m.sessionForRole('patient',state)
 const dest=m.notificationDestination(state,session,ownNotification)
-assert.equal(dest.context.hmoCaseId,hmoCase.id)
+assert.equal(dest.context.appointmentId,p1Visit.record.id)
 assert.equal(actions.markNotificationRead(ownNotification.id).ok,true)
 const renderPanel=role=>renderToString(React.createElement(m.NotificationPanel,{role,store:{...store,session:m.sessionForRole(role,state)},setPage:()=>{},onClose:()=>{}}))
 assert.ok(renderPanel('patient').includes('View all'))
@@ -176,13 +184,13 @@ session=m.sessionForRole('patient',state)
 assert.equal(actions.markConversationRead(conversation.id).ok,true)
 assert.ok(!state.conversations.find(c=>c.id===conversation.id).unreadUserIds.includes('u12'))
 session=m.sessionForRole('staff',state)
-assert.equal(actions.submitHmoCase(hmoCase.id,{commandId:'invalid-final-state'}).ok,false)
-assert.ok(render('automation','owner').includes('hmo.submit'))
+assert.equal(actions.replyToConversation(conversation.id,'   ','invalid-empty-reply').ok,false)
+assert.ok(render('automation','owner').includes('conversation.reply'))
 const beforeRender=JSON.stringify(state)
 for(let repeat=0;repeat<2;repeat++){render('hmo','staff');render('hmo','patient');renderPanel('patient');render('messages','dentist');render('automation','owner')}
 assert.equal(JSON.stringify(state),beforeRender)
 m.setClockSource(()=>new Date('2026-09-19T02:08:00Z'))
-console.log('PASS: Phase 3 HMO correction/resubmission/escalation, Patient privacy, notification navigation/read scope, participant messages, monitor failures, render purity')
+console.log('PASS: Phase 3 server HMO case views (Staff detail, Patient privacy, approved outcome), notification navigation/read scope, participant messages, monitor failures, render purity')
 
 // Exercise ClinicProvider's synchronous snapshot with commands issued before any render.
 // The server already recorded the arrival and queued it (M8 + M9): the appointment, Visit and queue entry reach the
@@ -223,7 +231,8 @@ const serverTreatmentRows=state.treatments.filter(t=>t.server).map(m.serverTreat
 assert.ok(serverTreatmentRows.length>0)
 renderToString(React.createElement(m.ClinicProvider,{initialReferenceData,initialServerAppointments:serverRows},React.createElement(Capture)))
 assert.equal(store.state.treatments.filter(t=>t.server).length,0,'browser storage never restores a server Treatment')
-renderToString(React.createElement(m.ClinicProvider,{initialReferenceData,initialServerAppointments:serverRows,initialServerTreatments:serverTreatmentRows},React.createElement(Capture)))
+// M12: HMO cases also return only from the server (here: the Staff/Owner rows GET /api/hmo-cases would return).
+renderToString(React.createElement(m.ClinicProvider,{initialReferenceData,initialServerAppointments:serverRows,initialServerTreatments:serverTreatmentRows,initialServerHmo:[approvedHmo]},React.createElement(Capture)))
 assert.ok(render('patients','staff',{patientId:patient.record.id}).includes('PhaseOne Patient'))
 assert.ok(render('schedule','dentist').includes('Branch A'))
 assert.ok(render('appointments').includes('Appointment management'))
@@ -265,10 +274,11 @@ store={...store,state:recoveryBase}
 console.log('PASS: empty patient registry retains the Staff registration recovery action')
 assert.ok(render('checkin','staff').includes('Select an appointment to check the patient in.'))
 assert.doesNotMatch(render('checkin','staff'),/Confirm arrival<\/button>/)
-store={...store,state:{...recoveryBase,hmo:recoveryBase.hmo.map(h=>h.id===hmoCase.id?{...h,contacts:{malformed:true}}:h)}}
-assert.ok(render('hmo','staff',{hmoCaseId:hmoCase.id}).includes('need clinic review'))
+// Malformed earlier browser HMO history renders safely as read-only history and never as a live server case.
+store={...store,state:{...recoveryBase,hmo:[...recoveryBase.hmo.filter(h=>h.server),{id:'legacy-bad',legacy:true,legacyAppointment:true,preServer:true,server:false,patientId:'p1',branchId:'b1',status:'Pending',contacts:{malformed:true},requirements:'bad'}]}}
+{const page=render('hmo','staff');assert.ok(page.includes('HMO Management'));assert.ok(!/legacy-bad/.test(page))}
 store={...store,state:recoveryBase}
-console.log('PASS: explicit arrival selection and malformed HMO tracking recovery render')
+console.log('PASS: explicit arrival selection and malformed HMO history recovery render')
 
 // Phase 4A: shared presentation must preserve semantic controls and role scope.
 const ui=component=>renderToString(component)

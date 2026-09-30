@@ -214,3 +214,16 @@ export function listServicePrices() { return request('/api/service-prices') }
 export function createServicePrice(serviceRef, payload, key) { return command(`/api/services/${encodeURIComponent(serviceRef)}/prices`, payload, key) }
 export function retractServicePrice(id, key) { return command(`/api/service-prices/${encodeURIComponent(id)}/retract`, {}, key) }
 export function resolveServicePrice(params) { return request(`/api/prices/resolve${query(params)}`) }
+
+// Minimal M12 HMO foundation. Raw calls only; src/hmo-api.js owns mapping.
+export function listHmoCases(params) { return request(`/api/hmo-cases${query(params)}`) }
+export function myHmoCases() { return request('/api/hmo-cases/mine') }
+export function listClaimDecisions(params) { return request(`/api/hmo/claim-decisions${query(params)}`) }
+export function hmoGate(visitId) { return request(`/api/visits/${encodeURIComponent(visitId)}/hmo-gate`) }
+export function getHmoMembership(patientId) { return request(`/api/patients/${encodeURIComponent(patientId)}/hmo-membership`) }
+// Membership changes go through an in-scope Visit: the server derives the Patient from it (no Patient id is sent).
+export function setHmoMembership(visitId, payload, key) { return command(`/api/visits/${encodeURIComponent(visitId)}/hmo-membership`, payload, key) }
+export function endHmoMembership(visitId, payload, key) { return command(`/api/visits/${encodeURIComponent(visitId)}/hmo-membership/end`, payload, key) }
+export function openHmoCase(visitId, key) { return command(`/api/visits/${encodeURIComponent(visitId)}/hmo-case`, {}, key) }
+export function hmoSelfPay(visitId, payload, key) { return command(`/api/visits/${encodeURIComponent(visitId)}/hmo/self-pay`, payload, key) }
+export function hmoCaseCommand(id, name, payload, key) { return command(`/api/hmo-cases/${encodeURIComponent(id)}/${name}`, payload, key) }

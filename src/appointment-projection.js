@@ -2,6 +2,7 @@ import { isLegacyAppointmentRef, isServerId, mapAppointment } from './appointmen
 import { mapVisit } from './visits-api.js'
 import { mapQueueEntry } from './queue-api.js'
 import { mapTreatment, mapPatientTreatment } from './treatments-api.js'
+import { mapHmoCase, mapPatientHmoCase } from './hmo-api.js'
 
 // TEMPORARY read model for the M6/M8/M9/M5 cutovers. Server appointments, Visits, queue entries and Treatments
 // (Laravel/PostgreSQL) are the only appointment, arrival/encounter, queue and clinical-treatment truth; the still-browser-
@@ -35,7 +36,7 @@ export function patientKeyResolver({ session, users = [], patients = [] }) {
  * with no local projection. `treatmentRows` are Staff/Dentist/Owner Treatments; `myTreatmentRows` are the signed-in
  * Patient's own completed safe subset (GET /api/treatments/mine).
  */
-export function buildServerProjection({ rows = [], visitRows = [], queueRows = [], treatmentRows = [], myTreatmentRows = [], directory = [], session = null, users = [], patients = [] }) {
+export function buildServerProjection({ rows = [], visitRows = [], queueRows = [], treatmentRows = [], myTreatmentRows = [], hmoRows = [], myHmoRows = [], claimDecisionRows = [], directory = [], session = null, users = [], patients = [] }) {
   const keyFor = patientKeyResolver({ session, users, patients })
   const appointments = rows.map(row => mapAppointment(row, keyFor))
   const visits = visitRows.map(row => mapVisit(row, keyFor))
@@ -44,6 +45,16 @@ export function buildServerProjection({ rows = [], visitRows = [], queueRows = [
     ...treatmentRows.map(row => mapTreatment(row, keyFor)),
     ...(session?.role === 'patient' ? myTreatmentRows.map(row => mapPatientTreatment(row, session.patientId)) : []),
   ]
+  // M12: server HMO cases (Staff/Dentist/Owner projection, or the Patient's own safe subset) and pending claim decisions.
+  const hmo = [
+    ...hmoRows.map(row => mapHmoCase(row, keyFor)),
+    ...(session?.role === 'patient' ? myHmoRows.map(row => mapPatientHmoCase(row, session.patientId)) : []),
+  ]
+  const claimDecisions = claimDecisionRows.map(row => ({
+    visitId: row.visit?.id ?? null, clinicDate: row.visit?.clinic_date ?? null, visitStatus: row.visit?.status ?? null,
+    patientId: keyFor(row.patient?.id), patientPublicId: row.patient?.id ?? null, patientName: row.patient?.name ?? '', patientCode: row.patient?.code ?? '',
+    branchId: row.branch?.id ?? null, branchName: row.branch?.name ?? '', appointmentCode: row.appointment?.code ?? null,
+  }))
   const readModel = new Map()
   const addPatient = (publicId, fields) => {
     if (!publicId || keyFor(publicId) !== publicId) return
@@ -56,9 +67,9 @@ export function buildServerProjection({ rows = [], visitRows = [], queueRows = [
       phone: fields.phone ?? previous.phone ?? '', dob: fields.dob ?? previous.dob ?? '',
     })
   }
-  for (const row of [...rows, ...visitRows, ...queueRows, ...treatmentRows]) addPatient(row.patient?.id, { patientCode: row.patient?.code, name: row.patient?.name })
+  for (const row of [...rows, ...visitRows, ...queueRows, ...treatmentRows, ...hmoRows, ...claimDecisionRows]) addPatient(row.patient?.id, { patientCode: row.patient?.code, name: row.patient?.name })
   for (const patient of directory) addPatient(patient.id, patient)
-  return { appointments, visits, queue, treatments, readModelPatients: [...readModel.values()], keyFor }
+  return { appointments, visits, queue, treatments, hmo, claimDecisions, readModelPatients: [...readModel.values()], keyFor }
 }
 
 /** The server Patient public id for a UI Patient key (the reverse of patientKeyResolver), or null for legacy-only Patients. */
@@ -97,7 +108,9 @@ export function classifyLegacy({ treatments = [], invoices = [], prescriptions =
   const flag = rows => flagLegacy(rows, 'appointmentId', legacyTreatmentIds)
   return {
     treatments: flaggedTreatments,
-    invoices: flag(invoices), prescriptions: flag(prescriptions), followups: flag(followups), hmo: flag(hmo), conversations: flag(conversations),
+    invoices: flag(invoices), prescriptions: flag(prescriptions), followups: flag(followups), conversations: flag(conversations),
+    // M12: every browser HMO case is read-only pre-server history — never live, never part of the financial gate.
+    hmo: hmo.map(h => ({ ...h, server: false, legacy: true, legacyAppointment: true, preServer: true })),
     inquiries: flagLegacy(inquiries, 'bookedAppointmentId'),
   }
 }

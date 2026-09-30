@@ -9,7 +9,7 @@ import { withServerAppointments } from './support/server-appointments.js'
 import { setClockSource } from '../src/clock.js'
 
 const require=createRequire(import.meta.url)
-const files=['data.js','clock.js','contracts.js','safeguards.js','phase3-contracts.js','workflow.js','hmo-presentation.js','patient-ui.jsx','patient-view.js','pages/Scheduling.jsx','pages/FinanceCommunication.jsx','pages/PatientCare.jsx','pages/PatientMe.jsx']
+const files=['data.js','clock.js','contracts.js','safeguards.js','phase3-contracts.js','workflow.js','hmo-presentation.js','hmo-api.js','patient-ui.jsx','patient-view.js','pages/Scheduling.jsx','pages/FinanceCommunication.jsx','pages/PatientCare.jsx','pages/PatientMe.jsx']
 const bundle=await build({stdin:{contents:files.map(file=>`export * from './src/${file}';`).join('\n'),resolveDir:process.cwd()},bundle:true,write:false,platform:'node',format:'esm',plugins:[{name:'shared-react',setup(build){build.onResolve({filter:/^react$/},()=>({path:pathToFileURL(require.resolve('react')).href,external:true}))}}]})
 const m=await import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].text).toString('base64')}`)
 m.setClockSource(()=>new Date('2026-09-19T02:08:00Z'))
@@ -29,11 +29,19 @@ function fixture() {
 const ok=result=>{assert.equal(result.ok,true,result.message);return result.record}
 const render=(Component,props)=>renderToString(React.createElement(Component,props))
 
-test('live HMO worklist uses scoped cases and detail reveals the three module sections',()=>{
+// M12: HMO cases come from the server. `serverCase` builds a GET /api/hmo-cases row; `withCases` puts the mapped server
+// projection into the store exactly as src/store.jsx does.
+const serverCase=(fields={})=>({id:'01jhmo0000000000000000000a',status:'Missing Requirements',revision:1,submission_cycle:0,provider_name:'Insurer One',member_number:'M-000123',
+  visit:{id:'01jvisit000000000000000000a',clinic_date:'2026-09-19',status:'Checked In'},patient:{id:'p1',code:'PAT-0001',name:'Maria Santos'},branch:{id:'b1',name:'Branch A'},
+  dentist:{id:'d1',name:'Miguel Reyes'},appointment:null,submitted_at:null,follow_up_due_at:null,escalated_at:null,final_at:null,approved_amount:null,created_at:'2026-09-19T10:00:00+08:00',
+  requirements:[{rule:'hmo-card',label:'HMO Card',state:'Missing'},{rule:'valid-id',label:'Valid ID',state:'Missing'},{rule:'treatment-request',label:'Dentist treatment request',state:'Missing'}],
+  events:[{kind:'created',submission_cycle:0,from_status:null,to_status:'Missing Requirements',occurred_at:'2026-09-19T10:00:00+08:00',actor:{role:'staff',name:'Alyssa Cruz'}}],...fields})
+const withCases=(f,rows,patient=false)=>m.normalizeClinicState({...f.state,hmo:rows.map(r=>patient?m.mapPatientHmoCase(r,'p1'):m.mapHmoCase(r)),claimDecisions:[]})
+
+test('live HMO worklist uses server cases and detail reveals the case sections',()=>{
   const f=fixture()
-  const appointment=f.flow.book({patientId:'p1',branchId:'b1',dentistId:'d1',serviceId:'svc1',date:'2026-09-19',start:'11:00'})
-  const h=ok(f.actions.createHmoCase({appointmentId:appointment.id}))
-  const store={state:f.state,session:f.session,actions:f.actions,toast:()=>{}}
+  const state=withCases(f,[serverCase()])
+  const store={state,session:f.session,actions:f.actions,toast:()=>{}}
   const list=render(m.HmoPage,{role:'staff',store})
   assert.match(list,/HMO Management/)
   assert.match(list,/All Cases/);assert.match(list,/Needs Action/);assert.match(list,/Follow-Ups/)
@@ -42,35 +50,30 @@ test('live HMO worklist uses scoped cases and detail reveals the three module se
   assert.match(list,/aria-pressed="true"[^>]*>All Cases<span aria-hidden="true">1<\/span>/)
   assert.match(list,/class="hmo-case-row/);assert.match(list,/Maria Santos/)
   assert.doesNotMatch(list,/aria-label="View case for/,'row keeps its visible text as the accessible name')
-  assert.doesNotMatch(list,/John Dela Cruz/)
-  assert.doesNotMatch(list,/Case Timeline/)
-  const detail=render(m.HmoPage,{role:'staff',store,context:{hmoCaseId:h.id}})
-  for(const section of ['Patient','HMO Provider','Verification','Request Status','Follow-Up','Case Timeline'])assert.ok(detail.includes(section))
-  assert.match(detail,/HMO Card/);assert.match(detail,/Missing Requirements/)
-  assert.equal((detail.match(/>HMO Card</g)||[]).length,1,'requirement name renders once in the checklist')
-  assert.match(detail,/Validate Locally/);assert.match(detail,/aria-describedby="[^"]*-req-/)
+  assert.match(list,/Claim decisions needed/);assert.match(list,/Patient HMO membership/)
+  assert.doesNotMatch(list,/Case history/)
+  const detail=render(m.HmoPage,{role:'staff',store,context:{hmoCaseId:'01jhmo0000000000000000000a'}})
+  for(const section of ['Visit','HMO Provider','Requirements','Request status','Follow-Up','Case history'])assert.ok(detail.includes(section),section)
+  assert.match(detail,/Missing Requirements/);assert.match(detail,/Insurer One/)
+  assert.equal((detail.match(/<b>HMO Card<\/b>/g)||[]).length,1,'requirement name renders once in the checklist')
+  assert.match(detail,/Check (<!-- -->)?HMO Card/);assert.match(detail,/Withdraw \(self-pay\)/)
   assert.match(detail,/<h2 tabindex="-1">Maria Santos<\/h2>/)
-  assert.doesNotMatch(detail,/Request submitted|Provider Approved response recorded/)
-  assert.doesNotMatch(detail,/Last provider response/,'no response is fabricated before one is recorded')
+  assert.doesNotMatch(detail,/Provider response:/,'no response is fabricated before one is recorded')
 })
 
-test('a Returned case corrected to Ready keeps Returned as the last provider response',()=>{
+test('a Returned case corrected to Ready keeps Returned as the last provider response and cannot be withdrawn',()=>{
   const f=fixture()
-  const appointment=f.flow.book({patientId:'p1',branchId:'b1',dentistId:'d1',serviceId:'svc1',date:'2026-09-19',start:'11:00'})
-  const h=ok(f.actions.createHmoCase({appointmentId:appointment.id}))
-  const validate=ruleId=>ok(f.actions.provideHmoRequirement(h.id,ruleId,{fileName:`${ruleId}.pdf`}))
-  for(const rule of m.HMO_REQUIREMENT_RULES)validate(rule.id)
-  const submitted=ok(f.actions.submitHmoCase(h.id,{commandId:'submit-1',method:'Portal',note:'Submitted externally'}))
-  ok(f.actions.recordHmoOutcome(h.id,{commandId:'response-1',caseId:h.id,submissionCycle:submitted.submissionCycle,outcome:'Returned',method:'Email',note:'Provider returned the ID',requirementIds:['valid-id']}))
-  assert.equal(m.getHmoAttention(f.state.hmo.find(x=>x.id===h.id)).label,'Returned by provider — correction needed')
-  validate('valid-id')
-  const corrected=f.state.hmo.find(x=>x.id===h.id)
-  assert.equal(corrected.status,'Ready for Submission')
-  assert.equal(m.latestProviderResponse(corrected).outcome,'Returned')
-  const detail=render(m.HmoPage,{role:'staff',store:{state:f.state,session:f.session,actions:f.actions,toast:()=>{}},context:{hmoCaseId:h.id}})
+  const row=serverCase({status:'Ready for Submission',revision:6,submission_cycle:1,submitted_at:'2026-09-19T08:00:00+08:00',
+    requirements:[{rule:'hmo-card',label:'HMO Card',state:'Validated'},{rule:'valid-id',label:'Valid ID',state:'Validated'},{rule:'treatment-request',label:'Dentist treatment request',state:'Validated'}],
+    events:[{kind:'submission',submission_cycle:1,to_status:'Pending',method:'Portal',occurred_at:'2026-09-19T08:00:00+08:00',actor:{name:'Alyssa Cruz'}},
+      {kind:'response',submission_cycle:1,to_status:'Returned',outcome:'Returned',method:'Email',note:'Provider returned the ID',rule_keys:['valid-id'],occurred_at:'2026-09-19T09:00:00+08:00',actor:{name:'Alyssa Cruz'}}]})
+  const mapped=m.mapHmoCase(row)
+  assert.equal(m.latestProviderResponse(mapped).outcome,'Returned')
+  const detail=render(m.HmoPage,{role:'staff',store:{state:withCases(f,[row]),session:f.session,actions:f.actions,toast:()=>{}},context:{hmoCaseId:row.id}})
   assert.match(detail,/Current status: <b>Ready for Submission<\/b>/)
-  assert.match(detail,/Last provider response: <b>Returned<\/b>/)
-  assert.doesNotMatch(detail,/Outcome: /,'current workflow status is never presented as a provider outcome')
+  assert.match(detail,/Provider response: (<!-- -->)?Returned/)
+  assert.match(detail,/Record Resubmission/)
+  assert.doesNotMatch(detail,/Withdraw \(self-pay\)/,'withdrawal is only possible before the first submission')
   assert.equal(m.latestProviderResponse({status:'Approved',providerOutcome:'Approved'}),null,'legacy status alone is not response history')
 })
 
@@ -92,48 +95,49 @@ test('HMO attention and timeline derive from case state and dated events',()=>{
   assert.equal(returned.label,'Returned by provider — correction needed');assert.equal(returned.needsAction,true)
 })
 
-test('Patient HMO hides operational data while Owner summary counts visible cases',()=>{
+test('Patient HMO shows the server safe subset while Owner oversight is read-only',()=>{
   const f=fixture()
-  const appointment=f.flow.book({patientId:'p1',branchId:'b1',dentistId:'d1',serviceId:'svc1',date:'2026-09-19',start:'11:00'})
-  const h=ok(f.actions.createHmoCase({appointmentId:appointment.id}))
+  const patientRow={id:'01jhmo0000000000000000000a',status:'Missing Requirements',provider_name:'Insurer One',member_number:'••••0123',visit_date:'2026-09-19',appointment:null,branch:{name:'Branch A'},
+    requirements:[{rule:'hmo-card',label:'HMO Card',state:'Missing'},{rule:'valid-id',label:'Valid ID',state:'Missing'},{rule:'treatment-request',label:'Dentist treatment request',state:'Missing'}],
+    submitted_at:null,final_at:null,approved_amount:null}
   f.role('patient')
-  const patient=render(m.HmoPage,{role:'patient',store:{state:f.state,session:f.session,actions:f.actions,toast:()=>{}}})
+  const patientState=withCases(f,[patientRow],true)
+  const patient=render(m.HmoPage,{role:'patient',store:{state:patientState,session:f.session,actions:f.actions,toast:()=>{}}})
   assert.match(patient,/HMO Coverage/);assert.match(patient,/Action required/)
   // Only Patient-provided documents are Patient actions; the clinic-prepared Dentist request is not.
-  assert.match(patient,/Missing: (<!-- -->)?HMO Card, Valid ID</)
-  assert.doesNotMatch(patient,/Missing: (<!-- -->)?[^<]*Dentist treatment request/)
+  assert.match(patient,/Bring to the clinic: (<!-- -->)?HMO Card, Valid ID</)
+  assert.doesNotMatch(patient,/Bring to the clinic: (<!-- -->)?[^<]*Dentist treatment request/)
   assert.match(patient,/The clinic prepares this document/)
-  const request=m.hmoCaseView(f.state.hmo.find(x=>x.id===h.id)).requirements.find(r=>r.ruleId==='treatment-request')
+  assert.match(patient,/••••0123/)
+  assert.doesNotMatch(patient,/type="file"|Record Document Metadata|Record Contact Attempt|Escalate Case|Case history|Internal tracking note|M-000123/)
+  const request=m.hmoCaseView(patientState.hmo[0]).requirements.find(r=>r.ruleId==='treatment-request')
   assert.equal(request.clinicSide,true);assert.equal(request.needsAction,false)
-  assert.match(m.patientAttention(f.state,f.session).find(i=>i.kind==='hmo').detail,/2 documents to provide/)
-  assert.doesNotMatch(patient,/Record Contact Attempt|Escalate Case|Case Timeline|Internal tracking note|John Dela Cruz/)
+  assert.match(m.patientAttention(patientState,f.session).find(i=>i.kind==='hmo').detail,/2 documents to provide/)
   f.role('owner')
-  const owner=render(m.HmoPage,{role:'owner',store:{state:f.state,session:f.session,actions:f.actions,toast:()=>{}}})
-  assert.match(owner,/Cases requiring attention/);assert.match(owner,/Maria Santos/)
-  assert.doesNotMatch(owner,/Record Contact Attempt|Record Provider Response|Prepare HMO Case/)
-  assert.equal(f.state.hmo.find(x=>x.id===h.id)?.status,'Missing Requirements')
+  const owner=render(m.HmoPage,{role:'owner',store:{state:withCases(f,[serverCase()]),session:f.session,actions:f.actions,toast:()=>{}}})
+  assert.match(owner,/Needs Attention/);assert.match(owner,/Maria Santos/)
+  assert.doesNotMatch(owner,/Record Contact Attempt|Record Provider Response|Open HMO case|Proceed self-pay|Patient HMO membership|Claim decisions needed|Check (<!-- -->)?HMO Card/)
 })
 
 test('Owner reaches approved and other cases through a read-only All Cases view',()=>{
   const f=fixture()
-  const first=f.flow.book({patientId:'p1',branchId:'b1',dentistId:'d1',serviceId:'svc1',date:'2026-09-19',start:'11:00'})
-  const second=f.flow.book({patientId:'p1',branchId:'b1',dentistId:'d1',serviceId:'svc1',date:'2026-09-19',start:'13:00'})
-  const approved=ok(f.actions.createHmoCase({appointmentId:first.id})),missing=ok(f.actions.createHmoCase({appointmentId:second.id}))
-  for(const rule of m.HMO_REQUIREMENT_RULES)ok(f.actions.provideHmoRequirement(approved.id,rule.id,{fileName:`${rule.id}.pdf`}))
-  const submitted=ok(f.actions.submitHmoCase(approved.id,{commandId:'owner-submit',method:'Portal',note:'Submitted externally'}))
-  ok(f.actions.recordHmoOutcome(approved.id,{commandId:'owner-response',caseId:approved.id,submissionCycle:submitted.submissionCycle,outcome:'Approved',method:'Phone',note:'Approved by provider'}))
+  const approved=serverCase({id:'01jhmo0000000000000000000b',status:'Approved',revision:7,submission_cycle:1,submitted_at:'2026-09-19T08:00:00+08:00',final_at:'2026-09-19T09:30:00+08:00',approved_amount:'1200.00',
+    requirements:[{rule:'hmo-card',label:'HMO Card',state:'Validated'},{rule:'valid-id',label:'Valid ID',state:'Validated'},{rule:'treatment-request',label:'Dentist treatment request',state:'Validated'}],
+    events:[{kind:'response',submission_cycle:1,to_status:'Approved',outcome:'Approved',method:'Phone',note:'Approved by provider',approved_amount:'1200.00',occurred_at:'2026-09-19T09:30:00+08:00',actor:{name:'Alyssa Cruz'}}]})
+  const missing=serverCase()
   f.role('owner')
-  const store={state:f.state,session:f.session,actions:f.actions,toast:()=>{}}
+  const state=withCases(f,[approved,missing])
+  const store={state,session:f.session,actions:f.actions,toast:()=>{}}
   const owner=render(m.HmoPage,{role:'owner',store})
   assert.match(owner,/<span>Approved<\/span><b>1<\/b>/,'summary counts the non-attention approved case')
   assert.match(owner,/aria-pressed="true"[^>]*>Needs Attention</);assert.match(owner,/>All Cases<span aria-hidden="true">2<\/span>/)
   assert.equal((owner.match(/class="hmo-case-row/g)||[]).length,1,'attention view lists only the case needing action')
-  const visible=m.visibleHmo(f.state,f.session)
+  const visible=m.visibleHmo(state,f.session)
   assert.deepEqual(m.hmoCasesForView(visible,'action').map(h=>h.id),[missing.id])
   assert.deepEqual(m.hmoCasesForView(visible,'all').map(h=>h.id).sort(),[approved.id,missing.id].sort())
   const detail=render(m.HmoPage,{role:'owner',store,context:{hmoCaseId:approved.id}})
-  assert.match(detail,/Current status: <b>Provider Approved<\/b>/);assert.match(detail,/Last provider response: <b>Approved<\/b>/);assert.match(detail,/Case Timeline/)
-  assert.doesNotMatch(detail,/Prepare HMO Case|Check overdue cases|Validate Locally|Record External Submission|Record Resubmission|Record Provider Response|Record Contact Attempt|Escalate Case/)
+  assert.match(detail,/Current status: <b>Provider Approved<\/b>/);assert.match(detail,/Provider response: (<!-- -->)?Approved/);assert.match(detail,/Approved amount: <b>₱1,200.00<\/b>/);assert.match(detail,/Case history/)
+  assert.doesNotMatch(detail,/Record Provider Response|Withdraw/)
 })
 
 test('HMO Coordinator is a Staff title with branch scoped HMO permission',()=>{

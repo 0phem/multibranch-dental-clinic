@@ -18,6 +18,7 @@ import * as appointmentsApi from './appointments-api.js'
 import * as visitsApi from './visits-api.js'
 import * as queueApi from './queue-api.js'
 import * as treatmentsApi from './treatments-api.js'
+import * as hmoApi from './hmo-api.js'
 import { buildServerProjection, classifyLegacy, reanchorLocalEvidence } from './appointment-projection.js'
 import { createAppointmentFlow } from './appointment-flow.js'
 
@@ -61,7 +62,7 @@ const fullName=person=>[person?.firstName,person?.lastName].map(cleanNamePart).f
 // render-smoke.mjs renders ClinicProvider via renderToString, which runs render-phase code only — a real
 // fetch-on-mount effect never executes under SSR, so the script needs a synchronous alternative rather than
 // silently seeing empty reference data.
-export function ClinicProvider({ children, initialReferenceData, initialServerAppointments, initialServerVisits, initialServerQueue, initialMyQueue, initialServerTreatments, initialMyTreatments }) {
+export function ClinicProvider({ children, initialReferenceData, initialServerAppointments, initialServerVisits, initialServerQueue, initialMyQueue, initialServerTreatments, initialMyTreatments, initialServerHmo, initialMyHmo, initialClaimDecisions }) {
   const recoveryBlocked=useRef(false)
   const [persistenceErrors,setPersistenceErrors]=useState({})
   const reportPersistence=useCallback((key,message)=>setPersistenceErrors(previous=>{
@@ -109,7 +110,19 @@ export function ClinicProvider({ children, initialReferenceData, initialServerAp
   const [myTreatmentRows,setMyTreatmentRows]=useState(initialMyTreatments??[])
   const [treatments,setTreatments]=usePersist('treatments',INITIAL_TREATMENTS,reportPersistence,recoveryBlocked)
   const [invoices,setInvoices]=usePersist('invoices',INITIAL_INVOICES,reportPersistence,recoveryBlocked)
-  const [hmo,setHmo]=usePersist('hmo',INITIAL_HMO,reportPersistence,recoveryBlocked)
+  // M12 cutover: HMO memberships and cases are server-authoritative. `serverHmoRows` (Staff/Dentist/Owner: GET
+  // /api/hmo-cases), `myHmoRows` (a Patient's own safe subset: /api/hmo-cases/mine) and `claimDecisionRows` (Visits whose
+  // Patient has an active membership but no case) are held in memory only. The `dentalops-v4-hmo` browser collection is
+  // read once as read-only HISTORY: never uploaded, never cleared, never written, and never part of the financial gate.
+  const [serverHmoRows,setServerHmoRows]=useState(initialServerHmo??[])
+  const [myHmoRows,setMyHmoRows]=useState(initialMyHmo??[])
+  const [claimDecisionRows,setClaimDecisionRows]=useState(initialClaimDecisions??[])
+  const hmo=useMemo(()=>{
+    const seed=rebaseDemoRecords(INITIAL_HMO)
+    if(typeof localStorage==='undefined')return seed
+    const result=readCollection(localStorage,`${STORAGE_PREFIX}hmo`,seed)
+    return !result.blocked&&Array.isArray(result.value)?result.value:seed
+  },[])
   const [inquiries,setInquiries]=usePersist('inquiries',INITIAL_INQUIRIES,reportPersistence,recoveryBlocked)
   const [conversations,setConversations]=usePersist('conversations',INITIAL_CONVERSATIONS,reportPersistence,recoveryBlocked)
   const [notifications,setNotifications]=usePersist('notifications',INITIAL_NOTIFICATIONS,reportPersistence,recoveryBlocked)
@@ -128,9 +141,9 @@ export function ClinicProvider({ children, initialReferenceData, initialServerAp
   const stateRef=useRef(null)
   const actionsRef=useRef(null)
   const [clock,setClock]=useState(clinicNow)
-  useEffect(()=>{const timer=setInterval(()=>{setClock(clinicNow());if(sessionRef.current?.role==='staff'){actionsRef.current?.evaluateHmoTimers();actionsRef.current?.evaluateOperationalReminders()}},15000);return ()=>clearInterval(timer)},[])
+  useEffect(()=>{const timer=setInterval(()=>{setClock(clinicNow());if(sessionRef.current?.role==='staff'){actionsRef.current?.evaluateOperationalReminders()}},15000);return ()=>clearInterval(timer)},[])
   // Server-provided identity fields (Patient public_id, Staff branch scopes from /api/me) survive local re-derivation.
-  const setSession=role=>{const derived=role?sessionForRole(role,stateRef.current):null;const next=derived&&sessionRef.current?.role===role?{...derived,serverUserId:sessionRef.current.serverUserId??null,patientPublicId:sessionRef.current.patientPublicId??null,branchScopes:sessionRef.current.branchScopes}:derived;sessionRef.current=next;setSessionState(next);if(next?.role==='staff'){actionsRef.current?.evaluateHmoTimers();actionsRef.current?.evaluateOperationalReminders()}return next}
+  const setSession=role=>{const derived=role?sessionForRole(role,stateRef.current):null;const next=derived&&sessionRef.current?.role===role?{...derived,serverUserId:sessionRef.current.serverUserId??null,patientPublicId:sessionRef.current.patientPublicId??null,branchScopes:sessionRef.current.branchScopes}:derived;sessionRef.current=next;setSessionState(next);if(next?.role==='staff'){actionsRef.current?.evaluateOperationalReminders()}return next}
 
   // Phase 2A reference-data bootstrap (plan section H/J). Fires once a session exists, role-aware (Patient
   // never triggers a /api/staff call — see fetchReferenceData). A logged-out session clears back to idle so
@@ -203,7 +216,7 @@ export function ClinicProvider({ children, initialReferenceData, initialServerAp
     const name=role==='Dentist'&&base?`Dr. ${base}`:base||u.username
     return {...u,name,email:p?.email||'',phone:p?.phone||'',firstName:p?.firstName||'',lastName:p?.lastName||''}
   })
-  const serverProjection=buildServerProjection({rows:serverAppointmentRows,visitRows:serverVisitRows,queueRows:serverQueueRows,treatmentRows:serverTreatmentRows,myTreatmentRows,directory:directoryPatients,session,users,patients})
+  const serverProjection=buildServerProjection({rows:serverAppointmentRows,visitRows:serverVisitRows,queueRows:serverQueueRows,treatmentRows:serverTreatmentRows,myTreatmentRows,hmoRows:serverHmoRows,myHmoRows,claimDecisionRows,directory:directoryPatients,session,users,patients})
   // D5/M8/M9: records without a server Visit (pre-cutover appointments, browser-only encounters) carry
   // `legacyAppointment` so live decisions and KPIs can exclude them. The live queue is the server queue only.
   const legacy=classifyLegacy({treatments,invoices,prescriptions,followups,hmo,conversations,inquiries})
@@ -211,7 +224,7 @@ export function ClinicProvider({ children, initialReferenceData, initialServerAp
   const state={...normalizeClinicState({
     persons,services,branchServices,dentistServiceAssignments,branches,
     dentists:projectedDentists,staff:projectedStaff,patients:[...projectedPatients,...serverProjection.readModelPatients],appointments:serverProjection.appointments,
-    visits:serverProjection.visits,queue:serverProjection.queue,myQueue,treatments:[...serverProjection.treatments,...legacy.treatments],invoices:legacy.invoices,hmo:legacy.hmo,inquiries:legacy.inquiries,
+    visits:serverProjection.visits,queue:serverProjection.queue,myQueue,treatments:[...serverProjection.treatments,...legacy.treatments],invoices:legacy.invoices,hmo:[...serverProjection.hmo,...legacy.hmo],claimDecisions:serverProjection.claimDecisions,inquiries:legacy.inquiries,
     conversations:legacy.conversations,notifications,prescriptions:legacy.prescriptions,followups:legacy.followups,users:projectedUsers,
     automations,workflowLog,campaigns,loyalty,audit,bookingDrafts,clock,today:clock.date,
     // Whether server Visits are part of this session's projection (Staff/Dentist/Owner). Derived, never persisted.
@@ -240,14 +253,13 @@ export function ClinicProvider({ children, initialReferenceData, initialServerAp
     setPatients(persistableCollection('patients',migrate(patients,state.patients,['preferredBranchId'])))
     setDentists(persistableCollection('dentists',migrate(dentists,state.dentists,['branchIds'])))
     setStaff(persistableCollection('staff',migrate(staff,state.staff,['branchId'])))
-    setHmo(persistableCollection('hmo',state.hmo))
     setConversations(persistableCollection('conversations',state.conversations))
     setNotifications(state.notifications)
     setInquiries(persistableCollection('inquiries',state.inquiries))
   },[refDataStatus])
   const setters={
     setPersons,setServices,setBranchServices,setBranches,setDentists,setStaff,setPatients,
-    setTreatments,setInvoices,setHmo,setInquiries,setConversations,setNotifications,
+    setTreatments,setInvoices,setInquiries,setConversations,setNotifications,
     setPrescriptions,setFollowups,setUsers,setAutomations,setWorkflowLog,setCampaigns,setLoyalty,setAudit,
     setBookingDrafts
   }
@@ -267,7 +279,8 @@ export function ClinicProvider({ children, initialReferenceData, initialServerAp
     // Appointments, Visits, the queue and Treatments are server-authoritative: no local command may write them (the
     // projection is refreshed from the server instead), so those keys are never applied or persisted. Pre-server treatment
     // history is read-only, so `treatments` is dropped as well.
-    const {appointments:_ignored,visits:_ignoredVisits,queue:_ignoredQueue,myQueue:_ignoredMyQueue,treatments:_ignoredTreatments,...patch}=rawPatch
+    // M12: HMO cases are server-authoritative too (and browser HMO history is read-only), so `hmo` is dropped as well.
+    const {appointments:_ignored,visits:_ignoredVisits,queue:_ignoredQueue,myQueue:_ignoredMyQueue,treatments:_ignoredTreatments,hmo:_ignoredHmo,claimDecisions:_ignoredClaimDecisions,...patch}=rawPatch
     // Advance immediately so repeated clicks before React renders see the commit.
     stateRef.current=normalizeClinicState({...stateRef.current,...patch})
     for(const [key,value] of Object.entries(patch))setters[`set${key[0].toUpperCase()}${key.slice(1)}`]?.(persistableCollection(key,value))
@@ -296,10 +309,16 @@ export function ClinicProvider({ children, initialReferenceData, initialServerAp
   // ---- M6 server appointments ------------------------------------------------------------------------------------
   // Applies fresh server rows to the in-memory projection immediately (so a local adapter command that follows a server
   // command sees the new status before React re-renders) and to React state.
-  const applyServerRows=(rows,directory=directoryRef.current,visitRows=visitRowsRef.current,queueRows=queueRowsRef.current,mine=myQueueRef.current,treatmentRows=treatmentRowsRef.current,myTreatments=myTreatmentRowsRef.current)=>{
+  const applyServerRows=(rows,directory=directoryRef.current,visitRows=visitRowsRef.current,queueRows=queueRowsRef.current,mine=myQueueRef.current,treatmentRows=treatmentRowsRef.current,myTreatments=myTreatmentRowsRef.current,hmoRows=hmoRowsRef.current,myHmo=myHmoRowsRef.current,decisions=claimDecisionRowsRef.current)=>{
     const current=stateRef.current
-    const projection=buildServerProjection({rows,visitRows,queueRows,treatmentRows,myTreatmentRows:myTreatments,directory,session:sessionRef.current,users:current.users,patients:current.patients.filter(p=>!p.serverProjection)})
-    stateRef.current=normalizeClinicState({...current,appointments:projection.appointments,visits:projection.visits,queue:projection.queue,myQueue:mine,treatments:[...projection.treatments,...current.treatments.filter(t=>!t.server)],patients:[...current.patients.filter(p=>!p.serverProjection),...projection.readModelPatients]})
+    const projection=buildServerProjection({rows,visitRows,queueRows,treatmentRows,myTreatmentRows:myTreatments,hmoRows,myHmoRows:myHmo,claimDecisionRows:decisions,directory,session:sessionRef.current,users:current.users,patients:current.patients.filter(p=>!p.serverProjection)})
+    stateRef.current=normalizeClinicState({...current,appointments:projection.appointments,visits:projection.visits,queue:projection.queue,myQueue:mine,treatments:[...projection.treatments,...current.treatments.filter(t=>!t.server)],hmo:[...projection.hmo,...current.hmo.filter(h=>!h.server)],claimDecisions:projection.claimDecisions,patients:[...current.patients.filter(p=>!p.serverProjection),...projection.readModelPatients]})
+    hmoRowsRef.current=hmoRows
+    myHmoRowsRef.current=myHmo
+    claimDecisionRowsRef.current=decisions
+    setServerHmoRows(hmoRows)
+    setMyHmoRows(myHmo)
+    setClaimDecisionRows(decisions)
     rowsRef.current=rows
     visitRowsRef.current=visitRows
     queueRowsRef.current=queueRows
@@ -319,6 +338,9 @@ export function ClinicProvider({ children, initialReferenceData, initialServerAp
   const myQueueRef=useRef(myQueue)
   const treatmentRowsRef=useRef(serverTreatmentRows)
   const myTreatmentRowsRef=useRef(myTreatmentRows)
+  const hmoRowsRef=useRef(serverHmoRows)
+  const myHmoRowsRef=useRef(myHmoRows)
+  const claimDecisionRowsRef=useRef(claimDecisionRows)
   const directoryRef=useRef(directoryPatients)
   // Loads server appointments and — for Staff/Dentist/Owner — server Visits, today's queue and Treatments (there is no
   // Patient Visit API yet, D9); a Patient loads only their own current queue state and own completed Treatment subset.
@@ -329,17 +351,20 @@ export function ClinicProvider({ children, initialReferenceData, initialServerAp
     const role=sessionRef.current.role
     const operational=['staff','dentist','owner'].includes(role)
     const none=Promise.resolve({ok:true,rows:[],truncated:false,data:null})
-    const [result,visits,queue,mine,treated,myTreated]=await Promise.all([
+    const [result,visits,queue,mine,treated,myTreated,hmoCases,myHmo,decisions]=await Promise.all([
       appointmentsApi.loadAppointments(today),
       operational?visitsApi.loadVisits(today):none,
       operational?queueApi.loadQueue(today):none,
       role==='patient'?queueApi.loadMyQueue():none,
       operational?treatmentsApi.loadTreatments(today):none,
       role==='patient'?treatmentsApi.loadMyTreatments():none,
+      operational?hmoApi.loadHmoCases(today):none,
+      role==='patient'?hmoApi.loadMyHmoCases():none,
+      ['staff','owner'].includes(role)?hmoApi.loadClaimDecisions(today):none,
     ])
-    const failed=[result,visits,queue,mine,treated,myTreated].find(r=>!r.ok)
+    const failed=[result,visits,queue,mine,treated,myTreated,hmoCases,myHmo,decisions].find(r=>!r.ok)
     if(failed){setAppointmentsStatus('error');setAppointmentsError(failed.message);return failed}
-    applyServerRows(result.rows,directoryRef.current,visits.rows,queue.rows,mine.data??null,treated.rows,myTreated.rows)
+    applyServerRows(result.rows,directoryRef.current,visits.rows,queue.rows,mine.data??null,treated.rows,myTreated.rows,hmoCases.rows,myHmo.rows,decisions.rows)
     setAppointmentsTruncated(result.truncated||visits.truncated||treated.truncated)
     setAppointmentsError('')
     setAppointmentsStatus('ready')
@@ -367,10 +392,10 @@ export function ClinicProvider({ children, initialReferenceData, initialServerAp
 
   // Load server appointments after sign-in (once reference data is ready), and again when the window regains focus.
   useEffect(()=>{
-    if(initialServerAppointments||initialServerVisits||initialServerQueue||initialServerTreatments)return
+    if(initialServerAppointments||initialServerVisits||initialServerQueue||initialServerTreatments||initialServerHmo)return
     if(!session?.role){
-      rowsRef.current=[];visitRowsRef.current=[];queueRowsRef.current=[];myQueueRef.current=null;directoryRef.current=[];treatmentRowsRef.current=[];myTreatmentRowsRef.current=[]
-      setServerAppointmentRows([]);setServerVisitRows([]);setServerQueueRows([]);setMyQueue(null);setServerTreatmentRows([]);setMyTreatmentRows([]);setDirectoryPatients([]);setAppointmentsStatus('idle');setAppointmentsError('')
+      rowsRef.current=[];visitRowsRef.current=[];queueRowsRef.current=[];myQueueRef.current=null;directoryRef.current=[];treatmentRowsRef.current=[];myTreatmentRowsRef.current=[];hmoRowsRef.current=[];myHmoRowsRef.current=[];claimDecisionRowsRef.current=[]
+      setServerAppointmentRows([]);setServerVisitRows([]);setServerQueueRows([]);setMyQueue(null);setServerTreatmentRows([]);setMyTreatmentRows([]);setServerHmoRows([]);setMyHmoRows([]);setClaimDecisionRows([]);setDirectoryPatients([]);setAppointmentsStatus('idle');setAppointmentsError('')
       return
     }
     if(refDataStatus!=='ready')return
@@ -403,7 +428,7 @@ export function ClinicProvider({ children, initialReferenceData, initialServerAp
     actionsRef.current?.reconcileTreatmentHandoffs()
   },[appointmentsStatus,serverTreatmentRows,serverVisitRows,session?.role])
 
-  const value=useMemo(()=>({state,setters,actions,appointmentFlow,appointmentsStatus,appointmentsError,appointmentsTruncated,directoryPatients,toast,log,workflow,toasts,session,setSession,adoptSession,persistenceErrors,refDataStatus,retryReferenceData}),[persons,services,branchServices,dentistServiceAssignments,branches,dentists,staff,patients,serverAppointmentRows,serverVisitRows,serverQueueRows,myQueue,serverTreatmentRows,myTreatmentRows,directoryPatients,appointmentsStatus,appointmentsError,appointmentsTruncated,treatments,invoices,hmo,inquiries,conversations,notifications,prescriptions,followups,users,automations,workflowLog,campaigns,loyalty,audit,toasts,bookingDrafts,session,clock,persistenceErrors,refDataStatus])
+  const value=useMemo(()=>({state,setters,actions,appointmentFlow,appointmentsStatus,appointmentsError,appointmentsTruncated,directoryPatients,toast,log,workflow,toasts,session,setSession,adoptSession,persistenceErrors,refDataStatus,retryReferenceData}),[persons,services,branchServices,dentistServiceAssignments,branches,dentists,staff,patients,serverAppointmentRows,serverVisitRows,serverQueueRows,myQueue,serverTreatmentRows,myTreatmentRows,serverHmoRows,myHmoRows,claimDecisionRows,directoryPatients,appointmentsStatus,appointmentsError,appointmentsTruncated,treatments,invoices,inquiries,conversations,notifications,prescriptions,followups,users,automations,workflowLog,campaigns,loyalty,audit,toasts,bookingDrafts,session,clock,persistenceErrors,refDataStatus])
   return <ClinicContext.Provider value={value}>{children}</ClinicContext.Provider>
 }
 

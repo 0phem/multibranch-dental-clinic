@@ -126,7 +126,7 @@ test('server Treatments are an in-memory projection: never persisted, never writ
   assert.equal(projection.treatments[0].server, true)
   assert.equal(persistableCollection('treatments', projection.treatments).length, 0)
   const store = read('src/store.jsx')
-  assert.match(store, /treatments:_ignoredTreatments,\.\.\.patch\}=rawPatch/, 'commit() drops any local treatment patch')
+  assert.match(store, /treatments:_ignoredTreatments,hmo:_ignoredHmo,claimDecisions:_ignoredClaimDecisions,\.\.\.patch\}=rawPatch/, 'commit() drops any local treatment patch')
   assert.doesNotMatch(store, /localStorage\.removeItem/, 'the pre-server history key is never cleared')
   // A Patient projection only ever holds its own subset rows.
   const patientView = buildServerProjection({ treatmentRows: [treatmentRow()], myTreatmentRows: [], session: { role: 'patient', patientId: 'p1' } })
@@ -153,7 +153,7 @@ test('no browser Treatment authority remains', () => {
   assert.doesNotMatch(workflow, /saveTreatment|completeTreatment|uid\('t'\)|dentalHistory|state\.treatments=/)
   assert.doesNotMatch(read('src/phase2.js'), /export function procedureLines/)
   assert.doesNotMatch(read('src/appointment-flow.js'), /transitionVisit|start-treatment|preflight/)
-  for (const path of ['src/workflow.js', 'src/phase2.js', 'src/hmo.js', 'src/communication.js', 'src/loyalty.js', 'src/administration.js'])
+  for (const path of ['src/workflow.js', 'src/phase2.js', 'src/communication.js', 'src/loyalty.js', 'src/administration.js'])
     assert.doesNotMatch(read(path), /state\.treatments\s*=/, `${path} never writes treatments`)
 })
 

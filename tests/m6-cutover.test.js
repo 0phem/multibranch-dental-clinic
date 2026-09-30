@@ -162,8 +162,8 @@ test('old browser appointment data is not uploaded, read or cleared', () => {
   assert.equal('INITIAL_APPOINTMENTS' in data, false)
   assert.doesNotMatch(store, /localStorage\.removeItem/)
   // The only appointment/Visit writes are server commands: the store strips any local `appointments`/`visits` patch.
-  assert.match(store, /const \{appointments:_ignored,visits:_ignoredVisits,queue:_ignoredQueue,myQueue:_ignoredMyQueue,treatments:_ignoredTreatments,\.\.\.patch\}=rawPatch/)
-  for (const path of ['src/workflow.js', 'src/hmo.js', 'src/communication.js', 'src/phase2.js', 'src/booking-drafts.js'])
+  assert.match(store, /const \{appointments:_ignored,visits:_ignoredVisits,queue:_ignoredQueue,myQueue:_ignoredMyQueue,treatments:_ignoredTreatments,hmo:_ignoredHmo,claimDecisions:_ignoredClaimDecisions,\.\.\.patch\}=rawPatch/)
+  for (const path of ['src/workflow.js', 'src/communication.js', 'src/phase2.js', 'src/booking-drafts.js'])
     assert.doesNotMatch(read(path), /state\.appointments=/, `${path} never writes appointments`)
 })
 

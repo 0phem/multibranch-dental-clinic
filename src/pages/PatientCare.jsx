@@ -1,8 +1,9 @@
 import React, { useState } from 'react'
-import { Button, Empty, Field, Notice, PageHeader, Status } from '../components.jsx'
+import { Button, Empty, Notice, PageHeader, Status } from '../components.jsx'
 import { dateLabel } from '../logic.js'
 import { formatStamp, hmoCaseView, invoiceView, money, patientContext, patientHmo, patientInvoices, patientPrescriptions, prescriptionView, resolveTarget } from '../patient-view.js'
 import { DefinitionList, RecordCard } from '../patient-ui.jsx'
+import { formatAmount } from '../pricing-api.js'
 
 const NO_ACCOUNT=<Notice tone="warning" title="We couldn’t confirm your account">Reopen your workspace, or ask the clinic to check your account access.</Notice>
 
@@ -51,49 +52,44 @@ export function PatientBillingPage({ store, context }) {
 }
 
 // Patients may record document details only. The clinic checks them locally, which is not provider approval.
-function Requirement({ requirement:r, onProvide }) {
-  const [details,setDetails]=useState({fileName:''})
+// M12: requirement status only. Documents are brought to the clinic; nothing is uploaded or recorded in this app (M14).
+function Requirement({ requirement:r }) {
   return <li className={`pt-req ${r.needsAction?'needs-action':''}`.trim()}>
-    <div className="pt-req-head"><b>{r.label}</b><Status>{r.state}</Status>{r.returned&&<span className="pt-flag">Needs correction</span>}</div>
-    {r.needsAction&&<div className="pt-req-action">
-      <Field label="Select document (details only)"><input type="file" onChange={event=>{const file=event.target.files?.[0];setDetails(file?{fileName:file.name,size:file.size}:{fileName:''})}}/></Field>
-      <Button size="sm" onClick={()=>onProvide(r,details)}>Record Document Metadata</Button>
-      <p className="pt-hint">No file is uploaded or stored. The clinic checks the document details; this is not approval from your HMO.</p>
-    </div>}
-    {r.state==='Provided'&&<p className="pt-hint">Recorded. The clinic will check this document.</p>}
+    <div className="pt-req-head"><b>{r.label}</b><Status>{r.state==='Validated locally'?'Checked at the clinic':r.state}</Status>{r.returned&&<span className="pt-flag">Needs correction</span>}</div>
+    {r.needsAction&&<p className="pt-hint">Please bring this document to the clinic. The clinic checks it; that is not approval from your HMO.</p>}
     {r.clinicSide&&r.state==='Missing'&&<p className="pt-hint">The clinic prepares this document. Nothing is needed from you.</p>}
   </li>
 }
 
+// The Patient's own HMO cases from the clinic server (GET /api/hmo-cases/mine, identity from the session): status,
+// requirement states, dates, the final outcome and the approved amount when Approved. Read-only in this wave.
 export function PatientHmoPage({ store, context }) {
-  const { state, actions, toast }=store, session=store.session
+  const { state }=store, session=store.session
   if(!patientContext(state,session))return NO_ACCOUNT
   const target=resolveTarget(state,session,'hmo',context)
   const cases=patientHmo(state,session)
-  const provide=(caseId,requirement,details)=>{
-    const result=actions.provideHmoRequirement(caseId,requirement.ruleId,details)
-    toast(result.ok?'Document details recorded for the clinic to check.':result.message,result.ok?'success':'warning')
-  }
   return <div className="pt-page">
     <PageHeader kicker="Your coverage" title="HMO Coverage" text="The clinic tracks the documents for your HMO request and any response your provider sends back."/>
     <Notice tone="info">Checking your documents at the clinic is not approval from your HMO. Only a response from your provider counts as a provider decision.</Notice>
     <div className="pt-list">{cases.length?cases.map(h=>{
-      const v=hmoCaseView(h), branch=state.branches.find(b=>b.id===h.branchId)?.name
-      const service=h.treatment||state.services.find(s=>s.id===state.appointments.find(a=>a.id===h.appointmentId)?.serviceId)?.name||state.treatments.find(t=>t.id===h.treatmentId)?.procedure
+      const v=hmoCaseView(h)
       const missing=v.requirements.filter(r=>r.needsAction)
-      return <RecordCard key={h.id} id={`hmo-${h.id}`} highlight={target===h.id} title={v.provider} subtitle={branch?`Branch: ${branch}`:undefined} status={v.label}>
+      return <RecordCard key={h.id} id={`hmo-${h.id}`} highlight={target===h.id} title={v.provider} subtitle={h.branchName?`Branch: ${h.branchName}`:undefined} status={v.label}>
         <p className={`pt-stage-line ${v.escalated?'is-attention':''}`.trim()}>{v.stage}</p>
-        {missing.length?<Notice tone="warning"><b>Action required</b><br/>Missing: {missing.map(r=>r.label).join(', ')}</Notice>:<Notice>No action required right now.</Notice>}
+        {h.legacy&&<Notice>An earlier record kept for reference. It is not part of your current billing.</Notice>}
+        {missing.length?<Notice tone="warning"><b>Action required</b><br/>Bring to the clinic: {missing.map(r=>r.label).join(', ')}</Notice>:<Notice>No action required right now.</Notice>}
         <DefinitionList items={[
           {label:'Provider',value:v.provider},
-          {label:'Treatment / service',value:service||null},
+          {label:'Member ID',value:h.server?h.memberId:null},
+          {label:'Visit',value:h.clinicDate?`${dateLabel(h.clinicDate)}${h.appointmentCode?` • ${h.appointmentCode}`:''}`:null},
           {label:'Status',value:v.label},
           {label:'Documents checked at the clinic',value:v.total?`${v.checked} of ${v.total}`:null},
           {label:'Submission',value:v.submittedAt?`Recorded ${formatStamp(v.submittedAt)}`:'Not yet submitted'},
           {label:'Provider response',value:v.respondedAt?`Recorded ${formatStamp(v.respondedAt)}`:'None recorded yet'},
+          {label:'Approved amount',value:v.approvedAmount?formatAmount(v.approvedAmount):null},
           {label:'Clinic follow-up',value:v.escalated?'The clinic is following up':null},
         ]}/>
-        {v.requirements.length>0&&<><h4>Documents</h4><ul className="pt-reqs">{v.requirements.map(r=><Requirement key={`${h.id}:${r.id}`} requirement={r} onProvide={(requirement,details)=>provide(h.id,requirement,details)}/>)}</ul></>}
+        {v.requirements.length>0&&<><h4>Documents</h4><ul className="pt-reqs">{v.requirements.map(r=><Requirement key={`${h.id}:${r.id}`} requirement={r}/>)}</ul></>}
       </RecordCard>
     }):<Empty title="No HMO case" text="You have no HMO case with the clinic yet."/>}</div>
   </div>

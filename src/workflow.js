@@ -1,7 +1,6 @@
 import { administrationActions } from './administration.js'
 import { validSession, permitted, isRecord, completedEncounter } from './safeguards.js'
 import { communicationActions } from './communication.js'
-import { hmoActions, prepareHmoCase } from './hmo.js'
 import { loyaltyActions } from './loyalty.js'
 import { workflowContext, notificationEventKey, appendWorkflowEvent, appendNotification, notifyBranch } from './orchestration.js'
 import { phase2Actions, treatmentInvoiceItems, linkedTreatment, money } from './phase2.js'
@@ -135,7 +134,8 @@ export function createWorkflowActions({getState,commit,getSession,clock=clinicNo
 
   // ---- M5 downstream reconciliation (TEMPORARY transitional adapters; decision Q-T7) --------------------------------------
   // The clinical Treatment is server-authoritative (M5). A COMPLETED server Treatment is the durable fact the still-browser-
-  // local modules consume: M11 Draft invoice, M20 follow-up task, M19 prescription-required task and M12 HMO handoff.
+  // local modules consume: M11 Draft invoice, M20 follow-up task and M19 prescription-required task. (Since M12 the HMO case
+  // is server-authoritative and opened explicitly by Staff for the Visit; there is no browser HMO handoff.)
   // Every authorized Staff/Dentist browser in scope reconciles the missing local
   // projections from the server Treatments it loaded, keyed by the Treatment's public id (the deterministic source key),
   // so the result never depends on which browser completed the treatment. Idempotent: an existing projection for that
@@ -144,8 +144,7 @@ export function createWorkflowActions({getState,commit,getSession,clock=clinicNo
   // backend lands.
   // M18 boundary: this reconciliation creates NO notification of any kind (no in-app record, email, SMS, delivery status,
   // retry or schedule) — notification & reminder delivery belongs to M18. It only appends M23 workflow-log events
-  // (`log`, which never notifies). The M12 HMO adapter it calls is unchanged M12 prototype code: when it opens a case it
-  // still records M12's own in-app case notices, exactly as a manual HMO case does (see the M5 hardening report).
+  // (`log`, which never notifies).
   const reconcileTreatmentHandoffs=run(({state,session,now,event,notify})=>{
     if(!['staff','dentist'].includes(session.role))return {ok:true,unchanged:true}
     const log=(key,domain,type,result,t,extra={},status='Success')=>appendWorkflowEvent(state,session,now,key,domain,type,result,{...workflowContext(state,key),patientId:t.patientId,branchId:t.branchId,...extra},status)
@@ -173,12 +172,6 @@ export function createWorkflowActions({getState,commit,getSession,clock=clinicNo
       }
       // M19: a requested prescription becomes the Dentist's authorization task (the Dentist enters every medication).
       if(t.prescriptionRequired&&!state.prescriptions.some(rx=>rx.treatmentId===t.id))log(`rx:${t.id}`,'treatment→prescription','clinical.prescription.required','Dentist authorization required',t)
-      // M12: clinic-side HMO handoff for an insured Patient (never a provider decision).
-      const handoff=prepareHmoCase({state,session,now,event,notify},{treatmentId:t.id},{system:true})
-      if(!handoff.ok){
-        log(`hmo:handoff:${t.id}`,'treatment→hmo','hmo.handoff.needs_review',handoff.message,t,{entityType:'treatment',entityId:t.id,treatmentId:t.id},'Warning')
-        warnings.push(handoff.message)
-      }
       if(t.appointmentId)closeFollowup(state,t.appointmentId,'Completed')
       log(`treatment:${t.id}:${t.revision}`,'treatment→automation','clinical.treatment.completed',`${t.id} • Completed`,t)
     }
@@ -210,7 +203,7 @@ export function createWorkflowActions({getState,commit,getSession,clock=clinicNo
     event(`patient:${record.id}`,'patient','patient.record.created',record.patientCode,record.id,preferredBranchId)
     return {ok:true,record:patientProjection(record,personRecord)}
   })
-  const commands={...administrationActions(run),...phase2Actions(run),...hmoActions(run),...communicationActions(run),...loyaltyActions(run),...bookingDraftActions(run),recordAppointmentEvent,applyAppointmentCancellation,applyAppointmentNoShow,linkFollowupAppointment,reconcileTreatmentHandoffs,createPatientRecord}
+  const commands={...administrationActions(run),...phase2Actions(run),...communicationActions(run),...loyaltyActions(run),...bookingDraftActions(run),recordAppointmentEvent,applyAppointmentCancellation,applyAppointmentNoShow,linkFollowupAppointment,reconcileTreatmentHandoffs,createPatientRecord}
   const permissions={recordAppointmentEvent:'appointments',applyAppointmentCancellation:'appointments',applyAppointmentNoShow:'appointments',linkFollowupAppointment:'followups',createPatientRecord:'patient-demographics',reviewInvoice:'billing',issueInvoice:'billing',postPayment:'billing',savePrescription:'prescriptions',authorizePrescription:'prescriptions',recordLoyaltyActivity:'engagement',processLoyaltyRedemption:'engagement'}
   return Object.fromEntries(Object.entries(commands).map(([name,action])=>[name,(...args)=>permissions[name]&&!permitted(getState(),getSession(),permissions[name])?fail('Your current account or permission no longer allows this action. Reopen your workspace or ask an administrator.'):action(...args)]))
 }

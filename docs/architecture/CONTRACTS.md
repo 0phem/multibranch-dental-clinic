@@ -147,11 +147,13 @@ Patient Responsibility − Valid Patient Payments = Remaining Patient Balance
   history does not drift if an HMO case changes later.
 - The same calculation feeds the Cashier/Staff invoice view, the HMO financial projection, the Patient billing view,
   receipts/settlement and analytics. No UI implements competing arithmetic.
-- Earlier-approved direction: Patient settlement does not proceed while the linked HMO case is Pending, Escalated or
-  Returned.
-- **TBD BEFORE MODULE IMPLEMENTATION (M11/M12):**
-  - whether cases still in Draft, Missing Requirements or Ready for Submission also hold settlement (with no
-    abandonment/self-pay path defined);
+- **HMO financial hold (approved with M12):** creating and reviewing a Draft invoice is never held by M12. Invoice
+  **issue** and Patient **payment** are held while an applicable HMO claim is unresolved — the Visit's case is Missing
+  Requirements, Ready for Submission, Pending, Escalated or Returned, or the Patient has an active HMO membership and the
+  Visit has neither a case nor a recorded self-pay decision.
+- Approved and Rejected are final insurer outcomes; **Withdrawn** is the terminal pre-submission no-claim / self-pay
+  disposition. Approved supplies the provider's approved amount; Rejected and Withdrawn supply zero usable HMO coverage.
+- **TBD BEFORE MODULE IMPLEMENTATION (M11):**
   - the exact settlement state and transition for a zero Patient balance (unresolved policy P9 — never a fabricated
     payment);
   - any Staff override (unresolved policy P5).
@@ -176,9 +178,17 @@ verification → requirement completion → external submission → pending → 
 - The Patient projection shows only Patient-safe information (no internal notes, contacts or recorders).
 - Coverage shown to Staff or Patients ultimately comes from the M11 calculation.
 - Documents extracted by M14 only produce drafts (see §9); only a Staff confirmation transitions a case.
-- **Current:** HMO cases are frontend-local prototype records. Responses already append per submission cycle with
-  outcome, channel, note, recorder and time, but provider reference, reason category, approved amount and
-  document-based drafts are not captured yet, and there is no server-backed M12 workflow.
+- **Anchor (approved with M12):** an authoritative HMO case is anchored to a **Visit** — at most one case per Visit;
+  Patient and branch derive from the Visit.
+- **Membership (approved with M12):** Patient HMO membership is server-authoritative; at most one active membership per
+  Patient in the current model; a change ends the active membership and starts a new one, so history is kept.
+- New cases begin at Missing Requirements; **Draft** remains legacy-only.
+- **Withdrawn (approved with M12):** allowed only before the first submission and requires an in-scope Staff actor and a
+  reason. Approved, Rejected and Withdrawn are terminal.
+- **Current:** a minimal server-authoritative M12 exists — memberships, Visit-anchored cases, the lifecycle with
+  per-cycle append-only history (outcome, channel, note, provider reference, approved amount, recorder, time) and the
+  server financial gate that M11 will consult. Reason category, provider-stated response time and document-based drafts
+  are not captured yet; M11 does not consume the gate yet.
 
 ## 9. Documents and extraction (M14)
 
@@ -328,19 +338,21 @@ own pricing.
 | Paid | — | Terminal |
 | Issued | zero-balance settlement | **TBD BEFORE MODULE IMPLEMENTATION** (P9; never a fake ₱0 payment) |
 
-Settlement is held while the linked HMO case is Pending, Escalated or Returned (see §7 for the open cases).
+Invoice issue and payment are held while the Visit's HMO claim is unresolved (see §7).
 
 ### HMO case / submission cycle (M12)
 | From | To | By / condition |
 | --- | --- | --- |
-| (new) | Missing Requirements | Case prepared for an exact encounter |
+| (new) | Missing Requirements | Staff opens the Visit's case from the Patient's active membership |
+| (new) | Withdrawn | Staff records the self-pay / no-claim decision for a Visit with an active membership and no case (reason required) |
 | Draft / Missing Requirements | Ready for Submission | Every requirement validated locally |
 | Ready for Submission | Pending | Staff records an external submission; submission cycle + 1 |
 | Pending | Escalated | Overdue past the project follow-up threshold, after a recorded contact |
 | Pending / Escalated | Approved, Rejected, Returned | Staff confirms an externally received response for the current cycle |
 | Returned | Ready for Submission | Returned requirements corrected and validated |
 | Ready for Submission (after Returned) | Pending | Resubmission; new cycle, history kept |
-| Approved / Rejected | — | Terminal; no reopening is defined |
+| Missing Requirements / Ready for Submission (no submission yet) | Withdrawn | Staff, with a required reason (no claim; self-pay) |
+| Approved / Rejected / Withdrawn | — | Terminal; no reopening is defined |
 
 Local validation is never approval; Escalated is never Approved or Rejected.
 

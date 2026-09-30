@@ -81,9 +81,9 @@ export function persistableCollection(key, rows) {
   }[key]||[]
   // M6 cutover read models are never stored: server Patient projections (serverProjection) are rebuilt from the API,
   // and `legacyAppointment` / `preServer` are derived D5 / M5 flags. Server Treatments (M5) are never stored at all.
-  const stored=key==='patients'?rows.filter(row=>!row.serverProjection):key==='treatments'?rows.filter(row=>row.server!==true):rows
+  const stored=key==='patients'?rows.filter(row=>!row.serverProjection):['treatments','hmo'].includes(key)?rows.filter(row=>row.server!==true):rows
   return stored.map(row=>Object.fromEntries(Object.entries(row).filter(([field])=>{
-    if(field==='legacyAppointment'||field==='preServer'||key==='treatments'&&field==='server')return false
+    if(field==='legacyAppointment'||field==='preServer'||['treatments','hmo'].includes(key)&&field==='server')return false
     if(['assignedTo','assignedRole','assigned'].includes(field)&&!row.assignedUserId)return true
     if(field==='provider'&&!row.providerId)return true
     if(field==='branch'&&!row.branchId)return true

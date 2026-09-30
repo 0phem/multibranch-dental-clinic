@@ -50,7 +50,9 @@ export function administrationActions(run) {
     const person=state.persons.find(p=>p.id===patient.personId)
     if(!person||input.person!=null&&!isRecord(input.person)||input.patient!=null&&!isRecord(input.patient))return fail('Patient identity needs review.')
     const personPatch=session.role==='staff'?selected(input.person||{},['firstName','lastName','phone','email','dob','sex','address']):{}
-    const patientPatch=selected(input.patient||{},session.role==='staff'?['preferredBranchId','hmo','hmoMember','emergencyContact','consent']:['allergies','medicalHistory','dentalHistory'])
+    // M12: HMO membership is server-authoritative (HMO Management); the browser Patient's hmo/hmoMember notes are no
+    // longer editable here.
+    const patientPatch=selected(input.patient||{},session.role==='staff'?['preferredBranchId','emergencyContact','consent']:['allergies','medicalHistory','dentalHistory'])
     if(Object.values(personPatch).some(v=>typeof v!=='string')||Object.entries(patientPatch).some(([k,v])=>k==='consent'?typeof v!=='boolean':typeof v!=='string'))return fail('Enter valid text and consent fields.')
     if(['firstName','lastName','phone'].some(k=>k in personPatch&&!clean(personPatch[k])))return fail('First name, last name and phone cannot be blank.')
     if(personPatch.dob&&(!validDate(personPatch.dob)||personPatch.dob>now.date))return fail('Enter a valid date of birth.')

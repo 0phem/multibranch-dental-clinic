@@ -68,12 +68,12 @@ Fees are snapshots of configured fees for the performed work, not a competing ed
 
 | Approved concept | Current frontend mapping | Simplification / integrity boundary |
 | --- | --- | --- |
-| HMO_PROVIDERS | Canonical frontend provider catalog | Illustrative configured providers; no API adapter |
-| PATIENT_HMO_POLICIES | Patient provider/member fields; case membership snapshot | No complete dated policy/eligibility subsystem; membership does not prove coverage |
+| HMO_PROVIDERS | No server provider table; the provider name is Staff-entered text on the membership (minimal M12) | The browser's two illustrative providers are demo data, kept only for reading earlier browser records; no API adapter |
+| PATIENT_HMO_POLICIES | **M12 (backend)**: `patient_hmo_memberships`; the browser Patient's `hmo`/`hmoMember` notes are read-only history | One active membership per Patient, history kept; no dated policy/eligibility subsystem; membership does not prove coverage |
 | HMO_REQUIREMENT_RULES | Three fixed frontend rules: HMO Card, Valid ID, Dentist treatment request | Broader provider/service-specific ERD rules remain future scope |
-| HMO_CASES / HMO_CASE_REQUIREMENTS | `hmo`, embedded `requirements[]` | Patient/branch/provider and exact appointment/treatment; Missing/Provided/Validated locally; metadata only |
+| HMO_CASES / HMO_CASE_REQUIREMENTS | **M12 (backend)**: `hmo_cases`, `hmo_case_requirements`, append-only `hmo_case_events` (PostgreSQL); the browser holds an in-memory projection (`state.hmo`) plus read-only earlier browser records | One case per Visit (Patient/branch from the Visit); Missing / Validated requirement states with a metadata label only; lifecycle incl. Withdrawn; approved amount on Approved; the server financial gate for M11 |
 | HMO_CLAIMS | No separate claims collection | Case submissions/responses are tracking, not adjudicated invoice claims or reimbursement |
-| HMO_FOLLOW_UP_TASKS | Embedded `followUpTasks[]` | Unique case/submission-cycle tasks; contacts, submission history and external response evidence embedded in case |
+| HMO_FOLLOW_UP_TASKS | No task rows since M12: the server derives the follow-up due time (submission + 12 h project value); contacts and escalation are case events | Earlier browser `followUpTasks[]` are read-only history |
 
 Returned → corrected/local validation → Ready → resubmission retains case identity and advances the cycle. Pending/Escalated accepts current-cycle recorded responses; escalation is not a terminal coverage decision. Timestamps drive the documented 12-hour follow-up threshold. Staff records externally handled actions; local completeness never creates provider approval. Modern outcome evidence is checked; legacy historical outcomes are not fabricated into modern response histories.
 
