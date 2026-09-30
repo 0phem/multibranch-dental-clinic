@@ -5,14 +5,18 @@ namespace App\Http\Controllers\Auth;
 use App\Enums\Role;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\RegisterPatientRequest;
+use App\Mail\PatientEmailVerificationOtp;
+use App\Models\EmailVerificationOtp;
 use App\Http\Resources\UserResource;
 use App\Models\Patient;
 use App\Models\Person;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use Throwable;
 
 // Public registration is Patient-only (see AGENTS.md canonical identity model). Every write here comes from
 // $request->validated() — never raw request input — so a reserved field slipping past the FormRequest's
@@ -49,12 +53,43 @@ class RegisteredPatientController extends Controller
             ]);
         });
 
-        auth()->login($user);
-        $request->session()->regenerate();
+        try {
+            $this->sendOtp($user);
+        } catch (Throwable $exception) {
+            report($exception);
+
+            return response()->json([
+                'message' => 'We could not send the verification email. Please try again.',
+                'code' => 'email_delivery_failed',
+            ], 503);
+        }
 
         return response()->json([
-            'data' => new UserResource($user->load(['person', 'patient'])),
+            'data' => array_merge((new UserResource($user->load(['person', 'patient'])))->resolve(), [
+                'verification_required' => true,
+                'resend_available_at' => now()->addSeconds(60)->toISOString(),
+            ]),
         ], 201);
+    }
+
+    private function sendOtp(User $user): void
+    {
+        $code = (string) random_int(100000, 999999);
+        $now = now();
+
+        EmailVerificationOtp::where('user_id', $user->id)
+            ->whereNull('consumed_at')
+            ->update(['consumed_at' => $now]);
+
+        EmailVerificationOtp::create([
+            'user_id' => $user->id,
+            'digest' => Hash::make($code),
+            'attempts' => 0,
+            'expires_at' => $now->copy()->addMinutes(10),
+            'sent_at' => $now,
+        ]);
+
+        Mail::to($user->email)->send(new PatientEmailVerificationOtp($code));
     }
 
     // Mirrors the frontend's possibleDuplicatePerson signal: a matching phone, or a matching first/last name

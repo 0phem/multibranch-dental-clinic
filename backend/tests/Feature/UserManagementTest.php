@@ -73,11 +73,12 @@ class UserManagementTest extends TestCase
         }
 
         $this->postJson('/api/users', $this->createPayload())->assertCreated();
+        $this->assertNull(User::where('email', 'jamie@example.com')->value('email_verified_at'));
         $this->assertSame(1, Patient::count());
         $this->assertSame(1, User::where('role', Role::Patient)->count());
     }
 
-    public function test_new_patient_account_can_log_in_with_the_created_password(): void
+    public function test_new_patient_account_requires_email_verification_before_login(): void
     {
         Auth::forgetGuards();
         $owner = $this->account(Role::Owner, ['email' => 'owner-login@example.com', 'password' => Hash::make('Passw0rd!')]);
@@ -87,7 +88,8 @@ class UserManagementTest extends TestCase
         Auth::forgetGuards();
 
         $this->postJson('/api/login', ['email' => 'jamie@example.com', 'password' => 'Passw0rd!'])
-            ->assertOk()->assertJsonPath('data.role', 'patient');
+            ->assertStatus(422)
+            ->assertJsonPath('code', 'email_verification_required');
     }
 
     public function test_duplicate_user_or_person_email_is_rejected_cleanly(): void

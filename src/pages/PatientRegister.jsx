@@ -4,21 +4,20 @@ import { Button, Field, Notice, SectionLabel } from '../components.jsx'
 import { COUNTRY_CODES, DEFAULT_COUNTRY, normalizePhoneNumber } from '../phone.js'
 
 // Patient self-registration (M1/M4, Backend Foundation 1B). Submits to the real Laravel backend
-// (`POST /api/register` via the `onRegister` prop — see App.jsx/api-client.js), which creates a real
-// Person+Patient+User in PostgreSQL inside one transaction and auto-authenticates the new session. There is no
-// local "account created, now sign in" step here: once `onRegister` resolves ok, App.jsx's own session state
-// flips to authenticated and this screen simply unmounts in favor of first-use Home.
+// (`POST /api/register` via the `onRegister` prop — see App.jsx/api-client.js), which creates a pending
+// Person+Patient+User in PostgreSQL and sends an email OTP. The account cannot enter the workspace until the
+// OTP is verified.
 //
 // No "Preferred branch" field: the current backend registration contract collects no branch preference (see
 // backend/README.md) — the frontend identity bridge defaults it locally, and this form does not invent one.
 // The identity form intentionally collects first and last name only.
 const emptyForm={first_name:'',last_name:'',email:'',date_of_birth:'',password:'',password_confirmation:''}
 
-function PhoneField({ dial, localNumber, onLocalNumberChange, error }) {
+function PhoneField({ dial, localNumber, onDialChange, onLocalNumberChange, error }) {
   const country=COUNTRY_CODES.find(c=>c.dial===dial)||DEFAULT_COUNTRY
   return <Field label="Mobile number" required error={error}>
     <div className="phone-field">
-      <select aria-label="Country code" className="phone-field-code" value={dial} onChange={()=>{}}>
+      <select aria-label="Country code" className="phone-field-code" value={dial} onChange={e=>onDialChange(e.target.value)}>
         {COUNTRY_CODES.map(c=><option key={c.dial} value={c.dial}>{c.dial} {c.label}</option>)}
       </select>
       <input type="tel" inputMode="numeric" aria-label="Mobile number" maxLength={country.digits}
@@ -31,6 +30,7 @@ function PhoneField({ dial, localNumber, onLocalNumberChange, error }) {
 export function PatientRegister({ onRegister, onCancel }) {
   const [form,setForm]=useState(emptyForm)
   const [phoneLocal,setPhoneLocal]=useState('')
+  const [dial,setDial]=useState(DEFAULT_COUNTRY.dial)
   const [errors,setErrors]=useState({})
   const [formError,setFormError]=useState('')
   const [submitting,setSubmitting]=useState(false)
@@ -41,11 +41,12 @@ export function PatientRegister({ onRegister, onCancel }) {
     setFormError('')
   }
   const updatePhone=value=>{setPhoneLocal(value);setErrors(e=>(e.phone?{...e,phone:undefined}:e));setFormError('')}
+  const updateDial=value=>{setDial(value);setPhoneLocal('');setErrors(e=>(e.phone?{...e,phone:undefined}:e));setFormError('')}
 
   const submit=async event=>{
     event.preventDefault()
     if(submitting)return
-    const phone=normalizePhoneNumber(DEFAULT_COUNTRY.dial,phoneLocal)
+    const phone=normalizePhoneNumber(dial,phoneLocal)
     if(!phone.ok){setErrors(e=>({...e,phone:phone.reason}));return}
     setSubmitting(true)
     setErrors({})
@@ -75,7 +76,7 @@ export function PatientRegister({ onRegister, onCancel }) {
         <div className="form-grid">
           <Field label="First name" required error={errors.first_name}><input value={form.first_name} onChange={e=>update('first_name',e.target.value)} autoComplete="given-name"/></Field>
           <Field label="Last name" required error={errors.last_name}><input value={form.last_name} onChange={e=>update('last_name',e.target.value)} autoComplete="family-name"/></Field>
-          <PhoneField dial={DEFAULT_COUNTRY.dial} localNumber={phoneLocal} onLocalNumberChange={updatePhone} error={errors.phone}/>
+          <PhoneField dial={dial} localNumber={phoneLocal} onDialChange={updateDial} onLocalNumberChange={updatePhone} error={errors.phone}/>
           <Field label="Date of birth" hint="Optional." error={errors.date_of_birth}><input type="date" value={form.date_of_birth} onChange={e=>update('date_of_birth',e.target.value)} autoComplete="bday"/></Field>
         </div>
         <SectionLabel>Account security</SectionLabel>

@@ -93,7 +93,7 @@ class RegistrationTest extends TestCase
             'leading zero after +63' => ['+6309171234567'],
             'non-digit content' => ['+63917abc4567'],
             'missing country code' => ['09171234567'],
-            'wrong country code' => ['+19171234567'],
+            'unsupported country code' => ['+49171234567'],
         ];
     }
 
@@ -156,13 +156,12 @@ class RegistrationTest extends TestCase
         $this->assertSame(0, Person::count());
     }
 
-    public function test_registration_auto_logs_in_the_new_patient(): void
+    public function test_registration_does_not_log_in_until_email_is_verified(): void
     {
         $this->postJson('/api/register', $this->validPayload())->assertCreated();
 
         $me = $this->getJson('/api/me');
 
-        $me->assertOk();
-        $me->assertJsonPath('data.email', 'maria.santos@example.com');
+        $me->assertUnauthorized();
     }
 }

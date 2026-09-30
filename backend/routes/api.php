@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AppointmentController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
+use App\Http\Controllers\Auth\EmailVerificationController;
 use App\Http\Controllers\Auth\RegisteredPatientController;
 use App\Http\Controllers\CurrentUserController;
 use App\Http\Controllers\HmoController;
@@ -24,6 +25,8 @@ use Illuminate\Support\Facades\Route;
 // Public identity/auth boundary (Backend Foundation 1A). The one thing a stranger may do is create their own
 // Patient identity — see RegisteredPatientController.
 Route::post('/register', [RegisteredPatientController::class, 'store']);
+Route::post('/register/verify', [EmailVerificationController::class, 'verify']);
+Route::post('/register/resend', [EmailVerificationController::class, 'resend']);
 Route::post('/login', [AuthenticatedSessionController::class, 'store']);
 
 Route::middleware('auth:sanctum')->group(function () {

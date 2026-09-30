@@ -4,6 +4,7 @@ namespace App\Http\Requests\Auth;
 
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rules\Password;
+use Illuminate\Validation\Rule;
 
 // Public self-registration is Patient-only (see RegisteredPatientController). The reserved-field rules below
 // reject the request outright — with a clear per-field validation error — rather than silently stripping
@@ -29,11 +30,21 @@ class RegisterPatientRequest extends FormRequest
         return [
             'first_name' => ['required', 'string', 'max:100'],
             'last_name' => ['required', 'string', 'max:100'],
-            'email' => ['required', 'email:rfc', 'max:255', 'unique:users,email'],
-            // Normalized E.164-style Philippine mobile number only (+63 plus exactly 10 local digits, first
-            // digit not 0), matching the frontend's src/phone.js normalization exactly — backend validation
-            // never accepts anything the frontend's control couldn't have produced.
-            'phone' => ['required', 'regex:/^\+63[1-9][0-9]{9}$/'],
+            'email' => ['required', 'email:rfc', 'max:255', Rule::unique('users', 'email'), Rule::unique('persons', 'email')],
+            // Normalized E.164 contact number. These are deliberately simplified project-level bounds for the
+            // six supported selectors, not a complete global telecom numbering authority. Display formatting is
+            // handled by the frontend selector and the server never assumes a Philippine number.
+            'phone' => ['required', function (string $attribute, mixed $value, \Closure $fail): void {
+                $lengths = ['1' => 10, '44' => 10, '61' => 9, '63' => 10, '65' => 8, '81' => 10];
+                $matched = false;
+                foreach ($lengths as $dial => $digits) {
+                    if (preg_match('/^\+'.preg_quote($dial, '/').'([1-9][0-9]{'.($digits - 1).'})$/', (string) $value)) {
+                        $matched = true;
+                        break;
+                    }
+                }
+                if (! $matched) $fail('Enter a valid national number for the selected country code.');
+            }],
             'date_of_birth' => ['nullable', 'date', 'before_or_equal:today'],
             'password' => ['required', 'confirmed', Password::min(8)->letters()->numbers()],
 

@@ -59,10 +59,7 @@ class IdentityBridgeTest extends TestCase
         $this->assertSame(['id' => $patient->public_id, 'code' => $patient->patient_code], $data['patient']);
         $this->assertSame(1, Patient::where('person_id', $user->person_id)->count());
 
-        $me = $this->getJson('/api/me')->assertOk()->json('data');
-        $this->assertNoInternalIds($me);
-        $this->assertSame($patient->public_id, $me['patient']['id']);
-        $this->assertSame([], $me['branch_scopes']);
+        $this->getJson('/api/me')->assertUnauthorized();
     }
 
     public function test_login_resolves_the_correct_patient(): void

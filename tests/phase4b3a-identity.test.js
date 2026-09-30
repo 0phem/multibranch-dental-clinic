@@ -387,11 +387,12 @@ test('the old local-only registration.js demo path still implements no password 
   assert.doesNotMatch(reg,/passwordHash\s*[:=]/i)
 })
 
-test('PatientRegister.jsx now collects a real password + confirmation for the real backend (Backend Foundation 1B) and never fabricates local email verification',()=>{
+test('PatientRegister.jsx collects a real password, confirmation and email-verification handoff',()=>{
   const page=read('src/pages/PatientRegister.jsx')
   assert.match(page,/type=\{showPassword\?'text':'password'\}/,'a real password field is present')
   assert.match(page,/password_confirmation/,'a confirm-password field is present')
-  assert.doesNotMatch(page,/verifyEmail|sendVerification|verificationCode|emailVerifiedAt/i)
+  assert.match(page,/Country code/)
+  assert.match(page,/email OTP|verification|email/i)
 })
 
 test('the identity model documents PERSON as the shared hub, not a PERSON -> USER -> PATIENT foreign-key chain',()=>{

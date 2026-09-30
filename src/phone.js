@@ -1,8 +1,12 @@
-// Country-code-aware phone input support. Structured as a small table so a future country is an additional
-// entry, not a redesign — but only Philippines (+63) is enabled/selectable in this checkpoint. Never implies
-// another country's numbers are supported: there is no validation rule for one.
+// Country-code-aware phone input support. The stored value is normalized to E.164; the local number remains
+// editable and never gets a guessed country prefix.
 export const COUNTRY_CODES = [
   { code: 'PH', dial: '+63', label: 'Philippines', digits: 10 },
+  { code: 'US', dial: '+1', label: 'United States / Canada', digits: 10 },
+  { code: 'GB', dial: '+44', label: 'United Kingdom', digits: 10 },
+  { code: 'AU', dial: '+61', label: 'Australia', digits: 9 },
+  { code: 'SG', dial: '+65', label: 'Singapore', digits: 8 },
+  { code: 'JP', dial: '+81', label: 'Japan', digits: 10 },
 ]
 export const DEFAULT_COUNTRY = COUNTRY_CODES[0]
 

@@ -3,7 +3,7 @@
 // CSRF or raw HTTP status codes:
 //   {ok:true, data}
 //   {ok:false, kind:'validation', errors:{field:[msg]}, message}
-//   {ok:false, kind:'invalid_credentials'|'inactive_account', message}
+//   {ok:false, kind:'invalid_credentials'|'inactive_account'|'email_verification_required', message}
 //   {ok:false, kind:'unauthenticated'|'forbidden'}
 //   {ok:false, kind:'network'|'server', message}
 // Session auth only (Sanctum SPA cookies) — never a bearer token in localStorage.
@@ -57,13 +57,15 @@ async function parseFailure(response) {
   if (response.status === 419) return { ok: false, kind: 'csrf' }
   if (response.status === 422) {
     const code = body?.code
-    if (code === 'invalid_credentials' || code === 'inactive_account') {
+    if (code === 'invalid_credentials' || code === 'inactive_account' || code === 'email_verification_required') {
       return { ok: false, kind: code, message: body?.message || 'Sign-in failed.' }
     }
     // M6 command refusals add a stable `code`, the failed scheduling checks and alternative start times.
     return { ok: false, kind: 'validation', code: code || null, errors: body?.errors || {}, message: body?.message || 'Check the highlighted fields.',
       failedChecks: Array.isArray(body?.failed_checks) ? body.failed_checks : [], alternatives: Array.isArray(body?.alternatives) ? body.alternatives : [] }
   }
+  if (response.status === 429) return { ok: false, kind: 'rate_limited', code: body?.code || null, retry_after: body?.retry_after || 0, message: body?.message || 'Please wait and try again.' }
+  if (response.status === 503) return { ok: false, kind: 'server', code: body?.code || null, message: body?.message || 'The clinic system could not send the email. Try again.' }
   if (response.status >= 500) return { ok: false, kind: 'server', message: 'The clinic system is temporarily unavailable. Try again in a moment.' }
   return { ok: false, kind: 'server', message: 'Something unexpected happened. Try again.' }
 }
@@ -102,6 +104,14 @@ export function login(email, password) {
 
 export function register(payload) {
   return request('/api/register', { method: 'POST', body: JSON.stringify(payload) })
+}
+
+export function verifyRegistrationEmail(email, otp) {
+  return request('/api/register/verify', { method: 'POST', body: JSON.stringify({ email, otp }) })
+}
+
+export function resendRegistrationEmail(email) {
+  return request('/api/register/resend', { method: 'POST', body: JSON.stringify({ email }) })
 }
 
 // Logout is honest about what actually happened: `backendConfirmed` is true only when the server itself

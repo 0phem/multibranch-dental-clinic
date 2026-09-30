@@ -5,7 +5,7 @@ import { COUNTRY_CODES, DEFAULT_COUNTRY, normalizePhoneNumber, sanitizePhoneInpu
 test('the country-code table defaults to Philippines +63', () => {
   assert.equal(DEFAULT_COUNTRY.dial, '+63')
   assert.equal(DEFAULT_COUNTRY.label, 'Philippines')
-  assert.equal(COUNTRY_CODES.length, 1, 'only one country is enabled in this checkpoint')
+  assert.ok(COUNTRY_CODES.length >= 2, 'alternate country codes are available')
 })
 
 test('a valid 10-digit Philippine mobile number is accepted and normalized to E.164', () => {
@@ -40,8 +40,12 @@ test('cosmetic formatting characters (spaces, dashes, parens) are tolerated', ()
   assert.equal(dashed.digits, '9994936192')
 })
 
+test('an alternate country code is accepted with its own national number', () => {
+  assert.deepEqual(normalizePhoneNumber('+1', '4155550123'), { ok: true, digits: '4155550123', e164: '+14155550123' })
+})
+
 test('an unsupported dial code is rejected rather than pretending it is supported', () => {
-  assert.equal(normalizePhoneNumber('+1', '9994936192').ok, false)
+  assert.equal(normalizePhoneNumber('+999', '9994936192').ok, false)
 })
 
 test('formatPhoneDisplay renders "+63 9994936192"', () => {

@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import { ClinicProvider, useClinic } from './store.jsx'
 import { Brand, Login, Shell, ToastStack } from './layout.jsx'
 import { PatientRegister } from './pages/PatientRegister.jsx'
+import { EmailVerification } from './pages/EmailVerification.jsx'
 import { DashboardPage } from './pages/Dashboards.jsx'
 import { AppointmentsPage, BookingPage, SchedulePage } from './pages/Scheduling.jsx'
 import { CheckInPage, QueuePage, CapacityPage } from './pages/PatientFlow.jsx'
@@ -55,6 +56,7 @@ function AppBody() {
   const [context,setContext]=useState(null)
   const [activeBranch,setActiveBranch]=useState('All Branches')
   const [showRegister,setShowRegister]=useState(false)
+  const [verification,setVerification]=useState(null)
 
   // Backend role is authoritative, always. This is a *derived* value, never independent state a stale login
   // could leave behind — see identity-bridge.js for how it gets here.
@@ -98,6 +100,7 @@ function AppBody() {
     setAuthError('')
     const result=await api.login(email,password)
     if(!result.ok){
+      if(result.kind==='email_verification_required')setVerification({email})
       const message=result.kind==='validation'?(Object.values(result.errors||{})[0]?.[0]||result.message):result.message
       return {ok:false,message:message||'Something went wrong. Try again.'}
     }
@@ -115,16 +118,25 @@ function AppBody() {
     setAuthError('')
     const result=await api.register(form)
     if(!result.ok)return result
-    const bridge=store.actions.bridgeBackendIdentity(result.data)
-    if(!bridge.ok)return {ok:false,message:'Something went wrong finishing your registration. Try signing in.'}
-    enterSession(bridge.session,result.data)
-    setAuthPhase('authenticated')
+    setVerification({email:result.data.email,resendAvailableAt:result.data.resend_available_at})
+    setShowRegister(false)
     return {ok:true}
   }
 
+  const verifyRegistration=async ({email,otp})=>{
+    const result=await api.verifyRegistrationEmail(email,otp)
+    if(!result.ok)return result
+    const bridge=store.actions.bridgeBackendIdentity(result.data)
+    if(!bridge.ok)return {ok:false,message:'Your email is verified, but the workspace could not be opened. Please sign in.'}
+    setVerification(null);enterSession(bridge.session,result.data);setAuthPhase('authenticated')
+    return {ok:true}
+  }
+
+  const resendRegistration=async email=>api.resendRegistrationEmail(email)
+
   const signedOut=()=>{
     store.adoptSession(null)
-    setContext(null);setPageState('dashboard');setActiveBranch('All Branches');setShowRegister(false)
+    setContext(null);setPageState('dashboard');setActiveBranch('All Branches');setShowRegister(false);setVerification(null)
     setAuthPhase('unauthenticated')
   }
 
@@ -168,7 +180,9 @@ function AppBody() {
 
   if (!role) return <>
     {authError&&<Notice tone="warning">{authError}</Notice>}
-    {showRegister
+    {verification
+      ?<EmailVerification email={verification.email} initialResendAvailableAt={verification.resendAvailableAt} onVerify={verifyRegistration} onResend={resendRegistration} onBack={()=>setVerification(null)}/>
+      :showRegister
       ?<PatientRegister onRegister={register} onCancel={()=>{setAuthError('');setShowRegister(false)}}/>
       :<Login onLogin={login} onShowRegister={()=>{setAuthError('');setShowRegister(true)}}/>}
     <ToastStack toasts={store.toasts}/>
