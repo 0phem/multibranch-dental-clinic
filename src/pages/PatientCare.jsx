@@ -4,7 +4,7 @@ import { dateLabel } from '../logic.js'
 import { formatStamp, hmoCaseView, invoiceView, money, patientContext, patientHmo, patientInvoices, patientPrescriptions, prescriptionView, resolveTarget } from '../patient-view.js'
 import { DefinitionList, RecordCard } from '../patient-ui.jsx'
 import { formatAmount } from '../pricing-api.js'
-import { myBillingInvoices } from '../api-client.js'
+import { myBillingInvoices, createPayMongoCheckout } from '../api-client.js'
 
 const NO_ACCOUNT=<Notice tone="warning" title="We couldn’t confirm your account">Reopen your workspace, or ask the clinic to check your account access.</Notice>
 
@@ -26,16 +26,34 @@ export function PatientBillingPage({ store, context }) {
   const { state }=store, session=store.session
   const [openReceiptId,setOpenReceiptId]=useState(null)
   const [serverItems,setServerItems]=useState(null),[serverError,setServerError]=useState('')
+  const [payingInvoiceId,setPayingInvoiceId]=useState(null)
+  const [checkoutError,setCheckoutError]=useState('')
+  const paymentStatus = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('payment') : null
   useEffect(()=>{let live=true;myBillingInvoices().then(r=>{if(!live)return;r.ok?setServerItems(Array.isArray(r.data)?r.data:[]):setServerError(r.message||'Your invoices could not be loaded.')});return()=>{live=false}},[])
   if(!patientContext(state,session))return NO_ACCOUNT
   const patient=patientContext(state,session).patient
   const target=resolveTarget(state,session,'billing',context)
-  const items=serverItems!==null?(serverItems||[]).map(i=>({id:i.id,invoiceNo:i.invoice_number,date:i.issued_at||i.created_at,branch:i.branch?.name||'',status:i.status,total:i.gross_amount,patientResponsibility:i.patient_responsibility_amount,balance:i.balance,settlementType:i.settlement_type,items:(i.lines||[]).map(l=>({key:l.id,name:l.service?.name||'Service',quantity:l.quantity,unit:l.unit_price,amount:l.line_total})),receipt:i.receipt?{number:i.receipt.number,amount:i.receipt.amount,method:i.receipt.method,status:'Recorded',paidAt:i.receipt.issued_at}:null})) : (typeof window==='undefined'?patientInvoices(state,session).map(i=>invoiceView(state,i)):[])
+  const items=serverItems!==null?(serverItems||[]).map(i=>({id:i.id,publicId:i.public_id,invoiceNo:i.invoice_number,date:i.issued_at||i.created_at,branch:i.branch?.name||'',status:i.status,total:i.gross_amount,patientResponsibility:i.patient_responsibility_amount,balance:i.balance,settlementType:i.settlement_type,items:(i.lines||[]).map(l=>({key:l.id,name:l.service?.name||'Service',quantity:l.quantity,unit:l.unit_price,amount:l.line_total})),receipt:i.receipt?{number:i.receipt.number,amount:i.receipt.amount,method:i.receipt.method,status:'Recorded',paidAt:i.receipt.issued_at}:null})) : (typeof window==='undefined'?patientInvoices(state,session).map(i=>invoiceView(state,i)):[])
   return <div className="pt-page">
     <PageHeader kicker="Your care" title="Receipts & Payments" text="Invoices the clinic has issued, and your receipts. The clinic records payments. Nothing is charged when you book."/>
+    {paymentStatus==='success'&&<Notice tone="success" title="Payment Successful">Thank you! Your payment has been received and your invoice is settled.</Notice>}
+    {paymentStatus==='cancelled'&&<Notice tone="warning" title="Payment Cancelled">The online payment checkout was cancelled. Your invoice balance remains outstanding.</Notice>}
+    {checkoutError&&<Notice tone="warning" title="Payment Error">{checkoutError}</Notice>}
     <div className="pt-list">{serverError?<Notice tone="warning">{serverError}</Notice>:serverItems===null&&typeof window!=='undefined'?<Notice>Loading your invoices…</Notice>:items.length?items.map(inv=><RecordCard key={inv.id} id={`invoice-${inv.id}`} highlight={target===inv.id} title={inv.invoiceNo||'Invoice'} subtitle={`${dateLabel(inv.date)}${inv.branch?` • ${inv.branch}`:''}${serverItems===null?' • Historical browser record':''}`} status={inv.status}>
       <ul className="pt-charges" aria-label="Itemized charges">{inv.items.map(item=><li key={item.key}><span><b>{item.name}</b><small>{item.quantity} × {money(item.unit)}</small></span><span>{money(item.amount)}</span></li>)}</ul>
       <div className="pt-total"><span>Total / Patient responsibility</span><b>{money(inv.patientResponsibility??inv.total)}</b></div>{inv.balance!==undefined&&<p className="pt-hint">Balance: {money(inv.balance)}{inv.settlementType==='full_hmo_coverage'?' • Fully covered by HMO; no Patient payment was collected.':''}</p>}
+      {inv.status==='Issued'&&Number(inv.balance??inv.patientResponsibility??0)>0&&<div style={{marginTop:'10px'}}>
+        <Button size="sm" variant="primary" disabled={payingInvoiceId===inv.id} onClick={async()=>{
+          setPayingInvoiceId(inv.id);setCheckoutError('')
+          const res=await createPayMongoCheckout(inv.publicId||inv.id)
+          if(res.ok&&res.data?.checkout_url){
+            if(typeof window!=='undefined')window.location.href=res.data.checkout_url
+          } else {
+            setCheckoutError(res.message||'Could not initiate PayMongo checkout. Please try again.')
+            setPayingInvoiceId(null)
+          }
+        }}>{payingInvoiceId===inv.id?'Connecting to PayMongo…':'Pay Online (GCash / Maya / Card)'}</Button>
+      </div>}
       {inv.receipt&&<p className="pt-hint">Receipt available: {inv.receipt.number}</p>}
       {inv.receipt&&<Button size="sm" variant="soft" aria-expanded={openReceiptId===inv.id} aria-controls={`receipt-${inv.id}`} onClick={()=>setOpenReceiptId(openReceiptId===inv.id?null:inv.id)}>{openReceiptId===inv.id?'Hide Receipt':'View Receipt'}</Button>}
       {inv.receipt&&openReceiptId===inv.id&&<div className="pt-receipt" id={`receipt-${inv.id}`}><h4>Payment receipt</h4><p className="pt-hint">Dr. Dana E. Roxas Dental Clinic</p><DefinitionList items={[

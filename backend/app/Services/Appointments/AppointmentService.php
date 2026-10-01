@@ -81,6 +81,17 @@ final class AppointmentService
             ]);
             $this->record($appointment, $actor, 'appointment.created', null);
 
+            try {
+                $patientUser = $patient->user ?? $patient->loadMissing('user')->user;
+                if ($patientUser?->email) {
+                    \Illuminate\Support\Facades\Mail::to($patientUser->email)->send(
+                        new \App\Mail\AppointmentConfirmationMail($appointment->loadMissing(['patient.person', 'branch', 'service', 'dentist.person']))
+                    );
+                }
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('Could not send appointment confirmation email: ' . $e->getMessage());
+            }
+
             return [$appointment, 201];
         });
     }

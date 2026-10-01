@@ -19,6 +19,8 @@ use App\Http\Controllers\DocumentController;
 use App\Http\Controllers\AuditController;
 use App\Http\Controllers\AutomationController;
 use App\Http\Controllers\AnalyticsController;
+use App\Http\Controllers\Payment\PayMongoController;
+use App\Http\Controllers\Mail\MailDiagnosticController;
 use App\Http\Controllers\Rbac\RbacDemoController;
 use App\Http\Controllers\Reference\BranchController;
 use App\Http\Controllers\Reference\BranchServiceController;
@@ -34,6 +36,9 @@ Route::post('/register/verify', [EmailVerificationController::class, 'verify']);
 Route::post('/register/resend', [EmailVerificationController::class, 'resend']);
 Route::post('/login', [AuthenticatedSessionController::class, 'store']);
 
+// Public Payment Gateway Webhook (PayMongo HMAC-SHA256 signature verified)
+Route::post('/webhooks/paymongo', [PayMongoController::class, 'webhook']);
+
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthenticatedSessionController::class, 'destroy']);
     Route::get('/me', [CurrentUserController::class, 'show']);
@@ -47,9 +52,13 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/{invoice}/review', [BillingController::class, 'review'])->middleware('role:staff');
         Route::post('/{invoice}/issue', [BillingController::class, 'issue'])->middleware('role:staff');
         Route::post('/{invoice}/payment', [BillingController::class, 'pay'])->middleware('role:staff');
+        Route::post('/{invoice}/paymongo-checkout', [PayMongoController::class, 'checkout']);
     });
     Route::get('/receipts/mine', [BillingController::class, 'receiptsMine'])->middleware('role:patient');
     Route::get('/billing/treatments', [BillingController::class, 'treatments'])->middleware('role:staff,owner');
+
+    // Mail Diagnostics (Owner-only)
+    Route::post('/mail/test', [MailDiagnosticController::class, 'sendTest'])->middleware('role:owner');
 
     // M14 Patient Forms, Documents & Consent Management
     Route::prefix('documents')->group(function () {
