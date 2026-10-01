@@ -53,6 +53,7 @@ class DemoAccountsSeeder extends Seeder
                 'password' => $password,
                 'role' => Role::Patient,
                 'account_status' => 'Active',
+                'email_verified_at' => now(),
             ]
         );
     }
