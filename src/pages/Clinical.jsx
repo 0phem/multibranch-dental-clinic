@@ -9,6 +9,7 @@ import { PatientFollowupsPage } from './PatientVisits.jsx'
 import { visibleHmo } from '../phase3-contracts.js'
 import { visiblePrescriptions, prescriptionTasks, linkedTreatment, followupDisplayState } from '../phase2.js'
 import { inScope, isTodayQueue, patientInScope, sessionForRole } from '../contracts.js'
+import { fetchDocuments, submitDocumentUpload, retractDocument, fetchPatientConsents, grantConsent, withdrawConsent, downloadDocumentFile } from '../documents-api.js'
 
 export function PatientsPage({ role, store, context, setPage }) {
   const { state, actions, toast, log }=store
@@ -56,7 +57,7 @@ export function PatientsPage({ role, store, context, setPage }) {
         {tab==='visits'&&<Card title="Cross-branch visit history"><Table rows={visits} columns={[{key:'date',label:'Date',render:a=>dateLabel(a.date)},{key:'branch',label:'Branch'},{key:'service',label:'Service'},{key:'dentist',label:'Dentist',render:a=>dentistName(a.dentistId,state.dentists)},{key:'status',label:'Status',render:a=><Status>{a.status}</Status>}]} /></Card>}
         {tab==='clinical'&&<Card title="Treatment history" subtitle={role==='dentist'?'Clinic server records you may read: your own treatments and, while you treat this patient, their earlier completed treatments. Read-only unless you are the treating Dentist.':'Staff read-only clinical record'}>{treatments.length?treatments.map(t=><div className="clinical-history" key={t.id}><div><b>{dateLabel(t.date)} • {t.procedure||t.plan||'Treatment in progress'}</b>{t.complaint&&<p>Complaint: {t.complaint}</p>}{t.plan&&<p>Plan: {t.plan}</p>}{t.notes&&<p>{t.notes}</p>}{Array.isArray(t.procedures)&&t.procedures.length>0&&<p>{t.procedures.map(p=>`${p.serviceName||state.services.find(s=>s.id===p.serviceId)?.name||'Service'} × ${p.quantity}`).join(', ')}</p>}<small>{t.dentistName||dentistName(t.dentistId,state.dentists)} • {t.status}</small>{!t.server&&<small className="block-muted">{t.legacyAppointment?'Historical demo record':'Recorded before server treatment records'} — read-only</small>}</div><Status>{t.status}</Status></div>):<Notice>No treatment history recorded.</Notice>}</Card>}
         {tab==='hmo'&&<Card title="HMO record" subtitle="Server HMO cases for this patient's visits; earlier browser records are marked as history. Membership is recorded in HMO Management."><Table rows={hmo} columns={[{key:'provider',label:'Provider'},{key:'memberId',label:'Member ID'},{key:'clinicDate',label:'Visit',render:h=>h.clinicDate?dateLabel(h.clinicDate):h.legacy?'Earlier record':'—'},{key:'eligibility',label:'Eligibility',render:h=><Status>{h.eligibility}</Status>},{key:'status',label:'Status',render:h=><Status>{h.status}</Status>}]} /></Card>}
-        {tab==='documents'&&<Card title="Visit documents"><Notice tone="info">Document upload/storage is represented in the UI only. A backend will store file metadata and protected object-storage references linked to this patient.</Notice><div className="document-grid"><div><span>PDF</span><b>Consent Form</b><small>Verified • 2026-09-12</small></div><div><span>IMG</span><b>Visit Attachment</b><small>Branch A • 2026-09-12</small></div></div></Card>}
+        {tab==='documents'&&<PatientDocumentsTab patient={patient} role={role} store={store}/>}
       </div>
     </div>}
     <Modal open={newOpen} onClose={()=>setNewOpen(false)} title="Create patient record" subtitle="Identity/contact fields create one PERSON record; PATIENTS stores only patient-specific information." wide><div className="form-grid">
@@ -105,6 +106,315 @@ function SummaryTab({ patient, role, onSave }) {
     </div>
   </Card>
 }
+
+function PatientDocumentsTab({ patient, role, store }) {
+  const { toast, session } = store
+  const [docs, setDocs] = useState([])
+  const [consents, setConsents] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [uploadOpen, setUploadOpen] = useState(false)
+  const [retractTarget, setRetractTarget] = useState(null)
+  const [retractReason, setRetractReason] = useState('')
+  const [consentOpen, setConsentOpen] = useState(false)
+  const [consentForm, setConsentForm] = useState({ consent_type: 'general_treatment', version: '1.0', notes: '' })
+  const [fileToUpload, setFileToUpload] = useState(null)
+  const [uploadCategory, setUploadCategory] = useState('clinical_attachment')
+  const [uploadTitle, setUploadTitle] = useState('')
+  const [uploading, setUploading] = useState(false)
+  const [expandedExtraction, setExpandedExtraction] = useState(null)
+
+  const patientIdentifier = patient?.publicId || patient?.patientCode || patient?.id
+
+  const reload = async () => {
+    if (!patientIdentifier) return
+    try {
+      setLoading(true)
+      const [docList, consentList] = await Promise.all([
+        fetchDocuments({ patient_id: patientIdentifier }),
+        fetchPatientConsents(patientIdentifier).catch(() => []),
+      ])
+      setDocs(docList)
+      setConsents(consentList)
+    } catch (err) {
+      toast(err.message || 'Could not load patient documents', 'warning')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  React.useEffect(() => {
+    reload()
+  }, [patientIdentifier])
+
+  const handleUpload = async (e) => {
+    e.preventDefault()
+    if (!fileToUpload) return toast('Please select a file to upload.', 'warning')
+    const formData = new FormData()
+    formData.append('file', fileToUpload)
+    formData.append('patient_id', patientIdentifier)
+    formData.append('category', uploadCategory)
+    if (uploadTitle.trim()) formData.append('title', uploadTitle.trim())
+    if (session?.branchId) formData.append('branch_id', session.branchId)
+
+    setUploading(true)
+    try {
+      await submitDocumentUpload(formData)
+      toast('Document uploaded successfully.', 'success')
+      setUploadOpen(false)
+      setFileToUpload(null)
+      setUploadTitle('')
+      await reload()
+    } catch (err) {
+      toast(err.message || 'Upload failed.', 'warning')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const handleDownload = async (doc) => {
+    try {
+      await downloadDocumentFile(doc.id, doc.originalFilename)
+    } catch (err) {
+      toast(err.message || 'Download failed.', 'warning')
+    }
+  }
+
+  const handleRetract = async () => {
+    if (!retractTarget) return
+    if (!retractReason.trim()) return toast('Please provide a reason for retraction.', 'warning')
+    try {
+      await retractDocument(retractTarget.id, retractReason.trim())
+      toast('Document retracted.', 'success')
+      setRetractTarget(null)
+      setRetractReason('')
+      await reload()
+    } catch (err) {
+      toast(err.message || 'Retraction failed.', 'warning')
+    }
+  }
+
+  const handleGrantConsent = async (e) => {
+    e.preventDefault()
+    try {
+      await grantConsent(patientIdentifier, consentForm)
+      toast('Consent granted on file.', 'success')
+      setConsentOpen(false)
+      setConsentForm({ consent_type: 'general_treatment', version: '1.0', notes: '' })
+      await reload()
+    } catch (err) {
+      toast(err.message || 'Could not record consent.', 'warning')
+    }
+  }
+
+  const handleWithdrawConsent = async (consentId) => {
+    try {
+      await withdrawConsent(patientIdentifier, consentId)
+      toast('Consent withdrawn.', 'success')
+      await reload()
+    } catch (err) {
+      toast(err.message || 'Could not withdraw consent.', 'warning')
+    }
+  }
+
+  const isOwner = role === 'owner'
+
+  return <>
+    <Card
+      title="Patient Documents & Forms"
+      subtitle="Encrypted, private server storage with SHA-256 integrity verification. Downloads are served through authenticated streaming guards."
+      actions={
+        <div style={{ display: 'flex', gap: '8px' }}>
+          {!isOwner && <Button size="sm" onClick={() => setUploadOpen(true)}>Upload Document</Button>}
+          {!isOwner && <Button size="sm" variant="soft" onClick={() => setConsentOpen(true)}>Record Consent</Button>}
+        </div>
+      }
+    >
+      {loading ? <Notice>Loading documents and consents...</Notice> : <>
+        <div style={{ marginBottom: '20px' }}>
+          <h4 style={{ margin: '0 0 10px 0', fontSize: '13px', fontWeight: '700' }}>Active Consents & Agreements</h4>
+          {consents.length === 0 ? (
+            <Notice tone="info">No consent records found for this patient.</Notice>
+          ) : (
+            <Table
+              rows={consents}
+              columns={[
+                { key: 'consentType', label: 'Consent Type', render: c => c.consentType?.replace(/_/g, ' ') },
+                { key: 'version', label: 'Version' },
+                { key: 'status', label: 'Status', render: c => <Status>{c.status}</Status> },
+                { key: 'signedAt', label: 'Signed Date', render: c => dateLabel(c.signedAt) },
+                { key: 'actions', label: 'Actions', render: c => (
+                  c.status === 'Granted' && !isOwner ? (
+                    <Button size="sm" variant="ghost" onClick={() => handleWithdrawConsent(c.id)}>Withdraw</Button>
+                  ) : null
+                )},
+              ]}
+            />
+          )}
+        </div>
+
+        <div>
+          <h4 style={{ margin: '0 0 10px 0', fontSize: '13px', fontWeight: '700' }}>Uploaded Patient Documents</h4>
+          {docs.length === 0 ? (
+            <Notice tone="info">No documents uploaded for this patient yet.</Notice>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {docs.map(doc => (
+                <div
+                  key={doc.id}
+                  style={{
+                    border: '1px solid var(--line)',
+                    borderRadius: '8px',
+                    padding: '12px 16px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '8px',
+                    backgroundColor: doc.status === 'Retracted' ? 'rgba(0,0,0,0.02)' : 'inherit',
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '8px' }}>
+                    <div>
+                      <b style={{ fontSize: '12px', display: 'block' }}>{doc.title}</b>
+                      <small style={{ color: 'var(--muted)', fontSize: '10px' }}>
+                        {doc.originalFilename} • {doc.fileSizeFormatted} • {doc.category?.replace(/_/g, ' ')} • Uploaded {dateLabel(doc.createdAt)}
+                      </small>
+                    </div>
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                      <Status>{doc.status}</Status>
+                      {doc.status === 'Active' && (
+                        <>
+                          <Button size="sm" variant="soft" onClick={() => handleDownload(doc)}>Download</Button>
+                          {!isOwner && <Button size="sm" variant="ghost" onClick={() => { setRetractTarget(doc); setRetractReason('') }}>Retract</Button>}
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  {doc.status === 'Retracted' && (
+                    <Notice tone="warning">
+                      Retracted on {dateLabel(doc.retractedAt)}: {doc.retractionReason}
+                    </Notice>
+                  )}
+
+                  {doc.checksumSha256 && (
+                    <small style={{ fontFamily: 'monospace', fontSize: '9px', color: 'var(--muted)' }}>
+                      SHA-256: {doc.checksumSha256.slice(0, 16)}...{doc.checksumSha256.slice(-8)}
+                    </small>
+                  )}
+
+                  {doc.extractions && doc.extractions.length > 0 && (
+                    <div style={{ marginTop: '4px' }}>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setExpandedExtraction(expandedExtraction === doc.id ? null : doc.id)}
+                      >
+                        {expandedExtraction === doc.id ? 'Hide Extracted Text (Draft)' : `View Extracted Text Draft (${doc.extractions.length})`}
+                      </Button>
+                      {expandedExtraction === doc.id && (
+                        <div style={{ marginTop: '8px', padding: '10px', background: '#f8fafc', borderRadius: '6px', fontSize: '11px' }}>
+                          <p style={{ margin: '0 0 6px 0', fontWeight: '600', color: 'var(--muted)' }}>
+                            Status: <span style={{ color: 'var(--brand)' }}>Draft (Advisory Only)</span> • Method: {doc.extractions[0].extractionMethod}
+                          </p>
+                          {doc.extractions[0].rawText && (
+                            <pre style={{ whiteSpace: 'pre-wrap', maxHeight: '120px', overflow: 'auto', background: '#fff', padding: '8px', borderRadius: '4px', border: '1px solid var(--line)', fontSize: '10px' }}>
+                              {doc.extractions[0].rawText}
+                            </pre>
+                          )}
+                          {doc.extractions[0].structuredPayload && Object.keys(doc.extractions[0].structuredPayload).length > 0 && (
+                            <div style={{ marginTop: '6px' }}>
+                              <b>Suggested fields:</b>
+                              <ul style={{ margin: '4px 0 0 16px', padding: 0 }}>
+                                {Object.entries(doc.extractions[0].structuredPayload).map(([k, v]) => (
+                                  <li key={k}><b>{k}</b>: {String(v)}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </>}
+    </Card>
+
+    <Modal open={uploadOpen} onClose={() => !uploading && setUploadOpen(false)} title="Upload Patient Document" subtitle="Files are stored securely in encrypted private storage.">
+      <form onSubmit={handleUpload} className="form-grid">
+        <Field label="Document File" required hint="PDF, JPG, PNG, or WebP. Max 10MB.">
+          <input
+            type="file"
+            accept=".pdf,.jpg,.jpeg,.png,.webp"
+            onChange={e => {
+              const file = e.target.files?.[0]
+              setFileToUpload(file || null)
+              if (file && !uploadTitle) setUploadTitle(file.name.replace(/\.[^/.]+$/, ''))
+            }}
+            required
+          />
+        </Field>
+        <Field label="Title / Description">
+          <input value={uploadTitle} onChange={e => setUploadTitle(e.target.value)} placeholder="e.g. National ID or Panoramic X-Ray" />
+        </Field>
+        <Field label="Category" required>
+          <select value={uploadCategory} onChange={e => setUploadCategory(e.target.value)}>
+            <option value="consent_document">Consent Document</option>
+            <option value="valid_id">Valid ID</option>
+            <option value="clinical_attachment">Clinical Attachment</option>
+            <option value="hmo_card">HMO Card</option>
+            <option value="treatment_request">Treatment Request</option>
+            <option value="prescription_source">Prescription Source</option>
+            <option value="invoice_proof">Payment Proof</option>
+            <option value="other">Other Document</option>
+          </select>
+        </Field>
+        <div className="span-2" style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '12px' }}>
+          <Button type="button" variant="ghost" onClick={() => setUploadOpen(false)} disabled={uploading}>Cancel</Button>
+          <Button type="submit" disabled={uploading}>{uploading ? 'Uploading...' : 'Upload Document'}</Button>
+        </div>
+      </form>
+    </Modal>
+
+    <Modal open={!!retractTarget} onClose={() => setRetractTarget(null)} title="Retract Document" subtitle="Retracting revokes download access and marks the record as retracted with an audit trail.">
+      <div className="form-grid">
+        <Field label="Retraction Reason" required hint="Explain why this document is being retracted (e.g. incorrect patient file, corrupted scan).">
+          <textarea value={retractReason} onChange={e => setRetractReason(e.target.value)} placeholder="Provide audit explanation..." rows={3} />
+        </Field>
+        <div className="span-2" style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '12px' }}>
+          <Button type="button" variant="ghost" onClick={() => setRetractTarget(null)}>Cancel</Button>
+          <Button type="button" variant="danger" onClick={handleRetract}>Confirm Retraction</Button>
+        </div>
+      </div>
+    </Modal>
+
+    <Modal open={consentOpen} onClose={() => setConsentOpen(false)} title="Record Patient Consent" subtitle="Records patient consent agreement on file.">
+      <form onSubmit={handleGrantConsent} className="form-grid">
+        <Field label="Consent Type" required>
+          <select value={consentForm.consent_type} onChange={e => setConsentForm({ ...consentForm, consent_type: e.target.value })}>
+            <option value="general_treatment">General Dental Treatment</option>
+            <option value="data_privacy">Data Privacy & Consent</option>
+            <option value="procedure_specific">Procedure-Specific Consent</option>
+            <option value="financial_agreement">Financial & HMO Agreement</option>
+          </select>
+        </Field>
+        <Field label="Version">
+          <input value={consentForm.version} onChange={e => setConsentForm({ ...consentForm, version: e.target.value })} />
+        </Field>
+        <Field label="Notes / Witness" className="span-2">
+          <textarea value={consentForm.notes} onChange={e => setConsentForm({ ...consentForm, notes: e.target.value })} placeholder="Signed in-person at clinic counter..." rows={2} />
+        </Field>
+        <div className="span-2" style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '12px' }}>
+          <Button type="button" variant="ghost" onClick={() => setConsentOpen(false)}>Cancel</Button>
+          <Button type="submit">Record Consent</Button>
+        </div>
+      </form>
+    </Modal>
+  </>
+}
+
 
 // The editable Treatment form, derived from the server record (or empty before treatment starts). Unsaved changes live
 // only in React memory; there are no browser Treatment drafts.

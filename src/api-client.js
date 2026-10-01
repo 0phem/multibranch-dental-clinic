@@ -37,7 +37,8 @@ function ensureCsrfCookie() {
 
 async function rawFetch(path, options) {
   const method = (options.method || 'GET').toUpperCase()
-  const headers = { Accept: 'application/json', ...(options.body ? { 'Content-Type': 'application/json' } : {}), ...options.headers }
+  const isForm = typeof FormData !== 'undefined' && options.body instanceof FormData
+  const headers = { Accept: 'application/json', ...(options.body && !isForm ? { 'Content-Type': 'application/json' } : {}), ...options.headers }
   if (method !== 'GET') {
     await ensureCsrfCookie()
     const token = getCookie('XSRF-TOKEN')
@@ -45,6 +46,7 @@ async function rawFetch(path, options) {
   }
   return fetch(`${apiBaseUrl()}${path}`, { ...options, method, headers, credentials: 'include' })
 }
+
 
 async function parseFailure(response) {
   let body = null
@@ -247,3 +249,28 @@ export function issueBillingInvoice(id, payload, key) { return command(`/api/inv
 export function recordBillingPayment(id, payload, key) { return command(`/api/invoices/${encodeURIComponent(id)}/payment`, payload, key) }
 export function myBillingInvoices() { return request('/api/invoices/mine') }
 export function myBillingReceipts() { return request('/api/receipts/mine') }
+
+// M14 Patient Forms, Documents & Consent Management
+export function listDocuments(params) { return request(`/api/documents${query(params)}`) }
+export function myDocuments() { return request('/api/documents/mine') }
+export function getDocument(id) { return request(`/api/documents/${encodeURIComponent(id)}`) }
+export function uploadDocument(formData, key) {
+  return request('/api/documents', {
+    method: 'POST',
+    body: formData,
+    headers: key ? { 'Idempotency-Key': key } : {},
+  })
+}
+export function retractDocument(id, payload, key) {
+  return command(`/api/documents/${encodeURIComponent(id)}/retract`, payload, key)
+}
+export function listPatientConsents(patientId) {
+  return request(`/api/patients/${encodeURIComponent(patientId)}/consents`)
+}
+export function myConsents() { return request('/api/consents/mine') }
+export function grantPatientConsent(patientId, payload, key) {
+  return command(`/api/patients/${encodeURIComponent(patientId)}/consents`, payload, key)
+}
+export function withdrawPatientConsent(patientId, consentId, key) {
+  return command(`/api/patients/${encodeURIComponent(patientId)}/consents/${encodeURIComponent(consentId)}/withdraw`, {}, key)
+}

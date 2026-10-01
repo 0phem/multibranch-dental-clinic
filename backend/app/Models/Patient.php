@@ -21,6 +21,19 @@ class Patient extends Model
         return ['public_id'];
     }
 
+    public function getRouteKeyName(): string
+    {
+        return 'public_id';
+    }
+
+    public function resolveRouteBinding($value, $field = null)
+    {
+        return $this->where('public_id', $value)
+            ->orWhere('patient_code', $value)
+            ->orWhere('id', is_numeric($value) ? (int) $value : 0)
+            ->first();
+    }
+
     protected $fillable = [
         'person_id',
         'patient_code',

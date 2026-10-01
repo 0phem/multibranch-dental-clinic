@@ -15,6 +15,7 @@ use App\Http\Controllers\UserBranchScopeController;
 use App\Http\Controllers\UserManagementController;
 use App\Http\Controllers\VisitController;
 use App\Http\Controllers\BillingController;
+use App\Http\Controllers\DocumentController;
 use App\Http\Controllers\Rbac\RbacDemoController;
 use App\Http\Controllers\Reference\BranchController;
 use App\Http\Controllers\Reference\BranchServiceController;
@@ -46,6 +47,20 @@ Route::middleware('auth:sanctum')->group(function () {
     });
     Route::get('/receipts/mine', [BillingController::class, 'receiptsMine'])->middleware('role:patient');
     Route::get('/billing/treatments', [BillingController::class, 'treatments'])->middleware('role:staff,owner');
+
+    // M14 Patient Forms, Documents & Consent Management
+    Route::prefix('documents')->group(function () {
+        Route::get('/mine', [DocumentController::class, 'mine'])->middleware('role:patient');
+        Route::get('/', [DocumentController::class, 'index'])->middleware('role:staff,dentist,owner');
+        Route::post('/', [DocumentController::class, 'store']);
+        Route::get('/{document}', [DocumentController::class, 'show']);
+        Route::get('/{document}/download', [DocumentController::class, 'download']);
+        Route::post('/{document}/retract', [DocumentController::class, 'retract']);
+    });
+    Route::get('/consents/mine', [DocumentController::class, 'consentsMine'])->middleware('role:patient');
+    Route::get('/patients/{patient}/consents', [DocumentController::class, 'consents']);
+    Route::post('/patients/{patient}/consents', [DocumentController::class, 'grantConsent']);
+    Route::post('/patients/{patient}/consents/{consent}/withdraw', [DocumentController::class, 'withdrawConsent']);
 
     // M1 User Management is a separate backend-authoritative account collection. It intentionally does not
     // replace the transitional frontend state.users collection or provision Staff/Dentist profiles.
