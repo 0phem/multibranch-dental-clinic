@@ -14,6 +14,7 @@ import { createUserAccountRemote, deleteUserAccountRemote, fetchUserAccounts, up
 import { DEFAULT_COUNTRY, normalizePhoneNumber, sanitizePhoneInput } from '../phone.js'
 import { fetchAutomationSnapshot, dispatchAutomationRule, downloadAutomationCsv } from '../automation-api.js'
 import { fetchExecutiveSummary, fetchBranchPerformance, downloadAnalyticsCsv } from '../analytics-api.js'
+import { sendTestEmail } from '../api-client.js'
 
 export function BranchesPage({ store }) {
   const { state, actions, toast }=store
@@ -394,6 +395,28 @@ export function AutomationPage({ store }) {
   const [runningRule, setRunningRule] = useState(false)
   const [selectedRuleCode, setSelectedRuleCode] = useState('R2_HMO_FOLLOWUP_REMINDER')
   const [filterStatus, setFilterStatus] = useState('all')
+  const [testEmailRecipient, setTestEmailRecipient] = useState('')
+  const [testingEmail, setTestingEmail] = useState(false)
+  const [testEmailResult, setTestEmailResult] = useState(null)
+
+  const handleSendTestEmail = async () => {
+    setTestingEmail(true)
+    setTestEmailResult(null)
+    try {
+      const res = await sendTestEmail(testEmailRecipient.trim() || undefined)
+      if (res.ok) {
+        setTestEmailResult({ tone: 'success', title: 'Diagnostic Email Dispatched', message: `Test email sent to ${res.recipient || testEmailRecipient || 'configured clinic mailbox'}.` })
+        toast('SMTP test email dispatched successfully.', 'success')
+      } else {
+        setTestEmailResult({ tone: 'warning', title: 'Dispatch Failed', message: res.message || 'Failed to send diagnostic test email.' })
+        toast(res.message || 'SMTP diagnostic failed.', 'warning')
+      }
+    } catch (err) {
+      setTestEmailResult({ tone: 'warning', title: 'Error', message: err.message || 'Unexpected network error.' })
+    } finally {
+      setTestingEmail(false)
+    }
+  }
 
   const refreshServer = async () => {
     try {
@@ -556,6 +579,38 @@ export function AutomationPage({ store }) {
         </div>
       </Card>
     </div>
+
+    <Card className="top-gap" title="Clinic SMTP Mailer Diagnostics" subtitle="Verify mail transport connectivity, TLS handshake, and delivery to test inboxes">
+      <div style={{ maxWidth: '520px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        <p className="text-secondary text-sm">
+          Send a diagnostic email using the clinic's configured mail transport. This validates outgoing server settings, SSL/TLS, and template rendering without generating production patient records.
+        </p>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-end' }}>
+          <div style={{ flex: 1 }}>
+            <Field label="Test recipient email">
+              <input
+                type="email"
+                placeholder="owner@example.test (or leave blank for self)"
+                value={testEmailRecipient}
+                onChange={e => setTestEmailRecipient(e.target.value)}
+              />
+            </Field>
+          </div>
+          <Button
+            onClick={handleSendTestEmail}
+            disabled={testingEmail}
+            variant="secondary"
+          >
+            {testingEmail ? 'Sending…' : 'Send Test Email'}
+          </Button>
+        </div>
+        {testEmailResult && (
+          <Notice tone={testEmailResult.tone} title={testEmailResult.title}>
+            {testEmailResult.message}
+          </Notice>
+        )}
+      </div>
+    </Card>
 
     <Card className="top-gap" title="Recent automation activity" subtitle="Central audit trail of system events and triggered actions">
       <div style={{ marginBottom: '12px', display: 'flex', gap: '8px' }}>

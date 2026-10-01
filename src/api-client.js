@@ -247,6 +247,18 @@ export function createBillingDraft(treatmentId, key) { return command(`/api/invo
 export function reviewBillingInvoice(id, payload, key) { return command(`/api/invoices/${encodeURIComponent(id)}/review`, payload, key) }
 export function issueBillingInvoice(id, payload, key) { return command(`/api/invoices/${encodeURIComponent(id)}/issue`, payload, key) }
 export function recordBillingPayment(id, payload, key) { return command(`/api/invoices/${encodeURIComponent(id)}/payment`, payload, key) }
+export function createPayMongoCheckout(invoiceId, payload = {}) {
+  return request(`/api/invoices/${encodeURIComponent(invoiceId)}/paymongo-checkout`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+export function sendTestEmail(recipientEmail) {
+  return request('/api/mail/test', {
+    method: 'POST',
+    body: JSON.stringify(recipientEmail ? { recipient_email: recipientEmail } : {}),
+  })
+}
 export function myBillingInvoices() { return request('/api/invoices/mine') }
 export function myBillingReceipts() { return request('/api/receipts/mine') }
 

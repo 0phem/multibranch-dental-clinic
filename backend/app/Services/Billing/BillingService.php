@@ -29,7 +29,110 @@ final class BillingService {
     public function transition(User $actor,Invoice $invoice,string $to,int $expected):Invoice {
         $this->staffBranch($actor,$invoice->branch_id); return DB::transaction(function()use($actor,$invoice,$to,$expected){$i=Invoice::whereKey($invoice->id)->lockForUpdate()->with(['lines','visit'])->firstOrFail(); if($i->revision!==$expected)throw new BillingException(409,'stale_revision','Invoice changed; reload before continuing.'); if($to==='Review'){if($i->status!=='Draft')throw new BillingException(422,'invalid_invoice_state','Only Draft invoices can be reviewed.'); $from=$i->status;$i->update(['status'=>'Review','revision'=>$i->revision+1,'updated_by_user_id'=>$actor->id]);$this->history($i,$actor,'invoice.reviewed',$from,'Review');return $i->fresh(['lines','histories']);} if($to==='Issued'){if($i->status!=='Review')throw new BillingException(422,'invalid_invoice_state','Only Review invoices can be issued.');$gate=$this->gate->forTreatment($i->treatment()->firstOrFail()); if($gate['blocks_invoice_issue'])throw new BillingException(422,'hmo_financial_hold','HMO financial decision is required before issuing this invoice.',['gate'=>$gate]);$coverage=in_array($gate['coverage_status'],['approved'],true)?$this->min((string)($gate['approved_amount']??'0.00'),(string)$i->gross_amount):'0.00';$resp=$this->sub((string)$i->gross_amount,$coverage);$paid=$resp==='0.00'?'0.00':(string)$i->paid_amount;$status=$resp==='0.00'?'Paid':'Issued';$i->update(['status'=>$status,'revision'=>$i->revision+1,'hmo_status'=>$gate['status'],'hmo_approved_amount'=>$gate['approved_amount'],'hmo_coverage_amount'=>$coverage,'patient_responsibility_amount'=>$resp,'paid_amount'=>$paid,'settlement_type'=>$resp==='0.00'?'full_hmo_coverage':null,'issued_at'=>ClinicClock::now(),'paid_at'=>$resp==='0.00'?ClinicClock::now():null,'updated_by_user_id'=>$actor->id]);$this->history($i,$actor,'invoice.issued','Review',$status,$resp==='0.00'?'full_hmo_coverage':null);return $i->fresh(['lines','histories','payment','receipt']);} throw new BillingException(422,'invalid_invoice_state','Unsupported invoice transition.');},3);
     }
-    public function pay(User $actor,Invoice $invoice,int $expected,string $method,?string $reference,?string $submittedAmount=null):Invoice { $this->staffBranch($actor,$invoice->branch_id); return DB::transaction(function()use($actor,$invoice,$expected,$method,$reference,$submittedAmount){$i=Invoice::whereKey($invoice->id)->lockForUpdate()->with(['lines','visit','payment','receipt'])->firstOrFail();if($i->revision!==$expected)throw new BillingException(409,'stale_revision','Invoice changed; reload before continuing.');if($i->status!=='Issued')throw new BillingException(422,$i->status==='Paid'?'already_paid':'invalid_invoice_state','This invoice is not payable.');$gate=$this->gate->forTreatment($i->treatment()->firstOrFail());if($gate['blocks_payment'])throw new BillingException(422,'hmo_financial_hold','HMO financial decision is required before payment.',['gate'=>$gate]);$current=$gate['coverage_status']==='approved'?$this->min((string)($gate['approved_amount']??'0.00'),(string)$i->gross_amount):'0.00';if($submittedAmount !== null && $this->cents($submittedAmount) !== $this->cents($this->sub((string)$i->patient_responsibility_amount,(string)$i->paid_amount))) throw new BillingException(422,'invalid_payment_amount','Payment must equal the full current balance.');if($current!== (string)$i->hmo_coverage_amount || (string)($gate['status']??'') !== (string)($i->hmo_status??''))throw new BillingException(409,'financial_state_changed','The HMO financial outcome changed after issue.');$balance=$this->sub((string)$i->patient_responsibility_amount,(string)$i->paid_amount);if($balance==='0.00')throw new BillingException(422,'already_paid','This invoice is already settled.');if(in_array($method,['Card/POS','Bank Transfer','E-Wallet'],true)&&!$reference)throw new BillingException(422,'invalid_payment_reference','An external reference is required for this payment method.');$payment=Payment::create(['invoice_id'=>$i->id,'amount'=>$balance,'method'=>$method,'external_reference'=>$reference,'recorded_by_user_id'=>$actor->id,'recorded_at'=>ClinicClock::now()]);$rn=DB::selectOne("select nextval('m11_receipt_number_seq') as n")->n;$receipt=Receipt::create(['payment_id'=>$payment->id,'invoice_id'=>$i->id,'receipt_number'=>'RCT-'.now()->format('Y').'-'.str_pad((string)$rn,6,'0',STR_PAD_LEFT),'amount'=>$balance,'method'=>$method,'external_reference'=>$reference,'issued_at'=>ClinicClock::now()]);$i->update(['status'=>'Paid','paid_amount'=>$balance,'paid_at'=>ClinicClock::now(),'revision'=>$i->revision+1,'updated_by_user_id'=>$actor->id]);$this->history($i,$actor,'invoice.paid','Issued','Paid');return $i->fresh(['lines','histories','payment','receipt']);},3); }
+    public function pay(User $actor,Invoice $invoice,int $expected,string $method,?string $reference,?string $submittedAmount=null):Invoice { $this->staffBranch($actor,$invoice->branch_id); return DB::transaction(function()use($actor,$invoice,$expected,$method,$reference,$submittedAmount){$i=Invoice::whereKey($invoice->id)->lockForUpdate()->with(['lines','visit.patient.person','payment','receipt','branch'])->firstOrFail();if($i->revision!==$expected)throw new BillingException(409,'stale_revision','Invoice changed; reload before continuing.');if($i->status!=='Issued')throw new BillingException(422,$i->status==='Paid'?'already_paid':'invalid_invoice_state','This invoice is not payable.');$gate=$this->gate->forTreatment($i->treatment()->firstOrFail());if($gate['blocks_payment'])throw new BillingException(422,'hmo_financial_hold','HMO financial decision is required before payment.',['gate'=>$gate]);$current=$gate['coverage_status']==='approved'?$this->min((string)($gate['approved_amount']??'0.00'),(string)$i->gross_amount):'0.00';if($submittedAmount !== null && $this->cents($submittedAmount) !== $this->cents($this->sub((string)$i->patient_responsibility_amount,(string)$i->paid_amount))) throw new BillingException(422,'invalid_payment_amount','Payment must equal the full current balance.');if($current!== (string)$i->hmo_coverage_amount || (string)($gate['status']??'') !== (string)($i->hmo_status??''))throw new BillingException(409,'financial_state_changed','The HMO financial outcome changed after issue.');$balance=$this->sub((string)$i->patient_responsibility_amount,(string)$i->paid_amount);if($balance==='0.00')throw new BillingException(422,'already_paid','This invoice is already settled.');if(in_array($method,['Card/POS','Bank Transfer','E-Wallet'],true)&&!$reference)throw new BillingException(422,'invalid_payment_reference','An external reference is required for this payment method.');$payment=Payment::create(['invoice_id'=>$i->id,'amount'=>$balance,'method'=>$method,'external_reference'=>$reference,'recorded_by_user_id'=>$actor->id,'recorded_at'=>ClinicClock::now()]);$rn=DB::selectOne("select nextval('m11_receipt_number_seq') as n")->n;$receipt=Receipt::create(['payment_id'=>$payment->id,'invoice_id'=>$i->id,'receipt_number'=>'RCT-'.now()->format('Y').'-'.str_pad((string)$rn,6,'0',STR_PAD_LEFT),'amount'=>$balance,'method'=>$method,'external_reference'=>$reference,'issued_at'=>ClinicClock::now()]);$i->update(['status'=>'Paid','paid_amount'=>$balance,'paid_at'=>ClinicClock::now(),'revision'=>$i->revision+1,'updated_by_user_id'=>$actor->id]);$this->history($i,$actor,'invoice.paid','Issued','Paid');
+        try {
+            $patientEmail = $i->patient?->user?->email ?? $i->patient?->person?->email;
+            if ($patientEmail) {
+                \Illuminate\Support\Facades\Mail::to($patientEmail)->send(new \App\Mail\PaymentReceiptMail($i, $receipt));
+            }
+        } catch (\Throwable $e) {}
+        return $i->fresh(['lines','histories','payment','receipt','visit.patient.person','branch']);},3); }
+
+    public function payOnline(Invoice $invoice, string $method, string $reference, ?User $actor = null): Invoice {
+        return DB::transaction(function() use ($invoice, $method, $reference, $actor) {
+            $i = Invoice::whereKey($invoice->id)->lockForUpdate()->with(['lines','visit.patient.person','patient.person','payment','receipt','branch'])->firstOrFail();
+            if ($i->status === 'Paid') {
+                return $i; // Idempotent return
+            }
+            if ($i->status !== 'Issued') {
+                throw new BillingException(422, 'invalid_invoice_state', 'This invoice is not in Issued payable status.');
+            }
+            $gate = $this->gate->forTreatment($i->treatment()->firstOrFail());
+            if ($gate['blocks_payment']) {
+                throw new BillingException(422, 'hmo_financial_hold', 'HMO financial decision is required before payment.', ['gate' => $gate]);
+            }
+            $balance = $this->sub((string)$i->patient_responsibility_amount, (string)$i->paid_amount);
+            if ($balance === '0.00') {
+                throw new BillingException(422, 'already_paid', 'This invoice is already settled.');
+            }
+
+            $recordedByUserId = $actor?->id ?? $i->patient?->user?->id ?? $i->created_by_user_id;
+
+            $payment = Payment::create([
+                'invoice_id' => $i->id,
+                'amount' => $balance,
+                'method' => $method,
+                'external_reference' => $reference,
+                'recorded_by_user_id' => $recordedByUserId,
+                'recorded_at' => ClinicClock::now(),
+            ]);
+
+            $rn = DB::selectOne("select nextval('m11_receipt_number_seq') as n")->n;
+            $receipt = Receipt::create([
+                'payment_id' => $payment->id,
+                'invoice_id' => $i->id,
+                'receipt_number' => 'RCT-' . now()->format('Y') . '-' . str_pad((string)$rn, 6, '0', STR_PAD_LEFT),
+                'amount' => $balance,
+                'method' => $method,
+                'external_reference' => $reference,
+                'issued_at' => ClinicClock::now(),
+            ]);
+
+            $i->update([
+                'status' => 'Paid',
+                'paid_amount' => $balance,
+                'paid_at' => ClinicClock::now(),
+                'revision' => $i->revision + 1,
+                'updated_by_user_id' => $recordedByUserId,
+            ]);
+
+            $recordedUser = User::find($recordedByUserId);
+            if ($recordedUser) {
+                $this->history($i, $recordedUser, 'invoice.paid', 'Issued', 'Paid', 'online_paymongo');
+            }
+
+            try {
+                $patientEmail = $i->patient?->user?->email ?? $i->patient?->person?->email;
+                if ($patientEmail) {
+                    \Illuminate\Support\Facades\Mail::to($patientEmail)->send(new \App\Mail\PaymentReceiptMail($i, $receipt));
+                }
+            } catch (\Throwable $e) {}
+
+            try {
+                if (class_exists(\App\Services\Audit\AuditService::class) && $recordedUser) {
+                    app(\App\Services\Audit\AuditService::class)->record(
+                        $recordedUser,
+                        'billing.payment_recorded',
+                        'Invoice',
+                        $i->public_id,
+                        $i->branch_id,
+                        [
+                            'invoice_number' => $i->invoice_number,
+                            'receipt_number' => $receipt->receipt_number,
+                            'amount' => (string)$balance,
+                            'method' => $method,
+                            'reference' => $reference,
+                        ]
+                    );
+                }
+                if (class_exists(\App\Services\Automation\WorkflowAutomationService::class)) {
+                    app(\App\Services\Automation\WorkflowAutomationService::class)->recordEvent(
+                        'billing.payment_received',
+                        'M11',
+                        $i->public_id,
+                        [
+                            'invoice_number' => $i->invoice_number,
+                            'receipt_number' => $receipt->receipt_number,
+                            'amount' => (string)$balance,
+                            'method' => $method,
+                        ]
+                    );
+                }
+            } catch (\Throwable $e) {}
+
+            return $i->fresh(['lines', 'histories', 'payment', 'receipt', 'visit.patient.person', 'branch']);
+        }, 3);
+    }
     private function history(Invoice $i,User $a,string $event,?string $from,?string $to,?string $settlement=null):void{InvoiceHistory::create(['invoice_id'=>$i->id,'event'=>$event,'from_status'=>$from,'to_status'=>$to,'settlement_type'=>$settlement,'snapshot'=>['gross_amount'=>(string)$i->gross_amount,'hmo_coverage_amount'=>(string)$i->hmo_coverage_amount,'patient_responsibility_amount'=>(string)$i->patient_responsibility_amount,'paid_amount'=>(string)$i->paid_amount],'actor_user_id'=>$a->id,'occurred_at'=>ClinicClock::now()]);}
     private function staffBranch(User $a,int $branch):void{if($a->role!==Role::Staff||!UserBranchScope::where('user_id',$a->id)->where('branch_id',$branch)->exists())throw new BillingException(403,'forbidden','Staff branch access is required.');}
     private function cents(string $v):int{$v=trim($v);if(!preg_match('/^\d+(?:\.\d{1,2})?$/',$v))throw new BillingException(500,'invalid_decimal','Invalid stored financial decimal.');$p=explode('.',$v);return ((int)$p[0])*100+(int)str_pad($p[1]??'0',2,'0');}

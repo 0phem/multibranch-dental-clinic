@@ -35,4 +35,11 @@ return [
         ],
     ],
 
+    'paymongo' => [
+        'public_key' => env('PAYMONGO_PUBLIC_KEY', 'pk_test_sample'),
+        'secret_key' => env('PAYMONGO_SECRET_KEY', 'sk_test_sample'),
+        'webhook_secret' => env('PAYMONGO_WEBHOOK_SECRET', 'whsec_sample'),
+        'base_url' => env('PAYMONGO_BASE_URL', 'https://api.paymongo.com/v1'),
+    ],
+
 ];
