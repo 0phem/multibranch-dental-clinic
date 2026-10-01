@@ -278,3 +278,14 @@ export function withdrawPatientConsent(patientId, consentId, key) {
 // M22 Audit Trail & Activity Monitoring Management (Owner only)
 export function listAuditLogs(params) { return request(`/api/audit-logs${query(params)}`) }
 export function getAuditLog(id) { return request(`/api/audit-logs/${encodeURIComponent(id)}`) }
+
+// M23 Integrated Workflow & Automation Control (Owner only)
+export function getAutomationSnapshot(branchId) {
+  const q = branchId ? `?branch_id=${encodeURIComponent(branchId)}` : ''
+  return request(`/api/automation/snapshot${q}`)
+}
+export function listAutomationRules() { return request('/api/automation/rules') }
+export function listAutomationActions(params) { return request(`/api/automation/actions${query(params)}`) }
+export function dispatchAutomationRule(ruleCode, payload) {
+  return command('/api/automation/dispatch', { rule_code: ruleCode, payload })
+}

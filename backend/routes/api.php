@@ -17,6 +17,7 @@ use App\Http\Controllers\VisitController;
 use App\Http\Controllers\BillingController;
 use App\Http\Controllers\DocumentController;
 use App\Http\Controllers\AuditController;
+use App\Http\Controllers\AutomationController;
 use App\Http\Controllers\Rbac\RbacDemoController;
 use App\Http\Controllers\Reference\BranchController;
 use App\Http\Controllers\Reference\BranchServiceController;
@@ -68,6 +69,15 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/', [AuditController::class, 'index']);
         Route::get('/export', [AuditController::class, 'export']);
         Route::get('/{auditLog}', [AuditController::class, 'show']);
+    });
+
+    // M23 Integrated Workflow & Automation Control (Owner only)
+    Route::prefix('automation')->middleware('role:owner')->group(function () {
+        Route::get('/snapshot', [AutomationController::class, 'snapshot']);
+        Route::get('/rules', [AutomationController::class, 'rules']);
+        Route::get('/actions', [AutomationController::class, 'actions']);
+        Route::post('/dispatch', [AutomationController::class, 'dispatch']);
+        Route::get('/export-csv', [AutomationController::class, 'exportCsv']);
     });
 
     // M1 User Management is a separate backend-authoritative account collection. It intentionally does not

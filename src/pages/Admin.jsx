@@ -12,6 +12,7 @@ import { branchCapacity, dateLabel, dentistName, makeCsv, patientName, peso, uid
 import { syncBranchUpdate, syncBranchServiceToggle, syncPersonnelUpdate } from '../reference-data-bridge.js'
 import { createUserAccountRemote, deleteUserAccountRemote, fetchUserAccounts, updateUserAccountRemote } from '../user-management-bridge.js'
 import { DEFAULT_COUNTRY, normalizePhoneNumber, sanitizePhoneInput } from '../phone.js'
+import { fetchAutomationSnapshot, dispatchAutomationRule, downloadAutomationCsv } from '../automation-api.js'
 
 export function BranchesPage({ store }) {
   const { state, actions, toast }=store
@@ -279,38 +280,218 @@ export function UsersPage({ store }) {
 }
 
 export function AutomationPage({ store }) {
-  const { state }=store
-  const monitor=automationSnapshot(state)
-  if(store.session&&store.session.role!=='owner')return <Notice>Automation monitoring is available to Owner/Admin.</Notice>
-  const success=monitor.success
-  const failed=monitor.failed.length
-  const rate=state.workflowLog.length?Math.round((success/state.workflowLog.length)*100):100
+  const { state, toast } = store
+  const monitor = automationSnapshot(state)
+  if (store.session && store.session.role !== 'owner') return <Notice>Automation monitoring is available to Owner/Admin.</Notice>
+
+  const [serverData, setServerData] = useState(null)
+  const [loading, setLoading] = useState(false)
+  const [runningRule, setRunningRule] = useState(false)
+  const [selectedRuleCode, setSelectedRuleCode] = useState('R2_HMO_FOLLOWUP_REMINDER')
+  const [filterStatus, setFilterStatus] = useState('all')
+
+  const refreshServer = async () => {
+    try {
+      setLoading(true)
+      const data = await fetchAutomationSnapshot()
+      setServerData(data)
+    } catch {
+      // Graceful fallback to client-side data
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  React.useEffect(() => {
+    refreshServer()
+  }, [])
+
+  const runDiagnostic = async () => {
+    try {
+      setRunningRule(true)
+      const res = await dispatchAutomationRule(selectedRuleCode, { diagnostic_check: true })
+      toast(res.message || 'Automation rule evaluated successfully.', 'success')
+      await refreshServer()
+    } catch (err) {
+      toast(err.message || 'Failed to trigger rule evaluation.', 'warning')
+    } finally {
+      setRunningRule(false)
+    }
+  }
+
+  const exportCsv = async () => {
+    try {
+      await downloadAutomationCsv({ status: filterStatus })
+      toast('Automation activity CSV exported successfully.', 'success')
+    } catch (err) {
+      toast(err.message || 'Could not export CSV.', 'warning')
+    }
+  }
+
+  const rate = serverData ? serverData.health_rate : (state.workflowLog.length ? Math.round((monitor.success / state.workflowLog.length) * 100) : 100)
+  const activeRulesCount = serverData ? serverData.active_rules_count : state.automations.filter(r => r.enabled).length
+  const failedCount = serverData ? serverData.failed_count : monitor.failed.length
+  const totalActions = serverData ? serverData.total_actions : state.workflowLog.length
+
+  const rulesList = serverData?.rules || state.automations.map(r => ({
+    id: r.id,
+    rule_code: r.triggerEvent,
+    name: r.event,
+    action: r.action,
+    condition: r.condition,
+    owner: r.owner,
+    is_active: r.enabled,
+    last_status: r.lastResult || 'Active',
+  }))
+
+  const actionsList = serverData?.recent_actions || state.workflowLog.map(e => ({
+    id: e.id,
+    executed_at_human: e.at,
+    event_type: e.event,
+    rule_code: e.domain,
+    result_summary: e.result,
+    status: e.status,
+    actor: { name: state.users.find(u => u.id === e.actorUserId)?.name || e.actorUserId || 'Historical' },
+    aggregate: e.entityType ? { type: e.entityType, id: e.entityId } : null,
+  }))
+
+  const filteredActions = filterStatus === 'all'
+    ? actionsList
+    : actionsList.filter(a => a.status.toLowerCase() === filterStatus.toLowerCase())
+
   return <>
-    <PageHeader kicker="System orchestration" title="Automation monitor" text="Monitor recorded frontend actions, failures, and warnings. Rules are read-only. No server workers, external delivery, or background scheduler are connected."/>
+    <PageHeader
+      kicker="System orchestration"
+      title="Automation monitor"
+      text="Monitor recorded frontend actions, failures, and warnings. Rules are read-only. No server workers, external delivery, or background scheduler are connected."
+      action={<div style={{ display: 'flex', gap: '8px' }}>
+        <Button onClick={refreshServer} disabled={loading} variant="secondary">
+          {loading ? 'Refreshing…' : 'Refresh Snapshot'}
+        </Button>
+        <Button onClick={exportCsv} variant="secondary">
+          Export CSV
+        </Button>
+      </div>}
+    />
     <div className="stats-grid">
-      <StatCard label="Automation health" value={`${rate}%`} hint="Successful recorded actions"/>
-      <StatCard label="Active rules" value={state.automations.filter(r=>r.enabled).length} hint="Approved workflow rules" tone="blue"/>
-      <StatCard label="Failed actions" value={failed} hint="Recorded failed attempts" tone="amber"/>
-      <StatCard label="Recent events" value={state.workflowLog.length} hint="Central activity feed" tone="purple"/>
+      <StatCard label="Automation health" value={`${rate}%`} hint="Successful recorded actions" />
+      <StatCard label="Active rules" value={activeRulesCount} hint="Approved workflow rules" tone="blue" />
+      <StatCard label="Failed actions" value={failedCount} hint="Recorded failed attempts" tone="amber" />
+      <StatCard label="Total actions" value={totalActions} hint="Central activity feed" tone="purple" />
     </div>
-    <div className="grid-2">
+
+    <Card title="Run Diagnostic Evaluation" subtitle="Trigger an authoritative verification run for an approved workflow rule" className="top-gap">
+      <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+        <div style={{ minWidth: '280px', flex: 1 }}>
+          <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--ink)', marginBottom: '4px' }}>
+            Select Workflow Rule
+          </label>
+          <select
+            value={selectedRuleCode}
+            onChange={e => setSelectedRuleCode(e.target.value)}
+            style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #d0d7de', fontSize: '13px' }}
+          >
+            <option value="R1_APPT_LIFECYCLE">R1 — Appointment Lifecycle (Slot reservation / notification staging)</option>
+            <option value="R2_HMO_FOLLOWUP_REMINDER">R2 — HMO Pending Timer (12h coordinator alert verification)</option>
+            <option value="R3_CAPACITY_ALERT">R3 — Capacity Alert (Wait & threshold monitoring)</option>
+            <option value="R4_TREATMENT_DOWNSTREAM">R4 — Treatment Completion (Draft invoice & Rx obligations)</option>
+            <option value="R5_MESSAGE_ROUTING">R5 — Message Routing (Staff queue assignment)</option>
+            <option value="R6_USER_PROFILE_SYNC">R6 — User Profile Sync (Personnel synchronization)</option>
+          </select>
+        </div>
+        <Button onClick={runDiagnostic} disabled={runningRule}>
+          {runningRule ? 'Evaluating Rule…' : 'Run Rule Evaluation'}
+        </Button>
+      </div>
+    </Card>
+
+    <div className="grid-2 top-gap">
       <Card title="Workflow health" subtitle="Protected automation rules currently in effect">
-        <div className="automation-rule-list">{state.automations.map(r=><div className="automation-rule-row" key={r.id}><div className="automation-rule-icon">{r.enabled?'✓':'—'}</div><div><b>{r.event}</b><span>{r.action}</span><small>{ruleTargetLabel(r)} • {r.condition}</small></div><Status>{r.enabled?'Active':'Inactive'}</Status></div>)}</div>
+        <div className="automation-rule-list">
+          {rulesList.map(r => (
+            <div className="automation-rule-row" key={r.id || r.rule_code}>
+              <div className="automation-rule-icon">{r.is_active !== false ? '✓' : '—'}</div>
+              <div>
+                <b>{r.name || r.rule_code}</b>
+                <span>{r.action}</span>
+                <small>{r.owner || 'System'} • {r.condition}</small>
+              </div>
+              <Status tone={r.is_active !== false ? 'success' : 'neutral'}>
+                {r.is_active !== false ? 'Active' : 'Inactive'}
+              </Status>
+            </div>
+          ))}
+        </div>
       </Card>
+
       <Card title="Recorded exceptions" subtitle="Historical failed attempts and warnings; current case status determines the next action">
-        <div className="alert-list">{[...monitor.failed,...monitor.warnings].length?[...monitor.failed,...monitor.warnings].map(x=><div className="alert warning" key={x.id}><div><b>{x.event}</b><span>{x.result}</span><small>{x.createdAt||x.at} • {x.entityType||'Legacy record'} {x.entityId||''}</small></div><Status>{x.status}</Status></div>):<Notice tone="success" title="No recorded exceptions">No failed attempts or warnings are present in the current activity history.</Notice>}</div>
+        <div className="alert-list">
+          {((serverData?.recent_exceptions && serverData.recent_exceptions.length > 0)
+            ? serverData.recent_exceptions
+            : [...monitor.failed, ...monitor.warnings]
+          ).length > 0 ? (
+            ((serverData?.recent_exceptions && serverData.recent_exceptions.length > 0)
+              ? serverData.recent_exceptions
+              : [...monitor.failed, ...monitor.warnings]
+            ).map(x => (
+              <div className="alert warning" key={x.id}>
+                <div>
+                  <b>{x.event_type || x.event || x.rule_name}</b>
+                  <span>{x.result_summary || x.result}</span>
+                  <small>{x.executed_at_human || x.createdAt || x.at} • {x.aggregate?.type || x.entityType || 'Action'} {x.aggregate?.id || x.entityId || ''}</small>
+                </div>
+                <Status tone={x.status === 'Failed' ? 'critical' : 'warning'}>{x.status}</Status>
+              </div>
+            ))
+          ) : (
+            <Notice tone="success" title="No recorded exceptions">
+              No failed attempts or warnings are present in the current activity history.
+            </Notice>
+          )}
+        </div>
       </Card>
     </div>
+
     <Card className="top-gap" title="Recent automation activity" subtitle="Central audit trail of system events and triggered actions">
-      <Table rows={state.workflowLog} columns={[
-        {key:'at',label:'Time'},
-        {key:'module',label:'Workflow',render:e=>eventModuleLabel(e)},
-        {key:'entity',label:'Affected record',render:e=>`${e.entityType||'Legacy'} • ${e.entityId||'Not linked'}`},
-        {key:'actor',label:'Actor',render:e=>state.users.find(u=>u.id===e.actorUserId)?.name||e.actorUserId||'Historical record'},
-        {key:'event',label:'Event'},
-        {key:'result',label:'Result'},
-        {key:'status',label:'Status',render:r=><Status>{r.status}</Status>}
-      ]}/>
+      <div style={{ marginBottom: '12px', display: 'flex', gap: '8px' }}>
+        <button
+          className={`tab-btn ${filterStatus === 'all' ? 'active' : ''}`}
+          onClick={() => setFilterStatus('all')}
+          style={{ padding: '6px 12px', borderRadius: '4px', border: '1px solid #d0d7de', background: filterStatus === 'all' ? 'var(--brand-soft)' : '#fff', cursor: 'pointer', fontSize: '12px' }}
+        >
+          All
+        </button>
+        <button
+          className={`tab-btn ${filterStatus === 'success' ? 'active' : ''}`}
+          onClick={() => setFilterStatus('success')}
+          style={{ padding: '6px 12px', borderRadius: '4px', border: '1px solid #d0d7de', background: filterStatus === 'success' ? 'var(--brand-soft)' : '#fff', cursor: 'pointer', fontSize: '12px' }}
+        >
+          Success
+        </button>
+        <button
+          className={`tab-btn ${filterStatus === 'warning' ? 'active' : ''}`}
+          onClick={() => setFilterStatus('warning')}
+          style={{ padding: '6px 12px', borderRadius: '4px', border: '1px solid #d0d7de', background: filterStatus === 'warning' ? 'var(--brand-soft)' : '#fff', cursor: 'pointer', fontSize: '12px' }}
+        >
+          Warning
+        </button>
+        <button
+          className={`tab-btn ${filterStatus === 'failed' ? 'active' : ''}`}
+          onClick={() => setFilterStatus('failed')}
+          style={{ padding: '6px 12px', borderRadius: '4px', border: '1px solid #d0d7de', background: filterStatus === 'failed' ? 'var(--brand-soft)' : '#fff', cursor: 'pointer', fontSize: '12px' }}
+        >
+          Failed
+        </button>
+      </div>
+      <Table rows={filteredActions} columns={[
+        { key: 'at', label: 'Time', render: a => a.executed_at_human || a.at },
+        { key: 'rule', label: 'Workflow Rule', render: a => a.rule_name || a.rule_code || eventModuleLabel(a) },
+        { key: 'entity', label: 'Affected record', render: a => a.aggregate ? `${a.aggregate.type} • ${a.aggregate.id}` : `${a.entityType || 'Legacy'} • ${a.entityId || 'Not linked'}` },
+        { key: 'actor', label: 'Actor', render: a => a.actor?.name || state.users.find(u => u.id === a.actorUserId)?.name || a.actorUserId || 'Historical record' },
+        { key: 'event', label: 'Event', render: a => a.event_type || a.event },
+        { key: 'result', label: 'Result', render: a => a.result_summary || a.result },
+        { key: 'status', label: 'Status', render: r => <Status tone={r.status === 'Success' ? 'success' : r.status === 'Warning' ? 'warning' : 'critical'}>{r.status}</Status> }
+      ]} />
     </Card>
   </>
 }
