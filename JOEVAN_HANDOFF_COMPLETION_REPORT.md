@@ -218,9 +218,45 @@ All commits follow conventional semantic commit standards, maintain surgical dif
 
 ---
 
-## 6. Future Expansion Roadmap (Next Wave)
+## 6. Integrations Wave: PayMongo Payment Gateway & Clinic SMTP Mailer (Option B Complete)
 
-Per Section 5 and Section 16 of the handoff, the following items were intentionally deferred from the core clinical/operational wave and are designated for the upcoming enhancement cycle:
-1. **PayMongo Payment Gateway Integration**: Webhook receivers, online checkout sessions, and automated invoice settlement via GCash/Maya/Card.
-2. **Production SMTP Emailer**: Real transactional email transport (e.g. Mailtrap / Resend / Amazon SES) for OTP delivery, automated appointment reminders, and follow-up notices.
-3. **OCR Provider Upgrade**: Integration with Google Cloud Vision or Tesseract OCR for automated intake form key-value extraction.
+Following the completion of core modules M11, M14, M22, M23, and M21, the **PayMongo Payment Gateway** and **Clinic Transactional SMTP Emailer** were implemented on feature branch `feature/integrations-paymongo-and-mailer` and merged into `main`.
+
+### A. PayMongo Payment Gateway Implementation
+- **Checkout Sessions API**: Integrated `POST /api/invoices/{invoice}/paymongo-checkout` with support for Philippine payment rails (GCash, Maya, GrabPay, Credit/Debit cards).
+- **Cryptographic Webhook Receiver**: Implemented `POST /api/webhooks/paymongo` with timing-attack safe HMAC SHA-256 signature verification (`Paymongo-Signature` header validation).
+- **Atomic Online Invoice Settlement**: Engineered `payOnline()` in `BillingService` featuring row-level locking (`lockForUpdate`), zero-balance prevention, sequential receipt generation (`RCT-YYYY-######`), automated workflow event dispatching, and audit logging.
+- **Frontend Patient Billing UI**: Added "Pay Online (GCash / Maya / Card)" action on issued invoices with outstanding balances in `PatientCare.jsx`, complete with checkout redirect and return handling.
+
+### B. Branded Transactional SMTP Mailer & Templates
+- **Responsive Layout**: Authored `emails/layout.blade.php` featuring clinic branding (Dr. Dana E. Roxas Dental Clinic), branch details, and responsive typography.
+- **HTML Email Templates & Mailables**:
+  - `AppointmentConfirmationMail.php` & `emails/appointment-confirmation.blade.php`: Automatic dispatch upon booking with clinic date, time, dentist, branch address, and patient instructions.
+  - `PaymentReceiptMail.php` & `emails/payment-receipt.blade.php`: Automatic dispatch upon online or in-clinic invoice settlement with itemized charges, receipt number, payment method, and timestamp.
+  - `ClinicTestMail.php` & `emails/test-mail.blade.php`: Diagnostic test email for mail transport verification.
+- **Owner SMTP Diagnostic Console**: Added `POST /api/mail/test` and an administrative diagnostic card on `AutomationPage` (`Admin.jsx`) allowing the Owner to test outbound mail delivery in real time without creating dummy records.
+
+### C. Comprehensive Testing Verification
+- **Backend Tests**: 10 new integration tests in `PayMongoPaymentTest.php` and `ClinicMailerTest.php` (all passed).
+- **Frontend Tests**: Integration suite `tests/m11-paymongo.test.js` validating client methods and UI components (all 652 tests passed).
+- **Zero External Dependencies**: Implemented using native Laravel `Http` and `Mail` facades without adding third-party packages to `composer.json` or `package.json`.
+
+---
+
+## 7. Final Git Commit History & GitHub Synchronization
+
+All commits follow conventional semantic commit standards, maintain surgical diffs, and are cleanly merged into `main`:
+
+| Commit Hash | Author | Message | Scope |
+| :--- | :--- | :--- | :--- |
+| `5137a75` | Joevan Delos Santos | `fix(auth): ensure demo patient is pre-verified in DemoAccountsSeeder` | M11 QA / Auth |
+| `353ca52` | Joevan Delos Santos | `feat(m14): patient forms, documents, and consent management` | Module 14 |
+| `5e85aa5` | Joevan Delos Santos | `feat(m22): implement Module 22 Audit Trail & Activity Monitoring Management` | Module 22 |
+| `cc76eb7` | Joevan Delos Santos | `feat(m23): implement Module 23 Integrated Workflow & Automation Control` | Module 23 |
+| `a54421e` | Joevan Delos Santos | `feat(m21): implement Module 21 Operational Analytics and Executive Intelligence` | Module 21 |
+| `e00a29a` | Joevan Delos Santos | `feat(integrations): implement PayMongo payment gateway and clinic branded mailer` | PayMongo & Mailer |
+
+- **Local `HEAD`**: Merge commit on `main` integrating `feature/integrations-paymongo-and-mailer`
+- **Total Passing Automated Tests**: **334 Backend Feature Tests** & **652 Frontend Unit Tests** (100% Pass)
+- **Production Build Status**: `dist/` compiled cleanly with Vite in 2.04s.
+
