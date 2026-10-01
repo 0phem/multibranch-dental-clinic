@@ -274,3 +274,7 @@ export function grantPatientConsent(patientId, payload, key) {
 export function withdrawPatientConsent(patientId, consentId, key) {
   return command(`/api/patients/${encodeURIComponent(patientId)}/consents/${encodeURIComponent(consentId)}/withdraw`, {}, key)
 }
+
+// M22 Audit Trail & Activity Monitoring Management (Owner only)
+export function listAuditLogs(params) { return request(`/api/audit-logs${query(params)}`) }
+export function getAuditLog(id) { return request(`/api/audit-logs/${encodeURIComponent(id)}`) }

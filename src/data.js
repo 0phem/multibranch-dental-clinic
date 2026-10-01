@@ -27,7 +27,7 @@ export const MODULES = [
   { no: 19, name: 'Digital Prescription & OCR-Assisted Management', owner: 'Ecal, Richmon', area: 'Clinical', roles: ['patient','dentist'], coverage: 'partial', coverageNote: 'Digital prescription is represented; OCR-assisted transcription is planned' },
   { no: 20, name: 'Treatment Follow-Up & Recall Management', owner: 'Ecal, Richmon', area: 'Clinical', roles: ['patient','staff','dentist'] },
   { no: 21, name: 'Operational Analytics & Executive Intelligence', owner: 'Delos Santos, Joevan', area: 'Analytics', roles: ['owner'] },
-  { no: 22, name: 'Audit Trail & Activity Monitoring Management', owner: 'Delos Santos, Joevan', area: 'Governance', roles: ['owner'], coverage: 'planned', coverageNote: 'Planned: only a limited in-browser activity history exists today; no tamper-resistant audit trail yet' },
+  { no: 22, name: 'Audit Trail & Activity Monitoring Management', owner: 'Delos Santos, Joevan', area: 'Governance', roles: ['owner'], coverage: 'implemented', coverageNote: 'Backend-authoritative immutable audit trail with forensic inspection and CSV export (Planned: only a limited in-browser activity history exists in legacy client)', implemented: true },
   { no: 23, name: 'Integrated Workflow & Automation Control', owner: 'Delos Santos, Joevan', area: 'Automation', roles: ['owner'] },
   { no: 24, name: 'Referral & Loyalty Management', owner: 'Millar, John Yzhekiel', area: 'Engagement', roles: ['patient','staff','owner'], enhancement: true, pe: true, implemented: true },
   { no: 25, name: 'Marketing, Reactivation & Patient Engagement Management', owner: 'Millar, John Yzhekiel', area: 'Engagement', roles: ['staff','owner'], enhancement: true, pe: true, implemented: false, preview: true },
@@ -55,7 +55,7 @@ export const NAV = {
   ],
   owner: [
     ['dashboard','Executive Dashboard'], ['analytics','Analytics & Reports'], ['branches','Branches'], ['team','People & Team'], ['capacity','Capacity & Workload'],
-    ['hmo','HMO Management'], ['users','User Management'], ['pricing','Services & Pricing'], ['automation','Automation Monitor'], ['engagement','Engagement']
+    ['hmo','HMO Management'], ['users','User Management'], ['pricing','Services & Pricing'], ['automation','Automation Monitor'], ['audit','Audit Trail'], ['engagement','Engagement']
   ],
 }
 

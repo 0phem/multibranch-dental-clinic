@@ -8,6 +8,7 @@ use App\Http\Resources\PatientConsentResource;
 use App\Models\Document;
 use App\Models\Patient;
 use App\Models\PatientConsent;
+use App\Services\Audit\AuditService;
 use App\Services\Document\DocumentException;
 use App\Services\Document\DocumentStorageService;
 use Carbon\CarbonImmutable;
@@ -17,7 +18,10 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class DocumentController extends Controller
 {
-    public function __construct(private readonly DocumentStorageService $storage) {}
+    public function __construct(
+        private readonly DocumentStorageService $storage,
+        private readonly AuditService $audit
+    ) {}
 
     private function fail(DocumentException $e): JsonResponse
     {
@@ -95,6 +99,22 @@ class DocumentController extends Controller
 
         try {
             $doc = $this->storage->store($request->user(), $request->file('file'), $request->all());
+
+            $this->audit->record([
+                'action' => 'document.uploaded',
+                'category' => 'administrative',
+                'severity' => 'info',
+                'actor' => $request->user(),
+                'target' => $doc,
+                'branch_id' => $doc->branch_id,
+                'payload' => [
+                    'category' => $doc->category,
+                    'title' => $doc->title,
+                    'file_size_bytes' => $doc->file_size_bytes,
+                    'checksum_sha256' => $doc->checksum_sha256,
+                ],
+            ]);
+
             return response()->json([
                 'data' => new DocumentResource($doc),
             ], 201);
@@ -129,6 +149,19 @@ class DocumentController extends Controller
 
         try {
             $updated = $this->storage->retract($request->user(), $document, $request->input('reason'));
+
+            $this->audit->record([
+                'action' => 'document.retracted',
+                'category' => 'administrative',
+                'severity' => 'warning',
+                'actor' => $request->user(),
+                'target' => $updated,
+                'branch_id' => $updated->branch_id,
+                'payload' => [
+                    'reason' => $request->input('reason'),
+                ],
+            ]);
+
             return response()->json([
                 'data' => new DocumentResource($updated),
             ]);
@@ -202,6 +235,19 @@ class DocumentController extends Controller
             'recorded_by_user_id' => $user->id,
         ]);
 
+        $this->audit->record([
+            'action' => 'consent.granted',
+            'category' => 'clinical',
+            'severity' => 'info',
+            'actor' => $user,
+            'target' => $consent,
+            'payload' => [
+                'consent_type' => $consent->consent_type,
+                'version' => $consent->version,
+                'patient_code' => $patient->patient_code,
+            ],
+        ]);
+
         return response()->json([
             'data' => new PatientConsentResource($consent->load(['patient', 'document', 'recordedBy.person'])),
         ], 201);
@@ -223,6 +269,19 @@ class DocumentController extends Controller
         $consent->update([
             'status' => 'Withdrawn',
             'withdrawn_at' => CarbonImmutable::now('Asia/Manila'),
+        ]);
+
+        $this->audit->record([
+            'action' => 'consent.withdrawn',
+            'category' => 'clinical',
+            'severity' => 'warning',
+            'actor' => $user,
+            'target' => $consent,
+            'payload' => [
+                'consent_type' => $consent->consent_type,
+                'version' => $consent->version,
+                'patient_code' => $patient->patient_code,
+            ],
         ]);
 
         return response()->json([

@@ -16,6 +16,7 @@ use App\Http\Controllers\UserManagementController;
 use App\Http\Controllers\VisitController;
 use App\Http\Controllers\BillingController;
 use App\Http\Controllers\DocumentController;
+use App\Http\Controllers\AuditController;
 use App\Http\Controllers\Rbac\RbacDemoController;
 use App\Http\Controllers\Reference\BranchController;
 use App\Http\Controllers\Reference\BranchServiceController;
@@ -61,6 +62,13 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/patients/{patient}/consents', [DocumentController::class, 'consents']);
     Route::post('/patients/{patient}/consents', [DocumentController::class, 'grantConsent']);
     Route::post('/patients/{patient}/consents/{consent}/withdraw', [DocumentController::class, 'withdrawConsent']);
+
+    // M22 Audit Trail & Activity Monitoring Management (Owner only)
+    Route::prefix('audit-logs')->middleware('role:owner')->group(function () {
+        Route::get('/', [AuditController::class, 'index']);
+        Route::get('/export', [AuditController::class, 'export']);
+        Route::get('/{auditLog}', [AuditController::class, 'show']);
+    });
 
     // M1 User Management is a separate backend-authoritative account collection. It intentionally does not
     // replace the transitional frontend state.users collection or provision Staff/Dentist profiles.
