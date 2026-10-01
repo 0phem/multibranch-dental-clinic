@@ -13,6 +13,7 @@ import { syncBranchUpdate, syncBranchServiceToggle, syncPersonnelUpdate } from '
 import { createUserAccountRemote, deleteUserAccountRemote, fetchUserAccounts, updateUserAccountRemote } from '../user-management-bridge.js'
 import { DEFAULT_COUNTRY, normalizePhoneNumber, sanitizePhoneInput } from '../phone.js'
 import { fetchAutomationSnapshot, dispatchAutomationRule, downloadAutomationCsv } from '../automation-api.js'
+import { fetchExecutiveSummary, fetchBranchPerformance, downloadAnalyticsCsv } from '../analytics-api.js'
 
 export function BranchesPage({ store }) {
   const { state, actions, toast }=store
@@ -161,32 +162,136 @@ export function TeamPage({ store }) {
 }
 
 export function AnalyticsPage({ activeBranch, store }) {
-  const { state }=store
-  const [period,setPeriod]=useState('Today')
-  const branchFilter=x=>activeBranch==='All Branches'||x.branch===activeBranch
-  const appts=state.appointments.filter(branchFilter)
-  const queue=state.queue.filter(branchFilter)
-  // D5: legacy demo records (pre-cutover appointments) never feed live analytics.
-  const hmo=liveRecords(state.hmo).filter(branchFilter)
-  const paid=liveRecords(state.invoices).filter(i=>i.status==='Paid'&&branchFilter(i))
-  // M6 appointments are loaded for a bounded working window, not all-time history, so the Scheduling metric names the
-  // window it covers (and says when even that window was cut short). The period selector does not apply to it.
-  const loaded=appointmentWindow(clinicDate())
-  const schedulingNote=`Confirmed appointments dated ${dateLabel(loaded.from)} – ${dateLabel(loaded.to)} (the loaded scheduling window, not all-time; the period selector does not apply)${store.appointmentsTruncated?'. Partial: the appointment list limit was reached.':''}`
-  const metrics=[
-    {name:'Scheduling',value:appts.filter(a=>a.status==='Confirmed').length,note:schedulingNote,module:'M6'},
-    {name:'Queue / patient flow',value:queue.filter(q=>q.status==='Served').length,note:'Patients served from today’s queue (treatment started)',module:'M9–M10'},
-    {name:'HMO processing',value:hmo.filter(h=>h.status==='Approved').length,note:'Approved provider outcomes',module:'M12'},
-    {name:'Communication',value:state.inquiries.filter(i=>i.status==='Responded').length+state.conversations.filter(c=>c.status==='Closed').length,note:'Responded/closed communication records',module:'M16–M18'},
-    {name:'Recorded revenue',value:peso.format(paid.reduce((s,i)=>s+i.total,0)),note:'Paid transaction records',module:'M11'},
+  const { state, toast } = store
+  const [period, setPeriod] = useState('Today')
+  const [serverSummary, setServerSummary] = useState(null)
+  const [serverBranches, setServerBranches] = useState(null)
+  const [loading, setLoading] = useState(false)
+
+  const activeBranchRecord = state.branches.find(b => b.name === activeBranch)
+  const activeBranchId = activeBranch === 'All Branches' ? null : (activeBranchRecord?.id || null)
+
+  const loadData = async () => {
+    try {
+      setLoading(true)
+      const p = period.toLowerCase()
+      const summary = await fetchExecutiveSummary({ period: p, branch_id: activeBranchId })
+      setServerSummary(summary)
+      const branches = await fetchBranchPerformance({ period: p })
+      setServerBranches(branches)
+    } catch {
+      // Graceful fallback to client-side data
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  React.useEffect(() => {
+    loadData()
+  }, [period, activeBranch])
+
+  const exportServerCsv = async () => {
+    try {
+      await downloadAnalyticsCsv({ period: period.toLowerCase(), branch_id: activeBranchId })
+      toast('Operational analytics CSV exported successfully.', 'success')
+    } catch (err) {
+      toast(err.message || 'Could not export server CSV.', 'warning')
+    }
+  }
+
+  // Client-side fallback metrics
+  const branchFilter = x => activeBranch === 'All Branches' || x.branch === activeBranch
+  const appts = state.appointments.filter(branchFilter)
+  const queue = state.queue.filter(branchFilter)
+  const hmo = liveRecords(state.hmo).filter(branchFilter)
+  const paid = liveRecords(state.invoices).filter(i => i.status === 'Paid' && branchFilter(i))
+
+  const loaded = appointmentWindow(clinicDate())
+  const schedulingNote = `Confirmed appointments dated ${dateLabel(loaded.from)} – ${dateLabel(loaded.to)} (the loaded scheduling window, not all-time; the period selector does not apply)${store.appointmentsTruncated?'. Partial: the appointment list limit was reached.':''}`
+
+  const clientMetrics = [
+    { name: 'Scheduling', value: appts.filter(a => a.status === 'Confirmed').length, note: schedulingNote, module: 'M6' },
+    { name: 'Queue / patient flow', value: queue.filter(q => q.status === 'Served').length, note: 'Patients served from today’s queue (treatment started)', module: 'M9–M10' },
+    { name: 'HMO processing', value: hmo.filter(h => h.status === 'Approved').length, note: 'Approved provider outcomes', module: 'M12' },
+    { name: 'Communication', value: state.inquiries.filter(i => i.status === 'Responded').length + state.conversations.filter(c => c.status === 'Closed').length, note: 'Responded/closed communication records', module: 'M16–M18' },
+    { name: 'Recorded revenue', value: peso.format(paid.reduce((s, i) => s + i.total, 0)), note: 'Paid transaction records', module: 'M11' },
   ]
-  const exportRows=state.branches.map(b=>{const c=branchCapacity(b.name,state);return {Branch:b.name,Workload:c.workload,Waiting:c.waiting,Booked:c.booked,EstimatedWait:c.estimate,Threshold:c.threshold}})
+
+  const metrics = serverSummary ? [
+    { name: 'Recorded revenue', value: peso.format(serverSummary.financials.total_collected_php), note: `Real collections from ${serverSummary.financials.paid_invoices_count} paid invoice(s) • Gross: ${peso.format(serverSummary.financials.total_gross_php)}`, module: 'M11' },
+    { name: 'Scheduling', value: serverSummary.scheduling.total_appointments, note: `Completion rate: ${serverSummary.scheduling.completion_rate_pct}% (${serverSummary.scheduling.completed} completed, ${serverSummary.scheduling.cancelled} cancelled)`, module: 'M6' },
+    { name: 'Queue / patient flow', value: serverSummary.patient_flow.total_visits, note: `${serverSummary.patient_flow.served_from_queue} served • ${serverSummary.patient_flow.current_waiting} currently waiting`, module: 'M9–M10' },
+    { name: 'HMO processing', value: serverSummary.hmo.approved, note: `${peso.format(serverSummary.hmo.approved_amount_php)} approved coverage • ${serverSummary.hmo.pending} pending coordinator action`, module: 'M12' },
+    { name: 'Automation health', value: `${serverSummary.automation.health_rate_pct}%`, note: `${serverSummary.automation.total_actions} actions executed (${serverSummary.automation.failed} failed)`, module: 'M23' },
+  ] : clientMetrics
+
+  const exportRows = state.branches.map(b => {
+    const c = branchCapacity(b.name, state)
+    return { Branch: b.name, Workload: c.workload, Waiting: c.waiting, Booked: c.booked, EstimatedWait: c.estimate, Threshold: c.threshold }
+  })
+
   return <>
-    <PageHeader title="Operational Reporting & Analytics" text="Cross-cutting KPI layer for queue, scheduling, workload, HMO, communication, and patient flow. Reports are filtered by branch and period before management review." aside={<select className="compact-select" value={period} onChange={e=>setPeriod(e.target.value)}><option>Today</option><option>This Week</option><option>This Month</option></select>}/>
-    <div className="cards-3">{metrics.map(m=><Card key={m.name} title={m.name}><div className="analytics-value">{m.value}</div><p className="muted-copy">{m.note}</p><span className="module-inline">{m.module}</span></Card>)}</div>
+    <PageHeader
+      title="Operational Reporting & Analytics"
+      text="Cross-cutting executive intelligence for revenue, queue, scheduling, capacity, HMO, and automation performance. Filtered by branch and authoritative business period."
+      aside={<div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+        <select className="compact-select" value={period} onChange={e => setPeriod(e.target.value)}>
+          <option>Today</option>
+          <option>This Week</option>
+          <option>This Month</option>
+          <option>This Year</option>
+          <option>All Time</option>
+        </select>
+        <Button onClick={exportServerCsv} variant="secondary">
+          Export Report CSV
+        </Button>
+      </div>}
+    />
+    <div className="cards-3">
+      {metrics.map(m => (
+        <Card key={m.name} title={m.name}>
+          <div className="analytics-value">{m.value}</div>
+          <p className="muted-copy">{m.note}</p>
+          <span className="module-inline">{m.module}</span>
+        </Card>
+      ))}
+    </div>
     <div className="grid-2 top-gap">
-      <Card title="Branch workload report"><div className="branch-bars">{state.branches.filter(b=>activeBranch==='All Branches'||b.name===activeBranch).map(b=>{const c=branchCapacity(b.name,state);return <div key={b.id}><div className="bar-label"><span>{b.name}</span><b>{c.workload}%</b></div><Progress value={c.workload} threshold={c.threshold}/><small>{c.waiting} waiting • {c.booked} booked • ~{c.estimate} min wait</small></div>})}</div></Card>
-      <Card title="Report actions" subtitle="Report exports"><div className="action-stack"><Button onClick={()=>makeCsv('branch-capacity.csv',exportRows)}>Export Branch Capacity CSV</Button><Button variant="ghost" onClick={()=>makeCsv('hmo-report.csv',hmo.map(x=>({Patient:patientName(x.patientId,state.patients),Provider:x.provider,Branch:x.branch,Status:x.status,PendingHours:pendingHours(x,state.clock),Reference:x.reference||''})))}>Export HMO CSV</Button><Notice tone="info">Reports are prepared from operational records and can be filtered by branch and reporting period.</Notice></div></Card>
+      <Card title="Branch workload report" subtitle={serverSummary ? `Authoritative comparative data for ${serverSummary.period_label}` : undefined}>
+        <div className="branch-bars">
+          {(serverBranches || state.branches.filter(b => activeBranch === 'All Branches' || b.name === activeBranch)).map(b => {
+            const isServer = !!b.revenue_collected_php !== undefined && b.active_queue !== undefined
+            const workload = isServer ? Math.min(100, Math.round((b.active_queue / Math.max(1, b.capacity_threshold || 80)) * 100)) : branchCapacity(b.name, state).workload
+            const threshold = b.capacity_threshold || 80
+            const waiting = isServer ? b.active_queue : branchCapacity(b.name, state).waiting
+            const booked = isServer ? b.total_appointments : branchCapacity(b.name, state).booked
+            const estimate = isServer ? b.estimated_wait_minutes : branchCapacity(b.name, state).estimate
+            const revenue = isServer ? peso.format(b.revenue_collected_php) : null
+
+            return <div key={b.id || b.branch_id}>
+              <div className="bar-label">
+                <span>{b.name}</span>
+                <b>{workload}%</b>
+              </div>
+              <Progress value={workload} threshold={threshold} />
+              <small>
+                {waiting} waiting • {booked} appointments • ~{estimate} min wait
+                {revenue ? ` • Revenue: ${revenue}` : ''}
+              </small>
+            </div>
+          })}
+        </div>
+      </Card>
+      <Card title="Report actions" subtitle="Executive exports & reconciliation">
+        <div className="action-stack">
+          <Button onClick={exportServerCsv}>Export Executive Analytics CSV</Button>
+          <Button variant="ghost" onClick={() => makeCsv('branch-capacity.csv', exportRows)}>Export Local Capacity CSV</Button>
+          <Button variant="ghost" onClick={() => makeCsv('hmo-report.csv', hmo.map(x => ({ Patient: patientName(x.patientId, state.patients), Provider: x.provider, Branch: x.branch, Status: x.status, PendingHours: pendingHours(x, state.clock), Reference: x.reference || '' })))}>Export HMO CSV</Button>
+          <Notice tone="info">
+            Server analytics calculates metrics across PostgreSQL operational tables for the Manila timezone ({period}).
+          </Notice>
+        </div>
+      </Card>
     </div>
   </>
 }

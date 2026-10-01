@@ -18,6 +18,7 @@ use App\Http\Controllers\BillingController;
 use App\Http\Controllers\DocumentController;
 use App\Http\Controllers\AuditController;
 use App\Http\Controllers\AutomationController;
+use App\Http\Controllers\AnalyticsController;
 use App\Http\Controllers\Rbac\RbacDemoController;
 use App\Http\Controllers\Reference\BranchController;
 use App\Http\Controllers\Reference\BranchServiceController;
@@ -78,6 +79,13 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/actions', [AutomationController::class, 'actions']);
         Route::post('/dispatch', [AutomationController::class, 'dispatch']);
         Route::get('/export-csv', [AutomationController::class, 'exportCsv']);
+    });
+
+    // M21 Operational Analytics & Executive Intelligence (Owner only)
+    Route::prefix('analytics')->middleware('role:owner')->group(function () {
+        Route::get('/executive-summary', [AnalyticsController::class, 'executiveSummary']);
+        Route::get('/branch-performance', [AnalyticsController::class, 'branchPerformance']);
+        Route::get('/export', [AnalyticsController::class, 'export']);
     });
 
     // M1 User Management is a separate backend-authoritative account collection. It intentionally does not

@@ -289,3 +289,7 @@ export function listAutomationActions(params) { return request(`/api/automation/
 export function dispatchAutomationRule(ruleCode, payload) {
   return command('/api/automation/dispatch', { rule_code: ruleCode, payload })
 }
+
+// M21 Operational Analytics & Executive Intelligence (Owner only)
+export function getExecutiveSummary(params) { return request(`/api/analytics/executive-summary${query(params)}`) }
+export function getBranchPerformance(params) { return request(`/api/analytics/branch-performance${query(params)}`) }
