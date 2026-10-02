@@ -389,9 +389,10 @@ test('the old local-only registration.js demo path still implements no password 
 
 test('PatientRegister.jsx collects a real password, confirmation and email-verification handoff',()=>{
   const page=read('src/pages/PatientRegister.jsx')
-  assert.match(page,/type=\{showPassword\?'text':'password'\}/,'a real password field is present')
+  assert.match(page,/<PasswordField label="Password"/,'a real password field is present')
+  assert.match(read('src/pages/PasswordField.jsx'),/type=\{visible\?'text':'password'\}/)
   assert.match(page,/password_confirmation/,'a confirm-password field is present')
-  assert.match(page,/Country code/)
+  assert.match(page,/Country and calling code/)
   assert.match(page,/email OTP|verification|email/i)
 })
 

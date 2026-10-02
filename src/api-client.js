@@ -96,8 +96,8 @@ async function request(path, options = {}, { allowCsrfRetry = true } = {}) {
   return failure
 }
 
-export function me() {
-  return request('/api/me')
+export function me({signal}={}) {
+  return request('/api/me',signal?{signal}:{})
 }
 
 export function login(email, password) {

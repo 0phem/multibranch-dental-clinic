@@ -1,39 +1,32 @@
-// Country-code-aware phone input support. The stored value is normalized to E.164; the local number remains
-// editable and never gets a guessed country prefix.
-export const COUNTRY_CODES = [
-  { code: 'PH', dial: '+63', label: 'Philippines', digits: 10 },
-  { code: 'US', dial: '+1', label: 'United States / Canada', digits: 10 },
-  { code: 'GB', dial: '+44', label: 'United Kingdom', digits: 10 },
-  { code: 'AU', dial: '+61', label: 'Australia', digits: 9 },
-  { code: 'SG', dial: '+65', label: 'Singapore', digits: 8 },
-  { code: 'JP', dial: '+81', label: 'Japan', digits: 10 },
-]
-export const DEFAULT_COUNTRY = COUNTRY_CODES[0]
+import { getCountries, getCountryCallingCode, parsePhoneNumberFromString } from 'libphonenumber-js/max'
 
-export function sanitizePhoneInput(value, dial=DEFAULT_COUNTRY.dial) {
-  const country=COUNTRY_CODES.find(c=>c.dial===dial)||DEFAULT_COUNTRY
-  return String(value||'').replace(/\D/g,'').slice(0,country.digits)
+const names=new Intl.DisplayNames(['en'],{type:'region'})
+export const COUNTRY_CODES=getCountries().map(code=>({
+  code,
+  dial:`+${getCountryCallingCode(code)}`,
+  label:names.of(code)||code,
+  // Retained for the existing Owner directory form; registration has no fixed digit limit.
+  digits:code==='PH'?10:undefined,
+})).sort((a,b)=>a.label.localeCompare(b.label))
+export const DEFAULT_COUNTRY=COUNTRY_CODES.find(country=>country.code==='PH')
+
+// The Owner directory's existing Philippine contact control keeps its input behavior.
+export function sanitizePhoneInput(value) {
+  return String(value||'').replace(/\D/g,'').slice(0,10)
 }
 
-const onlyFormattingChars = value => value.replace(/[\s\-()]/g, '')
-
-// Strips cosmetic formatting (spaces, dashes, parentheses) — never actual digits — then requires exactly
-// the country's local-number length, digits only, with no leading 0 (the 0 is only ever used with the
-// domestic trunk prefix, which the country code already replaces). A 9- or 11-digit result, or any
-// remaining non-digit character, is a rejection, not a silent mutation into something "close enough."
-export function normalizePhoneNumber(dial, raw) {
-  const country = COUNTRY_CODES.find(c => c.dial === dial)
-  if (!country) return { ok: false, reason: 'Unsupported country code.' }
-  const stripped = onlyFormattingChars(typeof raw === 'string' ? raw : '')
-  if (!/^\d+$/.test(stripped)) return { ok: false, reason: 'Enter digits only.' }
-  if (stripped.length !== country.digits) {
-    return { ok: false, reason: `Enter exactly ${country.digits} digits after ${country.dial}.` }
-  }
-  if (stripped[0] === '0') return { ok: false, reason: `Don’t include the leading 0 after ${country.dial}.` }
-  return { ok: true, digits: stripped, e164: `${country.dial}${stripped}` }
+export function normalizePhoneNumber(countrySelection,raw) {
+  const country=COUNTRY_CODES.find(item=>item.code===countrySelection)
+    ||COUNTRY_CODES.find(item=>item.dial===countrySelection)
+  if(!country)return {ok:false,reason:'Select a valid country.'}
+  const value=String(raw||'').trim()
+  if(!value||!/^\+?[\d\s().-]+$/.test(value))return {ok:false,reason:'Enter a valid phone number.'}
+  const parsed=parsePhoneNumberFromString(value,country.code)
+  if(!parsed?.isValid()||`+${parsed.countryCallingCode}`!==country.dial)
+    return {ok:false,reason:`Enter a valid phone number for ${country.label}.`}
+  return {ok:true,digits:parsed.nationalNumber,e164:parsed.number}
 }
 
-// For display: "+63 9994936192" — never mutates the underlying value, purely presentational.
-export function formatPhoneDisplay(dial, digits) {
-  return digits ? `${dial} ${digits}` : dial
+export function formatPhoneDisplay(dial,digits) {
+  return digits?`${dial} ${digits}`:dial
 }

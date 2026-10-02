@@ -93,8 +93,23 @@ class RegistrationTest extends TestCase
             'leading zero after +63' => ['+6309171234567'],
             'non-digit content' => ['+63917abc4567'],
             'missing country code' => ['09171234567'],
-            'unsupported country code' => ['+49171234567'],
+            'impossible country code' => ['+999171234567'],
         ];
+    }
+
+    public function test_registration_accepts_a_valid_international_number_outside_the_old_six_country_list(): void
+    {
+        $this->postJson('/api/register', $this->validPayload(['phone' => '+4915123456789']))
+            ->assertCreated()->assertJsonPath('data.phone', '+4915123456789');
+    }
+
+    public function test_date_of_birth_is_required_and_cannot_be_future_or_invalid(): void
+    {
+        foreach (['', now()->addDay()->toDateString(), '2024-02-30'] as $date) {
+            $this->postJson('/api/register', $this->validPayload(['date_of_birth' => $date]))
+                ->assertStatus(422)->assertJsonValidationErrors('date_of_birth');
+        }
+        $this->assertSame(0, User::count());
     }
 
     #[DataProvider('invalidPhoneProvider')]

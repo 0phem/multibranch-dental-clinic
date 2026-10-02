@@ -5,6 +5,10 @@ import { sessionForRole } from './contracts.js'
 import { canAccessPage } from './safeguards.js'
 import { Button, ConfirmDialog, Field, Icon, Modal, Notice, ShellActionsContext } from './components.jsx'
 import { patientConversations } from './patient-view.js'
+import { AuthShell } from './pages/AuthShell.jsx'
+import { PasswordField } from './pages/PasswordField.jsx'
+export { Brand } from './Brand.jsx'
+import { Brand } from './Brand.jsx'
 
 const useLayoutEffectSafe=typeof window==='undefined'?React.useEffect:React.useLayoutEffect
 
@@ -33,9 +37,6 @@ function navGroups(role){
 // Authoritative clinic identity is the text "Dr. Dana E. Roxas" / "Dental Clinic", set beside the official compact
 // logo (decorative, so empty alt). Never redraw or recolor the logo. logo-with-name.png is a supplied asset whose
 // embedded wording differs from this identity, so it is intentionally not rendered.
-export function Brand({className=''}){
-  return <div className={`brand ${className}`.trim()}><img className="clinic-logo" src="/images/logo.png" alt="" width="48" height="48"/><div><strong>Dr. Dana E. Roxas</strong><span>Dental Clinic</span></div></div>
-}
 
 // Real sign-in for every role (Backend Foundation 1B): the backend's GET /api/me determines role after a
 // successful login, so one email+password form serves Patient/Staff/Dentist/Owner alike — there is no client
@@ -45,7 +46,6 @@ export function Brand({className=''}){
 export function Login({ onLogin, onShowRegister }) {
   const [email,setEmail]=React.useState('')
   const [password,setPassword]=React.useState('')
-  const [showPassword,setShowPassword]=React.useState(false)
   const [submitting,setSubmitting]=React.useState(false)
   const [error,setError]=React.useState('')
   const submit=async event=>{
@@ -57,21 +57,16 @@ export function Login({ onLogin, onShowRegister }) {
     setSubmitting(false)
     if(!result?.ok)setError(result?.message||'Something went wrong. Try again.')
   }
-  return <main className="login-shell">
-    <section className="login-panel" aria-labelledby="login-title">
-      <Brand className="brand-login"/>
-      <div className="login-copy-wrap"><div className="eyebrow">Welcome to your clinic workspace</div><h1 id="login-title">Welcome back</h1><p className="login-copy">Sign in to manage your visit or continue the clinic’s day.</p></div>
+  return <AuthShell><div className="auth-form" aria-labelledby="login-title">
+      <div className="login-copy-wrap"><div className="eyebrow">Secure clinic access</div><h1 id="login-title">Welcome back</h1><p className="login-copy">Sign in to your clinic workspace.</p></div>
       <form onSubmit={submit} noValidate>
         <Field label="Email" required><input type="email" autoComplete="email" value={email} onChange={e=>{setEmail(e.target.value);setError('')}}/></Field>
-        <Field label="Password" required><input type={showPassword?'text':'password'} autoComplete="current-password" value={password} onChange={e=>{setPassword(e.target.value);setError('')}}/></Field>
-        <label className="show-password"><input type="checkbox" checked={showPassword} onChange={e=>setShowPassword(e.target.checked)}/> Show password</label>
+        <PasswordField label="Password" autoComplete="current-password" value={password} onChange={e=>{setPassword(e.target.value);setError('')}}/>
         {error&&<Notice tone="warning" title="Couldn’t sign in">{error}</Notice>}
         <Button type="submit" className="login-button" icon="arrow" disabled={submitting}>{submitting?'Signing in…':'Sign in'}</Button>
       </form>
       {onShowRegister&&<p className="login-register-link">New patient? <button type="button" className="text-link" onClick={onShowRegister}>Create an account</button></p>}
-    </section>
-    <aside className="login-visual" aria-label="Workspace overview"><span className="eyebrow">One continuous care journey</span><h2>A clearer day.<br/>For everyone.</h2><p>From the first appointment to the next visit, keep the right information with the right people.</p><ol className="login-journey"><li><b>Plan a visit</b><span>Appointments and arrival</span></li><li><b>Coordinate care</b><span>Queue and the clinical encounter</span></li><li><b>Keep in touch</b><span>Receipts, follow-up and communication</span></li></ol><small>Clinical decisions stay with the Dentist.</small></aside>
-  </main>
+    </div></AuthShell>
 }
 
 export function NotificationPanel({role,store,onClose,setPage}){

@@ -4,5 +4,6 @@ import App from './App.jsx'
 import './styles.css'
 import './foundation.css'
 import './patient.css'
+import './public-site.css'
 
 createRoot(document.getElementById('root')).render(<React.StrictMode><App/></React.StrictMode>)

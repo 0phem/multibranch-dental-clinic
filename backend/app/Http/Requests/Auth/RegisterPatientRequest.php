@@ -5,6 +5,9 @@ namespace App\Http\Requests\Auth;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\Rule;
+use libphonenumber\PhoneNumberUtil;
+use libphonenumber\NumberParseException;
+use libphonenumber\PhoneNumberFormat;
 
 // Public self-registration is Patient-only (see RegisteredPatientController). The reserved-field rules below
 // reject the request outright — with a clear per-field validation error — rather than silently stripping
@@ -31,21 +34,23 @@ class RegisterPatientRequest extends FormRequest
             'first_name' => ['required', 'string', 'max:100'],
             'last_name' => ['required', 'string', 'max:100'],
             'email' => ['required', 'email:rfc', 'max:255', Rule::unique('users', 'email'), Rule::unique('persons', 'email')],
-            // Normalized E.164 contact number. These are deliberately simplified project-level bounds for the
-            // six supported selectors, not a complete global telecom numbering authority. Display formatting is
-            // handled by the frontend selector and the server never assumes a Philippine number.
+            // Patient contact only; the browser submits normalized E.164 and the server validates it.
             'phone' => ['required', function (string $attribute, mixed $value, \Closure $fail): void {
-                $lengths = ['1' => 10, '44' => 10, '61' => 9, '63' => 10, '65' => 8, '81' => 10];
-                $matched = false;
-                foreach ($lengths as $dial => $digits) {
-                    if (preg_match('/^\+'.preg_quote($dial, '/').'([1-9][0-9]{'.($digits - 1).'})$/', (string) $value)) {
-                        $matched = true;
-                        break;
-                    }
+                if (! is_string($value) || ! preg_match('/^\+[1-9]\d{1,14}$/', $value)) {
+                    $fail('Enter a valid international phone number.');
+                    return;
                 }
-                if (! $matched) $fail('Enter a valid national number for the selected country code.');
+                try {
+                    $util = PhoneNumberUtil::getInstance();
+                    $parsed = $util->parse($value, null);
+                    if (! $util->isValidNumber($parsed) || $util->format($parsed, PhoneNumberFormat::E164) !== $value) {
+                        $fail('Enter a valid international phone number.');
+                    }
+                } catch (NumberParseException) {
+                    $fail('Enter a valid international phone number.');
+                }
             }],
-            'date_of_birth' => ['nullable', 'date', 'before_or_equal:today'],
+            'date_of_birth' => ['required', 'date_format:Y-m-d', 'before_or_equal:today'],
             'password' => ['required', 'confirmed', Password::min(8)->letters()->numbers()],
 
             // Reserved/privileged fields — public registration can never choose these.

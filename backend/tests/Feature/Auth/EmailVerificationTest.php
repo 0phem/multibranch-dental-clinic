@@ -21,7 +21,8 @@ class EmailVerificationTest extends TestCase
     {
         return array_merge([
             'first_name' => 'Jamie', 'last_name' => 'Cruz', 'email' => 'jamie@example.com',
-            'phone' => '+14155550123', 'password' => 'Passw0rd!', 'password_confirmation' => 'Passw0rd!',
+            'phone' => '+14155550123', 'date_of_birth' => '1995-04-12',
+            'password' => 'Passw0rd!', 'password_confirmation' => 'Passw0rd!',
         ], $overrides);
     }
 
@@ -50,6 +51,14 @@ class EmailVerificationTest extends TestCase
         $this->assertTrue(Hash::check($code, $otp->digest));
         $this->assertNull($user->email_verified_at);
         $this->assertNull(session('login_web_'.$user->id));
+    }
+
+    public function test_registration_mail_goes_to_the_new_patient_email(): void
+    {
+        $this->register(['email' => 'patient.unique@example.test']);
+        Mail::assertSent(PatientEmailVerificationOtp::class, function (PatientEmailVerificationOtp $mail): bool {
+            return $mail->hasTo('patient.unique@example.test');
+        });
     }
 
     public function test_correct_otp_verifies_once_and_logs_in_patient(): void

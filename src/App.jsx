@@ -1,41 +1,62 @@
 import { validSession, canAccessPage } from './safeguards.js'
 import { Notice } from './components.jsx'
-import React, { useEffect, useRef, useState } from 'react'
+import React, { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { ClinicProvider, useClinic } from './store.jsx'
 import { Brand, Login, Shell, ToastStack } from './layout.jsx'
-import { PatientRegister } from './pages/PatientRegister.jsx'
 import { EmailVerification } from './pages/EmailVerification.jsx'
-import { DashboardPage } from './pages/Dashboards.jsx'
-import { AppointmentsPage, BookingPage, SchedulePage } from './pages/Scheduling.jsx'
-import { CheckInPage, QueuePage, CapacityPage } from './pages/PatientFlow.jsx'
-import { PatientsPage, TreatmentPage, PrescriptionsPage, FollowupsPage } from './pages/Clinical.jsx'
-import { BillingPage, HmoPage, InquiriesPage, MessagesPage } from './pages/FinanceCommunication.jsx'
-import { PatientLoyaltyPage } from './pages/PatientLoyalty.jsx'
-import { PatientMePage } from './pages/PatientMe.jsx'
-import { AnalyticsPage, AutomationPage, BranchesPage, EngagementPage, TeamPage, UsersPage } from './pages/Admin.jsx'
-import { ServicesPricingPage } from './pages/Pricing.jsx'
-import { AuditTrailPage } from './pages/AuditTrail.jsx'
+import { PublicSite } from './pages/PublicSite.jsx'
+import { publicViewFromHash, publicSections } from './public-route.js'
+import { ChunkBoundary, StartupLoading } from './StartupLoading.jsx'
+import { AuthShell } from './pages/AuthShell.jsx'
+import { bootstrapSession } from './session-bootstrap.js'
+
+const PatientRegister=lazy(()=>import('./pages/PatientRegister.jsx').then(m=>({default:m.PatientRegister})))
 import * as api from './api-client.js'
+
+const DashboardPage=lazy(()=>import('./pages/Dashboards.jsx').then(m=>({default:m.DashboardPage})))
+const AppointmentsPage=lazy(()=>import('./pages/Scheduling.jsx').then(m=>({default:m.AppointmentsPage})))
+const BookingPage=lazy(()=>import('./pages/Scheduling.jsx').then(m=>({default:m.BookingPage})))
+const SchedulePage=lazy(()=>import('./pages/Scheduling.jsx').then(m=>({default:m.SchedulePage})))
+const CheckInPage=lazy(()=>import('./pages/PatientFlow.jsx').then(m=>({default:m.CheckInPage})))
+const QueuePage=lazy(()=>import('./pages/PatientFlow.jsx').then(m=>({default:m.QueuePage})))
+const CapacityPage=lazy(()=>import('./pages/PatientFlow.jsx').then(m=>({default:m.CapacityPage})))
+const PatientsPage=lazy(()=>import('./pages/Clinical.jsx').then(m=>({default:m.PatientsPage})))
+const TreatmentPage=lazy(()=>import('./pages/Clinical.jsx').then(m=>({default:m.TreatmentPage})))
+const PrescriptionsPage=lazy(()=>import('./pages/Clinical.jsx').then(m=>({default:m.PrescriptionsPage})))
+const FollowupsPage=lazy(()=>import('./pages/Clinical.jsx').then(m=>({default:m.FollowupsPage})))
+const BillingPage=lazy(()=>import('./pages/FinanceCommunication.jsx').then(m=>({default:m.BillingPage})))
+const HmoPage=lazy(()=>import('./pages/FinanceCommunication.jsx').then(m=>({default:m.HmoPage})))
+const InquiriesPage=lazy(()=>import('./pages/FinanceCommunication.jsx').then(m=>({default:m.InquiriesPage})))
+const MessagesPage=lazy(()=>import('./pages/FinanceCommunication.jsx').then(m=>({default:m.MessagesPage})))
+const PatientLoyaltyPage=lazy(()=>import('./pages/PatientLoyalty.jsx').then(m=>({default:m.PatientLoyaltyPage})))
+const PatientMePage=lazy(()=>import('./pages/PatientMe.jsx').then(m=>({default:m.PatientMePage})))
+const AnalyticsPage=lazy(()=>import('./pages/Admin.jsx').then(m=>({default:m.AnalyticsPage})))
+const AutomationPage=lazy(()=>import('./pages/Admin.jsx').then(m=>({default:m.AutomationPage})))
+const BranchesPage=lazy(()=>import('./pages/Admin.jsx').then(m=>({default:m.BranchesPage})))
+const EngagementPage=lazy(()=>import('./pages/Admin.jsx').then(m=>({default:m.EngagementPage})))
+const TeamPage=lazy(()=>import('./pages/Admin.jsx').then(m=>({default:m.TeamPage})))
+const UsersPage=lazy(()=>import('./pages/Admin.jsx').then(m=>({default:m.UsersPage})))
+const ServicesPricingPage=lazy(()=>import('./pages/Pricing.jsx').then(m=>({default:m.ServicesPricingPage})))
+const AuditTrailPage=lazy(()=>import('./pages/AuditTrail.jsx').then(m=>({default:m.AuditTrailPage})))
 
 const START_PAGE={patient:'dashboard',staff:'dashboard',dentist:'dashboard',owner:'dashboard'}
 const NO_WORKSPACE_MESSAGE='This account doesn’t have a workspace configured yet. Contact the clinic administrator.'
 
 function AuthChecking() {
-  return <main className="login-shell"><section className="login-panel"><Brand className="brand-login"/><p role="status" className="login-copy">Checking your session…</p></section></main>
+  return <StartupLoading/>
 }
 
 // Backend Foundation 1B: an honest, distinct screen for "the clinic system could not be reached" — never a
 // silent fallback to demo/local authentication, and never a crash.
 function AuthUnavailable({ onRetry }) {
-  return <main className="login-shell"><section className="login-panel">
-    <Brand className="brand-login"/>
+  return <AuthShell><div className="auth-form">
     <div className="login-copy-wrap"><h1>Can’t reach the clinic system</h1><p className="login-copy">The clinic system is temporarily unavailable. Check your connection and try again.</p></div>
     <button type="button" className="btn primary md" onClick={onRetry}><span>Try again</span></button>
-  </section></main>
+  </div></AuthShell>
 }
 
 function RefDataLoading() {
-  return <main className="login-shell"><section className="login-panel"><Brand className="brand-login"/><p role="status" className="login-copy">Loading clinic data…</p></section></main>
+  return <StartupLoading label="Loading your clinic workspace…"/>
 }
 
 // Phase 2A: an honest, distinct screen for "reference data couldn't load" — never a silent fallback to
@@ -56,8 +77,29 @@ function AppBody() {
   const [page,setPageState]=useState('dashboard')
   const [context,setContext]=useState(null)
   const [activeBranch,setActiveBranch]=useState('All Branches')
-  const [showRegister,setShowRegister]=useState(false)
+  const [publicView,setPublicView]=useState(()=>publicViewFromHash(typeof window==='undefined'?'':window.location.hash))
+  const showRegister=publicView==='register'
+  const setShowRegister=value=>{window.location.hash=value?'create-account':'sign-in';setPublicView(value?'register':'login')}
+  useEffect(()=>{
+    const navigate=()=>{
+      const hash=window.location.hash
+      setPublicView(publicViewFromHash(hash))
+      setVerification(null)
+      const section=hash.slice(1)
+      requestAnimationFrame(()=>{
+        if(publicSections.has(section))document.getElementById(section)?.scrollIntoView()
+        else {window.scrollTo(0,0);document.getElementById('public-main')?.focus({preventScroll:true})}
+      })
+    }
+    window.addEventListener('hashchange',navigate)
+    return()=>window.removeEventListener('hashchange',navigate)
+  },[])
   const [verification,setVerification]=useState(null)
+  useEffect(()=>{
+    if(authPhase==='checking'||publicView!=='home')return
+    const section=window.location.hash.slice(1)
+    if(publicSections.has(section))requestAnimationFrame(()=>document.getElementById(section)?.scrollIntoView())
+  },[authPhase,publicView])
 
   // Backend role is authoritative, always. This is a *derived* value, never independent state a stale login
   // could leave behind — see identity-bridge.js for how it gets here.
@@ -70,13 +112,13 @@ function AppBody() {
     setContext(null)
     setPageState(START_PAGE[session.role]||'dashboard')
     setActiveBranch(store.state.branches.find(b=>b.id===session.branchId)?.name||'All Branches')
-    setShowRegister(false)
+    setPublicView('login')
   }
 
   const checkSession=async()=>{
     setAuthPhase('checking')
     setAuthError('')
-    const result=await api.me()
+    const result=await bootstrapSession(api.me)
     if(result.ok){
       const bridge=store.actions.bridgeBackendIdentity(result.data)
       if(bridge.ok){
@@ -101,7 +143,10 @@ function AppBody() {
     setAuthError('')
     const result=await api.login(email,password)
     if(!result.ok){
-      if(result.kind==='email_verification_required')setVerification({email})
+      if(result.kind==='email_verification_required'){
+        setVerification({email})
+        window.history.replaceState(null,'','#verify-email')
+      }
       const message=result.kind==='validation'?(Object.values(result.errors||{})[0]?.[0]||result.message):result.message
       return {ok:false,message:message||'Something went wrong. Try again.'}
     }
@@ -120,7 +165,9 @@ function AppBody() {
     const result=await api.register(form)
     if(!result.ok)return result
     setVerification({email:result.data.email,resendAvailableAt:result.data.resend_available_at})
-    setShowRegister(false)
+    setPublicView('login')
+    window.history.replaceState(null,'','#verify-email')
+    window.scrollTo(0,0)
     return {ok:true}
   }
 
@@ -174,17 +221,18 @@ function AppBody() {
   const setPage=(next,record=null)=>{if(role&&canAccessPage(store.state,store.session,next)){setContext(record);setPageState(next)}}
 
   if(authPhase==='checking')return <AuthChecking/>
-  if(authPhase==='error')return <AuthUnavailable onRetry={checkSession}/>
+  if(authPhase==='error'&&publicView!=='home')return <AuthUnavailable onRetry={checkSession}/>
 
   const storageWarnings=Object.values(store.persistenceErrors||{})
   if(storageWarnings.some(message=>message.includes('could not be read')))return <Notice title="Saved workspace needs recovery">{storageWarnings.join(' ')}</Notice>
 
   if (!role) return <>
     {authError&&<Notice tone="warning">{authError}</Notice>}
-    {verification
-      ?<EmailVerification email={verification.email} initialResendAvailableAt={verification.resendAvailableAt} onVerify={verifyRegistration} onResend={resendRegistration} onBack={()=>setVerification(null)}/>
+    {verification||publicView==='verify'
+      ?<EmailVerification email={verification?.email} initialResendAvailableAt={verification?.resendAvailableAt} onVerify={verifyRegistration} onResend={resendRegistration} onBack={()=>{setVerification(null);setShowRegister(false)}}/>
       :showRegister
-      ?<PatientRegister onRegister={register} onCancel={()=>{setAuthError('');setShowRegister(false)}}/>
+      ?<ChunkBoundary><Suspense fallback={<AuthShell><StartupLoading compact label="Opening registration…"/></AuthShell>}><PatientRegister onRegister={register} onCancel={()=>{setAuthError('');setShowRegister(false)}}/></Suspense></ChunkBoundary>
+      :publicView==='home'?<PublicSite/>
       :<Login onLogin={login} onShowRegister={()=>{setAuthError('');setShowRegister(true)}}/>}
     <ToastStack toasts={store.toasts}/>
   </>
@@ -230,7 +278,7 @@ function AppBody() {
   }
 
   return <>
-    <Shell role={role} page={page} setPage={setPage} onLogout={logout} activeBranch={branch} setActiveBranch={setActiveBranch} store={store}>{storageWarnings.length>0&&<Notice tone="warning">{[...new Set(storageWarnings)].join(" ")}</Notice>}{content}</Shell>
+    <Shell role={role} page={page} setPage={setPage} onLogout={logout} activeBranch={branch} setActiveBranch={setActiveBranch} store={store}>{storageWarnings.length>0&&<Notice tone="warning">{[...new Set(storageWarnings)].join(" ")}</Notice>}<ChunkBoundary key={page}><Suspense fallback={<StartupLoading compact label="Loading this page…"/>}>{content}</Suspense></ChunkBoundary></Shell>
     <ToastStack toasts={store.toasts}/>
   </>
 }

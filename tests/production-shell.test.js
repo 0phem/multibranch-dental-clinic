@@ -5,14 +5,15 @@ import * as data from '../src/data.js'
 import { canAccessPage } from '../src/safeguards.js'
 import { normalizeClinicState, sessionForRole } from '../src/contracts.js'
 
-// Cleanup pass #1: the frontend is a clinic application, not a presentation shell. Unauthenticated entry is the real
-// sign-in screen, there is no demo-reset control, no demo sign-in shortcut and no professor-facing coverage page.
+// Public clinic website leads to real authentication. No demo-reset control, demo sign-in shortcut,
+// persona picker or professor-facing coverage page may be exposed.
 const read=path=>readFileSync(new URL(`../${path}`,import.meta.url),'utf8')
 const app=read('src/App.jsx'), layout=read('src/layout.jsx'), store=read('src/store.jsx'), admin=read('src/pages/Admin.jsx')
 
-test('unauthenticated entry is the real Login (or Patient registration), never a landing or persona picker',()=>{
+test('public clinic entry leads to real Login and Patient registration, never a persona picker',()=>{
   assert.match(app,/if \(!role\) return <>[\s\S]*?<Login onLogin=\{login\}/)
-  assert.doesNotMatch(app,/Landing|Welcome(Page|Screen)|RolePicker|persona/i)
+  assert.match(app,/<PublicSite\/>/)
+  assert.doesNotMatch(app,/RolePicker|persona/i)
   // Role comes only from the backend-authenticated session.
   assert.match(app,/const role=store\.session\?\.role\?\?null/)
 })

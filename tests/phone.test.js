@@ -5,7 +5,7 @@ import { COUNTRY_CODES, DEFAULT_COUNTRY, normalizePhoneNumber, sanitizePhoneInpu
 test('the country-code table defaults to Philippines +63', () => {
   assert.equal(DEFAULT_COUNTRY.dial, '+63')
   assert.equal(DEFAULT_COUNTRY.label, 'Philippines')
-  assert.ok(COUNTRY_CODES.length >= 2, 'alternate country codes are available')
+  assert.ok(COUNTRY_CODES.length > 200, 'international country metadata is available')
 })
 
 test('a valid 10-digit Philippine mobile number is accepted and normalized to E.164', () => {
@@ -21,9 +21,9 @@ test('11 digits are rejected, not truncated', () => {
   assert.equal(normalizePhoneNumber('+63', '99949361923').ok, false)
 })
 
-test('a leading 0 after +63 is rejected, not silently stripped', () => {
+test('a Philippine domestic trunk prefix is normalized to E.164', () => {
   const result = normalizePhoneNumber('+63', '09994936192')
-  assert.equal(result.ok, false)
+  assert.equal(result.e164, '+639994936192')
 })
 
 test('non-digit content is rejected', () => {
@@ -42,6 +42,10 @@ test('cosmetic formatting characters (spaces, dashes, parens) are tolerated', ()
 
 test('an alternate country code is accepted with its own national number', () => {
   assert.deepEqual(normalizePhoneNumber('+1', '4155550123'), { ok: true, digits: '4155550123', e164: '+14155550123' })
+})
+
+test('a country beyond the old selector can normalize a valid number',()=>{
+  assert.equal(normalizePhoneNumber('DE','15123456789').e164,'+4915123456789')
 })
 
 test('an unsupported dial code is rejected rather than pretending it is supported', () => {
