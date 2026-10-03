@@ -33,6 +33,19 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->redirectGuestsTo(fn () => null);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
+        $exceptions->render(function (\Throwable $exception, Request $request) {
+            if (! $request->is('api/login', 'api/logout', 'api/me', 'api/register', 'api/register/*', 'api/users', 'api/users/*')) return null;
+            if ($exception instanceof \Illuminate\Database\UniqueConstraintViolationException) {
+                return response()->json(['message' => 'This account information is already in use.', 'errors' => ['email' => ['This account information is already in use.']]], 422);
+            }
+            if ($exception instanceof \Illuminate\Validation\ValidationException ||
+                $exception instanceof \Illuminate\Auth\AuthenticationException ||
+                ($exception instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface && $exception->getStatusCode() < 500)) return null;
+            // Auth failures never reveal database queries, transport details or debug traces,
+            // even if a deployment accidentally enables APP_DEBUG.
+            return response()->json(['message' => 'The clinic system is temporarily unavailable. Try again.'],
+                $exception instanceof \Illuminate\Database\QueryException ? 503 : 500);
+        });
         $exceptions->shouldRenderJsonWhen(
             fn (Request $request) => $request->is('api/*') || $request->expectsJson(),
         );

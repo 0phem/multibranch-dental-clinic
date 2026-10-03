@@ -11,7 +11,7 @@ class UpdateUserRequest extends FormRequest
 
     protected function prepareForValidation(): void
     {
-        if ($this->has('email')) {
+        if (is_string($this->input('email'))) {
             $this->merge(['email' => strtolower(trim((string) $this->input('email')))]);
         }
     }

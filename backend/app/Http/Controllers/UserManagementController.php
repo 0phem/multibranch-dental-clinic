@@ -25,6 +25,10 @@ class UserManagementController extends Controller
     {
         $data = $request->validated();
         $user = DB::transaction(function () use ($data) {
+            DB::statement('LOCK TABLE patients IN SHARE ROW EXCLUSIVE MODE');
+            if (User::withTrashed()->where('email', $data['email'])->exists() || Person::where('email', $data['email'])->exists()) {
+                throw ValidationException::withMessages(['email' => 'This email address is already registered.']);
+            }
             $person = Person::create([
                 'first_name' => $data['first_name'],
                 'last_name' => $data['last_name'],
@@ -36,13 +40,15 @@ class UserManagementController extends Controller
                 'patient_code' => $this->nextPatientCode(),
                 'consent' => false,
             ]);
-            return User::create([
+            $user = User::create([
                 'person_id' => $person->id,
                 'email' => $data['email'],
                 'password' => Hash::make($data['password']),
                 'role' => Role::Patient,
                 'account_status' => 'Active',
             ])->load('person');
+            app(\App\Services\Audit\AuditService::class)->recordAdministrative('account.provisioned', auth()->user(), $user);
+            return $user;
         });
 
         return new UserAccountResource($user);
@@ -52,13 +58,21 @@ class UserManagementController extends Controller
     {
         $data = $request->validated();
         DB::transaction(function () use ($data, $user) {
+            $user = User::whereKey($user->id)->lockForUpdate()->firstOrFail();
             $personData = array_intersect_key($data, array_flip(['first_name', 'last_name', 'phone']));
             if (array_key_exists('email', $data)) {
                 $personData['email'] = $data['email'];
                 $user->email = $data['email'];
             }
             if ($personData) $user->person()->update($personData);
+            if ($user->isDirty('email')) {
+                $user->email_verified_at = null;
+                \App\Models\EmailVerificationOtp::where('user_id', $user->id)->whereNull('consumed_at')->update(['consumed_at' => now()]);
+                DB::table('sessions')->where('user_id', $user->id)->delete();
+                $user->tokens()->delete();
+            }
             if ($user->isDirty()) $user->save();
+            app(\App\Services\Audit\AuditService::class)->recordAdministrative('account.updated', auth()->user(), $user);
         });
 
         return new UserAccountResource($user->fresh()->load('person'));
@@ -73,7 +87,17 @@ class UserManagementController extends Controller
         if ($user->role === Role::Owner && User::query()->where('role', Role::Owner)->count() <= 1) {
             throw ValidationException::withMessages(['user' => 'The last Owner account cannot be deleted.']);
         }
-        $user->delete();
+        DB::transaction(function () use ($user, $actor) {
+            // Serialize Owner deletions before checking the last remaining account.
+            $owners = User::where('role', Role::Owner)->orderBy('id')->lockForUpdate()->get();
+            if ($user->role === Role::Owner && $owners->count() <= 1) {
+                throw ValidationException::withMessages(['user' => 'The last Owner account cannot be deleted.']);
+            }
+            $user->delete();
+            DB::table('sessions')->where('user_id', $user->id)->delete();
+            $user->tokens()->delete();
+            app(\App\Services\Audit\AuditService::class)->recordAdministrative('account.disabled', $actor, $user);
+        });
         return response()->noContent();
     }
 

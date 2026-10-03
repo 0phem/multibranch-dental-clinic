@@ -5,14 +5,12 @@ namespace App\Http\Controllers\Auth;
 use App\Enums\Role;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\UserResource;
-use App\Mail\PatientEmailVerificationOtp;
 use App\Models\EmailVerificationOtp;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\RateLimiter;
 use Throwable;
 
@@ -32,7 +30,7 @@ class EmailVerificationController extends Controller
                 ->where('role', Role::Patient->value)
                 ->lockForUpdate()
                 ->first();
-            if (! $user) return ['failure' => ['invalid_otp', 'That verification code is not valid.']];
+            if (! $user || $user->account_status !== 'Active') return ['failure' => ['invalid_otp', 'That verification code is not valid.']];
             if ($user->email_verified_at) return ['failure' => ['already_verified', 'This email address is already verified.']];
 
             $otp = EmailVerificationOtp::where('user_id', $user->id)
@@ -57,6 +55,7 @@ class EmailVerificationController extends Controller
             $now = now();
             $user->forceFill(['email_verified_at' => $now])->save();
             $otp->forceFill(['consumed_at' => $now])->save();
+            app(\App\Services\Audit\AuditService::class)->recordAuth('account.email_verified', $user);
             return ['user' => $user];
         });
 
@@ -64,6 +63,7 @@ class EmailVerificationController extends Controller
         $user = $result['user'];
         Auth::guard('web')->login($user);
         $request->session()->regenerate();
+        $request->session()->put('auth_version', (int) $user->auth_version);
 
         return response()->json(['data' => new UserResource($user->load(['person', 'patient']))]);
     }
@@ -90,11 +90,11 @@ class EmailVerificationController extends Controller
                 ->where('role', Role::Patient->value)
                 ->lockForUpdate()
                 ->first();
-            if (! $user || $user->email_verified_at) return ['generic' => true];
+            if (! $user || $user->account_status !== 'Active' || $user->email_verified_at) return ['generic' => true];
 
             $latest = EmailVerificationOtp::where('user_id', $user->id)->latest('id')->lockForUpdate()->first();
             if ($latest && $latest->sent_at->gt(now()->subSeconds(60))) {
-                return ['cooldown' => max(1, $latest->sent_at->copy()->addSeconds(60)->diffInSeconds(now()))];
+                return ['cooldown' => max(1, (int) ceil(now()->diffInSeconds($latest->sent_at->copy()->addSeconds(60))))];
             }
 
             $code = (string) random_int(100000, 999999);
@@ -122,9 +122,9 @@ class EmailVerificationController extends Controller
         }
 
         try {
-            Mail::to($result['user']->email)->send(new PatientEmailVerificationOtp($result['code']));
+            app(\App\Services\Auth\OtpDelivery::class)->send($result['user'], $result['code']);
         } catch (Throwable $exception) {
-            report($exception);
+            \Illuminate\Support\Facades\Log::warning('Patient verification email delivery failed.');
 
             return response()->json(['message' => 'We could not send the verification email. Please try again.', 'code' => 'email_delivery_failed'], 503);
         }

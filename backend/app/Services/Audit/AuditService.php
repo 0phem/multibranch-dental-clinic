@@ -13,6 +13,8 @@ use Illuminate\Support\Facades\Request as RequestFacade;
 class AuditService
 {
     private const SENSITIVE_KEYS = [
+        'cookie',
+        'session',
         'password',
         'password_confirmation',
         'token',

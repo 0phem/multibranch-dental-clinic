@@ -11,6 +11,7 @@ const selected=(form,keys)=>Object.fromEntries(keys.filter(k=>form[k]!==undefine
 const unchanged=(a,b)=>Object.entries(b).every(([k,v])=>JSON.stringify(a[k])===JSON.stringify(v))
 export function administrationActions(run) {
   const createUserAccount=run(({state,session,now,event},form={})=>{
+    if(session.serverUserId)return fail('Use server User Management. Local account creation is unavailable.')
     if(session.role!=='owner'||!isRecord(form))return fail('Only Owner/Admin can create accounts.')
     // Email is the account/login identity — username/login mirror it, matching the convention already
     // established for the real Patient path (registration.js, identity-bridge.js).
@@ -33,6 +34,7 @@ export function administrationActions(run) {
     return {ok:true,record:user,user}
   })
   const setUserStatus=run(({state,session,event},id,status)=>{
+    if(session.serverUserId)return fail('Account access must be changed on the clinic server.')
     if(session.role!=='owner')return fail('Only Owner/Admin can change account status.')
     const user=state.users.find(u=>u.id===id)
     if(!user||!['Active','Inactive'].includes(status))return fail('Select an existing account and valid status.')

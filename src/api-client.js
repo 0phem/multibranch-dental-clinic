@@ -51,6 +51,7 @@ async function rawFetch(path, options) {
 async function parseFailure(response) {
   let body = null
   try { body = await response.json() } catch { /* no JSON body */ }
+  if (response.status === 403 && body?.code === 'session_revoked') return { ok: false, kind: 'unauthenticated' }
   if (response.status === 401) return { ok: false, kind: 'unauthenticated' }
   if (response.status === 403) return { ok: false, kind: 'forbidden', message: body?.message || 'This is outside your access.' }
   if (response.status === 404) return { ok: false, kind: 'not_found', message: 'That record could not be found.' }
@@ -93,6 +94,7 @@ async function request(path, options = {}, { allowCsrfRetry = true } = {}) {
     if (allowCsrfRetry) return request(path, options, { allowCsrfRetry: false })
     return { ok: false, kind: 'network', message: 'Your session could not be verified. Please try again.' }
   }
+  if (failure.kind === 'unauthenticated' && /^\/api\/(users(?:\/|$)|login$|logout$)/.test(path)) reportSessionInvalidated()
   return failure
 }
 

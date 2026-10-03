@@ -23,7 +23,7 @@ class RegisterPatientRequest extends FormRequest
 
     protected function prepareForValidation(): void
     {
-        if ($this->has('email')) {
+        if (is_string($this->input('email'))) {
             $this->merge(['email' => strtolower(trim((string) $this->input('email')))]);
         }
     }
@@ -50,10 +50,15 @@ class RegisterPatientRequest extends FormRequest
                     $fail('Enter a valid international phone number.');
                 }
             }],
-            'date_of_birth' => ['required', 'date_format:Y-m-d', 'before_or_equal:today'],
-            'password' => ['required', 'confirmed', Password::min(8)->letters()->numbers()],
+            'date_of_birth' => ['required', 'date_format:Y-m-d', 'before_or_equal:'.\App\Support\ClinicClock::now()->toDateString()],
+            'password' => ['required', 'string', new \App\Rules\PasswordInput(), 'max:72', 'confirmed', Password::min(8)->letters()->numbers()],
 
             // Reserved/privileged fields — public registration can never choose these.
+            'public_id' => ['prohibited'],
+            'email_verified_at' => ['prohibited'],
+            'branch_id' => ['prohibited'],
+            'branch_ids' => ['prohibited'],
+            'branch_scopes' => ['prohibited'],
             'role' => ['prohibited'],
             'role_name' => ['prohibited'],
             'roleName' => ['prohibited'],

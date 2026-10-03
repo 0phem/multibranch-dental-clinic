@@ -117,3 +117,15 @@ test('register() passes through field-level validation errors (e.g. the duplicat
   assert.equal(result.kind, 'validation')
   assert.deepEqual(result.errors.phone, ['An existing patient record may already match these details.'])
 })
+
+test('server-revoked access notifies session invalidation without treating ordinary 403 as logout', async () => {
+  let count = 0
+  const off = api.onSessionInvalidated(() => { count++ })
+  mockFetch([jsonResponse(200, {}), jsonResponse(403, { code: 'session_revoked' })])
+  assert.equal((await api.login('a@example.test', 'Password123!')).kind, 'unauthenticated')
+  assert.equal(count, 1)
+  mockFetch([jsonResponse(403, { message: 'Forbidden.' })])
+  assert.equal((await api.me()).kind, 'forbidden')
+  assert.equal(count, 1)
+  off()
+})

@@ -31,15 +31,15 @@ use Illuminate\Support\Facades\Route;
 
 // Public identity/auth boundary (Backend Foundation 1A). The one thing a stranger may do is create their own
 // Patient identity — see RegisteredPatientController.
-Route::post('/register', [RegisteredPatientController::class, 'store']);
-Route::post('/register/verify', [EmailVerificationController::class, 'verify']);
-Route::post('/register/resend', [EmailVerificationController::class, 'resend']);
-Route::post('/login', [AuthenticatedSessionController::class, 'store']);
+Route::post('/register', [RegisteredPatientController::class, 'store'])->middleware('throttle:m1-register');
+Route::post('/register/verify', [EmailVerificationController::class, 'verify'])->middleware('throttle:m1-otp');
+Route::post('/register/resend', [EmailVerificationController::class, 'resend'])->middleware('throttle:m1-otp');
+Route::post('/login', [AuthenticatedSessionController::class, 'store'])->middleware('throttle:m1-login');
 
 // Public Payment Gateway Webhook (PayMongo HMAC-SHA256 signature verified)
 Route::post('/webhooks/paymongo', [PayMongoController::class, 'webhook']);
 
-Route::middleware('auth:sanctum')->group(function () {
+Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureAccountAccess::class])->group(function () {
     Route::post('/logout', [AuthenticatedSessionController::class, 'destroy']);
     Route::get('/me', [CurrentUserController::class, 'show']);
 
@@ -104,6 +104,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/', [UserManagementController::class, 'store']);
         Route::patch('/{user}', [UserManagementController::class, 'update']);
         Route::delete('/{user}', [UserManagementController::class, 'destroy']);
+        Route::post('/{user}/suspend', [\App\Http\Controllers\AccountStatusController::class, 'suspend']);
+        Route::post('/{user}/restore', [\App\Http\Controllers\AccountStatusController::class, 'restore']);
         // Staff authorization branch scopes (user_branch_scopes). {user} binds on the ULID public_id. PUT replaces
         // the whole set, so it is idempotent; an empty list removes all access.
         Route::get('/{user}/branch-scopes', [UserBranchScopeController::class, 'show']);

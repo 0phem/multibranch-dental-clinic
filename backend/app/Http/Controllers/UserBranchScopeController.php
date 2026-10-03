@@ -37,6 +37,7 @@ class UserBranchScopeController extends Controller
             foreach ($branchIds as $branchId) {
                 UserBranchScope::firstOrCreate(['user_id' => $user->id, 'branch_id' => $branchId]);
             }
+            app(\App\Services\Audit\AuditService::class)->recordAdministrative('account.branch_scopes_changed', auth()->user(), $user, ['branch_refs' => Branch::whereIn('id', $branchIds)->pluck('legacy_ref')->all()]);
         });
 
         return $this->scopes($user);

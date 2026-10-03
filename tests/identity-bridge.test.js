@@ -179,3 +179,16 @@ test('two legacy projections for the same email fail closed rather than picking 
   }
   assert.equal(f.bridge({ id: '01jtwinpublicid00000000000', role: 'patient', email: 'twin@example.test', patient: { id: 'x', code: 'PAT-0050' } }).reason, 'ambiguous-legacy-identity')
 })
+
+test('a persisted Patient projection cannot change its server-linked Patient or canonical role', () => {
+  const f = fixture()
+  const me = { id: '01M1PATIENTUSER', email: 'secure@example.test', role: 'patient', first_name: 'Safe', last_name: 'Patient', patient: { id: '01M1PATIENT', code: 'PAT-TEST' } }
+  assert.equal(f.bridge(me).ok, true)
+  const user = f.state.users.find(u => u.backendUserId === me.id)
+  user.backendPatientId = 'DIFFERENT'
+  assert.equal(f.bridge(me).ok, false)
+  user.backendPatientId = me.patient.id
+  user.roleName = 'Owner / Admin'
+  user.permissions = ['all']
+  assert.equal(f.bridge(me).ok, false)
+})

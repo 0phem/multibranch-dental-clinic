@@ -21,16 +21,32 @@ use Laravel\Sanctum\HasApiTokens;
 // name() below) to avoid a duplicate identity source (AGENTS.md). The bigint id stays internal (foreign keys, session
 // identifier); public_id (ULID) is the only user identifier the API accepts or returns, so routes bind on it.
 #[Fillable(['person_id', 'email', 'password', 'role', 'account_status', 'title'])]
-#[Hidden(['password', 'remember_token'])]
+#[Hidden(['password', 'remember_token', 'auth_version'])]
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
     use HasApiTokens, HasFactory, HasUlids, Notifiable, SoftDeletes;
 
+    protected static function booted(): void
+    {
+        static::updating(function (self $user) {
+            if ($user->isDirty(['account_status', 'password', 'email', 'role'])) {
+                $user->auth_version = ((int) $user->getOriginal('auth_version')) + 1;
+            }
+        });
+        static::updated(function (self $user) {
+            if ($user->wasChanged(['account_status', 'password', 'email', 'role'])) {
+                \Illuminate\Support\Facades\DB::table('sessions')->where('user_id', $user->id)->delete();
+                $user->tokens()->delete();
+            }
+        });
+    }
+
     protected function casts(): array
     {
         return [
             'email_verified_at' => 'datetime',
+            'auth_version' => 'integer',
             'password' => 'hashed',
             'role' => Role::class,
         ];

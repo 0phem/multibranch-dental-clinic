@@ -5,6 +5,8 @@ namespace Tests\Feature\Auth;
 use App\Models\Patient;
 use App\Models\Person;
 use App\Models\User;
+use App\Support\ClinicClock;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Schema;
@@ -105,11 +107,23 @@ class RegistrationTest extends TestCase
 
     public function test_date_of_birth_is_required_and_cannot_be_future_or_invalid(): void
     {
-        foreach (['', now()->addDay()->toDateString(), '2024-02-30'] as $date) {
-            $this->postJson('/api/register', $this->validPayload(['date_of_birth' => $date]))
-                ->assertStatus(422)->assertJsonValidationErrors('date_of_birth');
-        }
-        $this->assertSame(0, User::count());
+        // UTC is still October 3, while the canonical clinic date is October 4.
+        $this->travelTo(CarbonImmutable::parse('2026-10-03 18:00:00', 'UTC'), function () {
+            $this->assertSame('2026-10-04', ClinicClock::today());
+            $tomorrow = ClinicClock::now()->addDay()->toDateString();
+            $this->assertSame('2026-10-05', $tomorrow);
+            foreach (['', $tomorrow, '2024-02-30'] as $date) {
+                $this->postJson('/api/register', $this->validPayload(['date_of_birth' => $date]))
+                    ->assertStatus(422)->assertJsonValidationErrors('date_of_birth');
+            }
+            $this->assertSame(0, User::count());
+
+            $this->postJson('/api/register', $this->validPayload(['date_of_birth' => ClinicClock::today()]))
+                ->assertCreated()->assertJsonPath('data.date_of_birth', '2026-10-04');
+            $this->assertDatabaseHas('persons', [
+                'email' => 'maria.santos@example.com', 'date_of_birth' => '2026-10-04',
+            ]);
+        });
     }
 
     #[DataProvider('invalidPhoneProvider')]

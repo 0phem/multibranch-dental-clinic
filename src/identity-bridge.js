@@ -41,7 +41,7 @@ export function createIdentityBridge({ getState, commit, clock = clinicNow }) {
       const session = mapped.kind === 'role-info'
         ? sessionForRole(mapped.roleInfoKey, state)
         : sessionForUser(state, mapped.userId)
-      return session ? { ok: true, session } : { ok: false, reason: 'no-local-identity' }
+      return session?.role === me.role ? { ok: true, session } : { ok: false, reason: 'no-local-identity' }
     }
     // Any backend account not in the explicit table above fails closed unless it is a Patient — any number
     // of real people can register as a Patient, so that path is general-purpose, not table-based.
@@ -64,7 +64,11 @@ function bridgePatient(me, { getState, commit, clock }) {
     return session ? { ok: true, session } : { ok: false, reason: 'stale-local-identity' }
   }
   const existingUser = getState().users.find(u => u.backendUserId === me.id)
-  if (existingUser) return sessionFor(existingUser)
+  if (existingUser) {
+    if (existingUser.backendPatientId !== serverPatientId || (existingUser.roleName || existingUser.role) !== 'Patient') return { ok: false, reason: 'identity-mismatch' }
+    const result = sessionFor(existingUser)
+    return result.session?.role === 'patient' ? result : { ok: false, reason: 'role-mismatch' }
+  }
   // A local record already keyed to this server Patient under another account id is never reused or duplicated.
   if (getState().users.some(u => u.backendPatientId === serverPatientId)) return { ok: false, reason: 'patient-already-linked' }
 

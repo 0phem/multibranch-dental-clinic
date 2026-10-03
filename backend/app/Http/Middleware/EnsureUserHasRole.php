@@ -23,6 +23,9 @@ class EnsureUserHasRole
         $allowed = collect($roles)->map(fn (string $role) => Role::from($role));
 
         if (! $allowed->contains(fn (Role $role) => $role === $user->role)) {
+            if ($request->is('api/users', 'api/users/*')) {
+                app(\App\Services\Audit\AuditService::class)->recordSecurity('account.access_denied', $user);
+            }
             abort(403, 'Forbidden.');
         }
 

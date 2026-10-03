@@ -21,7 +21,8 @@ class AuthenticatedSessionController extends Controller
         // Inactive-account rejection is a distinct, explicit condition. Both keep Laravel's normal 422
         // {message, errors} validation shape, plus a machine-readable `code` (Backend Foundation 1B) so the
         // frontend can tell the two cases apart without string-matching the human-readable message.
-        if (! $user || ! Hash::check((string) $request->input('password'), $user->password)) {
+        if (! Hash::check((string) $request->input('password'), $user?->password ?? '$2y$12$H5ntb6FLY.qFGr/Rba08b.Dt0raoSs2QEEhzAIt5grrYJ3L8/f/q2') || ! $user) {
+            app(\App\Services\Audit\AuditService::class)->recordAuth('auth.login_failed', null);
             return $this->credentialFailure('invalid_credentials', 'These credentials do not match our records.');
         }
 
@@ -35,8 +36,10 @@ class AuthenticatedSessionController extends Controller
 
         // The API uses Sanctum's stateful middleware, which may expose a request guard as the default
         // facade guard. Login must always establish the real session-backed web guard.
+        app(\App\Services\Audit\AuditService::class)->recordAuth('auth.login', $user);
         Auth::guard('web')->login($user);
         $request->session()->regenerate();
+        $request->session()->put('auth_version', (int) $user->auth_version);
 
         return response()->json([
             'data' => new UserResource($user->load(['person', 'patient'])),
@@ -45,6 +48,7 @@ class AuthenticatedSessionController extends Controller
 
     public function destroy(Request $request)
     {
+        app(\App\Services\Audit\AuditService::class)->recordAuth('auth.logout', $request->user());
         Auth::guard('web')->logout();
         $request->session()->invalidate();
         $request->session()->regenerateToken();

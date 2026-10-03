@@ -12,7 +12,7 @@ class StoreUserRequest extends FormRequest
 
     protected function prepareForValidation(): void
     {
-        if ($this->has('email')) {
+        if (is_string($this->input('email'))) {
             $this->merge(['email' => strtolower(trim((string) $this->input('email')))]);
         }
     }
@@ -29,7 +29,7 @@ class StoreUserRequest extends FormRequest
             ],
             'phone' => ['nullable', 'regex:/^\+63[1-9][0-9]{9}$/'],
             'role' => ['required', Rule::in(['patient'])],
-            'password' => ['required', 'confirmed', Password::min(8)->letters()->numbers()],
+            'password' => ['required', 'string', new \App\Rules\PasswordInput(), 'max:72', 'confirmed', Password::min(8)->letters()->numbers()],
         ];
     }
 }

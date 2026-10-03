@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Auth;
 use App\Enums\Role;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\RegisterPatientRequest;
-use App\Mail\PatientEmailVerificationOtp;
 use App\Models\EmailVerificationOtp;
 use App\Http\Resources\UserResource;
 use App\Models\Patient;
@@ -13,7 +12,6 @@ use App\Models\Person;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Throwable;
@@ -27,9 +25,14 @@ class RegisteredPatientController extends Controller
     {
         $data = $request->validated();
 
-        $this->guardAgainstDuplicatePerson($data);
-
-        $user = DB::transaction(function () use ($data) {
+        [$user, $code] = DB::transaction(function () use ($data) {
+            // Same allocation lock as the existing walk-in path; duplicate checks
+            // run after it so concurrent public registrations cannot pass together.
+            DB::statement('LOCK TABLE patients IN SHARE ROW EXCLUSIVE MODE');
+            if (User::withTrashed()->where('email', $data['email'])->exists() || Person::where('email', $data['email'])->exists()) {
+                throw ValidationException::withMessages(['email' => 'This email address is already registered.']);
+            }
+            $this->guardAgainstDuplicatePerson($data);
             $person = Person::create([
                 'first_name' => $data['first_name'],
                 'last_name' => $data['last_name'],
@@ -44,19 +47,27 @@ class RegisteredPatientController extends Controller
                 'consent' => false,
             ]);
 
-            return User::create([
+            $user = User::create([
                 'person_id' => $person->id,
                 'email' => $data['email'],
                 'password' => Hash::make($data['password']),
                 'role' => Role::Patient,
                 'account_status' => 'Active',
             ]);
+            app(\App\Services\Audit\AuditService::class)->recordAuth('account.registered', $user);
+            $code = (string) random_int(100000, 999999);
+            EmailVerificationOtp::create([
+                'user_id' => $user->id, 'digest' => Hash::make($code), 'attempts' => 0,
+                'expires_at' => now()->addMinutes(10), 'sent_at' => now(),
+            ]);
+            return [$user, $code];
         });
 
         try {
-            $this->sendOtp($user);
+            app(\App\Services\Auth\OtpDelivery::class)->send($user, $code);
         } catch (Throwable $exception) {
-            report($exception);
+            // Transport exceptions may contain message contents or SMTP credentials.
+            \Illuminate\Support\Facades\Log::warning('Patient verification email delivery failed.');
 
             return response()->json([
                 'message' => 'We could not send the verification email. Please try again.',
@@ -70,26 +81,6 @@ class RegisteredPatientController extends Controller
                 'resend_available_at' => now()->addSeconds(60)->toISOString(),
             ]),
         ], 201);
-    }
-
-    private function sendOtp(User $user): void
-    {
-        $code = (string) random_int(100000, 999999);
-        $now = now();
-
-        EmailVerificationOtp::where('user_id', $user->id)
-            ->whereNull('consumed_at')
-            ->update(['consumed_at' => $now]);
-
-        EmailVerificationOtp::create([
-            'user_id' => $user->id,
-            'digest' => Hash::make($code),
-            'attempts' => 0,
-            'expires_at' => $now->copy()->addMinutes(10),
-            'sent_at' => $now,
-        ]);
-
-        Mail::to($user->email)->send(new PatientEmailVerificationOtp($code));
     }
 
     // Mirrors the frontend's possibleDuplicatePerson signal: a matching phone, or a matching first/last name

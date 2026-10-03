@@ -150,3 +150,11 @@ test('patient identity input rejects impossible DOB and object-valued names',()=
 test('non-text emergency reason cannot authorize priority',()=>{const f=fixture(),a=book(f),q=ok(f.actions.checkInAppointment(a.id));assert.equal(f.actions.updateQueue(q.id,'Waiting',{priority:'Urgent',reason:{fake:true}}).ok,false);assert.equal(f.state.queue[0].priority,'Normal')})
 test('removed follow-up permission blocks direct obligation scheduling',()=>{const f=fixture();complete(f,{followupRequired:true});f.role('staff');f.patch({users:f.state.users.map(u=>u.id==='u2'?{...u,permissions:u.permissions.filter(p=>p!=='followups')}:u)});const a=book(f,{start:'13:00'});assert.equal(f.actions.linkFollowupAppointment(f.state.followups[0].id,a.id).ok,false)})
 test('boolean and collection numeric payloads never become procedure or payment amounts',()=>{const f=fixture(),a=book(f),q=ok(f.actions.checkInAppointment(a.id));f.role('dentist');ok(f.actions.updateQueue(q.id,'Called'));ok(f.actions.saveTreatment({queueEntryId:q.id}));for(const quantity of [true,[1],{}])assert.equal(f.actions.completeTreatment({queueEntryId:q.id,procedure:'Done',procedures:[{serviceId:'svc1',quantity}]}).ok,false);ok(f.actions.completeTreatment({queueEntryId:q.id,procedure:'Done',procedures:[{serviceId:'svc1',quantity:1}]}));f.role('staff');const i=f.state.invoices[0];ok(f.actions.reviewInvoice(i.id));ok(f.actions.issueInvoice(i.id));assert.equal(f.actions.postPayment(i.id,'Cash',[i.total]).ok,false)})
+
+test('server-authenticated Owner cannot provision or revoke accounts through obsolete local commands',()=>{
+  const f=fixture();f.role('owner',{serverUserId:'01K00000000000000000000003'})
+  const before=JSON.stringify({users:f.state.users,persons:f.state.persons,staff:f.state.staff,dentists:f.state.dentists})
+  assert.equal(f.actions.createUserAccount({firstName:'New',lastName:'Staff',email:'new@example.test',roleName:'Receptionist',branchId:'b1'}).ok,false)
+  assert.equal(f.actions.setUserStatus('u2','Inactive').ok,false)
+  assert.equal(JSON.stringify({users:f.state.users,persons:f.state.persons,staff:f.state.staff,dentists:f.state.dentists}),before)
+})
