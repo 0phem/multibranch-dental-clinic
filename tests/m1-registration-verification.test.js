@@ -40,10 +40,12 @@ test('registration has required birth date and aligned password toggles on both 
 })
 
 test('login, registration and verification share a responsive auth shell',()=>{
-  const shell=read('src/pages/AuthShell.jsx'),css=read('src/foundation.css'),login=read('src/layout.jsx')
-  assert.match(shell,/Patient Portal/)
+  const shell=read('src/pages/AuthShell.jsx'),css=read('src/public-site.css'),login=read('src/layout.jsx')
+  assert.match(shell,/<PublicHeader\/>/)
+  assert.match(login,/Patient Portal/)
+  assert.doesNotMatch(shell,/auth-intro|Care, thoughtfully connected/)
   assert.match(read('src/clinic-config.js'),/Dr\. Dana E\. Roxas Dental Clinic/)
-  assert.match(css,/@media \(max-width: 480px\)/)
+  assert.match(css,/@media \(max-width:600px\)/)
   assert.match(login,/<AuthShell>/)
   assert.match(login,/onShowRegister/)
 })

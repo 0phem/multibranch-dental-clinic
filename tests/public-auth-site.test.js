@@ -10,7 +10,7 @@ import {clinic} from '../src/clinic-config.js'
 import {publicViewFromHash} from '../src/public-route.js'
 import {bootstrapSession} from '../src/session-bootstrap.js'
 const require=createRequire(import.meta.url)
-const bundle=await build({stdin:{contents:"export * from './src/pages/PublicSite.jsx'; export * from './src/pages/PublicChrome.jsx'; export * from './src/StartupLoading.jsx'; export * from './src/pages/PatientRegister.jsx'; export * from './src/pages/EmailVerification.jsx'; export {Login} from './src/layout.jsx';",resolveDir:process.cwd()},bundle:true,write:false,platform:'node',format:'esm',plugins:[{name:'react',setup(b){b.onResolve({filter:/^react$/},()=>({path:pathToFileURL(require.resolve('react')).href,external:true}))}}]})
+const bundle=await build({stdin:{contents:"export * from './src/pages/PublicSite.jsx'; export * from './src/pages/PublicChrome.jsx'; export * from './src/StartupLoading.jsx'; export * from './src/pages/PatientRegister.jsx'; export * from './src/pages/EmailVerification.jsx'; export {Login} from './src/layout.jsx';",resolveDir:process.cwd()},bundle:true,write:false,loader:{'.css':'empty'},platform:'node',format:'esm',plugins:[{name:'react',setup(b){b.onResolve({filter:/^react$/},()=>({path:pathToFileURL(require.resolve('react')).href,external:true}))}}]})
 const ui=await import('data:text/javascript;base64,'+Buffer.from(bundle.outputFiles[0].text).toString('base64'))
 const render=(Component,props={})=>renderToStaticMarkup(React.createElement(Component,props))
 const page=render(ui.PublicSite)
@@ -142,7 +142,28 @@ test('every lazy page resolves to its named component export',async()=>{
   const imports=[...source.matchAll(/import\('(.+?)'\)\.then\(m=>\(\{default:m\.(\w+)\}\)\)/g)]
   assert.equal(imports.length,26)
   for(const [,path,name] of imports){
-    const result=await build({entryPoints:[`src/${path.slice(2)}`],bundle:true,write:false,metafile:true,platform:'node',format:'esm',external:['react']})
+    const result=await build({entryPoints:[`src/${path.slice(2)}`],bundle:true,write:false,loader:{'.css':'empty'},metafile:true,platform:'node',format:'esm',external:['react']})
     assert.ok(Object.values(result.metafile.outputs).some(output=>output.exports.includes(name)),name)
   }
+})
+
+test('auth prioritizes forms and removes repeated brand/marketing panels',()=>{
+  const login=render(ui.Login,{onLogin:()=>{},onShowRegister:()=>{}})
+  assert.match(login,/Welcome back/)
+  assert.match(login,/Sign in to continue to your clinic portal/)
+  assert.match(login,/Create an account/)
+  for(const html of [login,render(ui.PatientRegister,{onRegister:()=>{},onCancel:()=>{}}),render(ui.EmailVerification,{email:'private@example.test'})]){
+    assert.doesNotMatch(html,/auth-intro|auth-mobile-brand|Care, thoughtfully connected|Appointments and visit details|Clinic updates and messages|Billing and receipt history/)
+    assert.match(html,/Back to the clinic website/)
+  }
+})
+test('registration groups have accessible legends and verification errors have one location',()=>{
+  const html=render(ui.PatientRegister,{onRegister:()=>{},onCancel:()=>{}})
+  assert.equal((html.match(/<fieldset/g)||[]).length,3)
+  for(const group of ['Personal information','Contact information','Account security'])assert.ok(html.includes(`<legend>${group}</legend>`))
+  const verification=render(ui.EmailVerification,{email:'private@example.test',initialResendAvailableAt:new Date(Date.now()+60000).toISOString()})
+  assert.match(verification,/We sent a 6-digit verification code to/)
+  assert.match(verification,/class="auth-otp"/)
+  assert.match(verification,/disabled=""[^>]*><span>Resend code/)
+  assert.doesNotMatch(verification,/private@example.test/)
 })

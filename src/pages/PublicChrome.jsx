@@ -3,7 +3,7 @@ import { Brand } from '../Brand.jsx'
 import { Icon } from '../components.jsx'
 import { clinic } from '../clinic-config.js'
 
-export const publicLinks=[['home','Home'],['about','About'],['features','Features'],['portal','Patient Portal'],['contact','Contact']]
+export const publicLinks=[['home','Home'],['about','About'],['features','Features'],['portal','Patient Portal'],['locations','Locations'],['contact','Contact']]
 
 export function PublicHeader() {
   const [open,setOpen]=useState(false)

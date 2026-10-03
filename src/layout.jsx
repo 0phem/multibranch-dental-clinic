@@ -58,8 +58,8 @@ export function Login({ onLogin, onShowRegister }) {
     if(!result?.ok)setError(result?.message||'Something went wrong. Try again.')
   }
   return <AuthShell><div className="auth-form" aria-labelledby="login-title">
-      <div className="login-copy-wrap"><div className="eyebrow">Secure clinic access</div><h1 id="login-title">Welcome back</h1><p className="login-copy">Sign in to your clinic workspace.</p></div>
-      <form onSubmit={submit} noValidate>
+      <div className="login-copy-wrap"><div className="eyebrow">Patient Portal</div><h1 id="login-title">Welcome back</h1><p className="login-copy">Sign in to continue to your clinic portal.</p></div>
+      <form onSubmit={submit} noValidate aria-busy={submitting}>
         <Field label="Email" required><input type="email" autoComplete="email" value={email} onChange={e=>{setEmail(e.target.value);setError('')}}/></Field>
         <PasswordField label="Password" autoComplete="current-password" value={password} onChange={e=>{setPassword(e.target.value);setError('')}}/>
         {error&&<Notice tone="warning" title="Couldn’t sign in">{error}</Notice>}

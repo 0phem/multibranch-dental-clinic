@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { Icon } from '../components.jsx'
 import { clinic } from '../clinic-config.js'
 import { PublicHeader, PublicFooter } from './PublicChrome.jsx'
+import { PublicLocations } from './PublicLocations.jsx'
 
 function Actions({light=false}) {
   return <div className={`site-actions ${light?'is-light':''}`}><a className="site-button" href="#create-account">Create Patient Account <Icon name="arrow" size={18}/></a><a className="site-button secondary" href="#sign-in">Sign In</a></div>
@@ -55,6 +56,7 @@ export function PublicSite() {
 
     <section className="site-cta"><div className="site-container"><div><span className="site-eyebrow">Your next step</span><h2>Ready to manage your<br/>dental visits online?</h2><p>Your Patient Portal starts with a verified email and your own account.</p></div><Actions light/></div></section>
 
+    <PublicLocations/>
     <section id="contact" className="site-section site-contact"><div className="site-container"><div className="site-section-heading"><div><span className="site-eyebrow">Contact</span><h2>Let’s stay connected.</h2></div><p>For questions about the clinic or help with your Patient Portal, get in touch directly.</p></div><div className="site-contact-grid"><div className="site-contact-clinic"><span className="site-contact-icon"><Icon name="building" size={28}/></span><h3>{clinic.name}</h3><p>{clinic.city}</p><span className="site-location-label">{clinic.locationLabel}</span></div><a className="site-contact-method" href={`tel:${clinic.phoneE164}`}><span className="site-eyebrow">Call the clinic</span><strong>{clinic.phoneDisplay}</strong><span>Start a phone call <Icon name="arrow" size={18}/></span></a><a className="site-contact-method" href={`mailto:${clinic.email}`}><span className="site-eyebrow">Email the clinic</span><strong>{clinic.email}</strong><span>Write an email <Icon name="arrow" size={18}/></span></a></div></div></section>
   </main><PublicFooter/></div>
 }

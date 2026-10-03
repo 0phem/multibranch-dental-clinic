@@ -361,40 +361,12 @@ dialog.notification-dialog { margin: var(--space-3) var(--space-3) auto auto; wi
   .content { max-width: none; padding: 0; }
 }
 
-/* Public authentication surfaces share one calm, responsive clinic shell. */
-.auth-shell { min-height: 100dvh; display: grid; grid-template-columns: minmax(0, .88fr) minmax(0, 1.12fr); background: #f5f8f7; color: var(--text); }
-.auth-intro { min-width: 0; background: #153f46; color: #fff; padding: clamp(30px, 5vw, 76px); display: flex; flex-direction: column; justify-content: space-between; gap: 64px; }
-.auth-brand strong, .auth-brand span { color: #fff; }
-.auth-brand .clinic-logo { background: #fff; border-radius: 50%; padding: 3px; }
-.auth-brand strong { font-size: 1.28rem; }
-.auth-brand span { font-size: .9rem; opacity: .82; }
-.auth-intro-copy { max-width: 440px; }
-.auth-kicker { color: #b7d8d5; font-size: .76rem; font-weight: 750; letter-spacing: .12em; text-transform: uppercase; }
-.auth-intro h2 { color: #fff; margin: 14px 0 20px; font-size: clamp(2.35rem, 4vw, 4.4rem); letter-spacing: -.055em; line-height: 1.07; }
-.auth-intro p { color: #d9e7e5; line-height: 1.7; font-size: 1rem; }
-.auth-intro ul { margin: 34px 0 0; padding: 0; list-style: none; }
-.auth-intro li { padding: 13px 0 13px 28px; border-top: 1px solid rgba(255,255,255,.16); position: relative; color: #e4efee; }
-.auth-intro li::before { content: '✓'; position: absolute; left: 2px; color: #a9d9d0; font-weight: 800; }
-.auth-intro > small { color: #b7d8d5; }
-.auth-form-side { min-width: 0; padding: clamp(24px, 4vw, 64px); display: flex; align-items: center; justify-content: center; }
-.auth-card { background: #fff; border: 1px solid #e0e8e7; border-radius: 24px; box-shadow: 0 20px 55px rgba(16,52,57,.075); width: min(100%, 560px); padding: clamp(28px, 4vw, 52px); }
-.auth-shell-wide .auth-card { width: min(100%, 720px); }
-.auth-form { min-width: 0; }
-.auth-form .login-copy-wrap { margin: 0 0 30px; }
-.auth-form h1 { font-size: clamp(2rem, 3vw, 2.8rem); line-height: 1.13; letter-spacing: -.04em; color: #173b43; margin: 8px 0 12px; }
-.auth-form .login-copy { margin: 0; color: #5c7177; line-height: 1.65; }
-.auth-form .field { margin-bottom: 18px; }
-.auth-form .login-button { margin-top: 8px; min-height: 48px; }
-.auth-form .login-register-link { margin-top: 22px; text-align: center; }
-.auth-form .section-label { margin-top: 26px; }
-.auth-form .row-actions { flex-wrap: wrap; }
 .auth-password-field > label { display: block; font-weight: 700; font-size: var(--font-sm); margin-bottom: 7px; }
 .auth-password-control { position: relative; }
 .auth-password-control input { width: 100%; padding-right: 74px !important; }
 .auth-password-toggle { position: absolute; right: 5px; top: 50%; transform: translateY(-50%); min-height: 38px; min-width: 58px; border: 0; background: transparent; color: #286866; border-radius: 8px; font-size: .83rem; font-weight: 750; cursor: pointer; }
 .auth-password-toggle:hover { background: #edf6f4; }
 .auth-password-toggle:focus-visible, .auth-country-trigger:focus-visible, .auth-country-options button:focus-visible { outline: var(--focus-ring); outline-offset: 1px; }
-.auth-mobile-brand { display: none; }
 .auth-phone-field { position: relative; }
 .auth-phone-field > span { font-weight: 700; font-size: var(--font-sm); margin-bottom: 7px; }
 .auth-phone-field > small { display: block; margin-top: 7px; }
@@ -410,22 +382,3 @@ dialog.notification-dialog { margin: var(--space-3) var(--space-3) auto auto; wi
 .auth-country-options button:hover, .auth-country-options button[aria-selected=true] { background: #eef6f4; }
 .auth-country-options p { padding: 8px; color: var(--muted); }
 .auth-phone-field .phone-field-number { width: 100%; }
-@media (max-width: 950px) {
-  .auth-shell { grid-template-columns: minmax(0, 1fr); }
-  .auth-intro { display: none; }
-  .auth-form-side { align-items: flex-start; }
-  .auth-mobile-brand { display: flex; margin-bottom: 22px; }
-  .auth-form-side { display: block; max-width: 760px; width: 100%; margin: auto; }
-  .auth-card { margin-inline: auto; }
-}
-@media (max-width: 480px) {
-  .auth-form-side { padding: 16px; }
-  .auth-card { padding: 24px 20px; border-radius: 18px; }
-  .auth-mobile-brand .clinic-logo { width: 46px; height: 46px; }
-  .auth-mobile-brand strong { font-size: 1.05rem; }
-  .auth-form .row-actions .btn { width: 100%; justify-content: center; }
-  .auth-country-wrap { flex-basis: 46%; }
-  .auth-country-trigger { padding-inline: 8px; font-size: .85rem; }
-  .auth-phone-field .phone-field-number { padding-inline: 9px; }
-  .verification-resend { flex-wrap: wrap; }
-}
