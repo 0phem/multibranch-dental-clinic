@@ -35,11 +35,21 @@ return [
         ],
     ],
 
+    // PayMongo credentials come ONLY from server environment configuration. There are deliberately no default values: an
+    // unset key or webhook secret must make the integration refuse to run (a publicly known placeholder secret would let anyone
+    // forge a signed "payment received" event). Never commit real values; rotate a secret if it is ever exposed.
     'paymongo' => [
-        'public_key' => env('PAYMONGO_PUBLIC_KEY', 'pk_test_sample'),
-        'secret_key' => env('PAYMONGO_SECRET_KEY', 'sk_test_sample'),
-        'webhook_secret' => env('PAYMONGO_WEBHOOK_SECRET', 'whsec_sample'),
-        'base_url' => env('PAYMONGO_BASE_URL', 'https://api.paymongo.com/v1'),
+        'public_key' => env('PAYMONGO_PUBLIC_KEY'),
+        'secret_key' => env('PAYMONGO_SECRET_KEY'),
+        'webhook_secret' => env('PAYMONGO_WEBHOOK_SECRET'),
+        // The API host (https://api.paymongo.com); the service appends /v2/checkout_sessions and /v1/checkout_sessions/{id}.
+        'base_url' => env('PAYMONGO_BASE_URL', 'https://api.paymongo.com'),
+        // 'test' or 'live', required. It selects the webhook signature component (te / li), must agree with the secret key's own
+        // prefix (sk_test_ / sk_live_), and every event and session read back must be in the same mode.
+        'mode' => env('PAYMONGO_MODE'),
+        // Comma-separated payment_method_types enabled on the merchant's PayMongo account. There is NO default: availability
+        // depends on the account, so an unset value makes checkout fail closed.
+        'payment_method_types' => env('PAYMONGO_PAYMENT_METHOD_TYPES'),
     ],
 
 ];

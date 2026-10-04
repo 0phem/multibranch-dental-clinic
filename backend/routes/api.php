@@ -57,6 +57,8 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureAccountAccess::cla
     });
     Route::get('/receipts/mine', [BillingController::class, 'receiptsMine'])->middleware('role:patient');
     Route::get('/billing/treatments', [BillingController::class, 'treatments'])->middleware('role:staff,owner');
+    // Provider payments that could not be applied automatically (reconciliation worklist; read-only).
+    Route::get('/billing/provider-events', [BillingController::class, 'providerEvents'])->middleware('role:staff,owner');
 
     // Mail Diagnostics (Owner-only)
     Route::post('/mail/test', [MailDiagnosticController::class, 'sendTest'])->middleware('role:owner');

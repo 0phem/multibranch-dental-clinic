@@ -98,6 +98,35 @@ class ConcurrentBillingTest extends TestCase
         $this->assertSame('Paid', $invoice->fresh()->status);
     }
 
+    public function test_concurrent_checkout_initiation_creates_one_open_session_and_one_provider_call_result(): void
+    {
+        ServicePrice::create(['service_id' => $this->svc['svc1']->id, 'branch_id' => $this->b['b1']->id, 'kind' => 'priced', 'amount' => '125.50', 'effective_from' => '2026-09-01', 'source' => 'owner_confirmed', 'created_by_user_id' => $this->u['owner']->id, 'created_at' => now()]);
+        $treatment = $this->completed();
+        $this->actingAsUser('staffB1');
+        $invoice = Invoice::where('public_id', $this->postJson("/api/invoices/from-treatment/{$treatment->public_id}", [], ['Idempotency-Key' => 'setup-draft'])->assertCreated()->json('data.id'))->firstOrFail();
+        $this->postJson("/api/invoices/{$invoice->public_id}/review", ['expected_revision' => 1], ['Idempotency-Key' => 'setup-review'])->assertOk();
+        $this->postJson("/api/invoices/{$invoice->public_id}/issue", ['expected_revision' => 2], ['Idempotency-Key' => 'setup-issue'])->assertOk();
+
+        $token = $this->u['patientA']->createToken('m11-checkout-race')->plainTextToken;
+        $startAt = microtime(true) + 1.5;
+        $children = [];
+        foreach ([1, 2, 3] as $n) {
+            $process = proc_open([PHP_BINARY, base_path('tests/Support/concurrent_checkout.php'), $token, "/api/invoices/{$invoice->public_id}/paymongo-checkout", (string) $startAt, 'cs_race'], [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, base_path(), array_merge(getenv(), ['APP_ENV' => 'testing', 'DB_CONNECTION' => 'pgsql', 'DB_DATABASE' => 'dental_clinic_test', 'DB_URL' => '', 'CACHE_STORE' => 'array', 'SESSION_DRIVER' => 'array', 'QUEUE_CONNECTION' => 'sync']));
+            $children[] = [$process, $pipes];
+        }
+        $results = [];
+        foreach ($children as [$process, $pipes]) {
+            $out = stream_get_contents($pipes[1]);
+            $err = stream_get_contents($pipes[2]);
+            proc_close($process);
+            $results[] = json_decode($out, true) ?: $this->fail("child process failed: {$out} {$err}");
+        }
+        $this->assertSame([200, 200, 200], array_column($results, 'status'));
+        $this->assertCount(1, array_unique(array_map(fn ($r) => $r['body']['data']['checkout_session_id'], $results)), 'every request got the same logical checkout');
+        $this->assertSame(1, \App\Models\PaymentCheckoutSession::where('invoice_id', $invoice->id)->where('status', 'Open')->count());
+        $this->assertSame(1, \App\Models\PaymentCheckoutSession::count());
+    }
+
     public function test_same_idempotency_key_replays_and_different_payload_conflicts_under_retry(): void
     {
         ServicePrice::create(['service_id' => $this->svc['svc1']->id, 'branch_id' => $this->b['b1']->id, 'kind' => 'priced', 'amount' => '125.50', 'effective_from' => '2026-09-01', 'source' => 'owner_confirmed', 'created_by_user_id' => $this->u['owner']->id, 'created_at' => now()]);

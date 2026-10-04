@@ -17,7 +17,9 @@ test('Patient billing page contains PayMongo checkout button and payment return 
   assert.match(patient, /createPayMongoCheckout/)
   assert.match(patient, /Pay Online \(GCash \/ Maya \/ Card\)/)
   assert.match(patient, /Connecting to PayMongo…/)
-  assert.match(patient, /Payment Successful/)
+  // The return redirect is not proof of payment: the banner follows the server's invoice status (see tests/billing-ui.test.js).
+  assert.match(patient, /Confirming your payment/)
+  assert.match(patient, /Payment received/)
   assert.match(patient, /Payment Cancelled/)
   assert.match(patient, /Payment Error/)
 })

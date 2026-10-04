@@ -69,6 +69,8 @@ async function parseFailure(response) {
   }
   if (response.status === 429) return { ok: false, kind: 'rate_limited', code: body?.code || null, retry_after: body?.retry_after || 0, message: body?.message || 'Please wait and try again.' }
   if (response.status === 503) return { ok: false, kind: 'server', code: body?.code || null, message: body?.message || 'The clinic system could not send the email. Try again.' }
+  // M11: an online-payment gateway refusal carries a deliberate, safe message ("No payment was started.") — show it instead of the generic outage text.
+  if (response.status === 502 && typeof body?.code === 'string' && body.code.startsWith('payment_') && body.message) return { ok: false, kind: 'server', code: body.code, message: body.message }
   if (response.status >= 500) return { ok: false, kind: 'server', message: 'The clinic system is temporarily unavailable. Try again in a moment.' }
   return { ok: false, kind: 'server', message: 'Something unexpected happened. Try again.' }
 }
@@ -247,7 +249,9 @@ export function hmoSelfPay(visitId, payload, key) { return command(`/api/visits/
 export function hmoCaseCommand(id, name, payload, key) { return command(`/api/hmo-cases/${encodeURIComponent(id)}/${name}`, payload, key) }
 
 // M11 server-authoritative billing. These calls never write invoices, payments or receipts to browser storage.
-export function listBillingInvoices() { return request('/api/invoices') }
+// Cursor-paged (newest first): params may carry per_page (1-100), cursor (the previous page's meta.next_cursor), status.
+export function listBillingInvoices(params) { return request(`/api/invoices${query(params)}`) }
+export function getBillingInvoice(id) { return request(`/api/invoices/${encodeURIComponent(id)}`) }
 export function listBillingTreatments() { return request('/api/billing/treatments') }
 export function createBillingDraft(treatmentId, key) { return command(`/api/invoices/from-treatment/${encodeURIComponent(treatmentId)}`, {}, key) }
 export function reviewBillingInvoice(id, payload, key) { return command(`/api/invoices/${encodeURIComponent(id)}/review`, payload, key) }
@@ -265,8 +269,9 @@ export function sendTestEmail(recipientEmail) {
     body: JSON.stringify(recipientEmail ? { recipient_email: recipientEmail } : {}),
   })
 }
-export function myBillingInvoices() { return request('/api/invoices/mine') }
-export function myBillingReceipts() { return request('/api/receipts/mine') }
+export function myBillingInvoices(params) { return request(`/api/invoices/mine${query(params)}`) }
+// Cursor-paged like the invoice lists (per_page 1-100, cursor = previous meta.next_cursor). The Patient billing page reads receipts from its paged invoices.
+export function myBillingReceipts(params) { return request(`/api/receipts/mine${query(params)}`) }
 
 // M14 Patient Forms, Documents & Consent Management
 export function listDocuments(params) { return request(`/api/documents${query(params)}`) }
