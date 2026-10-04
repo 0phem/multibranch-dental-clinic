@@ -486,7 +486,7 @@ test('M24 Patient copy carries no internal PE designation, navigation is aligned
   assert.equal(m24.enhancement,true);assert.equal(m24.implemented,true)
   assert.equal(m25.enhancement,true);assert.notEqual(m25.implemented,true,'M25 is not fully implemented');assert.equal(m25.preview,true,'M25 has only its limited pre-existing preview')
   assert.deepEqual(data.MODULES.filter(m=>m.pe).map(m=>m.no),[24,25],'M24 and M25 are the Proposed Enhancements (PE)')
-  assert.equal(data.MODULES.length,25,'no M26+')
+  assert.equal(data.MODULES.length,26,'canonical registry holds the approved 26 modules (M26 is not a PE)')
 })
 
 test('the Patient route and permission guard are unchanged',()=>{

@@ -1,10 +1,10 @@
 // Stable domain keys are the durable identity of recorded workflow/audit events and automation targets.
-// Module numbers are presentation metadata derived from the current 25-module structure, so renumbering
+// Module numbers are presentation metadata derived from the current canonical module structure (26 modules; M26 uses the domain key `feedback`, registered as metadata only), so renumbering
 // never rewrites what a stored record means. A multi-step handoff is written as 'treatment→hmo'.
 export const DOMAIN_MODULE={
   identity:1,branch:2,personnel:3,patient:4,treatment:5,appointment:6,assistant:7,checkin:8,queue:9,capacity:10,
   billing:11,hmo:12,service:13,document:14,configuration:15,inquiry:16,messaging:17,notification:18,
-  prescription:19,followup:20,analytics:21,audit:22,automation:23,loyalty:24,campaign:25,
+  prescription:19,followup:20,analytics:21,audit:22,automation:23,loyalty:24,campaign:25,feedback:26,
 }
 
 // Records written before the canonical restructure stored module numbers from the OLD structure. They are read

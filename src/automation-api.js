@@ -1,4 +1,4 @@
-// Module 23: Integrated Workflow & Automation Control API
+// Module 23: Workflow Automation & Exception Management API
 import * as api from './api-client.js'
 import { normalizeFailure } from './appointments-api.js'
 

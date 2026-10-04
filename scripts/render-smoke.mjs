@@ -487,7 +487,7 @@ const engagement=render('engagement','owner')
 for(const text of ['Optional engagement programs','team-designed','Process request','Under review','Marketing &amp; Reactivation • M25'])assert.ok(engagement.includes(text),`engagement: ${text}`)
 assert.ok(!/Proposed Enhancement|\bPE\b|Engagement • PE/.test(engagement+render('dashboard','owner')+render('dashboard','staff')),'Owner and Staff carry no PE copy')
 // New canonical modules that are not built yet must never be claimed as represented (canonical module data).
-for(const text of ['Patient AI Chatbot Management','Limited preview: a rule-based Clinic Assistant','Planned: only HMO document metadata','Planned: clinic settings are still fixed','Planned: only a limited in-browser activity history'])assert.ok(m.MODULES.some(mod=>mod.coverageNote?.includes(text)||mod.name===text),`module coverage: ${text}`)
+for(const text of ['Patient AI Support & Clinic Knowledge Management','Limited preview: a rule-based Clinic Assistant','Planned: only HMO document metadata','Planned: clinic settings are still fixed','Planned: only a limited in-browser activity history'])assert.ok(m.MODULES.some(mod=>mod.coverageNote?.includes(text)||mod.name===text),`module coverage: ${text}`)
 store={...store,state:fullState}
 console.log('PASS: Phase 4B.2 Referral & Loyalty — ledger-validated balance, request/pending/insufficient/review/empty states, Journey Hub entry point, aligned Engagement copy and Patient navigation')
 

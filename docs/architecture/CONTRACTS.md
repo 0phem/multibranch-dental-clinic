@@ -1,6 +1,6 @@
 # Shared Production Contracts
 
-Frozen at `1fa49d1` (canonical 25-module structure) before parallel Wave 1 development. This is the shared
+Frozen at `1fa49d1` (then the canonical 25-module structure; the canonical structure became 26 modules with revised names on October 4, 2026 — see `MODULE_COVERAGE.md`) before parallel Wave 1 development. This is the shared
 cross-module reference for all five developers. It does not repeat what other documents already own:
 
 - Module names, numbers, owners and current coverage: [MODULE_COVERAGE.md](../../MODULE_COVERAGE.md)
@@ -203,7 +203,7 @@ verification → requirement completion → external submission → pending → 
   integration.
 - **Current:** only HMO requirement document metadata is recorded; no file storage, extraction or OCR exists.
 
-## 10. Prescriptions (M19 — Digital Prescription & OCR-Assisted Management)
+## 10. Prescriptions (M19 — Digital Prescription Management)
 
 **Core invariant:** an authorized prescription requires a Patient, a valid Visit/Clinical Encounter and an
 authorizing Dentist. It does not require a completed treatment — a legitimate consultation or walk-in encounter may

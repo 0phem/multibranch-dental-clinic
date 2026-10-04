@@ -293,7 +293,7 @@ export function withdrawPatientConsent(patientId, consentId, key) {
 export function listAuditLogs(params) { return request(`/api/audit-logs${query(params)}`) }
 export function getAuditLog(id) { return request(`/api/audit-logs/${encodeURIComponent(id)}`) }
 
-// M23 Integrated Workflow & Automation Control (Owner only)
+// M23 Workflow Automation & Exception Management (Owner only)
 export function getAutomationSnapshot(branchId) {
   const q = branchId ? `?branch_id=${encodeURIComponent(branchId)}` : ''
   return request(`/api/automation/snapshot${q}`)

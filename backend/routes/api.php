@@ -81,7 +81,7 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureAccountAccess::cla
         Route::get('/{auditLog}', [AuditController::class, 'show']);
     });
 
-    // M23 Integrated Workflow & Automation Control (Owner only)
+    // M23 Workflow Automation & Exception Management (Owner only)
     Route::prefix('automation')->middleware('role:owner')->group(function () {
         Route::get('/snapshot', [AutomationController::class, 'snapshot']);
         Route::get('/rules', [AutomationController::class, 'rules']);

@@ -23,20 +23,27 @@ const ok=result=>{assert.equal(result.ok,true,result.message);return result.reco
 const CANONICAL=[
   [1,'User & Access Management','Licanda'],[2,'Multi-Branch Clinic Management','Licanda'],[3,'Dentist & Staff Management','Licanda'],
   [4,'Patient Records Management','Ecal'],[5,'Treatment & Clinical Workflow Management','Ecal'],[6,'Appointment Booking & Smart Scheduling Management','Alejo'],
-  [7,'Patient AI Chatbot Management','Alejo'],[8,'Patient Check-In Management','Alejo'],[9,'Patient Queue Management','Alejo'],
-  [10,'Clinic Capacity, Waiting-Time & Workforce Management','Alejo'],[11,'Billing, Payment & Receipt Management','Ecal'],
+  [7,'Patient AI Support & Clinic Knowledge Management','Alejo'],[8,'Patient Arrival & Check-In Management','Alejo'],[9,'Patient Queue Management','Alejo'],
+  [10,'Patient Flow, Capacity & Wait-Time Management','Alejo'],[11,'Billing, Payment & Receipt Management','Ecal'],
   [12,'HMO Case, Coverage & Follow-Up Management','Delos Santos'],[13,'Service, Procedure & Pricing Management','Licanda'],
-  [14,'Patient Forms, Documents & Consent Management','Delos Santos'],[15,'Clinic Configuration & Business Rules Management','Licanda'],
-  [16,'Social Media Inquiry Management','Millar'],[17,'Unified Patient Messaging Management','Millar'],[18,'Real-Time Notification & Reminder Management','Millar'],
-  [19,'Digital Prescription & OCR-Assisted Management','Ecal'],[20,'Treatment Follow-Up & Recall Management','Ecal'],
+  [14,'Patient Forms, Documents & Consent Management','Delos Santos'],[15,'Clinic Policy & Operational Configuration Management','Licanda'],
+  [16,'Social Media & External Inquiry Management','Millar'],[17,'Unified Patient Messaging Management','Millar'],[18,'Transactional Notification & Reminder Management','Millar'],
+  [19,'Digital Prescription Management','Ecal'],[20,'Clinical Follow-Up & Recall Management','Ecal'],
   [21,'Operational Analytics & Executive Intelligence','Delos Santos'],[22,'Audit Trail & Activity Monitoring Management','Delos Santos'],
-  [23,'Integrated Workflow & Automation Control','Delos Santos'],[24,'Referral & Loyalty Management','Millar'],
-  [25,'Marketing, Reactivation & Patient Engagement Management','Millar'],
+  [23,'Workflow Automation & Exception Management','Delos Santos'],[24,'Referral & Loyalty Management','Millar'],
+  [25,'Marketing Campaign & Patient Reactivation Management','Millar'],
+  [26,'Patient Feedback & Service Quality Management','Group 3 — Shared Enhancement'],
 ]
 
-test('MODULES matches the canonical 25-module structure, owners and PE designation',()=>{
+test('MODULES matches the canonical 26-module structure, owners and PE designation',()=>{
   assert.deepEqual(data.MODULES.map(m=>[m.no,m.name,m.owner.split(',')[0]]),CANONICAL)
   assert.deepEqual(data.MODULES.filter(m=>m.pe).map(m=>m.no),[24,25])
+  const m26=data.MODULES.find(m=>m.no===26)
+  assert.equal(DOMAIN_MODULE.feedback,26,'M26 uses the stable domain key feedback')
+  assert.equal(m26.implemented,false,'M26 is defined but not implemented')
+  assert.equal(m26.coverage,'planned')
+  assert.ok(!m26.pe&&!m26.enhancement,'M26 is a shared enhancement, not a PE')
+  assert.equal(Object.keys(DOMAIN_MODULE).length,26)
   // Newly defined modules that are not built yet must not claim full representation.
   for(const no of [7,13,14,15,22])assert.ok(data.MODULES.find(m=>m.no===no).coverage,`M${no} states its real coverage`)
 })

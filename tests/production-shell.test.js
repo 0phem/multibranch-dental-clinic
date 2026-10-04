@@ -29,7 +29,7 @@ test('no demo reset or demo sign-in shortcut is reachable from the application',
 test('the professor-facing Module Coverage page is gone and no role can navigate to it',()=>{
   assert.doesNotMatch(admin,/ModulesPage|Professor-facing|25-Module UI Coverage/)
   assert.doesNotMatch(app,/'modules'/)
-  assert.equal(data.MODULES.length,25,'canonical module data itself is kept')
+  assert.equal(data.MODULES.length,26,'canonical module data itself is kept')
 })
 
 test('every role still reaches its application pages under current auth rules',()=>{

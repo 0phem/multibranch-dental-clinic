@@ -3,7 +3,7 @@ import { clinicDate } from './clock.js'
 // Compatibility export for deferred modules; workflow code reads the live clinic clock.
 export const TODAY = clinicDate()
 
-// Canonical 25-module structure. `coverage` states what the frontend actually represents today:
+// Canonical module structure (26 modules approved October 4, 2026; M26 is registered as metadata only and is not implemented). `coverage` states what the frontend actually represents today:
 // 'represented' (default), 'partial', 'preview' or 'planned'. M24/M25 are Proposed Enhancements (PE).
 export const MODULES = [
   { no: 1, name: 'User & Access Management', owner: 'Licanda, Celin', area: 'Administration', roles: ['owner'] },
@@ -12,25 +12,26 @@ export const MODULES = [
   { no: 4, name: 'Patient Records Management', owner: 'Ecal, Richmon', area: 'Clinical', roles: ['staff','dentist'] },
   { no: 5, name: 'Treatment & Clinical Workflow Management', owner: 'Ecal, Richmon', area: 'Clinical', roles: ['dentist'] },
   { no: 6, name: 'Appointment Booking & Smart Scheduling Management', owner: 'Alejo, Hart Jaztin A.', area: 'Scheduling', roles: ['patient','staff','owner'] },
-  { no: 7, name: 'Patient AI Chatbot Management', owner: 'Alejo, Hart Jaztin A.', area: 'Patient Assistance', roles: ['patient'], coverage: 'preview', coverageNote: 'Limited preview: a rule-based Clinic Assistant with fixed answers; the AI chatbot is not yet implemented' },
-  { no: 8, name: 'Patient Check-In Management', owner: 'Alejo, Hart Jaztin A.', area: 'Patient Flow', roles: ['staff'] },
+  { no: 7, name: 'Patient AI Support & Clinic Knowledge Management', owner: 'Alejo, Hart Jaztin A.', area: 'Patient Assistance', roles: ['patient'], coverage: 'preview', coverageNote: 'Limited preview: a rule-based Clinic Assistant with fixed answers; the AI chatbot is not yet implemented' },
+  { no: 8, name: 'Patient Arrival & Check-In Management', owner: 'Alejo, Hart Jaztin A.', area: 'Patient Flow', roles: ['staff'] },
   { no: 9, name: 'Patient Queue Management', owner: 'Alejo, Hart Jaztin A.', area: 'Patient Flow', roles: ['patient','staff','dentist'] },
-  { no: 10, name: 'Clinic Capacity, Waiting-Time & Workforce Management', owner: 'Alejo, Hart Jaztin A.', area: 'Patient Flow', roles: ['patient','staff','owner'] },
+  { no: 10, name: 'Patient Flow, Capacity & Wait-Time Management', owner: 'Alejo, Hart Jaztin A.', area: 'Patient Flow', roles: ['patient','staff','owner'] },
   { no: 11, name: 'Billing, Payment & Receipt Management', owner: 'Ecal, Richmon', area: 'Finance', roles: ['patient','staff'] },
   { no: 12, name: 'HMO Case, Coverage & Follow-Up Management', owner: 'Delos Santos, Joevan', area: 'HMO', roles: ['patient','staff','owner'], coverage: 'partial', coverageNote: 'Partly represented: server memberships, Visit-anchored cases, lifecycle incl. self-pay Withdrawn, approved amount and the billing hold gate; documents, notifications and automation are later' },
   { no: 13, name: 'Service, Procedure & Pricing Management', owner: 'Licanda, Celin', area: 'Administration', roles: ['owner'], coverage: 'partial', coverageNote: 'Partly represented: service catalog, branch service availability and Owner-confirmed, effective-dated price versions (pricing foundation); billing adopts them at the M11 cutover' },
   { no: 14, name: 'Patient Forms, Documents & Consent Management', owner: 'Delos Santos, Joevan', area: 'Documents', roles: ['patient','staff'], coverage: 'planned', coverageNote: 'Planned: only HMO document metadata is recorded today; no file storage, forms, consent records or extraction yet' },
-  { no: 15, name: 'Clinic Configuration & Business Rules Management', owner: 'Licanda, Celin', area: 'Administration', roles: ['owner'], coverage: 'planned', coverageNote: 'Planned: clinic settings are still fixed in the application today' },
-  { no: 16, name: 'Social Media Inquiry Management', owner: 'Millar, John Yzhekiel', area: 'Communication', roles: ['staff'] },
+  { no: 15, name: 'Clinic Policy & Operational Configuration Management', owner: 'Licanda, Celin', area: 'Administration', roles: ['owner'], coverage: 'planned', coverageNote: 'Planned: clinic settings are still fixed in the application today' },
+  { no: 16, name: 'Social Media & External Inquiry Management', owner: 'Millar, John Yzhekiel', area: 'Communication', roles: ['staff'] },
   { no: 17, name: 'Unified Patient Messaging Management', owner: 'Millar, John Yzhekiel', area: 'Communication', roles: ['patient','staff','dentist'] },
-  { no: 18, name: 'Real-Time Notification & Reminder Management', owner: 'Millar, John Yzhekiel', area: 'Communication', roles: ['patient','staff'] },
-  { no: 19, name: 'Digital Prescription & OCR-Assisted Management', owner: 'Ecal, Richmon', area: 'Clinical', roles: ['patient','dentist'], coverage: 'partial', coverageNote: 'Digital prescription is represented; OCR-assisted transcription is planned' },
-  { no: 20, name: 'Treatment Follow-Up & Recall Management', owner: 'Ecal, Richmon', area: 'Clinical', roles: ['patient','staff','dentist'] },
+  { no: 18, name: 'Transactional Notification & Reminder Management', owner: 'Millar, John Yzhekiel', area: 'Communication', roles: ['patient','staff'] },
+  { no: 19, name: 'Digital Prescription Management', owner: 'Ecal, Richmon', area: 'Clinical', roles: ['patient','dentist'], coverage: 'partial', coverageNote: 'Digital prescription is represented; OCR-assisted transcription is planned' },
+  { no: 20, name: 'Clinical Follow-Up & Recall Management', owner: 'Ecal, Richmon', area: 'Clinical', roles: ['patient','staff','dentist'] },
   { no: 21, name: 'Operational Analytics & Executive Intelligence', owner: 'Delos Santos, Joevan', area: 'Analytics', roles: ['owner'], coverage: 'implemented', coverageNote: 'Backend-authoritative executive summary, multi-branch comparative KPI analytics, date-bounded aggregations and safe CSV export', implemented: true },
   { no: 22, name: 'Audit Trail & Activity Monitoring Management', owner: 'Delos Santos, Joevan', area: 'Governance', roles: ['owner'], coverage: 'implemented', coverageNote: 'Backend-authoritative immutable audit trail with forensic inspection and CSV export (Planned: only a limited in-browser activity history exists in legacy client)', implemented: true },
-  { no: 23, name: 'Integrated Workflow & Automation Control', owner: 'Delos Santos, Joevan', area: 'Automation', roles: ['owner'], coverage: 'implemented', coverageNote: 'Backend-authoritative workflow rules, immutable system events, automated actions, deduplication and owner monitoring control', implemented: true },
+  { no: 23, name: 'Workflow Automation & Exception Management', owner: 'Delos Santos, Joevan', area: 'Automation', roles: ['owner'], coverage: 'implemented', coverageNote: 'Backend-authoritative workflow rules, immutable system events, automated actions, deduplication and owner monitoring control', implemented: true },
   { no: 24, name: 'Referral & Loyalty Management', owner: 'Millar, John Yzhekiel', area: 'Engagement', roles: ['patient','staff','owner'], enhancement: true, pe: true, implemented: true },
-  { no: 25, name: 'Marketing, Reactivation & Patient Engagement Management', owner: 'Millar, John Yzhekiel', area: 'Engagement', roles: ['staff','owner'], enhancement: true, pe: true, implemented: false, preview: true },
+  { no: 25, name: 'Marketing Campaign & Patient Reactivation Management', owner: 'Millar, John Yzhekiel', area: 'Engagement', roles: ['staff','owner'], enhancement: true, pe: true, implemented: false, preview: true },
+  { no: 26, name: 'Patient Feedback & Service Quality Management', owner: 'Group 3 — Shared Enhancement', area: 'Quality', roles: [], coverage: 'planned', coverageNote: 'Defined, not implemented: approved Group 3 shared enhancement (October 4, 2026); no tables, routes or UI exist', implemented: false },
 ]
 
 export const ROLE_INFO = {

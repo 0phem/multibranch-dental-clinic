@@ -89,24 +89,27 @@ If the ERD, documentation, tests, and implementation disagree, identify the conf
 
 ## Canonical module architecture
 
-The canonical 25-module structure is listed in `MODULE_COVERAGE.md` (and `MODULES` in `src/data.js`). Preserve M1–M25 as defined there. The earlier structure — with Smart Scheduling as M7, HMO split across M12/M13/M14, workload as M15 and the Owner dashboard as M22 — is retired; `MODULE_COVERAGE.md` records the old → new mapping.
+The canonical 26-module structure (effective October 4, 2026) is listed in `MODULE_COVERAGE.md` and `CLAUDE_OPERATING_MODE.md` §4 (and `MODULES` in `src/data.js`, which does not yet include M26). Preserve M1–M26 as defined there. The earlier structure — with Smart Scheduling as M7, HMO split across M12/M13/M14, workload as M15 and the Owner dashboard as M22 — is retired; `MODULE_COVERAGE.md` records the old → new mapping.
 
 Do not invent new business modules merely because technical infrastructure is added.
 
 Important separations include:
 
 - M6 Appointment Booking & Smart Scheduling: Smart Scheduling, conflict prevention, nearest-branch recommendation and automatic Dentist assignment are M6 features. Conflict validation stays deterministic, never AI.
-- M7 Patient AI Chatbot: Patient-only, read-only; it never diagnoses, prescribes, recommends treatment, books, pays or changes HMO state.
-- M8 Check-In
+- M7 Patient AI Support & Clinic Knowledge: the Patient chatbot plus curated clinic knowledge, safe retrieval, fallback and human handoff; Patient-only, read-only; it never diagnoses, prescribes, recommends treatment, books, pays or changes HMO state.
+- M8 Patient Arrival & Check-In
 - M9 Queue
-- M10 Capacity, Waiting-Time & Workforce (includes the former workload/cross-branch capacity module)
+- M10 Patient Flow, Capacity & Wait-Time (includes the former workload/cross-branch capacity module; consumes M3 workforce availability and does not own personnel identity)
 - M12 HMO Case, Coverage & Follow-Up: one case lifecycle (see HMO below)
-- M13 Service, Procedure & Pricing; M14 Forms, Documents & Consent; M15 Clinic Configuration & Business Rules
+- M13 Service, Procedure & Pricing; M14 Forms, Documents & Consent; M15 Clinic Policy & Operational Configuration
 - M17 Messages
-- M18 Notifications
+- M18 Transactional Notifications & Reminders
+- M19 Digital Prescription (OCR is a draft-only feature, not a module)
+- M20 Clinical Follow-Up & Recall
+- M26 Patient Feedback & Service Quality (approved Group 3 shared enhancement; not implemented; M21 consumes only aggregates)
 - M21 Analytics & Executive Intelligence (includes the former Owner dashboard module)
 - M22 Audit Trail & Activity Monitoring
-- M23 Workflow Automation
+- M23 Workflow Automation & Exception Management
 
 Module numbers are presentation metadata. Recorded events and automation targets use stable domain keys (`src/module-map.js`); records written before the restructure are read through its fixed legacy table, never reinterpreted under the new numbering.
 
@@ -114,7 +117,7 @@ OCR is not a module. Document storage and text/OCR extraction belong to M14; HMO
 
 M24 and M25 are Proposed Enhancements (PE) (formerly recorded as Approved Frontend Enhancements). M24 (Referral & Loyalty) is an implemented prototype whose program rules (the 50-point redemption threshold, one Pending request at a time, each request processed once, the same-day duplicate-reward check) and validation rule (whole positive points) are team-designed prototype rules for demonstration, not historical clinic policy or an established clinic program; its writes go through the shared commands in `src/loyalty.js`. For M25 (Marketing & Reactivation), a limited frontend preview/demo exists today (the Engagement campaign-draft form): it sends no real campaigns and still writes through the earlier raw campaign setter, which is known technical debt. Full Staff/Owner management behavior, a safe command architecture, marketing consent, targeting, delivery and analytics are deferred to a later role phase. Neither may block core care operations.
 
-Do not add M26+ or begin M25 management work unless explicitly authorized.
+M26 Patient Feedback & Service Quality Management is explicitly approved (October 4, 2026) as a Group 3 shared enhancement and does not change the five-primary-modules-per-member assignment. Do not add M27+ or begin M25 management work unless explicitly authorized.
 
 Infrastructure such as authentication, database access, APIs, caching, email, queues, audit logging, and payments does not automatically become a new business module.
 

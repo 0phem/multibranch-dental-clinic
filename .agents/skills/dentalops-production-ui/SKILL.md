@@ -248,7 +248,7 @@ Two clinic assets exist. Neither may be redrawn, regenerated, destructively reco
 Keep navigation role- and viewport-specific, organized around user tasks. A redesigned menu must not expose unauthorized pages; direct-navigation safeguards and current permissions remain authoritative.
 
 Production navigation must NOT expose:
-- 25-Module Coverage
+- Module Coverage (the former "25-Module Coverage" page; the canonical structure is now 26 modules)
 - academic-defense pages
 - internal module numbers
 - ERD terminology

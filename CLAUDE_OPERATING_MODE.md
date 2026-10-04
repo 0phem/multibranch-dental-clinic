@@ -60,7 +60,7 @@ unexplained; whether the Dentist can be reassigned at arrival (Q15).
 
 ## 4. Modules, names and the process document
 
-Use the canonical module names below. They supersede the earlier process-document names (the process document
+Use the canonical module names below (approved October 4, 2026). They supersede the earlier process-document names and the earlier September 2026 names (the process document
 should be updated to match; see `MODULE_COVERAGE.md` for the old → new mapping). The M-numbers and owners are:
 
 | No. | Module | Owner |
@@ -71,34 +71,37 @@ should be updated to match; see `MODULE_COVERAGE.md` for the old → new mapping
 | M4 | Patient Records Management | Ecal |
 | M5 | Treatment & Clinical Workflow Management | Ecal |
 | M6 | Appointment Booking & Smart Scheduling Management | Alejo |
-| M7 | Patient AI Chatbot Management | Alejo |
-| M8 | Patient Check-In Management | Alejo |
+| M7 | Patient AI Support & Clinic Knowledge Management | Alejo |
+| M8 | Patient Arrival & Check-In Management | Alejo |
 | M9 | Patient Queue Management | Alejo |
-| M10 | Clinic Capacity, Waiting-Time & Workforce Management | Alejo |
+| M10 | Patient Flow, Capacity & Wait-Time Management | Alejo |
 | M11 | Billing, Payment & Receipt Management | Ecal |
 | M12 | HMO Case, Coverage & Follow-Up Management | Delos Santos |
 | M13 | Service, Procedure & Pricing Management | Licanda |
 | M14 | Patient Forms, Documents & Consent Management | Delos Santos |
-| M15 | Clinic Configuration & Business Rules Management | Licanda |
-| M16 | Social Media Inquiry Management | Millar |
+| M15 | Clinic Policy & Operational Configuration Management | Licanda |
+| M16 | Social Media & External Inquiry Management | Millar |
 | M17 | Unified Patient Messaging Management | Millar |
-| M18 | Real-Time Notification & Reminder Management | Millar |
-| M19 | Digital Prescription & OCR-Assisted Management | Ecal |
-| M20 | Treatment Follow-Up & Recall Management | Ecal |
+| M18 | Transactional Notification & Reminder Management | Millar |
+| M19 | Digital Prescription Management | Ecal |
+| M20 | Clinical Follow-Up & Recall Management | Ecal |
 | M21 | Operational Analytics & Executive Intelligence | Delos Santos |
 | M22 | Audit Trail & Activity Monitoring Management | Delos Santos |
-| M23 | Integrated Workflow & Automation Control | Delos Santos |
+| M23 | Workflow Automation & Exception Management | Delos Santos |
 | M24 | Referral & Loyalty Management (PE) | Millar |
-| M25 | Marketing, Reactivation & Patient Engagement Management (PE) | Millar |
+| M25 | Marketing Campaign & Patient Reactivation Management (PE) | Millar |
+| M26 | Patient Feedback & Service Quality Management | Group 3 — Shared Enhancement |
 
 Smart Scheduling and conflict prevention are M6 features, not a module. OCR is not a module either: extraction
 infrastructure belongs to M14, and its output is always a draft that a human confirms (Staff for M12, the Dentist
 for M19). Module numbers are presentation metadata; recorded events use stable domain keys (`src/module-map.js`).
 
+M26 is an additional approved shared enhancement; it is not implemented yet.
+
 M24 and M25 are not client-requested and are officially Proposed Enhancements (PE). Never describe either as a
 client requirement.
 
-The 31-module list in the original planning notes is historical. No M26+ without explicit approval.
+The 31-module list in the original planning notes is historical. The canonical count is 26 (effective October 4, 2026): M26 is explicitly approved as a Group 3 shared enhancement and does not alter the five-primary-modules-per-member assignment of M1–M25. No M27+ may be introduced without explicit approval.
 
 **Sync rule.** When a change alters what a module does, its limitations or its future boundary, the final
 report must list each affected module number and state what its process-document "Implementation Status"
