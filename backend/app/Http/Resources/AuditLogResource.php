@@ -31,7 +31,8 @@ class AuditLogResource extends JsonResource
             'ip_address' => $this->ip_address,
             'user_agent' => $this->user_agent,
             'payload' => $this->payload ?? [],
-            'created_at' => $this->created_at?->toIso8601String(),
+            // Explicit Asia/Manila offset, like every other module's timestamps.
+            'created_at' => $this->created_at ? \App\Support\ClinicClock::local($this->created_at)->toIso8601String() : null,
         ];
     }
 }

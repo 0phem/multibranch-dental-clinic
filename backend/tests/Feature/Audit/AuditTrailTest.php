@@ -146,7 +146,8 @@ class AuditTrailTest extends TestCase
         $this->actingAsUser('owner');
 
         $this->auditService->record([
-            'action' => '=cmd|"/C calc"!A0',
+            'action' => 'security.formula_probe',
+            'auditable_type' => '=cmd|"/C calc"!A0',
             'category' => 'security',
             'severity' => 'critical',
             'actor' => null,

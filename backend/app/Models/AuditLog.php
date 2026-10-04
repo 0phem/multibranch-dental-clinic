@@ -32,21 +32,9 @@ class AuditLog extends Model
         'critical',
     ];
 
-    protected $fillable = [
-        'actor_user_id',
-        'actor_role',
-        'actor_name',
-        'branch_id',
-        'action',
-        'category',
-        'severity',
-        'auditable_type',
-        'auditable_public_id',
-        'ip_address',
-        'user_agent',
-        'payload',
-        'created_at',
-    ];
+    // Nothing is mass-assignable: audit rows are written only by AuditService, which sets every column explicitly (actor,
+    // action, target and the server timestamp are never taken from a client or from mass assignment).
+    protected $fillable = [];
 
     protected function casts(): array
     {
@@ -54,6 +42,13 @@ class AuditLog extends Model
             'payload' => 'array',
             'created_at' => 'immutable_datetime',
         ];
+    }
+
+    protected static function booted(): void
+    {
+        // Application-level guard in addition to the database triggers (migration 2026_10_13_000100).
+        static::updating(fn () => throw new RuntimeException('Audit logs are append-only and cannot be modified.'));
+        static::deleting(fn () => throw new RuntimeException('Audit logs are immutable and cannot be deleted.'));
     }
 
     public function uniqueIds(): array
@@ -89,38 +84,33 @@ class AuditLog extends Model
         throw new RuntimeException('Audit logs are immutable and cannot be deleted.');
     }
 
-    /**
-     * Scope for searching audit logs.
-     */
+    /** Free-text search. LIKE metacharacters in the term are literal, never wildcards. */
     public function scopeSearch(Builder $query, ?string $term): Builder
     {
-        if (empty($term)) {
+        $term = trim((string) $term);
+        if ($term === '') {
             return $query;
         }
+        $like = '%'.addcslashes($term, '%_\\').'%';
 
-        $term = trim($term);
-
-        return $query->where(function (Builder $q) use ($term) {
-            $q->where('action', 'ilike', "%{$term}%")
-                ->orWhere('actor_name', 'ilike', "%{$term}%")
-                ->orWhere('auditable_public_id', 'ilike', "%{$term}%")
-                ->orWhere('auditable_type', 'ilike', "%{$term}%")
-                ->orWhere('ip_address', 'ilike', "%{$term}%");
+        return $query->where(function (Builder $q) use ($like) {
+            $q->where('action', 'ilike', $like)
+                ->orWhere('actor_name', 'ilike', $like)
+                ->orWhere('auditable_public_id', 'ilike', $like)
+                ->orWhere('auditable_type', 'ilike', $like)
+                ->orWhere('ip_address', 'ilike', $like);
         });
     }
 
-    /**
-     * Scope for branch filter.
-     */
-    public function scopeForBranch(Builder $query, ?string $branchId): Builder
+    /** Branch filter by the M2 references: the legacy_ref or the ULID public_id — never the internal bigint id. */
+    public function scopeForBranch(Builder $query, ?string $branchRef): Builder
     {
-        if (empty($branchId)) {
+        if ($branchRef === null || $branchRef === '') {
             return $query;
         }
 
-        return $query->whereHas('branch', function (Builder $b) use ($branchId) {
-            $b->where('public_id', $branchId)->orWhere('id', is_numeric($branchId) ? (int) $branchId : 0);
-        });
+        return $query->whereIn('branch_id', Branch::select('id')
+            ->where('legacy_ref', $branchRef)->orWhereRaw('lower(public_id) = ?', [strtolower($branchRef)]));
     }
 
     /**

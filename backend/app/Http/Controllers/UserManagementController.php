@@ -71,8 +71,10 @@ class UserManagementController extends Controller
                 DB::table('sessions')->where('user_id', $user->id)->delete();
                 $user->tokens()->delete();
             }
+            // Field NAMES only: no personal value is copied into the audit payload.
+            $changedFields = array_values(array_unique(array_merge(array_keys($personData), array_keys($user->getDirty()))));
             if ($user->isDirty()) $user->save();
-            app(\App\Services\Audit\AuditService::class)->recordAdministrative('account.updated', auth()->user(), $user);
+            app(\App\Services\Audit\AuditService::class)->recordAdministrative('account.updated', auth()->user(), $user, ['fields' => $changedFields]);
         });
 
         return new UserAccountResource($user->fresh()->load('person'));

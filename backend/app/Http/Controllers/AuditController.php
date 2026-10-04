@@ -5,58 +5,97 @@ namespace App\Http\Controllers;
 use App\Enums\Role;
 use App\Http\Resources\AuditLogResource;
 use App\Models\AuditLog;
-use Carbon\CarbonImmutable;
+use App\Models\Branch;
+use App\Support\ClinicClock;
+use Illuminate\Contracts\Database\Eloquent\Builder as BuilderContract;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
+// M22 audit history API — read-only. There is no create, update or delete endpoint: rows are written only by AuditService.
+// Owner only (existing contract; the role middleware on the route and the check below both enforce it); every other role is
+// refused. Filters are validated and allowlisted, pagination is bounded and cursor-based, and ordering is deterministic.
 class AuditController extends Controller
 {
+    private const MAX_PER_PAGE = 100;
+
+    private const EXPORT_LIMIT = 5000;
+
     private function authorizeOwner(Request $request): void
     {
         abort_unless($request->user() && $request->user()->role === Role::Owner, 403, 'Audit trail inspection is restricted to the clinic Owner.');
     }
 
+    /** @return array<string, mixed> */
+    private function validatedFilters(Request $request, bool $paged): array
+    {
+        $rules = [
+            'search' => ['nullable', 'string', 'max:100'],
+            'category' => ['nullable', 'string', 'in:all,'.implode(',', AuditLog::CATEGORIES)],
+            'severity' => ['nullable', 'string', 'in:all,'.implode(',', AuditLog::SEVERITIES)],
+            'branch_id' => ['nullable', 'string', 'max:64'],
+            'action' => ['nullable', 'string', 'max:100', 'regex:/^[A-Za-z0-9_.]+$/'],
+            'date_from' => ['nullable', 'date_format:Y-m-d'],
+            'date_to' => ['nullable', 'date_format:Y-m-d'],
+        ];
+        if ($paged) {
+            $rules += ['per_page' => ['nullable', 'integer', 'min:1', 'max:'.self::MAX_PER_PAGE], 'cursor' => ['nullable', 'string', 'size:26']];
+        }
+        $v = $request->validate($rules);
+        if (! empty($v['date_from']) && ! empty($v['date_to']) && $v['date_from'] > $v['date_to']) {
+            throw ValidationException::withMessages(['date_to' => 'The end date must not be before the start date.']);
+        }
+        if (! empty($v['branch_id']) && ! Branch::where('legacy_ref', $v['branch_id'])->orWhereRaw('lower(public_id) = ?', [strtolower($v['branch_id'])])->exists()) {
+            throw ValidationException::withMessages(['branch_id' => 'Choose an existing branch.']);
+        }
+
+        return $v;
+    }
+
+    private function filtered(array $v): BuilderContract
+    {
+        $query = AuditLog::query()->with(['actor.person', 'branch'])
+            ->search($v['search'] ?? null)
+            ->byCategory($v['category'] ?? null)
+            ->bySeverity($v['severity'] ?? null)
+            ->forBranch($v['branch_id'] ?? null);
+
+        if (! empty($v['action'])) {
+            $query->where('action', $v['action']);
+        }
+        // Dates are clinic (Asia/Manila) business days; the stored instants are timestamptz.
+        if (! empty($v['date_from'])) {
+            $query->where('created_at', '>=', ClinicClock::at($v['date_from'], '00:00')->startOfDay());
+        }
+        if (! empty($v['date_to'])) {
+            $query->where('created_at', '<=', ClinicClock::at($v['date_to'], '00:00')->endOfDay());
+        }
+
+        return $query;
+    }
+
     public function index(Request $request): JsonResponse
     {
         $this->authorizeOwner($request);
+        $v = $this->validatedFilters($request, true);
+        $perPage = (int) ($v['per_page'] ?? 50);
 
-        $query = AuditLog::with(['actor.person', 'branch'])
-            ->latest('id');
-
-        if ($request->filled('search')) {
-            $query->search($request->input('search'));
+        $query = $this->filtered($v)->orderByDesc('id');
+        if (! empty($v['cursor'])) {
+            // Keyset pagination on the public id of the last row seen: stable under concurrent inserts, no offset scans, and
+            // no internal id ever leaves the server. An unknown cursor yields an empty page.
+            $query->where('id', '<', AuditLog::select('id')->where('public_id', strtolower($v['cursor']))->limit(1));
         }
 
-        if ($request->filled('category')) {
-            $query->byCategory($request->input('category'));
-        }
-
-        if ($request->filled('severity')) {
-            $query->bySeverity($request->input('severity'));
-        }
-
-        if ($request->filled('branch_id')) {
-            $query->forBranch($request->input('branch_id'));
-        }
-
-        if ($request->filled('action')) {
-            $query->where('action', $request->input('action'));
-        }
-
-        if ($request->filled('date_from')) {
-            $query->where('created_at', '>=', CarbonImmutable::parse($request->input('date_from'))->startOfDay());
-        }
-
-        if ($request->filled('date_to')) {
-            $query->where('created_at', '<=', CarbonImmutable::parse($request->input('date_to'))->endOfDay());
-        }
-
-        $limit = min((int) ($request->input('limit', 50)), 200);
-        $logs = $query->limit($limit)->get();
+        $rows = $query->limit($perPage + 1)->get();
+        $more = $rows->count() > $perPage;
+        $page = $rows->take($perPage)->values();
 
         return response()->json([
-            'data' => AuditLogResource::collection($logs),
+            'data' => AuditLogResource::collection($page),
+            'meta' => ['per_page' => $perPage, 'next_cursor' => $more ? $page->last()->public_id : null],
         ]);
     }
 
@@ -64,92 +103,45 @@ class AuditController extends Controller
     {
         $this->authorizeOwner($request);
 
-        return response()->json([
-            'data' => new AuditLogResource($auditLog->load(['actor.person', 'branch'])),
-        ]);
+        return response()->json(['data' => new AuditLogResource($auditLog->load(['actor.person', 'branch']))]);
     }
 
     public function export(Request $request): StreamedResponse
     {
         $this->authorizeOwner($request);
+        $v = $this->validatedFilters($request, false);
 
-        $query = AuditLog::with(['actor.person', 'branch'])
-            ->latest('id');
-
-        if ($request->filled('search')) {
-            $query->search($request->input('search'));
-        }
-        if ($request->filled('category')) {
-            $query->byCategory($request->input('category'));
-        }
-        if ($request->filled('severity')) {
-            $query->bySeverity($request->input('severity'));
-        }
-        if ($request->filled('branch_id')) {
-            $query->forBranch($request->input('branch_id'));
-        }
-        if ($request->filled('date_from')) {
-            $query->where('created_at', '>=', CarbonImmutable::parse($request->input('date_from'))->startOfDay());
-        }
-        if ($request->filled('date_to')) {
-            $query->where('created_at', '<=', CarbonImmutable::parse($request->input('date_to'))->endOfDay());
-        }
-
-        $logs = $query->limit(5000)->get();
-        $filename = 'audit_trail_' . CarbonImmutable::now('Asia/Manila')->format('Ymd_His') . '.csv';
+        // One extra row tells us honestly whether the export was cut at the bound.
+        $rows = $this->filtered($v)->orderByDesc('id')->limit(self::EXPORT_LIMIT + 1)->get();
+        $truncated = $rows->count() > self::EXPORT_LIMIT;
+        $logs = $rows->take(self::EXPORT_LIMIT);
+        $filename = 'audit_trail_'.ClinicClock::now()->format('Ymd_His').'.csv';
 
         return response()->stream(function () use ($logs) {
             $handle = fopen('php://output', 'w');
-            fputcsv($handle, [
-                'ID',
-                'Timestamp',
-                'Action',
-                'Category',
-                'Severity',
-                'Actor Name',
-                'Actor Role',
-                'Branch',
-                'Target Type',
-                'Target ID',
-                'IP Address',
-                'Details',
-            ]);
-
+            fputcsv($handle, ['ID', 'Timestamp', 'Action', 'Category', 'Severity', 'Actor Name', 'Actor Role', 'Branch', 'Target Type', 'Target ID', 'IP Address', 'Details']);
             foreach ($logs as $log) {
                 $payloadText = json_encode($log->payload ?? [], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-                fputcsv($handle, [
-                    $this->sanitizeCsvCell($log->public_id),
-                    $this->sanitizeCsvCell($log->created_at?->toIso8601String() ?? ''),
-                    $this->sanitizeCsvCell($log->action),
-                    $this->sanitizeCsvCell($log->category),
-                    $this->sanitizeCsvCell($log->severity),
-                    $this->sanitizeCsvCell($log->actor_name ?? ''),
-                    $this->sanitizeCsvCell($log->actor_role ?? ''),
-                    $this->sanitizeCsvCell($log->branch?->name ?? 'All Branches'),
-                    $this->sanitizeCsvCell($log->auditable_type ?? ''),
-                    $this->sanitizeCsvCell($log->auditable_public_id ?? ''),
-                    $this->sanitizeCsvCell($log->ip_address ?? ''),
-                    $this->sanitizeCsvCell($payloadText),
-                ]);
+                fputcsv($handle, array_map($this->sanitizeCsvCell(...), [
+                    $log->public_id, ClinicClock::local($log->created_at)->toIso8601String(), $log->action, $log->category, $log->severity,
+                    $log->actor_name ?? '', $log->actor_role ?? '', $log->branch?->name ?? 'All Branches', $log->auditable_type ?? '',
+                    $log->auditable_public_id ?? '', $log->ip_address ?? '', $payloadText,
+                ]));
             }
-
             fclose($handle);
         }, 200, [
             'Content-Type' => 'text/csv',
             'Content-Disposition' => "attachment; filename=\"{$filename}\"",
             'X-Content-Type-Options' => 'nosniff',
+            'Cache-Control' => 'private, no-store',
+            'X-Audit-Export-Limit' => (string) self::EXPORT_LIMIT,
+            'X-Audit-Export-Truncated' => $truncated ? 'true' : 'false',
         ]);
     }
 
-    /**
-     * Prevents CSV Formula Injection (=, +, -, @).
-     */
+    /** Prevents CSV formula injection (=, +, -, @, tab, CR). */
     private function sanitizeCsvCell(string $value): string
     {
-        if (preg_match('/^[=+\-@\t\r]/', $value)) {
-            return "'" . $value;
-        }
-
-        return $value;
+        return preg_match('/^[=+\-@\t\r]/', $value) ? "'".$value : $value;
     }
 }

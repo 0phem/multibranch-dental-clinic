@@ -6,7 +6,11 @@ import { fetchAuditLogs, downloadAuditLogsCsv } from '../audit-api.js'
 export function AuditTrailPage({ store }) {
   const { state, toast } = store
   const [logs, setLogs] = useState([])
-  const [loading, setLoading] = useState(true)
+  const [status, setStatus] = useState('loading')
+  const [loadError, setLoadError] = useState('')
+  const [nextCursor, setNextCursor] = useState(null)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [attempt, setAttempt] = useState(0)
   const [search, setSearch] = useState('')
   const [category, setCategory] = useState('all')
   const [severity, setSeverity] = useState('all')
@@ -15,46 +19,61 @@ export function AuditTrailPage({ store }) {
   const [dateTo, setDateTo] = useState('')
   const [inspectLog, setInspectLog] = useState(null)
   const [exporting, setExporting] = useState(false)
+  const rangeInvalid = !!(dateFrom && dateTo && dateFrom > dateTo)
 
-  const reload = async () => {
+  const filters = () => ({
+    search: search.trim() || undefined,
+    category: category !== 'all' ? category : undefined,
+    severity: severity !== 'all' ? severity : undefined,
+    branch_id: branchId || undefined,
+    date_from: dateFrom || undefined,
+    date_to: dateTo || undefined,
+  })
+
+  // Debounced server query. A response for an older filter set is discarded, and a failure is an explicit error with Retry:
+  // never an empty list and never browser-held or demo activity.
+  useEffect(() => {
+    if (rangeInvalid) return undefined
+    let live = true
+    setStatus('loading')
+    setLoadError('')
+    const timer = setTimeout(async () => {
+      try {
+        const page = await fetchAuditLogs({ ...filters(), per_page: 50 })
+        if (!live) return
+        setLogs(page.rows)
+        setNextCursor(page.nextCursor)
+        setStatus('ready')
+      } catch (err) {
+        if (!live) return
+        setLogs([])
+        setNextCursor(null)
+        setLoadError(err.message || 'The audit trail could not be loaded.')
+        setStatus('error')
+      }
+    }, 200)
+    return () => { live = false; clearTimeout(timer) }
+  }, [search, category, severity, branchId, dateFrom, dateTo, attempt])
+
+  const loadMore = async () => {
+    if (!nextCursor || loadingMore) return
+    setLoadingMore(true)
     try {
-      setLoading(true)
-      const data = await fetchAuditLogs({
-        search: search.trim() || undefined,
-        category: category !== 'all' ? category : undefined,
-        severity: severity !== 'all' ? severity : undefined,
-        branch_id: branchId || undefined,
-        date_from: dateFrom || undefined,
-        date_to: dateTo || undefined,
-        limit: 100,
-      })
-      setLogs(data)
+      const page = await fetchAuditLogs({ ...filters(), per_page: 50, cursor: nextCursor })
+      setLogs(previous => [...previous, ...page.rows.filter(row => !previous.some(p => p.id === row.id))])
+      setNextCursor(page.nextCursor)
     } catch (err) {
-      toast(err.message || 'Failed to load audit trail.', 'warning')
+      toast(err.message || 'More audit records could not be loaded.', 'warning')
     } finally {
-      setLoading(false)
+      setLoadingMore(false)
     }
   }
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      reload()
-    }, 200)
-    return () => clearTimeout(timer)
-  }, [search, category, severity, branchId, dateFrom, dateTo])
 
   const handleExport = async () => {
     try {
       setExporting(true)
-      await downloadAuditLogsCsv({
-        search: search.trim() || undefined,
-        category: category !== 'all' ? category : undefined,
-        severity: severity !== 'all' ? severity : undefined,
-        branch_id: branchId || undefined,
-        date_from: dateFrom || undefined,
-        date_to: dateTo || undefined,
-      })
-      toast('Audit trail export generated.', 'success')
+      const result = await downloadAuditLogsCsv(filters())
+      toast(result.truncated ? `Export generated, but cut at the newest ${result.limit} matching events. Narrow the filters for the rest.` : 'Audit trail export generated.', result.truncated ? 'warning' : 'success')
     } catch (err) {
       toast(err.message || 'Failed to export audit logs.', 'warning')
     } finally {
@@ -76,7 +95,7 @@ export function AuditTrailPage({ store }) {
     <>
       <PageHeader
         title="Audit Trail & Activity Monitoring"
-        text="Append-only, tamper-resistant system activity audit log with credential sanitization and forensic inspection."
+        text="Append-only record of significant events written by the clinic server. The Owner can review and export it; nothing in this screen can change or delete an entry. Details are kept minimal and credentials are redacted."
         aside={
           <Button size="sm" variant="soft" onClick={handleExport} disabled={exporting}>
             {exporting ? 'Generating Export...' : 'Export Audit Trail (CSV)'}
@@ -86,19 +105,19 @@ export function AuditTrailPage({ store }) {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', marginBottom: '20px' }}>
         <div style={{ padding: '14px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--surface)' }}>
-          <span style={{ fontSize: '11px', color: 'var(--muted)', textTransform: 'uppercase', fontWeight: '700' }}>Total Events</span>
+          <span style={{ fontSize: '11px', color: 'var(--muted)', textTransform: 'uppercase', fontWeight: '700' }}>Events loaded</span>
           <b style={{ display: 'block', fontSize: '20px', marginTop: '4px' }}>{logs.length}</b>
         </div>
         <div style={{ padding: '14px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--surface)' }}>
-          <span style={{ fontSize: '11px', color: 'var(--muted)', textTransform: 'uppercase', fontWeight: '700' }}>Security & Warnings</span>
+          <span style={{ fontSize: '11px', color: 'var(--muted)', textTransform: 'uppercase', fontWeight: '700' }}>Security & warnings (loaded)</span>
           <b style={{ display: 'block', fontSize: '20px', marginTop: '4px', color: securityCount > 0 ? '#b91c1c' : 'inherit' }}>{securityCount}</b>
         </div>
         <div style={{ padding: '14px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--surface)' }}>
-          <span style={{ fontSize: '11px', color: 'var(--muted)', textTransform: 'uppercase', fontWeight: '700' }}>Financial Actions</span>
+          <span style={{ fontSize: '11px', color: 'var(--muted)', textTransform: 'uppercase', fontWeight: '700' }}>Financial (loaded)</span>
           <b style={{ display: 'block', fontSize: '20px', marginTop: '4px' }}>{financialCount}</b>
         </div>
         <div style={{ padding: '14px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--surface)' }}>
-          <span style={{ fontSize: '11px', color: 'var(--muted)', textTransform: 'uppercase', fontWeight: '700' }}>Clinical Events</span>
+          <span style={{ fontSize: '11px', color: 'var(--muted)', textTransform: 'uppercase', fontWeight: '700' }}>Clinical (loaded)</span>
           <b style={{ display: 'block', fontSize: '20px', marginTop: '4px' }}>{clinicalCount}</b>
         </div>
       </div>
@@ -108,7 +127,7 @@ export function AuditTrailPage({ store }) {
           <Field label="Search">
             <input
               type="search"
-              placeholder="Action, actor, target ID, IP..."
+              placeholder="Action, actor, target ID, IP…" maxLength={100}
               value={search}
               onChange={e => setSearch(e.target.value)}
             />
@@ -147,12 +166,17 @@ export function AuditTrailPage({ store }) {
             <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} />
           </Field>
         </div>
+        {rangeInvalid && <div style={{ marginTop: '12px' }}><Notice tone="warning">The end date is before the start date.</Notice></div>}
       </Card>
 
       <div style={{ marginTop: '20px' }}>
-        <Card title="Activity Log" subtitle="Chronological server-recorded events. Immutable and tamper-resistant.">
-          {loading ? (
+        <Card title="Activity Log" subtitle="Newest first, recorded by the clinic server. Entries cannot be edited or deleted from the application.">
+          {rangeInvalid ? (
+            <Notice tone="warning">Fix the date range to load audit records.</Notice>
+          ) : status === 'loading' ? (
             <Notice>Loading audit records...</Notice>
+          ) : status === 'error' ? (
+            <Notice tone="warning" title="Audit trail unavailable">{loadError} <Button size="sm" variant="ghost" onClick={() => setAttempt(attempt + 1)}>Retry</Button></Notice>
           ) : logs.length === 0 ? (
             <Notice tone="info">No audit records match the current filter criteria.</Notice>
           ) : (
@@ -191,8 +215,8 @@ export function AuditTrailPage({ store }) {
                   label: 'Actor',
                   render: l => (
                     <div>
-                      <b>{l.actor?.name || 'System'}</b>
-                      <small style={{ display: 'block', color: 'var(--muted)', fontSize: '10px' }}>{l.actor?.role || 'system'}</small>
+                      <b>{l.actor?.name || 'Anonymous'}</b>
+                      <small style={{ display: 'block', color: 'var(--muted)', fontSize: '10px' }}>{l.actor?.role || 'anonymous'}</small>
                     </div>
                   ),
                 },
@@ -222,6 +246,12 @@ export function AuditTrailPage({ store }) {
               ]}
             />
           )}
+          {status === 'ready' && nextCursor && !rangeInvalid && (
+            <div style={{ marginTop: '12px', display: 'flex', justifyContent: 'center' }}>
+              <Button variant="soft" onClick={loadMore} disabled={loadingMore}>{loadingMore ? 'Loading…' : 'Load older events'}</Button>
+            </div>
+          )}
+          {status === 'ready' && !nextCursor && logs.length > 0 && <p className="muted" style={{ textAlign: 'center', marginTop: '12px', fontSize: '11px' }}>End of the matching history.</p>}
         </Card>
       </div>
 

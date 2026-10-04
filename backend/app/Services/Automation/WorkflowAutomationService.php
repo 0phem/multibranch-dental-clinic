@@ -110,7 +110,7 @@ class WorkflowAutomationService
 
         // Audit log integration
         $severity = match ($execution['status']) {
-            'Failed' => 'error',
+            'Failed' => 'critical',
             'Warning' => 'warning',
             default => 'info',
         };

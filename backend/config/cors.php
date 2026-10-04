@@ -27,7 +27,8 @@ return [
 
     'allowed_headers' => ['*'],
 
-    'exposed_headers' => [],
+    // The audit export reports honestly whether it was cut at its bound; a cross-origin SPA can only read these if exposed.
+    'exposed_headers' => ['X-Audit-Export-Limit', 'X-Audit-Export-Truncated'],
 
     'max_age' => 0,
 

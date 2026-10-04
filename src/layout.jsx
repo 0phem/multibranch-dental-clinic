@@ -26,7 +26,7 @@ const GROUPS={
   patient:[['Overview',['dashboard']],['Booking',['book','appointments']],['Communication',['messages']],['Account',['billing','me']]],
   staff:[['Today',['dashboard','appointments','checkin','queue','capacity']],['Patients & finance',['patients','billing','hmo']],['Communication',['inquiries','messages','followups','engagement']]],
   dentist:[['Today',['dashboard','schedule','queue']],['Clinical',['patients','treatment','prescriptions','followups']],['Communication',['messages']]],
-  owner:[['Overview',['dashboard','analytics']],['Operations',['branches','team','capacity','hmo']],['Administration',['users','pricing','automation','engagement']]],
+  owner:[['Overview',['dashboard','analytics']],['Operations',['branches','team','capacity','hmo']],['Administration',['users','pricing','automation','audit','engagement']]],
 }
 
 function navGroups(role){

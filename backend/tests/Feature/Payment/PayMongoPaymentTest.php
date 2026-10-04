@@ -357,4 +357,63 @@ class PayMongoPaymentTest extends TestCase
         $this->assertTrue($result['ok']);
         $this->assertEquals($receiptCountBefore, \App\Models\Receipt::count());
     }
+
+    private function payWebhook(string $paymentId = 'pay_audit_001'): array
+    {
+        return app(PayMongoService::class)->processWebhook([
+            'data' => ['attributes' => ['type' => 'checkout_session.payment.paid', 'data' => [
+                'id' => 'cs_audit', 'attributes' => ['reference_number' => $this->invoice->public_id, 'payment_method_used' => 'gcash', 'payments' => [['id' => $paymentId]]],
+            ]]],
+        ]);
+    }
+
+    public function test_an_online_payment_is_recorded_in_the_audit_trail_and_the_automation_ledger(): void
+    {
+        $this->payWebhook('pay_audit_001');
+
+        // Previously the audit call used a stale signature, wrote nothing and also skipped the automation event.
+        $log = \App\Models\AuditLog::where('action', 'billing.payment_recorded')->sole();
+        $this->assertSame(['financial', 'info', 'Invoice', $this->invoice->public_id, $this->invoice->branch_id], [$log->category, $log->severity, $log->auditable_type, $log->auditable_public_id, $log->branch_id]);
+        $this->assertEqualsCanonicalizing(['invoice_number', 'receipt_number', 'amount', 'method'], array_keys($log->payload));
+        $this->assertSame('1500.00', $log->payload['amount'], 'decimal-safe string');
+        $this->assertStringNotContainsString('pay_audit_001', json_encode($log->payload), 'no provider reference in the audit payload');
+        $this->assertSame($this->patientUser->id, $log->actor_user_id);
+        $this->assertSame(1, \App\Models\SystemEvent::where('event_type', 'billing.payment_received')->count());
+    }
+
+    public function test_a_replayed_online_payment_does_not_duplicate_the_audit_event(): void
+    {
+        $this->payWebhook('pay_audit_002');
+        $this->payWebhook('pay_audit_002');
+        $this->assertSame(1, \App\Models\AuditLog::where('action', 'billing.payment_recorded')->count());
+        $this->assertSame(1, \App\Models\Receipt::count());
+    }
+
+    public function test_a_failing_audit_never_undoes_a_captured_payment_and_is_reported(): void
+    {
+        $this->app->bind(\App\Services\Audit\AuditService::class, fn () => new class extends \App\Services\Audit\AuditService {
+            public function record(array $attributes): \App\Models\AuditLog
+            {
+                throw new \RuntimeException('audit store unavailable');
+            }
+        });
+        $reported = [];
+        $this->app->make(\Illuminate\Contracts\Debug\ExceptionHandler::class)->reportable(function (\Throwable $e) use (&$reported) {
+            $reported[] = $e->getMessage();
+        });
+        $this->payWebhook('pay_audit_003');
+        $this->assertSame('Paid', $this->invoice->fresh()->status, 'the gateway already captured the funds');
+        $this->assertContains('audit store unavailable', $reported, 'the failure is reported, not swallowed');
+    }
+
+    public function test_a_failing_automation_event_does_not_suppress_the_payment_audit_event(): void
+    {
+        $this->app->bind(\App\Services\Automation\WorkflowAutomationService::class, fn () => new class(app(\App\Services\Audit\AuditService::class)) extends \App\Services\Automation\WorkflowAutomationService {
+            public function __construct(\App\Services\Audit\AuditService $audit) { parent::__construct($audit); }
+            public function recordEvent(array $data): \App\Models\SystemEvent { throw new \RuntimeException('automation unavailable'); }
+        });
+        $this->payWebhook('pay_audit_004');
+        $this->assertSame('Paid', $this->invoice->fresh()->status);
+        $this->assertSame(1, \App\Models\AuditLog::where('action', 'billing.payment_recorded')->count());
+    }
 }

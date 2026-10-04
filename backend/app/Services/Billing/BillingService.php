@@ -98,37 +98,33 @@ final class BillingService {
                 }
             } catch (\Throwable $e) {}
 
+            // M22 audit and M23 automation event for the payment. The gateway has already captured the funds, so neither may undo
+            // the recorded payment; each runs in its own savepoint (a failing statement cannot poison this transaction), a
+            // failure of one never suppresses the other, and a failure is reported to the application log — never swallowed.
+            // (This call used a stale positional signature and silently wrote nothing, which also skipped the automation event.)
+            if ($recordedUser) {
+                try {
+                    DB::transaction(fn () => app(\App\Services\Audit\AuditService::class)->record([
+                        'action' => 'billing.payment_recorded', 'category' => 'financial', 'severity' => 'info',
+                        'actor' => $recordedUser, 'target' => $i, 'branch_id' => $i->branch_id,
+                        // Decimal-safe string; no provider reference, credentials or card data.
+                        'payload' => ['invoice_number' => $i->invoice_number, 'receipt_number' => $receipt->receipt_number, 'amount' => (string) $balance, 'method' => $method],
+                    ]));
+                } catch (\Throwable $e) {
+                    report($e);
+                }
+            }
             try {
-                if (class_exists(\App\Services\Audit\AuditService::class) && $recordedUser) {
-                    app(\App\Services\Audit\AuditService::class)->record(
-                        $recordedUser,
-                        'billing.payment_recorded',
-                        'Invoice',
-                        $i->public_id,
-                        $i->branch_id,
-                        [
-                            'invoice_number' => $i->invoice_number,
-                            'receipt_number' => $receipt->receipt_number,
-                            'amount' => (string)$balance,
-                            'method' => $method,
-                            'reference' => $reference,
-                        ]
-                    );
-                }
-                if (class_exists(\App\Services\Automation\WorkflowAutomationService::class)) {
-                    app(\App\Services\Automation\WorkflowAutomationService::class)->recordEvent(
-                        'billing.payment_received',
-                        'M11',
-                        $i->public_id,
-                        [
-                            'invoice_number' => $i->invoice_number,
-                            'receipt_number' => $receipt->receipt_number,
-                            'amount' => (string)$balance,
-                            'method' => $method,
-                        ]
-                    );
-                }
-            } catch (\Throwable $e) {}
+                DB::transaction(fn () => app(\App\Services\Automation\WorkflowAutomationService::class)->recordEvent([
+                    'event_type' => 'billing.payment_received', 'domain' => 'billing', 'aggregate_type' => 'Invoice', 'aggregate_id' => $i->public_id,
+                    'branch_id' => $i->branch_id, 'actor_user_id' => $recordedUser?->id,
+                    // One ledger event per invoice payment: a replay returns the existing event.
+                    'idempotency_key' => 'billing.payment_received:'.$i->public_id,
+                    'payload' => ['invoice_number' => $i->invoice_number, 'receipt_number' => $receipt->receipt_number, 'amount' => (string) $balance, 'method' => $method],
+                ]));
+            } catch (\Throwable $e) {
+                report($e);
+            }
 
             return $i->fresh(['lines', 'histories', 'payment', 'receipt', 'visit.patient.person', 'branch']);
         }, 3);

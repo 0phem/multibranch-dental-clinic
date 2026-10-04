@@ -7,7 +7,7 @@ export function mapAuditLog(row) {
     action: row.action,
     category: row.category,
     severity: row.severity,
-    actor: row.actor || { id: null, name: 'System', role: 'system' },
+    actor: row.actor?.name ? row.actor : { id: null, name: 'Anonymous', role: 'anonymous' },
     branch: row.branch || null,
     auditableType: row.auditable_type,
     auditableId: row.auditable_id,
@@ -18,10 +18,11 @@ export function mapAuditLog(row) {
   }
 }
 
+// Server-backed, cursor-paginated (newest first). A failure throws; the caller shows an error with Retry, never an empty list.
 export async function fetchAuditLogs(params = {}) {
   const res = await api.listAuditLogs(params)
   if (!res.ok) throw normalizeFailure(res)
-  return (res.data || []).map(mapAuditLog)
+  return { rows: (res.data || []).map(mapAuditLog), nextCursor: res.meta?.next_cursor ?? null }
 }
 
 export async function fetchAuditLog(id) {
@@ -30,6 +31,7 @@ export async function fetchAuditLog(id) {
   return mapAuditLog(res.data)
 }
 
+/** Downloads the CSV and reports whether the server cut it at its bound (the export is never silently partial). */
 export async function downloadAuditLogsCsv(params = {}) {
   const query = Object.entries(params)
     .filter(([, v]) => v !== null && v !== undefined && v !== '' && v !== 'all')
@@ -39,11 +41,14 @@ export async function downloadAuditLogsCsv(params = {}) {
   const baseUrl = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_BASE_URL) || 'http://localhost:8000'
   const url = `${baseUrl}/api/audit-logs/export${query ? `?${query}` : ''}`
 
-  const res = await fetch(url, { credentials: 'include' })
+  let res
+  try { res = await fetch(url, { credentials: 'include' }) } catch { throw new Error('Could not reach the clinic system. Check your connection and try again.') }
   if (!res.ok) {
-    throw new Error(res.status === 403 ? 'Audit trail export is restricted to the clinic Owner.' : 'Failed to export audit logs.')
+    throw new Error(res.status === 403 ? 'Audit trail export is restricted to the clinic Owner.'
+      : res.status === 422 ? 'The export filters are not valid. Adjust them and try again.' : 'Failed to export audit logs.')
   }
-
+  const truncated = res.headers?.get?.('X-Audit-Export-Truncated') === 'true'
+  const limit = Number(res.headers?.get?.('X-Audit-Export-Limit')) || null
   const blob = await res.blob()
   const blobUrl = window.URL.createObjectURL(blob)
   const a = document.createElement('a')
@@ -53,4 +58,5 @@ export async function downloadAuditLogsCsv(params = {}) {
   a.click()
   a.remove()
   window.URL.revokeObjectURL(blobUrl)
+  return { truncated, limit }
 }
