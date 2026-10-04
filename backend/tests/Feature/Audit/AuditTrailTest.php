@@ -169,7 +169,7 @@ class AuditTrailTest extends TestCase
     public function test_document_upload_and_retraction_generate_real_audit_logs(): void
     {
         $this->actingAsUser('patientA');
-        $file = UploadedFile::fake()->create('id.jpg', 200, 'image/jpeg');
+        $file = UploadedFile::fake()->createWithContent('id.jpg', "\xFF\xD8\xFF\xE0".str_repeat("\0", 64));
 
         // Document upload
         $doc = $this->postJson('/api/documents', [
@@ -191,6 +191,8 @@ class AuditTrailTest extends TestCase
 
         $retractLog = AuditLog::where('action', 'document.retracted')->firstOrFail();
         $this->assertSame('warning', $retractLog->severity);
-        $this->assertSame('Uploaded wrong side of card', $retractLog->payload['reason']);
+        // The free-text reason lives on the document row; the audit payload records only that one was given.
+        $this->assertTrue($retractLog->payload['reason_recorded']);
+        $this->assertStringNotContainsString('wrong side', json_encode($retractLog->payload));
     }
 }

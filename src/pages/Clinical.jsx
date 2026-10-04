@@ -12,7 +12,7 @@ import { inScope, isTodayQueue, patientInScope, sessionForRole } from '../contra
 import { loadPatientRecord, loadPatientRecordIndex, savePatientRecord } from '../patient-records-api.js'
 import { commandKey } from '../appointments-api.js'
 import { DEFAULT_COUNTRY, normalizePhoneNumber } from '../phone.js'
-import { fetchDocuments, submitDocumentUpload, retractDocument, fetchPatientConsents, grantConsent, withdrawConsent, downloadDocumentFile } from '../documents-api.js'
+import { fetchDocuments, fetchDocument, submitDocumentUpload, retractDocument, fetchPatientConsents, grantConsent, withdrawConsent, downloadDocumentFile, DOCUMENT_CATEGORIES, CONSENT_TYPES } from '../documents-api.js'
 
 export function PatientsPage({ role, store, context, setPage }) {
   const { state, actions, toast, log }=store
@@ -242,25 +242,36 @@ function PatientDocumentsTab({ patient, role, store }) {
   const [uploadTitle, setUploadTitle] = useState('')
   const [uploading, setUploading] = useState(false)
   const [expandedExtraction, setExpandedExtraction] = useState(null)
+  const [extractionDetail, setExtractionDetail] = useState({})
+  const [loadError, setLoadError] = useState('')
+  const [consentError, setConsentError] = useState('')
+  const [branchChoice, setBranchChoice] = useState('')
+  const uploadKey = React.useRef(commandKey())
+  // Staff upload into a branch they are authorized for; the server re-checks the scope.
+  const branchOptions = (session?.branchScopes || []).map(id => ({ id, name: store.state.branches.find(b => b.id === id)?.name || id }))
+  const uploadBranchId = branchChoice || branchOptions[0]?.id || ''
+  const isStaff = role === 'staff'
 
   // M14 callers name a Patient by public_id only; a browser-only record has none and so loads no server documents.
   const patientIdentifier = patient?.publicId || null
 
   const reload = async () => {
-    if (!patientIdentifier) return
-    try {
-      setLoading(true)
-      const [docList, consentList] = await Promise.all([
-        fetchDocuments({ patient_id: patientIdentifier }),
-        fetchPatientConsents(patientIdentifier).catch(() => []),
-      ])
-      setDocs(docList)
-      setConsents(consentList)
-    } catch (err) {
-      toast(err.message || 'Could not load patient documents', 'warning')
-    } finally {
-      setLoading(false)
+    setLoading(true)
+    setLoadError('')
+    setConsentError('')
+    if (!patientIdentifier) {
+      setDocs([]); setConsents([]); setLoading(false)
+      return setLoadError('This record has no clinic-server identity, so its documents cannot be loaded.')
     }
+    const [documents, consentRecords] = await Promise.allSettled([
+      fetchDocuments({ patient_id: patientIdentifier }),
+      role === 'dentist' ? Promise.resolve(null) : fetchPatientConsents(patientIdentifier),
+    ])
+    if (documents.status === 'fulfilled') setDocs(documents.value)
+    else { setDocs([]); setLoadError(documents.reason?.message || 'Documents could not be loaded.') }
+    if (consentRecords.status === 'fulfilled') setConsents(consentRecords.value || [])
+    else { setConsents([]); setConsentError(consentRecords.reason?.message || 'Consent records could not be loaded.') }
+    setLoading(false)
   }
 
   React.useEffect(() => {
@@ -275,21 +286,33 @@ function PatientDocumentsTab({ patient, role, store }) {
     formData.append('patient_id', patientIdentifier)
     formData.append('category', uploadCategory)
     if (uploadTitle.trim()) formData.append('title', uploadTitle.trim())
-    if (session?.branchId) formData.append('branch_id', session.branchId)
+    if (isStaff) {
+      if (!uploadBranchId) return toast('You have no authorized branch to upload into.', 'warning')
+      formData.append('branch_id', uploadBranchId)
+    }
 
     setUploading(true)
     try {
-      await submitDocumentUpload(formData)
+      await submitDocumentUpload(formData, uploadKey.current)
       toast('Document uploaded successfully.', 'success')
       setUploadOpen(false)
       setFileToUpload(null)
       setUploadTitle('')
+      uploadKey.current = commandKey()
       await reload()
     } catch (err) {
       toast(err.message || 'Upload failed.', 'warning')
     } finally {
       setUploading(false)
     }
+  }
+
+  const showExtraction = async (doc) => {
+    if (expandedExtraction === doc.id) return setExpandedExtraction(null)
+    setExpandedExtraction(doc.id)
+    if (extractionDetail[doc.id]) return
+    try { setExtractionDetail({ ...extractionDetail, [doc.id]: await fetchDocument(doc.id) }) }
+    catch (err) { toast(err.message || 'The extracted text could not be loaded.', 'warning'); setExpandedExtraction(null) }
   }
 
   const handleDownload = async (doc) => {
@@ -338,22 +361,26 @@ function PatientDocumentsTab({ patient, role, store }) {
   }
 
   const isOwner = role === 'owner'
+  const canRetract = doc => isStaff && doc.status === 'Active'
 
   return <>
     <Card
       title="Patient Documents & Forms"
-      subtitle="Encrypted, private server storage with SHA-256 integrity verification. Downloads are served through authenticated streaming guards."
+      subtitle="Private clinic-server storage. A download needs your sign-in and permission for this record. Files are type-checked on upload but are not scanned for malware."
       actions={
         <div style={{ display: 'flex', gap: '8px' }}>
-          {!isOwner && <Button size="sm" onClick={() => setUploadOpen(true)}>Upload Document</Button>}
-          {!isOwner && <Button size="sm" variant="soft" onClick={() => setConsentOpen(true)}>Record Consent</Button>}
+          {isStaff && <Button size="sm" disabled={!uploadBranchId} onClick={() => { uploadKey.current = commandKey(); setUploadOpen(true) }}>Upload Document</Button>}
+          {isStaff && <Button size="sm" variant="soft" onClick={() => setConsentOpen(true)}>Record Consent</Button>}
         </div>
       }
     >
       {loading ? <Notice>Loading documents and consents...</Notice> : <>
+        {role === 'dentist' && <Notice tone="info" title="Documents for your visits">You see documents attached to visits you are responsible for. Consent records and uploads are not available to Dentists yet (clinic decision pending).</Notice>}
         <div style={{ marginBottom: '20px' }}>
           <h4 style={{ margin: '0 0 10px 0', fontSize: '13px', fontWeight: '700' }}>Active Consents & Agreements</h4>
-          {consents.length === 0 ? (
+          {role === 'dentist' ? null : consentError ? (
+            <Notice tone="warning" title="Consent records unavailable">{consentError} <Button size="sm" variant="ghost" onClick={reload}>Retry</Button></Notice>
+          ) : consents.length === 0 ? (
             <Notice tone="info">No consent records found for this patient.</Notice>
           ) : (
             <Table
@@ -364,7 +391,7 @@ function PatientDocumentsTab({ patient, role, store }) {
                 { key: 'status', label: 'Status', render: c => <Status>{c.status}</Status> },
                 { key: 'signedAt', label: 'Signed Date', render: c => dateLabel(c.signedAt) },
                 { key: 'actions', label: 'Actions', render: c => (
-                  c.status === 'Granted' && !isOwner ? (
+                  c.status === 'Granted' && isStaff ? (
                     <Button size="sm" variant="ghost" onClick={() => handleWithdrawConsent(c.id)}>Withdraw</Button>
                   ) : null
                 )},
@@ -375,8 +402,10 @@ function PatientDocumentsTab({ patient, role, store }) {
 
         <div>
           <h4 style={{ margin: '0 0 10px 0', fontSize: '13px', fontWeight: '700' }}>Uploaded Patient Documents</h4>
-          {docs.length === 0 ? (
-            <Notice tone="info">No documents uploaded for this patient yet.</Notice>
+          {loadError ? (
+            <Notice tone="warning" title="Documents unavailable">{loadError} <Button size="sm" variant="ghost" onClick={reload}>Retry</Button></Notice>
+          ) : docs.length === 0 ? (
+            <Notice tone="info">No documents are on file for this patient{role === 'dentist' ? ' on your visits' : ''}.</Notice>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               {docs.map(doc => (
@@ -404,7 +433,7 @@ function PatientDocumentsTab({ patient, role, store }) {
                       {doc.status === 'Active' && (
                         <>
                           <Button size="sm" variant="soft" onClick={() => handleDownload(doc)}>Download</Button>
-                          {!isOwner && <Button size="sm" variant="ghost" onClick={() => { setRetractTarget(doc); setRetractReason('') }}>Retract</Button>}
+                          {canRetract(doc) && <Button size="sm" variant="ghost" onClick={() => { setRetractTarget(doc); setRetractReason('') }}>Retract</Button>}
                         </>
                       )}
                     </div>
@@ -422,38 +451,31 @@ function PatientDocumentsTab({ patient, role, store }) {
                     </small>
                   )}
 
-                  {doc.extractions && doc.extractions.length > 0 && (
+                  {doc.textExtraction === 'draft_available' && doc.extractions.length > 0 ? (
                     <div style={{ marginTop: '4px' }}>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => setExpandedExtraction(expandedExtraction === doc.id ? null : doc.id)}
-                      >
-                        {expandedExtraction === doc.id ? 'Hide Extracted Text (Draft)' : `View Extracted Text Draft (${doc.extractions.length})`}
+                      <Button size="sm" variant="ghost" onClick={() => showExtraction(doc)}>
+                        {expandedExtraction === doc.id ? 'Hide extracted text (draft)' : 'View extracted text (draft)'}
                       </Button>
-                      {expandedExtraction === doc.id && (
-                        <div style={{ marginTop: '8px', padding: '10px', background: '#f8fafc', borderRadius: '6px', fontSize: '11px' }}>
+                      {expandedExtraction === doc.id && (() => {
+                        const e = extractionDetail[doc.id]?.extractions?.[0]
+                        return <div style={{ marginTop: '8px', padding: '10px', background: '#f8fafc', borderRadius: '6px', fontSize: '11px' }}>
                           <p style={{ margin: '0 0 6px 0', fontWeight: '600', color: 'var(--muted)' }}>
-                            Status: <span style={{ color: 'var(--brand)' }}>Draft (Advisory Only)</span> • Method: {doc.extractions[0].extractionMethod}
+                            Draft — not verified. It is not used for any decision until a person confirms it in the owning workflow. Method: {doc.extractions[0].method === 'native_text' ? 'text read from the PDF (no OCR)' : doc.extractions[0].method}
                           </p>
-                          {doc.extractions[0].rawText && (
-                            <pre style={{ whiteSpace: 'pre-wrap', maxHeight: '120px', overflow: 'auto', background: '#fff', padding: '8px', borderRadius: '4px', border: '1px solid var(--line)', fontSize: '10px' }}>
-                              {doc.extractions[0].rawText}
-                            </pre>
-                          )}
-                          {doc.extractions[0].structuredPayload && Object.keys(doc.extractions[0].structuredPayload).length > 0 && (
-                            <div style={{ marginTop: '6px' }}>
-                              <b>Suggested fields:</b>
-                              <ul style={{ margin: '4px 0 0 16px', padding: 0 }}>
-                                {Object.entries(doc.extractions[0].structuredPayload).map(([k, v]) => (
-                                  <li key={k}><b>{k}</b>: {String(v)}</li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
+                          {!e ? <p role="status">Loading the extracted text…</p> : <>
+                            {e.rawText && <pre style={{ whiteSpace: 'pre-wrap', maxHeight: '120px', overflow: 'auto', background: '#fff', padding: '8px', borderRadius: '4px', border: '1px solid var(--line)', fontSize: '10px' }}>{e.rawText}</pre>}
+                            {e.candidates && <ul style={{ margin: '6px 0 0 16px', padding: 0 }}>
+                              {[['provider_candidate', 'Provider (candidate)'], ['member_number_candidate', 'Member number (candidate)']].filter(([k]) => e.candidates[k]).map(([k, label]) => <li key={k}><b>{label}</b>: {String(e.candidates[k])}</li>)}
+                              {Array.isArray(e.candidates.detected_dates) && e.candidates.detected_dates.length > 0 && <li><b>Dates found</b>: {e.candidates.detected_dates.join(', ')}</li>}
+                            </ul>}
+                          </>}
                         </div>
-                      )}
+                      })()}
                     </div>
+                  ) : (
+                    <small style={{ color: 'var(--muted)', fontSize: '10px' }}>
+                      {doc.textExtraction === 'no_text_layer' ? 'No readable text was found in this PDF.' : 'Text extraction is not available for images (OCR is not set up).'}
+                    </small>
                   )}
                 </div>
               ))}
@@ -463,7 +485,7 @@ function PatientDocumentsTab({ patient, role, store }) {
       </>}
     </Card>
 
-    <Modal open={uploadOpen} onClose={() => !uploading && setUploadOpen(false)} title="Upload Patient Document" subtitle="Files are stored securely in encrypted private storage.">
+    <Modal open={uploadOpen} onClose={() => !uploading && setUploadOpen(false)} title="Upload Patient Document" subtitle="Files are kept in private clinic storage. They are type-checked but not scanned for malware.">
       <form onSubmit={handleUpload} className="form-grid">
         <Field label="Document File" required hint="PDF, JPG, PNG, or WebP. Max 10MB.">
           <input
@@ -482,16 +504,12 @@ function PatientDocumentsTab({ patient, role, store }) {
         </Field>
         <Field label="Category" required>
           <select value={uploadCategory} onChange={e => setUploadCategory(e.target.value)}>
-            <option value="consent_document">Consent Document</option>
-            <option value="valid_id">Valid ID</option>
-            <option value="clinical_attachment">Clinical Attachment</option>
-            <option value="hmo_card">HMO Card</option>
-            <option value="treatment_request">Treatment Request</option>
-            <option value="prescription_source">Prescription Source</option>
-            <option value="invoice_proof">Payment Proof</option>
-            <option value="other">Other Document</option>
+            {DOCUMENT_CATEGORIES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
           </select>
         </Field>
+        {branchOptions.length > 1 && <Field label="Branch" required hint="The branch this document belongs to.">
+          <select value={uploadBranchId} onChange={e => setBranchChoice(e.target.value)}>{branchOptions.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</select>
+        </Field>}
         <div className="span-2" style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '12px' }}>
           <Button type="button" variant="ghost" onClick={() => setUploadOpen(false)} disabled={uploading}>Cancel</Button>
           <Button type="submit" disabled={uploading}>{uploading ? 'Uploading...' : 'Upload Document'}</Button>
@@ -511,14 +529,11 @@ function PatientDocumentsTab({ patient, role, store }) {
       </div>
     </Modal>
 
-    <Modal open={consentOpen} onClose={() => setConsentOpen(false)} title="Record Patient Consent" subtitle="Records patient consent agreement on file.">
+    <Modal open={consentOpen} onClose={() => setConsentOpen(false)} title="Record Patient Consent" subtitle="Records that a consent is on file for this patient. The consent types are the system's current list; the clinic has not yet confirmed its required forms.">
       <form onSubmit={handleGrantConsent} className="form-grid">
         <Field label="Consent Type" required>
           <select value={consentForm.consent_type} onChange={e => setConsentForm({ ...consentForm, consent_type: e.target.value })}>
-            <option value="general_treatment">General Dental Treatment</option>
-            <option value="data_privacy">Data Privacy & Consent</option>
-            <option value="procedure_specific">Procedure-Specific Consent</option>
-            <option value="financial_agreement">Financial & HMO Agreement</option>
+            {CONSENT_TYPES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
           </select>
         </Field>
         <Field label="Version">

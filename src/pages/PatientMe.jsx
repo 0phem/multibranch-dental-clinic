@@ -4,6 +4,7 @@ import { dateLabel } from '../logic.js'
 import { patientContext } from '../patient-view.js'
 import { DefinitionList, RecordCard } from '../patient-ui.jsx'
 import { loadPatientRecord } from '../patient-records-api.js'
+import { commandKey } from '../appointments-api.js'
 import { fetchMyDocuments, fetchMyConsents, submitDocumentUpload, retractDocument, downloadDocumentFile } from '../documents-api.js'
 
 const NO_ACCOUNT = <Notice tone="warning" title="We couldn’t confirm your account">Reopen your workspace, or ask the clinic to check your account access.</Notice>
@@ -14,6 +15,9 @@ export function PatientMePage({ store, setPage }) {
   const [docs, setDocs] = useState([])
   const [consents, setConsents] = useState([])
   const [loading, setLoading] = useState(true)
+  const [docError, setDocError] = useState('')
+  const [consentError, setConsentError] = useState('')
+  const uploadKey = React.useRef(commandKey())
   const [uploadOpen, setUploadOpen] = useState(false)
   const [fileToUpload, setFileToUpload] = useState(null)
   const [uploadTitle, setUploadTitle] = useState('')
@@ -37,18 +41,17 @@ export function PatientMePage({ store, setPage }) {
     return () => { live = false }
   }, [serverProfile, session?.patientPublicId, profileAttempt])
 
+  // Failures are shown (with Retry) — never as an empty list.
   const reload = async () => {
-    try {
-      setLoading(true)
-      const [d, c] = await Promise.all([
-        fetchMyDocuments().catch(() => []),
-        fetchMyConsents().catch(() => []),
-      ])
-      setDocs(d)
-      setConsents(c)
-    } finally {
-      setLoading(false)
-    }
+    setLoading(true)
+    setDocError('')
+    setConsentError('')
+    const [documents, consentRecords] = await Promise.allSettled([fetchMyDocuments(), fetchMyConsents()])
+    if (documents.status === 'fulfilled') setDocs(documents.value)
+    else { setDocs([]); setDocError(documents.reason?.message || 'Your documents could not be loaded.') }
+    if (consentRecords.status === 'fulfilled') setConsents(consentRecords.value)
+    else { setConsents([]); setConsentError(consentRecords.reason?.message || 'Your consent records could not be loaded.') }
+    setLoading(false)
   }
 
   useEffect(() => {
@@ -68,7 +71,8 @@ export function PatientMePage({ store, setPage }) {
 
     setUploading(true)
     try {
-      await submitDocumentUpload(formData)
+      await submitDocumentUpload(formData, uploadKey.current)
+      uploadKey.current = commandKey()
       toast('Document uploaded successfully.', 'success')
       setUploadOpen(false)
       setFileToUpload(null)
@@ -130,7 +134,9 @@ export function PatientMePage({ store, setPage }) {
 
     <section className="pt-record" aria-labelledby="pt-me-consents-title" style={{ marginTop: '20px' }}>
       <header><div><h2 id="pt-me-consents-title" className="pt-record-title">Consents & Agreements</h2><p className="pt-record-sub">Active consent records on file with the clinic.</p></div></header>
-      {loading ? <Notice>Loading consents...</Notice> : consents.length === 0 ? (
+      {loading ? <Notice>Loading consents...</Notice> : consentError ? (
+        <Notice tone="warning" title="Consent records unavailable">{consentError} <Button size="sm" variant="ghost" onClick={reload}>Retry</Button></Notice>
+      ) : consents.length === 0 ? (
         <Notice tone="info">No active consent records found.</Notice>
       ) : (
         <div className="pt-list" style={{ marginTop: '12px' }}>
@@ -145,11 +151,13 @@ export function PatientMePage({ store, setPage }) {
 
     <section className="pt-record" aria-labelledby="pt-me-docs-title" style={{ marginTop: '20px' }}>
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-        <div><h2 id="pt-me-docs-title" className="pt-record-title">My Documents</h2><p className="pt-record-sub">IDs, insurance cards, and medical records stored securely in your private clinic record.</p></div>
+        <div><h2 id="pt-me-docs-title" className="pt-record-title">My Documents</h2><p className="pt-record-sub">IDs, insurance cards, and medical records kept in your private clinic record. Files are type-checked but not scanned for malware.</p></div>
         <Button size="sm" onClick={() => setUploadOpen(true)}>Upload Document</Button>
       </header>
 
-      {loading ? <Notice>Loading documents...</Notice> : docs.length === 0 ? (
+      {loading ? <Notice>Loading documents...</Notice> : docError ? (
+        <Notice tone="warning" title="Documents unavailable">{docError} <Button size="sm" variant="ghost" onClick={reload}>Retry</Button></Notice>
+      ) : docs.length === 0 ? (
         <Notice tone="info">You haven't uploaded any documents yet. Use the upload button above to submit your ID or HMO card.</Notice>
       ) : (
         <div className="pt-list" style={{ marginTop: '12px' }}>
@@ -157,7 +165,7 @@ export function PatientMePage({ store, setPage }) {
             <RecordCard key={doc.id} title={doc.title} subtitle={`${doc.originalFilename} • ${doc.fileSizeFormatted} • ${doc.category?.replace(/_/g, ' ')} • Uploaded ${dateLabel(doc.createdAt)}`} status={doc.status}>
               <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
                 {doc.status === 'Active' && <Button size="sm" variant="soft" onClick={() => handleDownload(doc)}>Download</Button>}
-                {doc.status === 'Active' && <Button size="sm" variant="ghost" onClick={() => { setRetractTarget(doc); setRetractReason('') }}>Retract</Button>}
+                {doc.status === 'Active' && doc.uploadedByPatient && <Button size="sm" variant="ghost" onClick={() => { setRetractTarget(doc); setRetractReason('') }}>Retract</Button>}
               </div>
               {doc.status === 'Retracted' && (
                 <Notice tone="warning" style={{ marginTop: '8px' }}>
@@ -170,7 +178,7 @@ export function PatientMePage({ store, setPage }) {
       )}
     </section>
 
-    <Modal open={uploadOpen} onClose={() => !uploading && setUploadOpen(false)} title="Upload Document" subtitle="Documents are stored in private clinic storage accessible only to you and authorized clinic staff.">
+    <Modal open={uploadOpen} onClose={() => !uploading && setUploadOpen(false)} title="Upload Document" subtitle="Documents are kept in private clinic storage. They are type-checked but not scanned for malware, and are visible only to you and authorized clinic staff.">
       <form onSubmit={handleUpload} className="form-grid">
         <Field label="Document File" required hint="PDF, JPG, PNG, or WebP. Max 10MB.">
           <input

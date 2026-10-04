@@ -8,78 +8,78 @@ use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Storage;
 use Throwable;
 
+// M14 text extraction infrastructure. The output is ALWAYS a Draft, non-authoritative record: it never changes an HMO case,
+// prescription, treatment, billing, Patient identity or consent, and only an authorized human in the owning module can act
+// on it. Extracted text is untrusted DATA (an uploaded document may contain anything, including text that looks like an
+// instruction); nothing here interprets it as a command, and no language model or tool-calling is involved.
+//
+// What exists: NATIVE text extraction from machine-readable PDFs only. What does not: OCR. Images (and scanned PDFs with no
+// text layer) therefore get no extraction at all — never a fabricated one — and the document reports that honestly.
 class TextExtractionService
 {
-    /**
-     * Extracts text or metadata from a document into a non-authoritative draft record.
-     * Guaranteed to never throw fatal errors or block the caller.
-     */
-    public function extract(Document $document): DocumentExtraction
+    /** Hard bound on any decompressed PDF stream (a compressed stream can expand enormously). */
+    private const MAX_INFLATED_BYTES = 5_000_000;
+
+    public const PDF_MIME = 'application/pdf';
+
+    /** True when this service can attempt native extraction for the document's type. */
+    public function supports(Document $document): bool
     {
-        $rawText = null;
-        $structured = [];
-        $confidence = 0.0;
-        $method = 'native_text';
+        return $document->mime_type === self::PDF_MIME;
+    }
+
+    /**
+     * Returns the Draft extraction, or null when the type is unsupported (no OCR) or the PDF has no extractable text layer.
+     * Never throws and never blocks the upload: an unreadable PDF simply yields no extraction.
+     */
+    public function extract(Document $document): ?DocumentExtraction
+    {
+        if (! $this->supports($document)) {
+            return null;
+        }
 
         try {
             $disk = Storage::disk('local');
-            if ($disk->exists($document->file_path)) {
-                $content = $disk->get($document->file_path);
-
-                if ($document->mime_type === 'application/pdf') {
-                    $rawText = $this->extractPdfText($content);
-                    $method = 'native_text';
-                    $confidence = ! empty($rawText) ? 0.95 : 0.40;
-                } else {
-                    $method = 'heuristic_parser';
-                    $rawText = $this->heuristicExtractImage($document);
-                    $confidence = 0.75;
-                }
-
-                $structured = $this->parseKeyEntities($rawText, $document);
+            if (! $disk->exists($document->file_path)) {
+                return null;
             }
-        } catch (Throwable $e) {
-            $method = 'native_text';
-            $rawText = null;
-            $structured = ['error' => 'Extraction failed gracefully: ' . $e->getMessage()];
-            $confidence = 0.0;
+            $text = $this->extractPdfText((string) $disk->get($document->file_path));
+        } catch (Throwable) {
+            return null; // no internal exception text is stored or returned
+        }
+        if ($text === null) {
+            return null;
         }
 
         return DocumentExtraction::create([
             'document_id' => $document->id,
-            'extraction_method' => $method,
+            'extraction_method' => 'native_text',
             'status' => 'Draft',
-            'raw_text' => $rawText ? substr($rawText, 0, 65000) : null,
-            'structured_payload' => $structured,
-            'confidence_score' => $confidence,
+            'raw_text' => substr($text, 0, 65000),
+            'structured_payload' => $this->candidates($text, $document),
+            // Native text has no measurable accuracy, so no confidence figure is invented.
+            'confidence_score' => null,
             'extracted_at' => CarbonImmutable::now('Asia/Manila'),
         ]);
     }
 
-    /**
-     * Native PDF stream text extraction without external dependencies.
-     */
-    private function extractPdfText(string $pdfContent): ?string
+    private function extractPdfText(string $pdf): ?string
     {
         $text = '';
-
-        // Extract streams
-        if (preg_match_all('/stream[\r\n]+(.*?)[\r\n]+endstream/s', $pdfContent, $matches)) {
+        if (preg_match_all('/stream[\r\n]+(.*?)[\r\n]+endstream/s', $pdf, $matches)) {
             foreach ($matches[1] as $stream) {
-                // Try decompressing flate streams if zlib is present
-                $decompressed = @gzuncompress($stream);
-                if ($decompressed === false) {
-                    $decompressed = @gzinflate($stream);
+                $data = @gzuncompress($stream, self::MAX_INFLATED_BYTES);
+                if ($data === false) {
+                    $data = @gzinflate($stream, self::MAX_INFLATED_BYTES);
                 }
-                $data = ($decompressed !== false) ? $decompressed : $stream;
+                $data = $data !== false ? $data : $stream;
 
-                // Extract text operators in PDF (Tj, TJ, ' )
-                if (preg_match_all('/\((.*?)\)\s*Tj/s', $data, $textMatches)) {
-                    $text .= implode(' ', $textMatches[1]) . "\n";
-                } elseif (preg_match_all('/\[(.*?)\]\s*TJ/s', $data, $arrayMatches)) {
-                    foreach ($arrayMatches[1] as $arr) {
-                        if (preg_match_all('/\((.*?)\)/s', $arr, $subMatches)) {
-                            $text .= implode('', $subMatches[1]) . ' ';
+                if (preg_match_all('/\((.*?)\)\s*Tj/s', $data, $runs)) {
+                    $text .= implode(' ', $runs[1])."\n";
+                } elseif (preg_match_all('/\[(.*?)\]\s*TJ/s', $data, $arrays)) {
+                    foreach ($arrays[1] as $array) {
+                        if (preg_match_all('/\((.*?)\)/s', $array, $parts)) {
+                            $text .= implode('', $parts[1]).' ';
                         }
                     }
                     $text .= "\n";
@@ -87,63 +87,35 @@ class TextExtractionService
             }
         }
 
-        $cleaned = trim(preg_replace('/[^\x20-\x7E\t\r\n]/', '', $text));
-        return ! empty($cleaned) ? $cleaned : null;
+        $cleaned = trim((string) preg_replace('/[^\x20-\x7E\t\r\n]/', '', $text));
+
+        return $cleaned !== '' ? $cleaned : null;
     }
 
-    private function heuristicExtractImage(Document $document): string
+    /** Candidate values found IN THE EXTRACTED TEXT (never the title or client metadata). Candidates are not facts. */
+    private function candidates(string $text, Document $document): array
     {
-        $category = $document->category;
-        $title = $document->title;
-        $meta = $document->metadata ?? [];
-
-        $parts = ["Scanned Document: {$title}", "Category: {$category}"];
-        if (! empty($meta['provider'])) {
-            $parts[] = "Provider: {$meta['provider']}";
-        }
-        if (! empty($meta['member_number'])) {
-            $parts[] = "Member ID: {$meta['member_number']}";
-        }
-
-        return implode("\n", $parts);
-    }
-
-    /**
-     * Extracts structured candidates (HMO member numbers, dates, provider names) from text.
-     */
-    private function parseKeyEntities(?string $text, Document $document): array
-    {
-        $entities = [
+        $candidates = [
             'document_category' => $document->category,
             'detected_dates' => [],
             'member_number_candidate' => null,
             'provider_candidate' => null,
             'is_draft_only' => true,
+            'provenance' => ['source' => 'document_text', 'method' => 'native_text', 'human_reviewed' => false],
         ];
-
-        if (! $text) {
-            return $entities;
+        if (preg_match_all('/\b\d{4}-\d{2}-\d{2}\b|\b\d{2}\/\d{2}\/\d{4}\b/', $text, $dates)) {
+            $candidates['detected_dates'] = array_values(array_unique($dates[0]));
         }
-
-        // Detect YYYY-MM-DD or DD/MM/YYYY dates
-        if (preg_match_all('/\b\d{4}-\d{2}-\d{2}\b|\b\d{2}\/\d{2}\/\d{4}\b/', $text, $dMatches)) {
-            $entities['detected_dates'] = array_values(array_unique($dMatches[0]));
-        }
-
-        // Detect common Philippine HMO provider names
-        $providers = ['Maxicare', 'Intellicare', 'Medicard', 'PhilCare', 'Caritas', 'Cocolife', 'ValuCare', 'Insurer'];
-        foreach ($providers as $p) {
-            if (stripos($text, $p) !== false || stripos($document->title, $p) !== false) {
-                $entities['provider_candidate'] = $p;
+        foreach (['Maxicare', 'Intellicare', 'Medicard', 'PhilCare', 'Caritas', 'Cocolife', 'ValuCare'] as $provider) {
+            if (stripos($text, $provider) !== false) {
+                $candidates['provider_candidate'] = $provider;
                 break;
             }
         }
-
-        // Detect member numbers (e.g. alphanumeric strings 8-16 chars with hyphens/digits)
-        if (preg_match('/\b([A-Z0-9]{2,4}-[0-9]{4,10}|[0-9]{10,16})\b/i', $text, $mMatch)) {
-            $entities['member_number_candidate'] = $mMatch[1];
+        if (preg_match('/\b([A-Z0-9]{2,4}-[0-9]{4,10}|[0-9]{10,16})\b/i', $text, $member)) {
+            $candidates['member_number_candidate'] = $member[1];
         }
 
-        return $entities;
+        return $candidates;
     }
 }

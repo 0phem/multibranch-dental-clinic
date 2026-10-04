@@ -33,7 +33,9 @@ return [
         'local' => [
             'driver' => 'local',
             'root' => storage_path('app/private'),
-            'serve' => true,
+            // Patient documents live here. Never served by a framework route: access is only through the authorized
+            // streaming endpoint (DocumentController@download).
+            'serve' => false,
             'throw' => false,
             'report' => false,
         ],

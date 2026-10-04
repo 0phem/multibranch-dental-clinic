@@ -91,25 +91,30 @@ class Document extends Model
         return $this->hasMany(PatientConsent::class);
     }
 
+    /**
+     * The authoritative read scope for a document (and, through it, download, upload-target and retraction checks).
+     *   Patient: their own documents.
+     *   Staff:   documents of a branch in the account's authorization scopes (the document's branch or its Visit's branch);
+     *            a document with no branch and no Visit is reachable only for a Patient who has an appointment or Visit in
+     *            those scopes. A Staff account with no scope reaches nothing.
+     *   Dentist: only documents linked to a Visit for which they are the responsible Dentist (workflow-tied, never arbitrary
+     *            Patient browsing).
+     *   Owner:   none — unrestricted clinical-document access for the Owner is not an established contract
+     *            (POLICY DECISION REQUIRED), so it fails closed.
+     */
     public function scopeVisibleTo(Builder $query, User $user): Builder
     {
         return match ($user->role?->value) {
-            'owner' => $query,
-            'staff' => $query->where(function ($q) use ($user) {
+            'patient' => $query->where('patient_id', $user->patient?->id ?? 0),
+            'staff' => $query->where(function (Builder $q) use ($user) {
                 $branchIds = UserBranchScope::select('branch_id')->where('user_id', $user->id);
                 $q->whereIn('branch_id', $branchIds)
-                  ->orWhereNull('branch_id')
-                  ->orWhereHas('visit', fn ($v) => $v->whereIn('branch_id', $branchIds));
+                    ->orWhereHas('visit', fn ($v) => $v->whereIn('branch_id', $branchIds))
+                    ->orWhere(fn ($n) => $n->whereNull('branch_id')->whereNull('visit_id')->where(fn ($r) => $r
+                        ->whereIn('patient_id', Appointment::select('patient_id')->whereIn('branch_id', $branchIds))
+                        ->orWhereIn('patient_id', Visit::select('patient_id')->whereIn('branch_id', $branchIds))));
             }),
-            'dentist' => $query->where(function ($q) use ($user) {
-                $dentistProfileId = $user->person?->dentistProfile?->id;
-                if (! $dentistProfileId) {
-                    $dentistProfileId = DentistProfile::where('person_id', $user->person_id)->value('id') ?? 0;
-                }
-                $q->whereHas('visit', fn ($v) => $v->where('responsible_dentist_profile_id', $dentistProfileId))
-                  ->orWhereHas('patient.visits', fn ($v) => $v->where('responsible_dentist_profile_id', $dentistProfileId));
-            }),
-            'patient' => $query->where('patient_id', $user->patient?->id ?? 0),
+            'dentist' => $query->whereHas('visit', fn ($v) => $v->whereHas('dentist', fn ($d) => $d->where('person_id', $user->person_id))),
             default => $query->whereRaw('false'),
         };
     }

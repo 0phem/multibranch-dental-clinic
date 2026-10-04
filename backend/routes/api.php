@@ -64,7 +64,7 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureAccountAccess::cla
     // M14 Patient Forms, Documents & Consent Management
     Route::prefix('documents')->group(function () {
         Route::get('/mine', [DocumentController::class, 'mine'])->middleware('role:patient');
-        Route::get('/', [DocumentController::class, 'index'])->middleware('role:staff,dentist,owner');
+        Route::get('/', [DocumentController::class, 'index'])->middleware('role:staff,dentist'); // Owner has no document access (POLICY DECISION REQUIRED)
         Route::post('/', [DocumentController::class, 'store']);
         Route::get('/{document}', [DocumentController::class, 'show']);
         Route::get('/{document}/download', [DocumentController::class, 'download']);

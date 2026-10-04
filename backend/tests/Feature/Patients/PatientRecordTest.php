@@ -61,6 +61,8 @@ class PatientRecordTest extends TestCase
         $this->getJson('/api/patients/'.$this->p['A']->id.'/consents')->assertNotFound();
         $this->getJson('/api/patients/'.$this->p['A']->patient_code.'/consents')->assertNotFound();
         $this->getJson('/api/patients/'.$this->p['A']->id.'/hmo-membership')->assertNotFound();
+        $this->getJson($this->url('A', '/consents'))->assertForbidden(); // a ULID resolves, but Staff need a scoped record of this Patient (M14)
+        $this->relate();
         $this->getJson($this->url('A', '/consents'))->assertOk();
     }
 
@@ -377,8 +379,9 @@ class PatientRecordTest extends TestCase
 
     public function test_document_upload_names_the_patient_by_public_id_only(): void
     {
+        \Illuminate\Support\Facades\Storage::fake('local');
         $this->actingAsUser('staffB1');
-        $file = fn () => \Illuminate\Http\UploadedFile::fake()->create('consent.pdf', 100, 'application/pdf');
+        $file = fn () => \Illuminate\Http\UploadedFile::fake()->createWithContent('consent.pdf', "%PDF-1.4\n%%EOF");
         foreach ([$this->p['A']->patient_code, (string) $this->p['A']->id] as $bad) {
             $this->postJson('/api/documents', ['file' => $file(), 'patient_id' => $bad, 'branch_id' => 'b1', 'category' => 'consent_document'])
                 ->assertStatus(404);

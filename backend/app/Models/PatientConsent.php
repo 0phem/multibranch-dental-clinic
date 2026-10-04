@@ -2,7 +2,6 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -59,15 +58,5 @@ class PatientConsent extends Model
     public function recordedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'recorded_by_user_id');
-    }
-
-    public function scopeVisibleTo(Builder $query, User $user): Builder
-    {
-        return match ($user->role?->value) {
-            'owner' => $query,
-            'staff', 'dentist' => $query,
-            'patient' => $query->where('patient_id', $user->patient?->id ?? 0),
-            default => $query->whereRaw('false'),
-        };
     }
 }

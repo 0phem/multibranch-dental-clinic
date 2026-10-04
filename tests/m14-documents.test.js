@@ -40,14 +40,17 @@ test('mapDocument converts server document resource to presentation shape with f
     checksum_sha256: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
     status: 'Active',
     created_at: '2026-10-06T10:00:00+08:00',
+    text_extraction: 'draft_available',
     extractions: [
       {
         id: '01k9ext1234567890abcdef',
-        extraction_method: 'native_pdf_stream',
+        method: 'native_text',
         status: 'Draft',
+        is_draft: true,
+        confidence_score: null,
         raw_text: 'Sample passport text',
         structured_payload: { name_candidate: 'Maria Santos', is_draft_only: true },
-        created_at: '2026-10-06T10:00:01+08:00',
+        extracted_at: '2026-10-06T10:00:01+08:00',
       },
     ],
   }
@@ -60,7 +63,9 @@ test('mapDocument converts server document resource to presentation shape with f
   assert.equal(mapped.checksumSha256, 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855')
   assert.equal(mapped.extractions.length, 1)
   assert.equal(mapped.extractions[0].status, 'Draft')
-  assert.equal(mapped.extractions[0].structuredPayload.is_draft_only, true)
+  assert.equal(mapped.extractions[0].isDraft, true)
+  assert.equal(mapped.extractions[0].candidates.is_draft_only, true)
+  assert.equal(mapped.textExtraction, 'draft_available')
 })
 
 test('mapConsent converts server consent resource to presentation model', () => {
@@ -92,8 +97,8 @@ test('Clinical.jsx renders PatientDocumentsTab in centralized patient records', 
 })
 
 test('Clinical.jsx displays draft extraction advisory note without automatically mutating clinical records', () => {
-  assert.match(clinical, /Draft \(Advisory Only\)/)
-  assert.match(clinical, /View Extracted Text Draft/)
+  assert.match(clinical, /Draft — not verified/)
+  assert.match(clinical, /View extracted text \(draft\)/)
 })
 
 test('PatientMePage includes patient documents and consents views', () => {
