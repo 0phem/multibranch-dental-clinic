@@ -49,6 +49,15 @@ assert.equal(m.ModulesPage,undefined,'the professor-facing Module Coverage page 
 // the reference fee as unconfirmed rather than as a price.
 {const pricing=render('pricing','owner');assert.ok(pricing.includes('Services &amp; Pricing')&&pricing.includes('Loading prices'),'pricing page renders');assert.ok(pricing.includes('Reference fees')||pricing.includes('reference fee (unconfirmed)'),'reference fees are explained as unconfirmed')}
 assert.ok(render('branches','owner').includes('Reference fee (unconfirmed)'),'the Branches screen labels the reference fee')
+// M4: under a server-authenticated session the Patient Records surface lists only authoritative server Patients — never the
+// browser demo/legacy collection, and never as read-only "earlier browser record" rows.
+{const renderServer=role=>{const session={...m.sessionForRole(role,store.state),serverUserId:'01K00000000000000000000099'};return renderToString(React.createElement(m.Shell,{role,page:'patients',setPage:()=>{},onLogout:()=>{},activeBranch:'All Branches',setActiveBranch:()=>{},store:{...store,session}},React.createElement(m[pages.patients],{role,activeBranch:'All Branches',store:{...store,session},context:null,setPage:()=>{}})))}
+ const demoNames=store.state.patients.filter(p=>!p.serverProjection).map(p=>p.name)
+ assert.ok(demoNames.length>0,'the demo collection exists in state')
+ for(const role of ['staff','dentist']){const html=renderServer(role);for(const name of demoNames)assert.ok(!html.includes(name),`${role} server session does not list demo Patient ${name}`);assert.ok(!html.includes('Earlier browser record'),`${role} shows no earlier browser rows`)}
+ assert.ok(renderServer('staff').includes('Type at least 2 characters to search the clinic patient directory'),'Staff is asked to search the server directory')
+ assert.ok(renderServer('dentist').includes('Patients appear here from your appointments and queue'),'Dentist list comes from workflow records')
+ assert.ok(render('patients','staff').includes(demoNames[0]),'a non-server (demo/local) context keeps the browser collection')}
 console.log(`PASS: ${count} initial role/page renders, Login, production shell without demo reset`)
 
 const providerStore=store

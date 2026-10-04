@@ -9,12 +9,18 @@ import { PatientFollowupsPage } from './PatientVisits.jsx'
 import { visibleHmo } from '../phase3-contracts.js'
 import { visiblePrescriptions, prescriptionTasks, linkedTreatment, followupDisplayState } from '../phase2.js'
 import { inScope, isTodayQueue, patientInScope, sessionForRole } from '../contracts.js'
+import { loadPatientRecord, loadPatientRecordIndex, savePatientRecord } from '../patient-records-api.js'
+import { commandKey } from '../appointments-api.js'
+import { DEFAULT_COUNTRY, normalizePhoneNumber } from '../phone.js'
 import { fetchDocuments, submitDocumentUpload, retractDocument, fetchPatientConsents, grantConsent, withdrawConsent, downloadDocumentFile } from '../documents-api.js'
 
 export function PatientsPage({ role, store, context, setPage }) {
   const { state, actions, toast, log }=store
   const session=store.session||sessionForRole(role,state)
-  const availablePatients=state.patients.filter(p=>patientInScope(p,state,session))
+  // M4 boundary: in a server-authenticated session only authoritative server Patients (public ids) are listed. The browser
+  // collections (demo fixtures and local projections) stay in state for unfinished modules but are never shown here.
+  const serverSession=!!session?.serverUserId
+  const availablePatients=state.patients.filter(p=>(!serverSession||p.serverProjection)&&patientInScope(p,state,session))
   const [selected,setSelected]=useState(context?.patientId||availablePatients[0]?.id||'')
   React.useEffect(()=>{if(context?.patientId)setSelected(context.patientId)},[context?.patientId])
   const [tab,setTab]=useState('summary')
@@ -22,6 +28,17 @@ export function PatientsPage({ role, store, context, setPage }) {
   const [newOpen,setNewOpen]=useState(false)
   const [newPatient,setNewPatient]=useState({firstName:'',lastName:'',dob:'',sex:'Female',phone:'',email:'',address:'',preferredBranch:'Branch A',hmo:'None',hmoMember:'—',allergies:'None',medicalHistory:'',dentalHistory:'',emergencyContact:'',consent:false,createPortalAccount:false})
   const patient=availablePatients.find(p=>p.id===selected)
+  const serverPatient=serverSession&&!!patient?.serverProjection
+  const [searchError,setSearchError]=useState('')
+  const [searchAttempt,setSearchAttempt]=useState(0)
+  const [registering,setRegistering]=useState(false)
+  React.useEffect(()=>{
+    setSearchError('')
+    if(!(serverSession&&role!=='dentist'&&search.trim().length>=2))return undefined
+    let live=true
+    const t=setTimeout(async()=>{const result=await store.appointmentFlow?.searchPatients(search);if(live&&result&&result.ok===false)setSearchError(result.message||'The patient directory could not be loaded.')},250)
+    return ()=>{live=false;clearTimeout(t)}
+  },[search,serverSession,role,searchAttempt])
   const visits=state.appointments.filter(a=>a.patientId===selected&&inScope(a,session,state)).sort((a,b)=>`${b.date}${b.start}`.localeCompare(`${a.date}${a.start}`))
   // M5: server Treatments (already scoped by the server) first, then read-only pre-server history.
   const treatments=state.treatments.filter(t=>t.patientId===selected).sort((a,b)=>Number(!!b.server)-Number(!!a.server)||String(b.date).localeCompare(String(a.date)))
@@ -33,8 +50,26 @@ export function PatientsPage({ role, store, context, setPage }) {
     log(role==='dentist'?ROLE_INFO.dentist.name:ROLE_INFO.staff.name,`Updated permitted patient record fields ${selected}`,'patient')
     toast('Patient record updated.','success')
   }
+  const emptyRegistration={firstName:'',lastName:'',phone:'',email:'',dob:''}
+  const [registration,setRegistration]=useState(emptyRegistration)
+  const [registrationError,setRegistrationError]=useState('')
+  const registrationKey=React.useRef(commandKey())
+  const updateRegistration=(key,value)=>{registrationKey.current=commandKey();setRegistrationError('');setRegistration(previous=>({...previous,[key]:value}))}
+  const registerOnServer=async()=>{
+    if(role!=='staff'||registering)return
+    const phone=registration.phone.trim()?normalizePhoneNumber(DEFAULT_COUNTRY.dial,registration.phone):{ok:true,e164:''}
+    if(!registration.firstName.trim()||!registration.lastName.trim())return setRegistrationError('Enter the patient’s first and last name.')
+    if(!phone.ok)return setRegistrationError(phone.reason)
+    setRegistering(true)
+    const result=await store.appointmentFlow.registerPatient({...registration,firstName:registration.firstName.trim(),lastName:registration.lastName.trim(),phone:phone.e164,email:registration.email.trim()},registrationKey.current)
+    setRegistering(false)
+    if(!result.ok)return setRegistrationError(result.message)
+    toast(`Patient ${result.patient.name} registered (${result.patient.patientCode}).`,'success')
+    setSelected(result.patient.id);setTab('summary');setNewOpen(false);setRegistration(emptyRegistration);registrationKey.current=commandKey()
+  }
   const createPatient=()=>{
     if(role!=='staff')return
+    if(serverSession)return
     const result=actions.createPatientRecord({
       person:{firstName:newPatient.firstName,lastName:newPatient.lastName,dob:newPatient.dob,sex:newPatient.sex,phone:newPatient.phone,email:newPatient.email,address:newPatient.address},
       patient:{preferredBranch:newPatient.preferredBranch,allergies:newPatient.allergies,medicalHistory:newPatient.medicalHistory,dentalHistory:newPatient.dentalHistory,emergencyContact:newPatient.emergencyContact,consent:newPatient.consent},
@@ -48,19 +83,29 @@ export function PatientsPage({ role, store, context, setPage }) {
   const tabs=[{key:'summary',label:'Summary'},{key:'visits',label:'Visit history',count:visits.length},{key:'clinical',label:'Clinical',count:treatments.length},{key:'hmo',label:'HMO',count:hmo.length},{key:'documents',label:'Documents'}]
   return <>
     <PageHeader title="Centralized Patient Records" text="Identity and contact details are shared across the patient record. Staff may maintain approved demographics; dentists see those fields read-only and edit only clinical information." aside={role==='dentist'&&encounter&&(['Called','Treatment Ready'].includes(encounter.status)||encounter.status==='Served'&&encounter.visitStatus==='In Treatment')?<Button onClick={()=>setPage('treatment',context)}>{encounter.treatmentId?'Continue Treatment':'Open Treatment'}</Button>:null}/>
-    {!patient?<Notice>The selected patient is unavailable in your current scope. {availablePatients.length>0&&<Button onClick={()=>setSelected(availablePatients[0].id)}>Open an available patient</Button>}{role==='staff'&&<Button onClick={()=>setNewOpen(true)}>New Patient</Button>}</Notice>:<div className="records-layout">
-      <Card className="patient-list" title="Patients" actions={role==='staff'?<Button size="sm" onClick={()=>setNewOpen(true)}>New Patient</Button>:null}><input className="search-input" aria-label="Search patients" placeholder="Search patient..." value={search} onChange={e=>setSearch(e.target.value)}/><div className="patient-list-scroll">{availablePatients.filter(p=>`${p.name} ${p.patientCode||''}`.toLowerCase().includes(search.trim().toLowerCase())).map(p=><button key={p.id} className={selected===p.id?'selected':''} onClick={()=>{setSelected(p.id);setTab('summary')}}><span className="avatar">{p.name.split(' ').map(x=>x[0]).slice(0,2).join('')}</span><div><b>{p.name}</b><small>{p.patientCode||p.id} • {p.preferredBranch} • {p.hmo}</small></div></button>)}</div></Card>
-      <div>
-        <Card className="patient-header-card"><div className="patient-record-head"><div className="avatar xl">{patient.name.split(' ').map(x=>x[0]).slice(0,2).join('')}</div><div><h2>{patient.name}</h2><p>{patient.patientCode||patient.id} • {patient.dob||'DOB not set'} • {patient.sex||'—'} • {patient.preferredBranch}</p><div className="chip-row"><span className="mini-chip">Allergies: {patient.allergies}</span>{patient.consent&&<span className="mini-chip success">Consent on file</span>}</div></div></div></Card>
+    {!patient&&!serverSession?<Notice>The selected patient is unavailable in your current scope. {availablePatients.length>0&&<Button onClick={()=>setSelected(availablePatients[0].id)}>Open an available patient</Button>}{role==='staff'&&<Button onClick={()=>setNewOpen(true)}>New Patient</Button>}</Notice>:<div className="records-layout">
+      <Card className="patient-list" title="Patients" actions={role==='staff'?<Button size="sm" onClick={()=>setNewOpen(true)}>New Patient</Button>:null}><input className="search-input" aria-label="Search patients" placeholder={serverSession&&role!=='dentist'?'Search the clinic directory…':'Search patient...'} value={search} onChange={e=>setSearch(e.target.value)}/>{searchError&&<Notice tone="warning" title="Patient search unavailable">{searchError} <Button size="sm" variant="ghost" onClick={()=>setSearchAttempt(searchAttempt+1)}>Retry</Button></Notice>}{serverSession&&availablePatients.length===0&&!searchError&&<p className="muted">{role==='dentist'?'Patients appear here from your appointments and queue.':'Type at least 2 characters to search the clinic patient directory.'}</p>}<div className="patient-list-scroll">{availablePatients.filter(p=>`${p.name} ${p.patientCode||''} ${p.phone||''}`.toLowerCase().includes(search.trim().toLowerCase())).map(p=><button key={p.id} className={selected===p.id?'selected':''} onClick={()=>{setSelected(p.id);setTab('summary')}}><span className="avatar">{p.name.split(' ').map(x=>x[0]).slice(0,2).join('')}</span><div><b>{p.name}</b><small>{p.serverProjection?p.patientCode:`${p.patientCode||p.id} • ${p.preferredBranch} • ${p.hmo}`}</small></div></button>)}</div></Card>
+      {patient?      <div>
+        <Card className="patient-header-card"><div className="patient-record-head"><div className="avatar xl">{patient.name.split(' ').map(x=>x[0]).slice(0,2).join('')}</div><div><h2>{patient.name}</h2><p>{patient.serverProjection?patient.patientCode:<>{patient.patientCode||patient.id} • {patient.dob||'DOB not set'} • {patient.sex||'—'} • {patient.preferredBranch}</>}</p><div className="chip-row">{!patient.serverProjection&&<span className="mini-chip">Allergies: {patient.allergies}</span>}{patient.consent&&<span className="mini-chip success">Consent on file</span>}</div></div></div></Card>
         <Tabs tabs={tabs} active={tab} onChange={setTab}/>
-        {tab==='summary'&&<SummaryTab key={patient.id} patient={patient} role={role} onSave={saveRecord}/>}
+        {tab==='summary'&&(serverPatient
+          ?<ServerPatientSummary key={patient.id} patient={patient} role={role} branches={state.branches} toast={toast}/>
+          :<SummaryTab key={patient.id} patient={patient} role={role} onSave={saveRecord}/>)}
         {tab==='visits'&&<Card title="Cross-branch visit history"><Table rows={visits} columns={[{key:'date',label:'Date',render:a=>dateLabel(a.date)},{key:'branch',label:'Branch'},{key:'service',label:'Service'},{key:'dentist',label:'Dentist',render:a=>dentistName(a.dentistId,state.dentists)},{key:'status',label:'Status',render:a=><Status>{a.status}</Status>}]} /></Card>}
         {tab==='clinical'&&<Card title="Treatment history" subtitle={role==='dentist'?'Clinic server records you may read: your own treatments and, while you treat this patient, their earlier completed treatments. Read-only unless you are the treating Dentist.':'Staff read-only clinical record'}>{treatments.length?treatments.map(t=><div className="clinical-history" key={t.id}><div><b>{dateLabel(t.date)} • {t.procedure||t.plan||'Treatment in progress'}</b>{t.complaint&&<p>Complaint: {t.complaint}</p>}{t.plan&&<p>Plan: {t.plan}</p>}{t.notes&&<p>{t.notes}</p>}{Array.isArray(t.procedures)&&t.procedures.length>0&&<p>{t.procedures.map(p=>`${p.serviceName||state.services.find(s=>s.id===p.serviceId)?.name||'Service'} × ${p.quantity}`).join(', ')}</p>}<small>{t.dentistName||dentistName(t.dentistId,state.dentists)} • {t.status}</small>{!t.server&&<small className="block-muted">{t.legacyAppointment?'Historical demo record':'Recorded before server treatment records'} — read-only</small>}</div><Status>{t.status}</Status></div>):<Notice>No treatment history recorded.</Notice>}</Card>}
         {tab==='hmo'&&<Card title="HMO record" subtitle="Server HMO cases for this patient's visits; earlier browser records are marked as history. Membership is recorded in HMO Management."><Table rows={hmo} columns={[{key:'provider',label:'Provider'},{key:'memberId',label:'Member ID'},{key:'clinicDate',label:'Visit',render:h=>h.clinicDate?dateLabel(h.clinicDate):h.legacy?'Earlier record':'—'},{key:'eligibility',label:'Eligibility',render:h=><Status>{h.eligibility}</Status>},{key:'status',label:'Status',render:h=><Status>{h.status}</Status>}]} /></Card>}
         {tab==='documents'&&<PatientDocumentsTab patient={patient} role={role} store={store}/>}
-      </div>
+      </div>:<Card title="Patient record"><p>Select a patient from the list to open their record.</p></Card>}
     </div>}
-    <Modal open={newOpen} onClose={()=>setNewOpen(false)} title="Create patient record" subtitle="Identity/contact fields create one PERSON record; PATIENTS stores only patient-specific information." wide><div className="form-grid">
+    {serverSession?<Modal open={newOpen} onClose={()=>setNewOpen(false)} title="Register patient" subtitle="Creates one clinic-wide patient record on the clinic server (no login account). If the email is already on file, select that patient instead."><div className="form-grid">
+      <Field label="First name" required><input value={registration.firstName} onChange={e=>updateRegistration('firstName',e.target.value)}/></Field>
+      <Field label="Last name" required><input value={registration.lastName} onChange={e=>updateRegistration('lastName',e.target.value)}/></Field>
+      <Field label="Mobile number" hint="Optional. 10 digits after +63."><input inputMode="tel" value={registration.phone} placeholder="9171234567" onChange={e=>updateRegistration('phone',e.target.value)}/></Field>
+      <Field label="Email" hint="Optional."><input type="email" value={registration.email} onChange={e=>updateRegistration('email',e.target.value)}/></Field>
+      <Field label="Date of birth" hint="Optional."><input type="date" value={registration.dob} onChange={e=>updateRegistration('dob',e.target.value)}/></Field>
+      {registrationError&&<div className="span-2"><Notice tone="warning">{registrationError}</Notice></div>}
+      <Button className="span-2" disabled={registering} onClick={registerOnServer}>{registering?'Registering…':'Register patient'}</Button>
+    </div></Modal>:<Modal open={newOpen} onClose={()=>setNewOpen(false)} title="Create patient record" subtitle="Identity/contact fields create one PERSON record; PATIENTS stores only patient-specific information." wide><div className="form-grid">
       <Field label="First name" required><input value={newPatient.firstName} onChange={e=>setNewPatient({...newPatient,firstName:e.target.value})}/></Field>
       <Field label="Last name" required><input value={newPatient.lastName} onChange={e=>setNewPatient({...newPatient,lastName:e.target.value})}/></Field>
       <Field label="Phone" required><input value={newPatient.phone} onChange={e=>setNewPatient({...newPatient,phone:e.target.value})}/></Field>
@@ -73,7 +118,7 @@ export function PatientsPage({ role, store, context, setPage }) {
       <label className="check-control"><input type="checkbox" checked={newPatient.consent} onChange={e=>setNewPatient({...newPatient,consent:e.target.checked})}/><span><b>Consent recorded</b><small>Frontend marker only; real consent evidence is stored separately.</small></span></label>
       <label className="check-control"><input type="checkbox" checked={newPatient.createPortalAccount} onChange={e=>setNewPatient({...newPatient,createPortalAccount:e.target.checked})}/><span><b>Create patient portal account</b><small>Optional. A patient record may exist without a login.</small></span></label>
       <Button className="span-2" onClick={createPatient}>Create Central Patient Record</Button>
-    </div></Modal>
+    </div></Modal>}
   </>
 }
 
@@ -107,6 +152,81 @@ function SummaryTab({ patient, role, onSave }) {
   </Card>
 }
 
+// M4: the Patient profile of a server Patient, loaded from and saved to the clinic server. No browser or demo value is ever
+// shown as the patient's profile: a failed load is an explicit error with Retry. Only Staff (front desk) may edit, and only
+// the non-clinical fields; Dentist and Owner see a read-only projection. Clinical history has no server record yet.
+function ServerPatientSummary({ patient, role, branches, toast }) {
+  // Dentists have no generic Patient-record access yet (POLICY DECISION REQUIRED); their workflow screens carry the patient
+  // context care needs. Nothing is requested from the Patient record API for them.
+  if(role==='dentist')return <Card title="Patient summary" subtitle="Identity from your appointments and queue.">
+    <div className="form-grid">
+      <Field label="Patient code"><input value={patient.patientCode||''} disabled/></Field>
+      <Field label="Name"><input value={patient.name||''} disabled/></Field>
+    </div>
+    <Notice tone="info" title="Full patient record not available to Dentists yet">A Dentist’s access to the complete patient record is pending a clinic decision. Your schedule, queue and treatment screens show the details needed for each visit, and clinical history is not stored on the clinic server yet.</Notice>
+  </Card>
+  return <StaffPatientSummary patient={patient} role={role} branches={branches} toast={toast}/>
+}
+
+function StaffPatientSummary({ patient, role, branches, toast }) {
+  const [load,setLoad]=useState({status:'loading',record:null,message:''})
+  const [form,setForm]=useState(null)
+  const [index,setIndex]=useState(null)
+  const [saving,setSaving]=useState(false)
+  const [problem,setProblem]=useState(null)
+  const [attempt,setAttempt]=useState(0)
+  React.useEffect(()=>{
+    let live=true
+    setLoad({status:'loading',record:null,message:''});setProblem(null)
+    Promise.all([loadPatientRecord(patient.id),loadPatientRecordIndex(patient.id)]).then(([record,linked])=>{
+      if(!live)return
+      if(!record.ok)return setLoad({status:'error',record:null,message:record.message})
+      setLoad({status:'ready',record:record.record,message:''});setForm(record.record);setIndex(linked.ok?linked:null)
+    })
+    return ()=>{live=false}
+  },[patient.id,attempt])
+  if(load.status==='loading')return <Card title="Patient summary"><p role="status">Loading the patient record from the clinic server…</p></Card>
+  if(load.status==='error')return <Card title="Patient summary"><Notice tone="warning" title="Patient record unavailable">{load.message}</Notice><Button className="top-gap" onClick={()=>setAttempt(attempt+1)}>Retry</Button></Card>
+  const record=load.record
+  const full=record.access==='full'
+  const editable=role==='staff'&&full
+  const update=(key,value)=>{setProblem(null);setForm({...form,[key]:value})}
+  const save=async()=>{
+    let next=form
+    if(form.phone!==record.phone){
+      const phone=form.phone.trim()?normalizePhoneNumber(DEFAULT_COUNTRY.dial,form.phone):{ok:true,e164:''}
+      if(!phone.ok)return setProblem({tone:'warning',message:phone.reason})
+      next={...form,phone:phone.e164}
+    }
+    setSaving(true)
+    const result=await savePatientRecord(record,next)
+    setSaving(false)
+    if(!result.ok)return setProblem({tone:'warning',message:result.kind==='conflict'?'This patient record was changed by someone else after you opened it. Reload it to see the latest details before saving again.':result.message,conflict:result.kind==='conflict'})
+    setLoad({status:'ready',record:result.record,message:''});setForm(result.record);setProblem(null)
+    toast(result.unchanged?'No changes to save.':'Patient record updated.','success')
+  }
+  const counts=index?.counts
+  const subtitle=editable?'Staff maintains the non-clinical profile on the clinic server. Clinical history is not edited here.':full?'Read-only.':'Identity only. The full profile is shown to Staff for patients with an appointment or visit at their branches.'
+  return <Card title="Patient summary" subtitle={subtitle}>
+    <div className="form-grid">
+      <Field label="Patient code"><input value={record.patientCode} disabled/></Field>
+      <Field label="First name"><input value={form.firstName} disabled={!editable} onChange={e=>update('firstName',e.target.value)}/></Field>
+      <Field label="Last name"><input value={form.lastName} disabled={!editable} onChange={e=>update('lastName',e.target.value)}/></Field>
+      {record.preferredBranchId!==undefined&&<Field label="Preferred branch"><select value={form.preferredBranchId||''} disabled={!editable} onChange={e=>update('preferredBranchId',e.target.value||null)}><option value="">No preference</option>{branches.map(b=><option key={b.id} value={b.id}>{b.name}</option>)}</select></Field>}
+      <Field label="Mobile number" hint={editable?'10 digits after +63.':undefined}><input inputMode="tel" value={form.phone} disabled={!editable} onChange={e=>update('phone',e.target.value)}/></Field>
+      {record.email!==undefined&&<Field label="Email" hint={record.hasPortalAccount?'This patient has a portal account; their email is changed through account management.':undefined}><input type="email" value={form.email} disabled={!editable||record.hasPortalAccount} onChange={e=>update('email',e.target.value)}/></Field>}
+      <Field label="Date of birth"><input type="date" value={form.dob} disabled={!editable} onChange={e=>update('dob',e.target.value)}/></Field>
+      {record.sex!==undefined&&<Field label="Sex"><input value={form.sex} disabled={!editable} onChange={e=>update('sex',e.target.value)}/></Field>}
+      {record.address!==undefined&&<Field label="Address"><textarea value={form.address} disabled={!editable} onChange={e=>update('address',e.target.value)}/></Field>}
+      {record.emergencyContact!==undefined&&<Field label="Emergency contact"><textarea value={form.emergencyContact} disabled={!editable} onChange={e=>update('emergencyContact',e.target.value)}/></Field>}
+      <div className="span-2"><Notice tone="info" title="Clinical history">Allergies, medical history and dental history are not stored on the clinic server yet, so they are not shown or editable here. They change only through an authorized Dentist workflow.</Notice></div>
+      {counts&&<div className="span-2"><Notice tone="info" title="Linked records">{[['appointments','appointments'],['visits','visits'],['treatments','treatments'],['invoices','invoices'],['hmo_cases','HMO cases']].map(([key,label])=>`${counts[key]} ${label}`).join(' • ')}{index.limit&&Object.values(counts).some(n=>n>=index.limit)?` (showing up to ${index.limit} per list)`:''}. These records are kept in their own modules and open from the tabs above.</Notice></div>}
+      {problem&&<div className="span-2"><Notice tone={problem.tone} title={problem.conflict?'Record changed':undefined}>{problem.message}{problem.conflict&&<> <Button size="sm" variant="ghost" onClick={()=>setAttempt(attempt+1)}>Reload record</Button></>}</Notice></div>}
+      {editable&&<Button className="span-2" disabled={saving} onClick={save}>{saving?'Saving…':'Save changes'}</Button>}
+    </div>
+  </Card>
+}
+
 function PatientDocumentsTab({ patient, role, store }) {
   const { toast, session } = store
   const [docs, setDocs] = useState([])
@@ -123,7 +243,8 @@ function PatientDocumentsTab({ patient, role, store }) {
   const [uploading, setUploading] = useState(false)
   const [expandedExtraction, setExpandedExtraction] = useState(null)
 
-  const patientIdentifier = patient?.publicId || patient?.patientCode || patient?.id
+  // M14 callers name a Patient by public_id only; a browser-only record has none and so loads no server documents.
+  const patientIdentifier = patient?.publicId || null
 
   const reload = async () => {
     if (!patientIdentifier) return

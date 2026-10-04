@@ -7,6 +7,7 @@ use App\Http\Controllers\Auth\RegisteredPatientController;
 use App\Http\Controllers\CurrentUserController;
 use App\Http\Controllers\HmoController;
 use App\Http\Controllers\PatientDirectoryController;
+use App\Http\Controllers\PatientRecordController;
 use App\Http\Controllers\PatientRegistrationController;
 use App\Http\Controllers\PricingController;
 use App\Http\Controllers\QueueController;
@@ -155,6 +156,12 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureAccountAccess::cla
     Route::get('/patients', [PatientDirectoryController::class, 'index'])->middleware('role:staff,owner');
     // Minimal M4 front-desk registration for walk-ins: Person + Patient, no login account (decision D4).
     Route::post('/patients', [PatientRegistrationController::class, 'store'])->middleware('role:staff,owner');
+    // M4 Patient record: non-clinical profile read (Patient own, Staff in-scope, Owner, Dentist with a Visit/appointment),
+    // Staff-only non-clinical profile update with optimistic revision, and a read-only index of linked records. {patient} binds
+    // on the ULID public_id only (numeric ids and patient codes are 404); PatientPolicy decides access.
+    Route::get('/patients/{patient}', [PatientRecordController::class, 'show']);
+    Route::patch('/patients/{patient}', [PatientRecordController::class, 'update'])->middleware('role:staff');
+    Route::get('/patients/{patient}/records', [PatientRecordController::class, 'records']);
 
     // M6 Appointment Booking & Smart Scheduling. {appointment} binds on the ULID public_id. State changes are named
     // commands only (no generic status PATCH); per-record access is decided by AppointmentPolicy. Dentists may read

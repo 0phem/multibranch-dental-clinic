@@ -2,7 +2,7 @@
 
 // Child process for concurrency tests: boots its own application (its own database connection), waits for a shared
 // start instant, then sends one real JSON POST through the HTTP kernel with a Sanctum token and optional headers.
-// Usage: php concurrent_request.php <bearer-token> <path> <json-payload> <start-at-unix-microtime> [<json-headers>]
+// Usage: php concurrent_request.php <bearer-token> <path> <json-payload> <start-at-unix-microtime> [<json-headers>] [<http-method>]
 
 require __DIR__.'/../../vendor/autoload.php';
 $app = require __DIR__.'/../../bootstrap/app.php';
@@ -15,7 +15,7 @@ $server = ['HTTP_AUTHORIZATION' => 'Bearer '.$token, 'HTTP_ACCEPT' => 'applicati
 foreach ($headers as $name => $value) {
     $server['HTTP_'.strtoupper(str_replace('-', '_', $name))] = $value;
 }
-$request = Illuminate\Http\Request::create($path, 'POST', [], [], [], $server, $payload);
+$request = Illuminate\Http\Request::create($path, $argv[6] ?? 'POST', [], [], [], $server, $payload);
 
 while (microtime(true) < (float) $startAt) {
     usleep(100);

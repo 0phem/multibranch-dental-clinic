@@ -47,6 +47,7 @@ export function administrationActions(run) {
     return {ok:true,record,status}
   })
   const updatePatientRecord=run(({state,session,now,event},id,input={})=>{
+    if(session.serverUserId)return fail('Patient records are maintained on the clinic server. Use the patient record screen.')
     const patient=state.patients.find(p=>p.id===id)
     if(!patient||!['staff','dentist'].includes(session.role)||!patientInScope(patient,state,session)||!permitted(state,session,session.role==='staff'?'patient-demographics':'clinical-records')||!isRecord(input))return fail('Patient is outside your current permitted scope.')
     const person=state.persons.find(p=>p.id===patient.personId)

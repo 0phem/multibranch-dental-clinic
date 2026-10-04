@@ -37,10 +37,10 @@ class DocumentController extends Controller
 
         if ($request->filled('patient_id')) {
             $patientId = $request->input('patient_id');
-            $patient = Patient::where('public_id', $patientId)
-                ->orWhere('patient_code', $patientId)
-                ->orWhere('id', is_numeric($patientId) ? (int) $patientId : 0)
-                ->first();
+            // M4 identity contract: a Patient is named by public_id only (never patient_code or the bigint id).
+            $patient = is_string($patientId) && \Illuminate\Support\Str::isUlid($patientId)
+                ? Patient::where('public_id', strtolower($patientId))->first()
+                : null;
             $q->where('patient_id', $patient?->id ?? 0);
         }
 

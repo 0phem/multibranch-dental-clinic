@@ -43,7 +43,7 @@ class RegisteredPatientController extends Controller
 
             Patient::create([
                 'person_id' => $person->id,
-                'patient_code' => $this->nextPatientCode(),
+                'patient_code' => Patient::nextCode(),
                 'consent' => false,
             ]);
 
@@ -104,10 +104,5 @@ class RegisteredPatientController extends Controller
                 'phone' => 'An existing patient record may already match these details. Please contact the clinic for account assistance.',
             ]);
         }
-    }
-
-    private function nextPatientCode(): string
-    {
-        return 'PAT-'.str_pad((string) (Patient::count() + 1), 4, '0', STR_PAD_LEFT);
     }
 }

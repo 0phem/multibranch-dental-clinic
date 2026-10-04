@@ -179,6 +179,7 @@ export function createWorkflowActions({getState,commit,getSession,clock=clinicNo
   })
 
   const createPatientRecord=run(({state,session,now,event},input={})=>{
+    if(session.serverUserId)return fail('Patients are registered on the clinic server. Use the patient registration screen.')
     if(!isRecord(input)||!isRecord(input.person)||!isRecord(input.patient))return fail('Enter patient and contact details.')
     if(session.role!=='staff'&&session.role!=='owner')return fail('Only Staff or Owner can create a patient record.')
     const {person,patient,createPortalAccount=false}=input

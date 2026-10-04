@@ -30,7 +30,7 @@ class RegisterWalkInPatientRequest extends FormRequest
             'email' => ['nullable', 'email:rfc', 'max:255'],
             // Same normalized Philippine mobile format as registration (src/phone.js).
             'phone' => ['nullable', 'regex:/^\+63[1-9][0-9]{9}$/'],
-            'date_of_birth' => ['nullable', 'date_format:Y-m-d', 'before_or_equal:today'],
+            'date_of_birth' => ['nullable', 'date_format:Y-m-d', 'before_or_equal:'.\App\Support\ClinicClock::today()],
             'id' => ['prohibited'],
             'public_id' => ['prohibited'],
             'patient_code' => ['prohibited'],

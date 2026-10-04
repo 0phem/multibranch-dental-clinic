@@ -3,6 +3,7 @@ import { Button, Field, Modal, Notice, PageHeader, Status } from '../components.
 import { dateLabel } from '../logic.js'
 import { patientContext } from '../patient-view.js'
 import { DefinitionList, RecordCard } from '../patient-ui.jsx'
+import { loadPatientRecord } from '../patient-records-api.js'
 import { fetchMyDocuments, fetchMyConsents, submitDocumentUpload, retractDocument, downloadDocumentFile } from '../documents-api.js'
 
 const NO_ACCOUNT = <Notice tone="warning" title="We couldn’t confirm your account">Reopen your workspace, or ask the clinic to check your account access.</Notice>
@@ -20,6 +21,21 @@ export function PatientMePage({ store, setPage }) {
   const [uploading, setUploading] = useState(false)
   const [retractTarget, setRetractTarget] = useState(null)
   const [retractReason, setRetractReason] = useState('')
+
+  // M4: with a server session the Patient's profile is read from the clinic server (their own record, resolved from the
+  // account, never a supplied id). The browser projection created at sign-in is not shown as the profile.
+  const serverProfile = !!(session?.serverUserId && session?.patientPublicId)
+  const [profile, setProfile] = useState({ status: serverProfile ? 'loading' : 'local', record: null, message: '' })
+  const [profileAttempt, setProfileAttempt] = useState(0)
+  useEffect(() => {
+    if (!serverProfile) return undefined
+    let live = true
+    setProfile({ status: 'loading', record: null, message: '' })
+    loadPatientRecord(session.patientPublicId).then(result => {
+      if (live) setProfile(result.ok ? { status: 'ready', record: result.record, message: '' } : { status: 'error', record: null, message: result.message })
+    })
+    return () => { live = false }
+  }, [serverProfile, session?.patientPublicId, profileAttempt])
 
   const reload = async () => {
     try {
@@ -92,13 +108,23 @@ export function PatientMePage({ store, setPage }) {
 
     <section className="pt-record" aria-labelledby="pt-me-profile-title">
       <header><div><h2 id="pt-me-profile-title" className="pt-record-title">Profile</h2><p className="pt-record-sub">This information is read-only for now.</p></div></header>
-      <DefinitionList items={[
-        { label: 'Name', value: ctx.patient.name },
-        { label: 'Email', value: ctx.patient.email },
-        { label: 'Phone', value: ctx.patient.phone },
-        { label: 'Date of birth', value: ctx.patient.dob ? dateLabel(ctx.patient.dob) : null },
-        { label: 'Preferred branch', value: branch?.name },
-      ]}/>
+      {serverProfile
+        ? profile.status === 'loading' ? <Notice>Loading your profile…</Notice>
+        : profile.status === 'error' ? <Notice tone="warning" title="We couldn’t load your profile">{profile.message} <Button size="sm" variant="ghost" onClick={() => setProfileAttempt(profileAttempt + 1)}>Retry</Button></Notice>
+        : <DefinitionList items={[
+          { label: 'Name', value: profile.record.name },
+          { label: 'Email', value: profile.record.email },
+          { label: 'Phone', value: profile.record.phone },
+          { label: 'Date of birth', value: profile.record.dob ? dateLabel(profile.record.dob) : null },
+          { label: 'Preferred branch', value: profile.record.preferredBranch },
+        ]}/>
+        : <DefinitionList items={[
+          { label: 'Name', value: ctx.patient.name },
+          { label: 'Email', value: ctx.patient.email },
+          { label: 'Phone', value: ctx.patient.phone },
+          { label: 'Date of birth', value: ctx.patient.dob ? dateLabel(ctx.patient.dob) : null },
+          { label: 'Preferred branch', value: branch?.name },
+        ]}/>}
       <p className="pt-hint">Editing your profile will be available once secure, verified changes are supported. Contact the clinic if any of this needs to change now.</p>
     </section>
 

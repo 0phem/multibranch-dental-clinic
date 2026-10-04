@@ -65,6 +65,8 @@ export function patientInScope(patient, state, session) {
   if (session.role==='patient') return patient.id===session.patientId
   if (session.role==='owner') return true
   if (session.role==='staff' && patient.preferredBranchId===session.branchId) return true
+  // M4: server Patients (public ids) reach a Staff session only through the server directory or branch-scoped server records, so the server has already decided access; the Patient identity itself is clinic-wide.
+  if (session.role==='staff' && patient.serverProjection && session.serverUserId) return true
   return [...state.appointments,...state.queue,...state.treatments].some(x=>x.patientId===patient.id&&inScope(x,session))
 }
 export function encounterContext(entry) {

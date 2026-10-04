@@ -30,7 +30,7 @@ class PatientRegistrationController extends Controller
 
         return IdempotentCommand::run(
             CommandKey::class, $actor, $this->idempotencyKey($request, true), 'patient.register', $data,
-            function () use ($data) {
+            function () use ($data, $actor) {
                 if ($data['email'] !== null && Person::where('email', $data['email'])->exists()) {
                     throw VisitCommandException::rule('patient_email_exists', 'A record with this email already exists. Search the patient directory and select the existing patient.', 'email');
                 }
@@ -45,9 +45,11 @@ class PatientRegistrationController extends Controller
                 ]);
                 $patient = Patient::create([
                     'person_id' => $person->id,
-                    'patient_code' => 'PAT-'.str_pad((string) (Patient::count() + 1), 4, '0', STR_PAD_LEFT),
+                    'patient_code' => Patient::nextCode(),
                     'consent' => false,
                 ]);
+
+                app(\App\Services\Audit\AuditService::class)->recordClinical('patient.registered', $actor, $patient, ['source' => 'front_desk']);
 
                 return [['data' => [
                     'id' => $patient->public_id,

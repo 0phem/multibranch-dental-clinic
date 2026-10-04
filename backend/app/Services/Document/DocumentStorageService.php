@@ -189,10 +189,8 @@ class DocumentStorageService
             throw new DocumentException(422, 'patient_required', 'patient_id is required.');
         }
 
-        $patient = Patient::where('public_id', $patientId)
-            ->orWhere('patient_code', $patientId)
-            ->orWhere('id', is_numeric($patientId) ? (int) $patientId : 0)
-            ->first();
+        // M4 identity contract: a Patient is named by public_id only (never patient_code or the bigint id).
+        $patient = \Illuminate\Support\Str::isUlid($patientId) ? Patient::where('public_id', strtolower($patientId))->first() : null;
         if (! $patient) {
             throw new DocumentException(404, 'patient_not_found', 'Specified patient does not exist.');
         }

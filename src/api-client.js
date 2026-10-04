@@ -203,6 +203,10 @@ export function transitionAppointment(id, name, payload, key) { return command(`
 // Minimal M4 Patient directory (Staff/Owner selection) and front-desk registration (Person + Patient, no login).
 export function searchPatients(params) { return request(`/api/patients${query(params)}`) }
 export function registerPatient(payload, key) { return command('/api/patients', payload, key) }
+// M4 Patient record: non-clinical profile (read; Staff-only edit with expected_revision) and the read-only linked-record index.
+export function getPatientRecord(id) { return request(`/api/patients/${encodeURIComponent(id)}`) }
+export function updatePatientRecordRemote(id, payload) { return request(`/api/patients/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(payload) }) }
+export function getPatientRecordIndex(id) { return request(`/api/patients/${encodeURIComponent(id)}/records`) }
 
 // M8 Patient Check-In and the shared Visit / Clinical Encounter. Raw calls only; src/visits-api.js owns mapping.
 export function listVisits(params) { return request(`/api/visits${query(params)}`) }

@@ -165,3 +165,18 @@ test('server-authenticated Owner cannot replace authoritative branches through t
   assert.equal(f.actions.saveBranch('b1',{name:'Local replacement'}).ok,false)
   assert.equal(JSON.stringify(f.state.branches),before)
 })
+
+test('server-authenticated Staff cannot create or edit Patient records through the obsolete local commands (M4)',()=>{
+  const f=fixture();f.role('staff',{serverUserId:'01K00000000000000000000002'})
+  const before=JSON.stringify({patients:f.state.patients,persons:f.state.persons,users:f.state.users})
+  const created=f.actions.createPatientRecord({person:{firstName:'New',lastName:'Patient',phone:'09170009999'},patient:{preferredBranch:'Branch A'}})
+  assert.equal(created.ok,false);assert.match(created.message,/clinic server/)
+  const updated=f.actions.updatePatientRecord('p1',{person:{firstName:'Changed'},patient:{}})
+  assert.equal(updated.ok,false);assert.match(updated.message,/clinic server/)
+  assert.equal(JSON.stringify({patients:f.state.patients,persons:f.state.persons,users:f.state.users}),before,'no local Patient authority is written')
+})
+
+test('without a server session the local Patient commands keep their existing behaviour (demo/local workspace)',()=>{
+  const f=fixture()
+  assert.equal(f.actions.createPatientRecord({person:{firstName:'New',lastName:'Patient',phone:'09170009998'},patient:{preferredBranch:'Branch A'}}).ok,true)
+})
