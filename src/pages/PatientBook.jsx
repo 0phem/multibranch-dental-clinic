@@ -99,7 +99,7 @@ function SmartBranchStep({ state, serviceId, branchId, onPick, onBack, onContinu
       {timeout:8000},
     )
   }
-  const options=lookup.branches.map(b=>{const branch=state.branches.find(x=>x.id===b.id);return {value:b.id,label:b.name,description:branch?`${branch.city} • ${displayTime(branch.open)}–${displayTime(branch.close)}`:undefined}})
+  const options=lookup.branches.map(b=>{const branch=state.branches.find(x=>x.id===b.id);return {value:b.id,label:b.name,description:branch?`${branch.city} • Confirm opening hours with the clinic`:undefined}})
   const chosen=lookup.branches.find(b=>b.id===branchId)
   return <>
     <StageHeader eyebrow="Smart Find · Step 2 of 3" title="Which branch works for you?" headingRef={headingRef}
@@ -332,7 +332,7 @@ export function PatientBookingPage({ store, setPage, context }) {
       {stage==='manual-branch'&&<>
         <StageHeader eyebrow="Manual booking · Step 1 of 4" title="Which clinic works best for you?" headingRef={headingRef}/>
         <ChoiceGroup legend="Branch" name="manual-branch" value={form.branchId} onChange={value=>{setForm({...emptyForm,branchId:value});save({mode:'manual',branchId:value,serviceId:null,date:null,start:null})}}
-          options={openBranches.map(b=>({value:b.id,label:b.name,description:`${b.city} • ${displayTime(b.open)}–${displayTime(b.close)}`}))}/>
+          options={openBranches.map(b=>({value:b.id,label:b.name,description:`${b.city} • Confirm opening hours with the clinic`}))}/>
         <div className="pt-stage-footer"><Button variant="ghost" onClick={()=>{setMode(null);setStage('mode')}}>Back</Button><Button icon="arrow" onClick={()=>setStage('manual-service')} disabled={!form.branchId}>Continue</Button></div>
       </>}
       {stage==='manual-service'&&<ServiceStep services={servicesAt(state,form.branchId)} serviceId={form.serviceId} headingRef={headingRef} stepLabel="Manual booking · Step 2 of 4"

@@ -14,6 +14,20 @@ class Branch extends Model
 {
     use HasFactory;
 
+    protected static function booted(): void
+    {
+        static::creating(function (self $branch) {
+            $branch->public_id ??= (string) \Illuminate\Support\Str::ulid();
+        });
+    }
+
+    public function resolveRouteBindingQuery($query, $value, $field = null)
+    {
+        // Keep the frozen Phase 2A bridge during downstream migration. Never bind bigint IDs.
+        return parent::resolveRouteBindingQuery($query, $value,
+            $field ?? (\Illuminate\Support\Str::isUlid($value) ? 'public_id' : 'legacy_ref'));
+    }
+
     protected $fillable = [
         'legacy_ref',
         'branch_code',

@@ -17,6 +17,8 @@ export function mapBranch(row) {
     id: row.id, branchCode: row.branch_code, name: row.name, city: row.city, address: row.address,
     phone: row.phone, open: row.open_time?.slice(0, 5), close: row.close_time?.slice(0, 5),
     status: row.status, threshold: row.capacity_threshold,
+    ...(row.public_id ? { publicId: row.public_id } : {}),
+    ...(row.operating_data_status ? { operatingDataStatus: row.operating_data_status } : {}),
   }
 }
 
@@ -77,6 +79,12 @@ export async function fetchReferenceData(role) {
   if (failed) return { ok: false, kind: failed.kind, message: failed.message }
 
   const byKey = Object.fromEntries(keys.map((key, i) => [key, results[i].data]))
+  // A successful HTTP response is not proof of a usable catalog. Fail visibly, never seed a fallback.
+  if (keys.some(key => !Array.isArray(byKey[key])) || byKey.branches.some(row =>
+    !row || typeof row.id !== 'string' || !row.id || typeof row.name !== 'string' || !row.name.trim()) ||
+    new Set(byKey.branches.map(row => row.id)).size !== byKey.branches.length) {
+    return { ok: false, kind: 'unavailable', message: 'Clinic branch information is unavailable. Try again.' }
+  }
   const dentists = (byKey.dentists || []).map(mapDentistProfile)
   return {
     ok: true,

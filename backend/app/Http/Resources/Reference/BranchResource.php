@@ -13,6 +13,8 @@ class BranchResource extends JsonResource
     {
         return [
             'id' => $this->legacy_ref,
+            'public_id' => $this->public_id,
+            'operating_data_status' => 'unconfirmed',
             'branch_code' => $this->branch_code,
             'name' => $this->name,
             'city' => $this->city,

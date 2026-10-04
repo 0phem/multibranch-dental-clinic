@@ -68,6 +68,7 @@ export function administrationActions(run) {
     return {ok:true,record}
   })
   const saveBranch=run(({state,session,event},id,form={})=>{
+    if(session.serverUserId)return fail('Branch changes must be saved through the clinic server.')
     const branch=state.branches.find(b=>b.id===id)
     if(session.role!=='owner'||!branch||!isRecord(form))return fail('Only Owner/Admin can update an existing branch.')
     const patch=selected(form,['name','branchCode','city','status','open','close','threshold','phone','address'])

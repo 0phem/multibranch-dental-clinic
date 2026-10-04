@@ -22,18 +22,20 @@ class UpdateBranchRequest extends FormRequest
 
         return [
             'branch_code' => ['sometimes', 'string', 'max:50', Rule::unique('branches', 'branch_code')->ignore($branchId)],
-            'name' => ['sometimes', 'string', 'max:150', Rule::unique('branches', 'name')->ignore($branchId)],
+            'name' => ['sometimes', 'required', 'string', 'max:150', Rule::unique('branches', 'name')->ignore($branchId)],
             'city' => ['sometimes', 'string', 'max:100'],
             'address' => ['sometimes', 'string', 'max:255'],
             'phone' => ['sometimes', 'nullable', 'string', 'max:30'],
             'open_time' => ['sometimes', 'date_format:H:i'],
-            'close_time' => ['sometimes', 'date_format:H:i', 'after:open_time'],
+            'close_time' => ['sometimes', 'date_format:H:i'],
             'status' => ['sometimes', Rule::in(['Open', 'Temporarily Closed', 'Inactive'])],
             'capacity_threshold' => ['sometimes', 'integer', 'min:1', 'max:100'],
 
             // legacy_ref/latitude/longitude/id are never client-mutable — coordinates stay NULL until a
             // real future decision populates them (plan section F); legacy_ref is bridge-internal only.
             'legacy_ref' => ['prohibited'],
+            'public_id' => ['prohibited'],
+            'operating_data_status' => ['prohibited'],
             'latitude' => ['prohibited'],
             'longitude' => ['prohibited'],
             'id' => ['prohibited'],

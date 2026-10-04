@@ -158,3 +158,10 @@ test('server-authenticated Owner cannot provision or revoke accounts through obs
   assert.equal(f.actions.setUserStatus('u2','Inactive').ok,false)
   assert.equal(JSON.stringify({users:f.state.users,persons:f.state.persons,staff:f.state.staff,dentists:f.state.dentists}),before)
 })
+
+test('server-authenticated Owner cannot replace authoritative branches through the obsolete local command',()=>{
+  const f=fixture();f.role('owner',{serverUserId:'01K00000000000000000000003'})
+  const before=JSON.stringify(f.state.branches)
+  assert.equal(f.actions.saveBranch('b1',{name:'Local replacement'}).ok,false)
+  assert.equal(JSON.stringify(f.state.branches),before)
+})

@@ -170,7 +170,7 @@ export function ClinicProvider({ children, initialReferenceData, initialServerAp
       setDentists(result.data.dentists)
       setStaff(result.data.staff)
       setRefDataStatus('ready')
-    })
+    }).catch(()=>{if(!cancelled)setRefDataStatus('error')})
     return ()=>{cancelled=true}
   },[session?.role,initialReferenceData,refDataRetryToken])
 

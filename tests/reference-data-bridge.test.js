@@ -19,6 +19,23 @@ const API_DENTIST = { id: 'd1', userId: 'u3', personId: 'per-d1', name: 'Miguel 
 
 beforeEach(() => { api.__resetCsrfCacheForTests() })
 
+test('branch bootstrap refuses malformed and duplicate catalogs without demo fallback', async () => {
+  for (const branches of [null, {}, [null], [{id: 1, name:'Numeric'}], [API_BRANCH, API_BRANCH]]) {
+    mockFetchSequence([jsonResponse(branches), jsonResponse([]), jsonResponse([]), jsonResponse([])])
+    const result = await fetchReferenceData('patient')
+    assert.equal(result.ok, false)
+    assert.equal(result.kind, 'unavailable')
+    assert.equal(result.data, undefined)
+  }
+})
+
+test('branch mapper preserves server public identity and unconfirmed operating provenance', () => {
+  const row = {...API_BRANCH, public_id:'01K00000000000000000000001', operating_data_status:'unconfirmed'}
+  assert.equal(mapBranch(row).publicId, row.public_id)
+  assert.equal(mapBranch(row).operatingDataStatus, 'unconfirmed')
+  assert.equal(mapBranch(row).id, 'b1', 'downstream legacy references are not renumbered')
+})
+
 // ---- Mapper parity: exact legacy field shapes (Phase 2A plan, section A/D/J) ------------------------------
 
 test('mapBranch produces the exact legacy INITIAL_BRANCHES shape', () => {

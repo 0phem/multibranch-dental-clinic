@@ -21,7 +21,7 @@ export function BranchesPage({ store }) {
   const [selected,setSelected]=useState(state.branches[0]?.id||'')
   const branch=state.branches.find(b=>b.id===selected)
   const [form,setForm]=useState(branch||{})
-  React.useEffect(()=>setForm(branch||{}),[selected])
+  React.useEffect(()=>setForm(branch||{}),[branch])
   // Phase 2A: branches/branchServices are backend-authoritative — the API call happens first, and only its
   // confirmed response is adopted into local state (never an optimistic local success ahead of the
   // server). See adoptBranchFromServer/adoptBranchServiceFromServer (administration.js) and the Phase 2A
@@ -40,7 +40,8 @@ export function BranchesPage({ store }) {
     if(!adopted.ok)toast(adopted.message,'warning')
   }
   return <>
-    <PageHeader title="Multi-Branch Clinic Management" text="ERD-aligned branch identity plus the operating data required by scheduling, staffing, patient flow, and reporting."/>
+    <PageHeader title="Multi-Branch Clinic Management" text="Clinic locations and operational branch information."/>
+    <Notice tone="warning">Operating hours, branch phone numbers and capacity settings need clinic confirmation. Current values must not be treated as confirmed clinic policy. Holiday and temporary-closure schedules have not been supplied.</Notice>
     <div className="grid-2 admin-config">
       <Card title="Branches" subtitle="Branch identity, location, hours, status, and capacity">
         <div className="branch-selector">{state.branches.map(b=><button key={b.id} className={selected===b.id?'selected':''} onClick={()=>setSelected(b.id)}><div><b>{b.name}</b><small>{b.branchCode} • {b.city}</small></div><Status>{b.status}</Status></button>)}</div>
@@ -50,9 +51,9 @@ export function BranchesPage({ store }) {
         <Field label="Branch code"><input value={form.branchCode||''} onChange={e=>setForm({...form,branchCode:e.target.value})}/></Field>
         <Field label="City"><input value={form.city||''} onChange={e=>setForm({...form,city:e.target.value})}/></Field>
         <Field label="Branch status"><select value={form.status||'Open'} onChange={e=>setForm({...form,status:e.target.value})}><option>Open</option><option>Temporarily Closed</option><option>Inactive</option></select></Field>
-        <Field label="Opening time"><input type="time" value={form.open||'09:00'} onChange={e=>setForm({...form,open:e.target.value})}/></Field>
-        <Field label="Closing time"><input type="time" value={form.close||'18:00'} onChange={e=>setForm({...form,close:e.target.value})}/></Field>
-        <Field label="Capacity threshold"><input type="number" min="40" max="100" value={form.threshold||80} onChange={e=>setForm({...form,threshold:Number(e.target.value)})}/></Field>
+        <Field label="Opening time (unconfirmed)"><input type="time" value={form.open||''} onChange={e=>setForm({...form,open:e.target.value})}/></Field>
+        <Field label="Closing time (unconfirmed)"><input type="time" value={form.close||''} onChange={e=>setForm({...form,close:e.target.value})}/></Field>
+        <Field label="Capacity threshold (unconfirmed)"><input type="number" min="1" max="100" value={form.threshold??''} onChange={e=>setForm({...form,threshold:Number(e.target.value)})}/></Field>
         <Field label="Phone"><input value={form.phone||''} onChange={e=>setForm({...form,phone:e.target.value})}/></Field>
         <Field label="Address"><textarea value={form.address||''} onChange={e=>setForm({...form,address:e.target.value})}/></Field>
         <div className="span-2"><label className="field-label">Available services <small>Branch services • scheduling reads this catalog directly</small></label><div className="permission-list">{state.services.filter(s=>s.status==='Active').map(service=><label className="check-control" key={service.id}><input type="checkbox" checked={serviceActive(service.id)} onChange={()=>toggleService(service.id)}/><span><b>{service.name}</b><small>{service.category} • {service.duration} min • Reference fee (unconfirmed): {peso.format(service.baseFee)}</small></span></label>)}</div></div>
