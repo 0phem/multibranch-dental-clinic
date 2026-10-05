@@ -119,6 +119,34 @@ class BillingHardeningTest extends TestCase
         $this->assertSame(['125.50', '251.00', '251.00'], [$shown->json('data.lines.0.unit_price'), $shown->json('data.gross_amount'), $shown->json('data.patient_responsibility_amount')]);
     }
 
+    public function test_m11_prices_exactly_what_the_m13_resolver_returns_for_branch_base_and_missing_prices(): void
+    {
+        $resolver = app(\App\Services\Pricing\PriceResolver::class);
+        // Base price for svc1 plus a branch override at b1; svc2 has only a base price; a third treatment has no price at all.
+        ServicePrice::create(['service_id' => $this->svc['svc1']->id, 'branch_id' => null, 'kind' => 'priced', 'amount' => '100.10', 'effective_from' => '2026-09-01', 'source' => 'owner_confirmed', 'created_by_user_id' => $this->u['owner']->id, 'created_at' => now()]);
+        $this->price('svc1', 'b1', '125.55', '2026-09-15');
+        ServicePrice::create(['service_id' => $this->svc['svc2']->id, 'branch_id' => null, 'kind' => 'priced', 'amount' => '19.99', 'effective_from' => '2026-09-01', 'source' => 'owner_confirmed', 'created_by_user_id' => $this->u['owner']->id, 'created_at' => now()]);
+
+        $branchTreated = $this->completed('svc1');
+        $baseTreated = $this->completed('svc2');
+        foreach ([[$branchTreated, 'svc1', '125.55', 'branch'], [$baseTreated, 'svc2', '19.99', 'base']] as [$treatment, $service, $amount, $level]) {
+            $direct = $resolver->resolve($this->svc[$service], $this->b['b1'], '2026-09-28');
+            $this->assertSame([$amount, $level], [$direct->amount(), $direct->level()]);
+            $line = $this->createInvoice($treatment)->assertCreated()->json('data.lines.0');
+            $this->assertSame($direct->amount(), $line['unit_price'], 'M11 snapshots exactly the M13 price');
+        }
+        // 19.99 x 2 and 125.55 x 2 are exact.
+        $this->assertSame('39.98', Invoice::whereHas('treatment', fn ($q) => $q->whereKey($baseTreated->id))->value('gross_amount'));
+        $this->assertSame('251.10', Invoice::whereHas('treatment', fn ($q) => $q->whereKey($branchTreated->id))->value('gross_amount'));
+
+        // The base price applies to a branch with no override of its own (b2 is billed the base).
+        $this->assertSame('100.10', $resolver->resolve($this->svc['svc1'], $this->b['b2'], '2026-09-28')->amount());
+        // No authoritative price on the treatment's clinic date (before the first version): an explicit refusal, never a guess or the reference fee.
+        $unpriced = $this->completed('svc1', 'b1', '2026-08-15 09:00:00');
+        $this->createInvoice($unpriced)->assertStatus(422);
+        $this->assertSame(0, Invoice::whereHas('treatment', fn ($q) => $q->whereKey($unpriced->id))->count());
+    }
+
     public function test_payment_amounts_are_validated_decimals_and_never_negative_zero_or_exponent(): void
     {
         $invoice = $this->issued();

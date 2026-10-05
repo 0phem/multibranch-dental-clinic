@@ -16,7 +16,7 @@ use App\Support\ClinicClock;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
-// M13 pricing foundation API. Owner: price history, create a version, retract a future version, resolve any date.
+// M13 pricing foundation API. Owner: paged price history, create a version, retract a future version, resolve any date.
 // Staff: resolve TODAY's price only, for branches in their authorization scope (never a history browser). Dentists,
 // Patients and guests have no pricing access (route middleware). M11 uses PriceResolver internally, not this API.
 class PricingController extends Controller
@@ -27,17 +27,50 @@ class PricingController extends Controller
 
     public function __construct(private readonly PricingService $pricing, private readonly PriceResolver $resolver) {}
 
-    /** Owner: every version of every service (the table is small and append-only). */
-    public function index()
+    private const MAX_PER_PAGE = 100;
+
+    /**
+     * Keyset page over price versions, newest first by the internal id (deterministic and never reused). The cursor is the last
+     * version's public id; an unknown cursor yields an empty page. Authorization (Owner-only route) comes first; the optional
+     * filters can only narrow the result.
+     */
+    private function page(Request $request, $query)
     {
-        return ServicePriceResource::collection(ServicePrice::with(self::RELATIONS)->orderBy('service_id')->orderBy('effective_from')->orderBy('id')->get());
+        $v = $request->validate([
+            'per_page' => ['nullable', 'integer', 'min:1', 'max:'.self::MAX_PER_PAGE],
+            'cursor' => ['nullable', 'string', 'size:26'],
+            'service_ref' => ['nullable', 'string', 'max:64', 'exists:services,legacy_ref'],
+            'branch_ref' => ['nullable', 'string', 'max:64', 'exists:branches,legacy_ref'],
+        ]);
+        $per = (int) ($v['per_page'] ?? 50);
+        if (! empty($v['service_ref'])) {
+            $query->where('service_id', Service::where('legacy_ref', $v['service_ref'])->value('id'));
+        }
+        if (! empty($v['branch_ref'])) {
+            $query->where('branch_id', Branch::where('legacy_ref', $v['branch_ref'])->value('id'));
+        }
+        if (! empty($v['cursor'])) {
+            $query->where('id', '<', ServicePrice::select('id')->where('public_id', strtolower($v['cursor']))->limit(1));
+        }
+        $rows = $query->with(self::RELATIONS)->orderByDesc('id')->limit($per + 1)->get();
+        $page = $rows->take($per)->values();
+
+        return response()->json([
+            'data' => ServicePriceResource::collection($page)->resolve($request),
+            'meta' => ['per_page' => $per, 'next_cursor' => $rows->count() > $per ? $page->last()->public_id : null],
+        ]);
     }
 
-    /** Owner: one service's complete version history, including retracted versions. */
-    public function history(Service $service)
+    /** Owner: price versions (including retracted ones), newest first, keyset-paged. */
+    public function index(Request $request)
     {
-        return ServicePriceResource::collection(ServicePrice::with(self::RELATIONS)->where('service_id', $service->id)
-            ->orderBy('effective_from')->orderBy('id')->get());
+        return $this->page($request, ServicePrice::query());
+    }
+
+    /** Owner: one service's version history (retracted versions included), newest first, keyset-paged. */
+    public function history(Request $request, Service $service)
+    {
+        return $this->page($request, ServicePrice::where('service_id', $service->id));
     }
 
     public function store(CreateServicePriceRequest $request, Service $service): JsonResponse

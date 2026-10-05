@@ -6,8 +6,8 @@ import { __resetCsrfCacheForTests, onSessionInvalidated } from '../src/api-clien
 import { canAccessPage } from '../src/safeguards.js'
 import { NAV } from '../src/data.js'
 
-// M13 pricing foundation: Owner-confirmed, effective-dated server prices are the only authoritative prices. The reference
-// fee (`baseFee`, from services.reference_fee_php) is display-only and never pre-fills, feeds or is sent as a price.
+// M13 pricing foundation: Owner-confirmed, effective-dated server prices are the only authoritative prices. The demo
+// reference fee (services.reference_fee_php) is no longer in the Service API projection and no server-backed screen shows it.
 
 const read = path => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8')
 const row = (fields = {}) => ({
@@ -85,17 +85,15 @@ test('pricing refusals keep their codes; a 401 reaches the shared session-invali
   assert.equal(expired.kind, 'unauthenticated'); assert.equal(seen.length, 1)
 })
 
-test('the reference fee never pre-fills, feeds or is labelled as a confirmed price', () => {
+test('no reference/demo fee reaches, feeds or is shown beside a confirmed price on any server-backed screen', () => {
   const page = read('src/pages/Pricing.jsx')
   assert.match(page, /const emptyForm = today => \(\{ level: 'base', kind: 'priced', amount: '', effectiveFrom: today \}\)/, 'the amount field starts blank')
-  // baseFee appears only inside the labelled reference-fee displays, never in the form or the create request.
-  const uses = page.split('\n').filter(line => line.includes('baseFee'))
-  assert.ok(uses.length >= 2)
-  for (const line of uses) assert.match(line, /[Rr]eference fee \(unconfirmed\)|reference only/, line.trim())
-  assert.doesNotMatch(page, /amount:\s*[^,}]*baseFee/)
+  // M13 contract correction: the server Service has no fee, so no production screen reads or prints one.
+  assert.doesNotMatch(page, /baseFee|reference fee|Reference fee/i)
+  assert.doesNotMatch(read('src/pages/Admin.jsx'), /baseFee|Reference fee/)
+  assert.doesNotMatch(read('src/reference-data-bridge.js').split('\n').filter(l => !l.trim().startsWith('//')).join('\n'), /baseFee|reference_fee/)
   const code = read('src/pricing-api.js').split('\n').filter(line => !line.trim().startsWith('//')).join('\n')
   assert.doesNotMatch(code, /baseFee|reference_fee/, 'the pricing client never reads or sends the reference fee')
-  assert.match(read('src/pages/Admin.jsx'), /Reference fee \(unconfirmed\): \{peso\.format\(service\.baseFee\)\}/, 'the Branches screen labels it')
 })
 
 test('Services & Pricing is an Owner-only page', () => {
@@ -110,4 +108,24 @@ test('the current browser billing prototype is unchanged by the M13 foundation',
   assert.match(read('src/phase2.js'), /const configuredFee=assignment\?\.feeOverride\?\?service\?\.baseFee/, 'M11 prototype pricing stays until the M11 cutover')
   assert.doesNotMatch(read('src/phase2.js'), /pricing-api/)
   assert.doesNotMatch(read('src/workflow.js'), /pricing-api/)
+})
+
+test('price versions are read through the server cursor, a failed page is an error and a long history stays reachable', async () => {
+  const row = n => ({ id: `01k000000000000000000000${n}`, service: { id: 'svc1', name: 'S' }, branch: null, level: 'base', kind: 'priced', amount: '1.00', effective_from: '2026-09-01', created_by: {} })
+  const pages = { first: { data: [row(1)], meta: { per_page: 100, next_cursor: 'c1' } }, c1: { data: [row(2)], meta: { per_page: 100, next_cursor: null } } }
+  const urls = []
+  globalThis.fetch = async url => { urls.push(String(url)); const cursor = new URL(String(url)).searchParams.get('cursor'); return new Response(JSON.stringify(pages[cursor ?? 'first']), { status: 200, headers: { 'Content-Type': 'application/json' } }) }
+  const all = await pricingApi.loadPriceVersions()
+  assert.deepEqual([all.ok, all.versions.length, all.nextCursor], [true, 2, null])
+  assert.ok(urls.every(u => /per_page=100/.test(u)))
+  // endless cursor chain: the automatic fetch stops at its bound but keeps the cursor
+  globalThis.fetch = async () => new Response(JSON.stringify({ data: [row(3)], meta: { per_page: 100, next_cursor: 'forever' } }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+  const bounded = await pricingApi.loadPriceVersions()
+  assert.deepEqual([bounded.ok, bounded.nextCursor], [true, 'forever'])
+  globalThis.fetch = async () => new Response(JSON.stringify({ message: 'boom' }), { status: 500, headers: { 'Content-Type': 'application/json' } })
+  assert.equal((await pricingApi.loadPriceVersions('forever')).ok, false)
+  const page = read('src/pages/Pricing.jsx')
+  assert.match(page, /Only part of the price history is loaded/)
+  assert.match(page, /Load older price versions/)
+  assert.match(page, /Load the full history first/, 'no "in effect today" claim while history is incomplete')
 })

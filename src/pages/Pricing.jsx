@@ -3,17 +3,18 @@ import { Button, Card, Field, Modal, Notice, PageHeader, Status, Table } from '.
 import { clinicNow } from '../clock.js'
 import { commandKey } from '../appointments-api.js'
 import { createPriceVersion, formatAmount, inEffect, loadPriceVersions, retractPriceVersion, validAmount, versionStatus } from '../pricing-api.js'
-import { peso } from '../logic.js'
 
 // M13 pricing foundation — Owner "Services & Pricing". Confirmed prices are Owner-entered, effective-dated, append-only
-// server versions and the only authoritative prices. The service's reference fee is shown separately and labelled as
-// unconfirmed; it is never copied into the form (the amount field always starts blank).
+// server versions and the only authoritative prices. The amount field always starts blank: no reference or demo fee exists in the server Service data.
 const emptyForm = today => ({ level: 'base', kind: 'priced', amount: '', effectiveFrom: today })
 
 export function ServicesPricingPage({ store }) {
   const { state, toast } = store
   const today = clinicNow().date
   const [versions, setVersions] = useState(null)
+  const [nextCursor, setNextCursor] = useState(null)
+  const [moreError, setMoreError] = useState('')
+  const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState('')
   const [selectedId, setSelectedId] = useState(null)
   const [form, setForm] = useState(() => emptyForm(today))
@@ -24,9 +25,20 @@ export function ServicesPricingPage({ store }) {
   const load = async () => {
     setError('')
     const result = await loadPriceVersions()
-    if (result.ok) setVersions(result.versions)
+    if (result.ok) { setVersions(result.versions); setNextCursor(result.nextCursor); setMoreError('') }
     else setError(result.message || 'Could not load prices.')
   }
+  const loadOlder = async () => {
+    if (!nextCursor || loadingMore) return
+    setLoadingMore(true); setMoreError('')
+    const result = await loadPriceVersions(nextCursor)
+    setLoadingMore(false)
+    if (!result.ok) return setMoreError(result.message || 'Older price versions could not be loaded.')
+    setVersions(previous => [...previous, ...result.versions.filter(v => !previous.some(p => p.id === v.id))])
+    setNextCursor(result.nextCursor)
+  }
+  // Until every version is loaded, "in effect today" / "superseded" cannot be stated truthfully.
+  const complete = !nextCursor
   useEffect(() => { load() }, [])
 
   const selected = state.services.find(s => s.id === selectedId) || null
@@ -58,27 +70,26 @@ export function ServicesPricingPage({ store }) {
 
   return <>
     <PageHeader title="Services & Pricing" text="Confirmed prices are entered by the Owner and take effect on a chosen date. Each change adds a new version; earlier versions are kept."/>
-    <Notice tone="info" title="Confirmed prices versus reference fees">A <b>confirmed price</b> is one you enter and confirm here; billing will use only confirmed prices. A <b>reference fee (unconfirmed)</b> is project reference data, not a clinic price, and is never used for billing.</Notice>
+    <Notice tone="info" title="Confirmed prices">A <b>confirmed price</b> is one you enter and confirm here; billing will use only confirmed prices. A service with no confirmed price is reported as unavailable for billing.</Notice>
     {error && <Notice tone="warning" title="Prices could not be loaded">{error} <Button size="sm" onClick={load}>Retry</Button></Notice>}
     {!versions && !error && <Notice>Loading prices…</Notice>}
+    {versions && !complete && <Notice tone="warning" title="Only part of the price history is loaded">Older price versions exist. Current prices are shown only once the whole history is loaded. {moreError && <span role="alert">{moreError} </span>}<Button size="sm" variant="soft" disabled={loadingMore} onClick={loadOlder}>{moreError ? 'Retry' : loadingMore ? 'Loading…' : 'Load older price versions'}</Button></Notice>}
     {versions && <Card title="Services" subtitle="Base clinic price in effect today, with any branch prices">
       <Table rows={state.services} columns={[
         { key: 'name', label: 'Service', render: s => <div><b>{s.name}</b><small className="block-muted">{s.code} • {s.status}</small></div> },
-        { key: 'base', label: 'Confirmed base price today', render: s => { const v = inEffect(versions, s.id, null, today); return v ? <span>{formatAmount(v.amount)} <small className="block-muted">since {v.effectiveFrom}</small></span> : <Status>No confirmed price</Status> } },
-        { key: 'branches', label: 'Branch prices today', render: s => { const list = state.branches.map(b => [b, inEffect(versions, s.id, b.id, today)]).filter(([, v]) => v); return list.length ? list.map(([b, v]) => <small className="block-muted" key={b.id}>{b.name}: {v.kind === 'priced' ? formatAmount(v.amount) : 'ended (uses base)'}</small>) : '—' } },
-        { key: 'reference', label: 'Reference fee (unconfirmed)', render: s => (s.baseFee != null ? <small>{peso.format(s.baseFee)} <span className="block-muted">reference only</span></small> : '—') },
+        { key: 'base', label: 'Confirmed base price today', render: s => { if (!complete) return <small className="block-muted">Load the full history first</small>; const v = inEffect(versions, s.id, null, today); return v ? <span>{formatAmount(v.amount)} <small className="block-muted">since {v.effectiveFrom}</small></span> : <Status>No confirmed price</Status> } },
+        { key: 'branches', label: 'Branch prices today', render: s => { if (!complete) return <small className="block-muted">Load the full history first</small>; const list = state.branches.map(b => [b, inEffect(versions, s.id, b.id, today)]).filter(([, v]) => v); return list.length ? list.map(([b, v]) => <small className="block-muted" key={b.id}>{b.name}: {v.kind === 'priced' ? formatAmount(v.amount) : 'ended (uses base)'}</small>) : '—' } },
         { key: 'actions', label: 'Actions', render: s => <Button size="sm" onClick={() => open(s)}>Manage prices</Button> },
       ]}/>
     </Card>}
 
     <Modal open={!!selected} onClose={() => setSelectedId(null)} title={selected ? `${selected.name} — prices` : ''} subtitle="Versions are never edited. A scheduled (future) version can be retracted before it starts." wide>{selected && <>
-      <p className="pt-hint">Reference fee (unconfirmed): {selected.baseFee != null ? peso.format(selected.baseFee) : '—'} — not used for billing and not copied into the form.</p>
       <h3>Price history</h3>
       {history.length ? <Table rows={history} columns={[
         { key: 'level', label: 'Level', render: v => (v.level === 'base' ? 'Base clinic price' : v.branchName) },
         { key: 'kind', label: 'Price', render: v => (v.kind === 'priced' ? formatAmount(v.amount) : 'Ended at this level') },
         { key: 'effectiveFrom', label: 'Effective from' },
-        { key: 'status', label: 'Status', render: v => <Status>{versionStatus(v, versions, today)}</Status> },
+        { key: 'status', label: 'Status', render: v => { const st = versionStatus(v, versions, today); return <Status>{!complete && (st === 'In effect' || st === 'Superseded') ? 'Load full history' : st}</Status> } },
         { key: 'by', label: 'Confirmed by', render: v => <small>{v.createdBy || '—'}{v.retractedAt ? ` • retracted by ${v.retractedBy || '—'}` : ''}</small> },
         { key: 'actions', label: 'Actions', render: v => (versionStatus(v, versions, today) === 'Scheduled' ? <Button size="sm" variant="ghost" onClick={() => setRetracting({ version: v, key: commandKey() })}>Retract</Button> : null) },
       ]}/> : <Notice>No confirmed price yet. Billing reports “pricing needed” for this service until you set one.</Notice>}
@@ -86,7 +97,7 @@ export function ServicesPricingPage({ store }) {
       <div className="form-grid">
         <Field label="Level"><select value={form.level} onChange={e => setForm({ ...form, level: e.target.value })}><option value="base">Base clinic price (all branches)</option>{branchesOffering.map(b => <option key={b.id} value={b.id}>{b.name} only</option>)}</select></Field>
         <Field label="Action"><select value={form.kind} onChange={e => setForm({ ...form, kind: e.target.value, amount: '' })}><option value="priced">Set confirmed price</option><option value="ended">End price at this level</option></select></Field>
-        {form.kind === 'priced' && <Field label="Confirmed price (₱)" required hint="Type the clinic’s price. It is not filled in from the reference fee."><input inputMode="decimal" autoComplete="off" placeholder="e.g. 1500.00" value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })}/></Field>}
+        {form.kind === 'priced' && <Field label="Confirmed price (₱)" required hint="Type the clinic’s price. The field is never pre-filled."><input inputMode="decimal" autoComplete="off" placeholder="e.g. 1500.00" value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })}/></Field>}
         <Field label="Effective from" required hint="Today or a future date"><input type="date" min={today} value={form.effectiveFrom} onChange={e => setForm({ ...form, effectiveFrom: e.target.value })}/></Field>
         <Button className="span-2" onClick={review}>Review price change</Button>
       </div>

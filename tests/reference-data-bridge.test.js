@@ -48,7 +48,8 @@ test('mapBranch produces the exact legacy INITIAL_BRANCHES shape', () => {
 
 test('mapService produces the exact legacy INITIAL_SERVICES shape', () => {
   const mapped = mapService(API_SERVICE)
-  assert.deepEqual(mapped, { id: 'svc1', code: 'CONSULT', name: 'Dental Consultation', duration: 30, baseFee: 600, category: 'General Dentistry', status: 'Active' })
+  assert.deepEqual(mapped, { id: 'svc1', code: 'CONSULT', name: 'Dental Consultation', duration: 30, category: 'General Dentistry', status: 'Active' })
+  assert.equal('baseFee' in mapped, false, 'the server Service has no fee')
 })
 
 test('mapBranchService derives the same bs-<branch>-<service> id data.js already generates', () => {

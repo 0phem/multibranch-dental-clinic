@@ -47,8 +47,8 @@ for(const role of Object.keys(m.NAV)){const shell=render('dashboard',role);asser
 assert.equal(m.ModulesPage,undefined,'the professor-facing Module Coverage page is removed')
 // M13: the Owner pricing page renders its honest loading state under SSR (no fetch runs) and the Branches screen labels
 // the reference fee as unconfirmed rather than as a price.
-{const pricing=render('pricing','owner');assert.ok(pricing.includes('Services &amp; Pricing')&&pricing.includes('Loading prices'),'pricing page renders');assert.ok(pricing.includes('Reference fees')||pricing.includes('reference fee (unconfirmed)'),'reference fees are explained as unconfirmed')}
-assert.ok(render('branches','owner').includes('Reference fee (unconfirmed)'),'the Branches screen labels the reference fee')
+{const pricing=render('pricing','owner');assert.ok(pricing.includes('Services &amp; Pricing')&&pricing.includes('Loading prices'),'pricing page renders');assert.ok(!/reference fee/i.test(pricing),'no reference fee is shown on the pricing page')}
+assert.ok(!/reference fee/i.test(render('branches','owner')),'the Branches screen shows no reference fee')
 // M4: under a server-authenticated session the Patient Records surface lists only authoritative server Patients — never the
 // browser demo/legacy collection, and never as read-only "earlier browser record" rows.
 {const renderServer=role=>{const session={...m.sessionForRole(role,store.state),serverUserId:'01K00000000000000000000099'};return renderToString(React.createElement(m.Shell,{role,page:'patients',setPage:()=>{},onLogout:()=>{},activeBranch:'All Branches',setActiveBranch:()=>{},store:{...store,session}},React.createElement(m[pages.patients],{role,activeBranch:'All Branches',store:{...store,session},context:null,setPage:()=>{}})))}

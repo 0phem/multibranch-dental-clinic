@@ -30,7 +30,7 @@ class ReferenceDataResourceContractTest extends TestCase
         ]);
     }
 
-    public function test_service_resource_never_exposes_a_fee_confirmation_flag(): void
+    public function test_service_resource_exposes_no_fee_of_any_kind_to_any_role(): void
     {
         $service = Service::create([
             'legacy_ref' => 'svc1', 'code' => 'CONSULT', 'name' => 'Dental Consultation',
@@ -44,9 +44,14 @@ class ReferenceDataResourceContractTest extends TestCase
         $payload = $response->json('data.0');
 
         $this->assertSame('svc1', $payload['id']);
-        $this->assertEquals(600, $payload['reference_fee_php']);
-        $this->assertArrayNotHasKey('fee_is_clinic_confirmed', $payload);
-        $this->assertArrayNotHasKey('baseFee', $payload);
+        $this->assertSame(['id', 'code', 'name', 'duration_minutes', 'category', 'status'], array_keys($payload));
+        foreach ([Role::Staff, Role::Dentist, Role::Owner, Role::Patient] as $role) {
+            Sanctum::actingAs($this->userWithRole($role));
+            $json = json_encode($this->getJson('/api/services')->assertOk()->json());
+            foreach (['reference_fee', 'baseFee', 'fee_php', 'fee_is_clinic_confirmed', '600'] as $needle) {
+                $this->assertStringNotContainsString($needle, $json, "{$role->value} must not receive {$needle}");
+            }
+        }
     }
 
     public function test_dentist_resource_never_exposes_account_status_and_hides_license_from_patient(): void

@@ -55,10 +55,25 @@ export function validAmount(text) {
   return AMOUNT.test(value) && !/^0(\.0{1,2})?$/.test(value)
 }
 
-export async function loadPriceVersions() {
-  const result = await api.listServicePrices()
-  if (!result.ok) return normalizeFailure(result)
-  return { ok: true, versions: (result.data || []).map(mapPriceVersion) }
+const PAGE_SIZE = 100
+const MAX_PAGES = 20
+
+/**
+ * Price versions, newest first, read through the server cursor. The automatic fetch is bounded; when it stops with more history
+ * on the server, `nextCursor` is returned so the Owner can continue (`loadPriceVersions(nextCursor)`) and the page never claims
+ * the history is complete. A failed page is an error, never a shorter list.
+ */
+export async function loadPriceVersions(startCursor = null) {
+  const versions = []
+  let cursor = startCursor
+  for (let page = 1; page <= MAX_PAGES; page++) {
+    const result = await api.listServicePrices({ per_page: PAGE_SIZE, ...(cursor ? { cursor } : {}) })
+    if (!result.ok) return normalizeFailure(result)
+    versions.push(...(result.data || []).map(mapPriceVersion))
+    cursor = result.meta?.next_cursor ?? null
+    if (!cursor) return { ok: true, versions, nextCursor: null }
+  }
+  return { ok: true, versions, nextCursor: cursor }
 }
 
 /** Creates a new version. `source` and the author are assigned by the server and are never sent. */

@@ -24,6 +24,8 @@ class CreateServicePriceRequest extends FormRequest
             'created_by_user_id' => ['prohibited'],
             'retracted_at' => ['prohibited'],
             'status' => ['prohibited'],
+            // Identity, scope, ownership and clocks are server context: supplying one is refused, never ignored.
+            ...array_fill_keys(['id', 'public_id', 'service_id', 'service_ref', 'branch_id', 'created_at', 'updated_at', 'retracted_by_user_id', 'is_current', 'ended_at'], ['prohibited']),
         ];
     }
 

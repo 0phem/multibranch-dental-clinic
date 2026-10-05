@@ -152,7 +152,10 @@ export function createWorkflowActions({getState,commit,getSession,clock=clinicNo
     const completed=state.treatments.filter(t=>t.server&&!t.summaryOnly&&!t.patientSubset&&t.status==='Completed'&&inScope(t,session,state)&&completedEncounter(state,t))
     for(const t of completed){
       // M11: Draft invoice priced from the local fee configuration (M13/M11 own pricing; M5 stores no money).
-      if(!state.invoices.some(i=>i.treatmentId===t.id)){
+      // A real clinic-server session never prices a treatment in the browser: Laravel creates and prices invoices from M13
+      // effective-dated prices, and the browser's reference/demo fee (`baseFee`) is not a price. Only the pre-cutover local
+      // prototype (no server session) still builds this local draft.
+      if(!session.serverUserId&&!state.invoices.some(i=>i.treatmentId===t.id)){
         const invoiceId=`inv-${t.id}`
         const priced=treatmentInvoiceItems(state,t,invoiceId)
         if(!priced.ok){

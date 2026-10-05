@@ -25,7 +25,8 @@ export function mapBranch(row) {
 export function mapService(row) {
   return {
     id: row.id, code: row.code, name: row.name, duration: row.duration_minutes,
-    baseFee: row.reference_fee_php, category: row.category, status: row.status,
+    // M13: the server Service carries no fee. `reference_fee_php` is never read; prices come only from M13 versions.
+    category: row.category, status: row.status,
   }
 }
 

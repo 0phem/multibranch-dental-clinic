@@ -56,8 +56,9 @@ review and an update to this file in the same change.
 - Database money uses fixed decimal precision (`numeric(12,2)`); financial arithmetic never uses floating point.
 - API monetary values use a decimal-safe representation (a decimal string such as `"1500.00"`).
 - **Current:** the frontend prototype uses JavaScript numbers rounded to centavos, and the Phase 2A service API
-  returns `reference_fee_php` as a JSON number. Both are replaced by the decimal-safe contract when M11/M13 are
-  implemented.
+  returned `reference_fee_php` as a JSON number. M13 (reviewed correction): the Service projection no longer carries
+  any fee; authoritative prices are decimal strings from the M13 pricing API only. The column remains in the database
+  as demo/reference data and is never read by pricing.
 
 **API**
 - Success responses use the `{ "data": ... }` envelope already used by the backend.

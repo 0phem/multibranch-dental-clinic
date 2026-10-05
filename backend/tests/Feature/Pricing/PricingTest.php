@@ -252,4 +252,202 @@ class PricingTest extends TestCase
         $this->assertSame('9999999999.99', $this->price(['amount' => '9999999999.99', 'effective_from' => '2026-12-01'])->assertCreated()->json('data.amount'));
         $this->assertTrue(Schema::hasTable('service_prices'));
     }
+
+    // ---- M13 production hardening ---------------------------------------------------------------------------------------
+
+    public function test_business_dates_follow_asia_manila_not_utc_around_midnight(): void
+    {
+        // 2026-09-28 16:30 UTC is already 2026-09-29 00:30 in Manila: "today" is the 29th.
+        $this->travelTo(\Carbon\CarbonImmutable::parse('2026-09-28 16:30:00', 'UTC'));
+        $this->actingAsUser('owner');
+        $this->price(['amount' => '500.00', 'effective_from' => '2026-09-28'])->assertStatus(422)->assertJsonPath('code', 'effective_from_past');
+        $id = $this->price(['amount' => '500.00', 'effective_from' => '2026-09-29'])->assertCreated()->json('data.id');
+        $this->assertSame('2026-09-29', $this->resolveApi('b1')->assertOk()->json('data.date'), 'the default resolve date is the Manila date');
+        $this->assertSame('500.00', $this->resolveApi('b1', 'svc1', '2026-09-29')->json('data.amount'), 'effective exactly on its date');
+        $this->assertSame(false, $this->resolveApi('b1', 'svc1', '2026-09-28')->json('data.available'), 'the day before is unavailable');
+        // A version starting today (Manila) is already in effect and cannot be retracted, even though UTC says it is still the 28th.
+        $this->retract($id)->assertStatus(422)->assertJsonPath('code', 'price_effective');
+        $this->actingAsUser('staffB1');
+        $this->resolveApi('b1', 'svc1', '2026-09-28')->assertForbidden();   // Staff see only Manila-today
+        $this->resolveApi('b1', 'svc1', '2026-09-29')->assertOk();
+    }
+
+    public function test_exact_decimal_amounts_survive_storage_resolution_and_the_api(): void
+    {
+        $this->actingAsUser('owner');
+        foreach (['19.99', '0.29', '999.95', '0.01'] as $i => $amount) {
+            $svc = ['svc1', 'svc2'][$i % 2];
+            $date = now('Asia/Manila')->addDays($i + 1)->format('Y-m-d');
+            $this->assertSame($amount, $this->price(['amount' => $amount, 'effective_from' => $date], $svc)->assertCreated()->json('data.amount'));
+            $this->assertSame($amount, $this->resolve('b1', $svc, $date)->amount());
+            $this->assertSame($amount, $this->resolveApi('b1', $svc, $date)->json('data.amount'));
+        }
+        $this->assertSame('39.98', DB::selectOne("select (amount * 2)::text as t from service_prices where amount = 19.99")->t);
+        foreach (['19.999', '-1', '1e3', '0x10', '00.50', '', 'abc', '1,000.00'] as $bad) {
+            $this->price(['amount' => $bad, 'effective_from' => '2026-12-01'])->assertStatus(422);
+        }
+        $this->price(['amount' => 19.99, 'effective_from' => '2026-12-01'])->assertStatus(422);      // a JSON number is never accepted as money
+    }
+
+    public function test_identity_scope_ownership_and_clock_fields_are_refused_and_ids_resolve_safely(): void
+    {
+        $this->actingAsUser('owner');
+        foreach (['id' => 'x', 'public_id' => '01ARZ3NDEKTSV4RRFFQ69G5FAV', 'service_id' => 1, 'branch_id' => 1, 'created_at' => '2020-01-01T00:00:00Z', 'created_by_user_id' => 1,
+            'retracted_at' => '2020-01-01T00:00:00Z', 'retracted_by_user_id' => 1, 'source' => 'owner_confirmed', 'status' => 'Active', 'is_current' => true] as $field => $value) {
+            $this->price([$field => $value, 'amount' => '500.00'])->assertStatus(422, "must refuse {$field}");
+        }
+        $this->assertSame(0, ServicePrice::count());
+        // Numeric / malformed / unknown identifiers are 404 or 422, never another record.
+        $this->postJson('/api/services/1/prices', ['kind' => 'priced', 'amount' => '5.00', 'effective_from' => '2026-12-01'], ['Idempotency-Key' => 'n-1'])->assertNotFound();
+        $this->postJson('/api/services/'.$this->svc['svc1']->id.'/prices', ['kind' => 'priced', 'amount' => '5.00', 'effective_from' => '2026-12-01'], ['Idempotency-Key' => 'n-2'])->assertNotFound();
+        foreach (['1', 'not-a-ulid', '01ARZ3NDEKTSV4RRFFQ69G5FAV'] as $bad) {
+            $this->retract($bad)->assertNotFound();
+        }
+        $this->price(['amount' => '5.00', 'branch_ref' => '1'])->assertStatus(422);
+        $this->assertSame(0, ServicePrice::count());
+    }
+
+    public function test_price_versions_write_minimal_m22_events_and_a_replay_writes_one(): void
+    {
+        $this->actingAsUser('owner');
+        $date = now('Asia/Manila')->addDays(5)->format('Y-m-d');
+        $id = $this->price(['amount' => '1500.50', 'branch_ref' => 'b1', 'effective_from' => $date], 'svc1', 'audit-1')->assertCreated()->json('data.id');
+        $this->price(['amount' => '1500.50', 'branch_ref' => 'b1', 'effective_from' => $date], 'svc1', 'audit-1')->assertCreated();   // same key replays
+        $this->retract($id, 'audit-r')->assertOk();
+        $this->retract($id, 'audit-r')->assertOk();
+        $events = \App\Models\AuditLog::whereIn('action', ['pricing.price_version_created', 'pricing.price_version_retracted'])->orderBy('id')->get();
+        $this->assertSame(['pricing.price_version_created', 'pricing.price_version_retracted'], $events->pluck('action')->all());
+        $this->assertSame(['financial', 'owner', $id, $this->b['b1']->id], [$events[0]->category, $events[0]->actor_role, $events[0]->auditable_public_id, $events[0]->branch_id]);
+        $this->assertEquals(['service' => 'svc1', 'branch' => 'b1', 'level' => 'branch', 'kind' => 'priced', 'amount' => '1500.50', 'effective_from' => $date], $events[0]->payload);
+        $this->assertEqualsCanonicalizing(['service', 'branch', 'effective_from'], array_keys($events[1]->payload));
+    }
+
+    public function test_an_audit_failure_rolls_the_price_change_back(): void
+    {
+        $this->actingAsUser('owner');
+        \App\Models\AuditLog::creating(fn () => throw new \RuntimeException('audit down'));
+        $this->withoutExceptionHandling();
+        try {
+            $this->price(['amount' => '500.00', 'effective_from' => '2026-12-01']);
+            $this->fail('expected the simulated failure');
+        } catch (\RuntimeException) {
+        }
+        $this->assertSame(0, ServicePrice::count());
+        $this->assertSame(0, DB::table('command_keys')->where('command', 'pricing.create')->count());
+    }
+
+    public function test_a_historical_date_still_resolves_its_old_version_after_a_newer_one_takes_effect(): void
+    {
+        $old = $this->version('svc1', null, '2026-09-01', '500.00');
+        $this->actingAsUser('owner');
+        $this->price(['amount' => '650.00', 'effective_from' => '2026-09-28'])->assertCreated();   // today
+        $this->assertSame('650.00', $this->resolve('b1', 'svc1', '2026-09-28')->amount());
+        $this->assertSame('500.00', $this->resolve('b1', 'svc1', '2026-09-27')->amount(), 'a date before the change keeps the old price');
+        $this->assertSame('500.00', $old->fresh()->amount, 'the old version row is unchanged and still listed');
+        $this->assertSame(2, collect($this->getJson('/api/services/svc1/prices')->assertOk()->json('data'))->count());
+        try {
+            DB::table('service_prices')->where('id', $old->id)->update(['amount' => '1.00']);
+            $this->fail('the database must refuse editing a price version');
+        } catch (\Illuminate\Database\QueryException) {
+            $this->assertTrue(true);
+        }
+    }
+
+    public function test_changing_branch_availability_writes_one_event_only_when_it_changes(): void
+    {
+        $this->actingAsUser('owner');
+        $body = ['branch_ref' => 'b2', 'service_ref' => 'svc2', 'active' => true];
+        $this->postJson('/api/branch-services', $body)->assertOk();
+        $this->postJson('/api/branch-services', $body)->assertOk();             // no change
+        $this->postJson('/api/branch-services', ['active' => false] + $body)->assertOk();
+        $events = \App\Models\AuditLog::where('action', 'service.branch_availability_changed')->orderBy('id')->get();
+        $this->assertCount(2, $events);
+        $this->assertSame([null, true], [$events[0]->payload['from_active'], $events[0]->payload['to_active']]);
+        $this->assertSame([true, false], [$events[1]->payload['from_active'], $events[1]->payload['to_active']]);
+        $this->actingAsUser('staffB1');
+        $this->postJson('/api/branch-services', $body)->assertForbidden();
+    }
+
+    // ---- final gate: paging and retries ---------------------------------------------------------------------------------
+
+    public function test_the_price_version_list_is_cursor_paged_newest_first_without_gaps_or_repeats(): void
+    {
+        $ids = [];
+        foreach (range(1, 5) as $n) {
+            $ids[] = $this->version('svc1', $n % 2 ? null : 'b1', "2026-09-0{$n}", "{$n}00.00")->public_id;
+        }
+        $this->version('svc2', null, '2026-09-01', '1200.00');
+        $newest = array_reverse($ids);
+        $this->actingAsUser('owner');
+
+        $one = $this->getJson('/api/service-prices?per_page=2&service_ref=svc1')->assertOk();
+        $two = $this->getJson('/api/service-prices?per_page=2&service_ref=svc1&cursor='.$one->json('meta.next_cursor'))->assertOk();
+        $three = $this->getJson('/api/service-prices?per_page=2&service_ref=svc1&cursor='.$two->json('meta.next_cursor'))->assertOk();
+        $this->assertSame($newest, [...array_column($one->json('data'), 'id'), ...array_column($two->json('data'), 'id'), ...array_column($three->json('data'), 'id')]);
+        $this->assertSame($newest[1], $one->json('meta.next_cursor'), 'the cursor is a public id');
+        $this->assertNull($three->json('meta.next_cursor'));
+        $this->assertSame(50, $this->getJson('/api/service-prices')->json('meta.per_page'));
+        $this->assertCount(6, $this->getJson('/api/service-prices?per_page=100')->json('data'));
+        // a version created while paging neither shifts nor repeats the pages already read
+        $late = $this->version('svc1', null, '2026-10-20', '999.00')->public_id;
+        $again = $this->getJson('/api/service-prices?per_page=2&service_ref=svc1&cursor='.$one->json('meta.next_cursor'))->assertOk();
+        $this->assertSame(array_slice($newest, 2, 2), array_column($again->json('data'), 'id'));
+        $this->assertSame($late, $this->getJson('/api/service-prices?per_page=1')->json('data.0.id'));
+        // filters only narrow; the per-service history is paged the same way
+        $this->assertCount(2, $this->getJson('/api/service-prices?branch_ref=b1&service_ref=svc1')->json('data'));
+        $this->assertCount(2, $this->getJson('/api/services/svc1/prices?per_page=2')->json('data'));
+        $this->assertNotNull($this->getJson('/api/services/svc1/prices?per_page=2')->json('meta.next_cursor'));
+        // malformed input is a validation error; an unknown cursor is an empty page
+        foreach (['per_page=0', 'per_page=101', 'per_page=x', 'per_page[]=1', 'cursor=short', 'cursor[]=a', 'service_ref=nope', 'service_ref[]=svc1', 'branch_ref=nope'] as $bad) {
+            $this->getJson('/api/service-prices?'.$bad)->assertStatus(422);
+        }
+        $this->assertSame([], $this->getJson('/api/service-prices?cursor=01ARZ3NDEKTSV4RRFFQ69G5FAV')->assertOk()->json('data'));
+        // authorization comes first: other roles never reach the filters or the cursor
+        foreach (['staffB1', 'dentist1', 'patientA'] as $who) {
+            $this->actingAsUser($who);
+            $this->getJson('/api/service-prices?per_page=1&cursor='.$one->json('meta.next_cursor'))->assertForbidden();
+            $this->getJson('/api/services/svc1/prices?service_ref=nope')->assertForbidden();
+        }
+    }
+
+    public function test_a_lost_response_retry_with_the_same_key_replays_and_never_creates_a_second_version(): void
+    {
+        $this->actingAsUser('owner');
+        $date = now('Asia/Manila')->addDays(4)->format('Y-m-d');
+        $body = ['amount' => '1500.00', 'effective_from' => $date];
+        $first = $this->price($body, 'svc1', 'lost-response-1')->assertCreated();
+        $retry = $this->price($body, 'svc1', 'lost-response-1')->assertCreated();   // the client never saw the first response
+        $this->assertSame($first->json('data'), $retry->json('data'), 'a stable replay of the same logical result');
+        $this->assertSame(1, ServicePrice::count());
+        $this->assertSame(1, \App\Models\AuditLog::where('action', 'pricing.price_version_created')->count());
+        // The same key for a different request is refused, never silently reused.
+        $this->price(['amount' => '1600.00', 'effective_from' => $date], 'svc1', 'lost-response-1')->assertStatus(422)->assertJsonPath('code', 'idempotency_key_reused');
+        // A new key for the same level and date is a distinct command: the unique invariant refuses it with a stable 409.
+        $this->price($body, 'svc1', 'lost-response-2')->assertStatus(409)->assertJsonPath('code', 'price_version_exists');
+        $this->assertSame(1, ServicePrice::count());
+        // The key is mandatory.
+        $this->postJson('/api/services/svc1/prices', ['kind' => 'priced'] + $body)->assertStatus(422);
+    }
+
+    public function test_the_reference_fee_cannot_become_a_price_in_m5_m11_or_any_server_projection(): void
+    {
+        // M5 owns no money at all.
+        foreach (['treatments', 'treatment_procedures'] as $table) {
+            foreach (Schema::getColumnListing($table) as $column) {
+                $this->assertDoesNotMatchRegularExpression('/price|amount|fee|total|cost/i', $column, "{$table}.{$column}");
+            }
+        }
+        // M11 / the resolver / the pricing service never read the reference column.
+        foreach (['Services/Billing/BillingService.php', 'Services/Pricing/PriceResolver.php', 'Services/Pricing/PricingService.php', 'Http/Controllers/PricingController.php', 'Http/Controllers/BillingController.php', 'Http/Resources/InvoiceResource.php'] as $file) {
+            $this->assertStringNotContainsString('reference_fee', preg_replace('#//.*#', '', file_get_contents(app_path($file))), $file);
+        }
+        // With a reference fee present and NO M13 price, M11 refuses; and no Service projection carries a fee to any role.
+        $this->assertSame('600.00', (string) $this->svc['svc1']->fresh()->reference_fee_php);
+        $this->assertInstanceOf(PriceUnavailable::class, $this->resolve('b1', 'svc1', '2026-09-28'));
+        foreach (['owner', 'staffB1', 'dentist1', 'patientA'] as $who) {
+            $this->actingAsUser($who);
+            $this->assertStringNotContainsString('fee', strtolower(json_encode($this->getJson('/api/services')->assertOk()->json())));
+            $this->assertStringNotContainsString('fee', strtolower(json_encode($this->getJson('/api/branch-services')->assertOk()->json())));
+        }
+    }
 }

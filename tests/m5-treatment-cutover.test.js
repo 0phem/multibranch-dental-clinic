@@ -262,6 +262,18 @@ test('completion does not depend on the browser invoice; every authorized browse
   w.actions.reconcileTreatmentHandoffs(); assert.equal(w.state.invoices.length, 0)
 })
 
+test('a real clinic-server session never prices a treatment in the browser from reference fees (M13/M11 authority)', async () => {
+  const w = world(); const entry = await called(w)
+  w.session.serverUserId = '01K00000000000000000000010'   // a signed-in clinic-server account
+  const t = (await w.flow.startTreatment(entry, { procedure: 'Consultation', procedures: [{ serviceId: 'svc1', quantity: 1 }], followupRequired: true, followupReason: 'Recall' })).record
+  const done = await w.flow.completeTreatment(t)
+  assert.equal(done.ok, true, done.message)
+  assert.deepEqual(w.state.invoices, [], 'no local draft invoice priced from baseFee exists for a server session')
+  assert.equal(w.state.followups[0].id, `f-${t.id}`, 'the other downstream handoffs are unchanged')
+  assert.equal(w.state.workflowLog.some(e => /billing\./.test(e.eventType)), false, 'no local billing event either')
+  assert.match(read('src/workflow.js'), /if\(!session\.serverUserId&&!state\.invoices\.some/)
+})
+
 test('only the author may save or complete; another Dentist is refused before any server call', async () => {
   const w = world(); const entry = await called(w)
   const t = (await w.flow.startTreatment(entry)).record

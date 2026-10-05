@@ -9,6 +9,7 @@ use App\Models\CommandKey;
 use App\Models\Service;
 use App\Models\ServicePrice;
 use App\Models\User;
+use App\Services\Audit\AuditService;
 use App\Services\Visits\VisitCommandException;
 use App\Support\ClinicClock;
 use App\Support\IdempotentCommand;
@@ -33,7 +34,8 @@ final class PricingService
                 throw VisitCommandException::rule('effective_from_past', 'A price version can start today or on a future date, never in the past.', 'effective_from');
             }
             // D8: a branch-specific price requires the branch to offer the service (the current branch-service convention).
-            if ($branch && ! BranchService::where('branch_id', $branch->id)->where('service_id', $service->id)->where('active', true)->exists()) {
+            // The offering row is locked so a concurrent availability change cannot slip between this check and the insert.
+            if ($branch && ! BranchService::where('branch_id', $branch->id)->where('service_id', $service->id)->where('active', true)->lockForUpdate()->exists()) {
                 throw VisitCommandException::rule('branch_service_missing', 'This branch does not offer this service, so it cannot have a branch price.', 'branch_ref');
             }
             $price = ServicePrice::create([
@@ -45,6 +47,10 @@ final class PricingService
                 'source' => ServicePrice::SOURCE,
                 'created_by_user_id' => $actor->id,
                 'created_at' => ClinicClock::now(),
+            ]);
+            $this->audit($actor, 'pricing.price_version_created', $price, $service, $branch, [
+                'service' => $service->legacy_ref, 'branch' => $branch?->legacy_ref, 'level' => $branch ? 'branch' : 'base',
+                'kind' => $kind, 'amount' => $price->amount !== null ? (string) $price->amount : null, 'effective_from' => $effectiveFrom,
             ]);
 
             return [$price, 201];
@@ -63,9 +69,26 @@ final class PricingService
                 throw VisitCommandException::rule('price_effective', 'This price version is already in effect and cannot be changed. Add a new version instead.', 'price');
             }
             $current->update(['retracted_at' => ClinicClock::now(), 'retracted_by_user_id' => $actor->id]);
+            $current->loadMissing(['service', 'branch']);
+            $this->audit($actor, 'pricing.price_version_retracted', $current, $current->service, $current->branch, [
+                'service' => $current->service->legacy_ref, 'branch' => $current->branch?->legacy_ref, 'effective_from' => $current->effective_from->format('Y-m-d'),
+            ]);
 
             return [$current, 200];
         });
+    }
+
+    /**
+     * Minimal M22 event written in the command's transaction: identifiers, level, kind, the exact decimal amount (a price
+     * change is itself the financial fact) and the effective date — never a price history. A failed audit write rolls the
+     * price change back with it.
+     */
+    private function audit(User $actor, string $action, ServicePrice $price, Service $service, ?Branch $branch, array $payload): void
+    {
+        app(AuditService::class)->record([
+            'action' => $action, 'category' => 'financial', 'severity' => 'info', 'actor' => $actor, 'target' => $price,
+            'branch_id' => $branch?->id, 'payload' => $payload,
+        ]);
     }
 
     private function idempotent(User $actor, string $key, string $command, array $payload, Closure $work): JsonResponse

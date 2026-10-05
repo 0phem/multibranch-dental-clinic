@@ -32,10 +32,20 @@ class BranchServiceController extends Controller
             $attributes['duration_override_minutes'] = $request->validated('duration_override_minutes');
         }
 
-        $row = BranchService::updateOrCreate(
-            ['branch_id' => $branch->id, 'service_id' => $service->id],
-            $attributes
-        );
+        $row = \Illuminate\Support\Facades\DB::transaction(function () use ($branch, $service, $attributes, $request) {
+            $before = BranchService::where('branch_id', $branch->id)->where('service_id', $service->id)->lockForUpdate()->first();
+            $row = BranchService::updateOrCreate(['branch_id' => $branch->id, 'service_id' => $service->id], $attributes);
+            if (! $before || (bool) $before->active !== (bool) $row->active) {
+                // Offering a service at a branch changes what can be booked and priced there: a minimal M22 event (refs and flag only).
+                app(\App\Services\Audit\AuditService::class)->record([
+                    'action' => 'service.branch_availability_changed', 'category' => 'administrative', 'severity' => 'info', 'actor' => $request->user(),
+                    'branch_id' => $branch->id, 'auditable_type' => 'BranchService', 'auditable_public_id' => null,
+                    'payload' => ['branch' => $branch->legacy_ref, 'service' => $service->legacy_ref, 'from_active' => $before ? (bool) $before->active : null, 'to_active' => (bool) $row->active],
+                ]);
+            }
+
+            return $row;
+        });
 
         // Explicit 200 regardless of create-vs-update: this is described to callers as an idempotent
         // upsert, not a strict create, so the status contract stays simple and consistent.
