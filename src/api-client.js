@@ -71,6 +71,8 @@ async function parseFailure(response) {
   if (response.status === 503) return { ok: false, kind: 'server', code: body?.code || null, message: body?.message || 'The clinic system could not send the email. Try again.' }
   // M11: an online-payment gateway refusal carries a deliberate, safe message ("No payment was started.") — show it instead of the generic outage text.
   if (response.status === 502 && typeof body?.code === 'string' && body.code.startsWith('payment_') && body.message) return { ok: false, kind: 'server', code: body.code, message: body.message }
+  // M7: the assistant's own refusals carry a deliberate, safe message (no provider text) — show it instead of the generic outage text.
+  if (response.status === 502 && typeof body?.code === 'string' && body.code.startsWith('assistant_') && body.message) return { ok: false, kind: 'server', code: body.code, message: body.message }
   if (response.status >= 500) return { ok: false, kind: 'server', message: 'The clinic system is temporarily unavailable. Try again in a moment.' }
   return { ok: false, kind: 'server', message: 'Something unexpected happened. Try again.' }
 }
@@ -229,6 +231,9 @@ export function treatmentCommand(id, name, payload, key) { return command(`/api/
 export function listQueue(params) { return request(`/api/queue${query(params)}`) }
 export function myQueue() { return request('/api/queue/mine') }
 export function queueCommand(id, name, payload, key) { return command(`/api/queue/${encodeURIComponent(id)}/${encodeURIComponent(name)}`, payload, key) }
+
+// M7 Patient assistant: the ONLY input is the message; the server derives everything else and holds the provider credential.
+export function askAssistant(message) { return request('/api/assistant/messages', { method: 'POST', body: JSON.stringify({ message }) }) }
 
 // M13 pricing foundation (Owner-confirmed, effective-dated prices). Raw calls only; src/pricing-api.js owns mapping.
 // Cursor-paged (newest first): per_page 1-100, cursor = the previous page's meta.next_cursor.

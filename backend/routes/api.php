@@ -11,6 +11,7 @@ use App\Http\Controllers\PatientRecordController;
 use App\Http\Controllers\PatientRegistrationController;
 use App\Http\Controllers\PricingController;
 use App\Http\Controllers\QueueController;
+use App\Http\Controllers\AssistantController;
 use App\Http\Controllers\TreatmentController;
 use App\Http\Controllers\UserBranchScopeController;
 use App\Http\Controllers\UserManagementController;
@@ -202,6 +203,9 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureAccountAccess::cla
         Route::post('/{hmoCase}/response', [HmoController::class, 'respond'])->middleware('role:staff');
         Route::post('/{hmoCase}/withdraw', [HmoController::class, 'withdraw'])->middleware('role:staff');
     });
+
+    // M7 Patient AI Support: Patient-only, stateless, read-only; rate-limited per account (a technical cost/abuse bound).
+    Route::post('/assistant/messages', [AssistantController::class, 'ask'])->middleware(['role:patient', 'throttle:m7-assistant']);
 
     // M5 Treatment & Clinical Workflow. {treatment} binds on the ULID public_id. Reads are role-scoped and projected per
     // role (TreatmentPolicy); documentation and completion are named commands of the responsible Dentist only.

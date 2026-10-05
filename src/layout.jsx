@@ -7,6 +7,7 @@ import { Button, ConfirmDialog, Field, Icon, Modal, Notice, ShellActionsContext 
 import { patientConversations } from './patient-view.js'
 import { AuthShell } from './pages/AuthShell.jsx'
 import { PasswordField } from './pages/PasswordField.jsx'
+import { ClinicAssistant } from './assistant-panel.jsx'
 export { Brand } from './Brand.jsx'
 import { Brand } from './Brand.jsx'
 
@@ -83,35 +84,8 @@ export function NotificationPanel({role,store,onClose,setPage}){
   </div></Modal>
 }
 
-// Phase 4B.3C-1 / Pass 1 remediation: the Clinic Assistant is Patient-only (Shell renders it only for
-// role==='patient' — see Shell below), so this component no longer needs a non-patient variant. It's a
-// floating circular FAB using the approved compact clinic logo, with strict controlled-open a11y behavior
-// (focus enters the panel on open, Escape/close returns focus to the FAB) since it is the Patient's own
-// only trigger. CSS (`patient.css`/`foundation.css`) positions `.assistant-fab.is-patient` above the
-// mobile bottom navigation and, via a `:has()` rule, above a sticky booking footer when one is present —
-// see PHASE4B3_ONBOARDING_BOOKING.md.
-function ClinicAssistant({open,onOpenChange}){
-  const panel=React.useRef(null)
-  React.useEffect(()=>{if(open)panel.current?.focus()},[open])
-  const closeToTrigger=()=>{onOpenChange(false);document.getElementById('clinic-assistant-fab')?.focus()}
-  const [answer,setAnswer]=React.useState('')
-  const quick=['How do I book?','What do I need for HMO?','How does the queue work?']
-  const reply=q=>{
-    const map={
-      'How do I book?':'Open Book, choose Smart Find or Manual booking, then pick any validated available slot. A Dentist is assigned automatically.',
-      'What do I need for HMO?':'Your HMO case lists missing requirements. You can record document metadata; clinic staff checks local requirements. This app does not upload files or contact the provider.',
-      'How does the queue work?':'After Staff records your arrival, your Home shows your position and an estimated wait from this workspace’s current data.',
-    }
-    setAnswer(map[q]||'I can help with clinic navigation and workflow questions. Clinical diagnosis and treatment decisions always stay with a dentist.')
-  }
-  return <>
-    <button id="clinic-assistant-fab" type="button" className="assistant-fab is-patient" onClick={()=>onOpenChange(!open)} aria-expanded={open} aria-controls="clinic-assistant-panel" aria-label={open?"Close clinic help":"Open clinic help"}>
-      <img src="/images/logo.png" alt="" width="26" height="26"/>
-    </button>
-    {open&&<div className="assistant-panel is-sheet" id="clinic-assistant-panel" ref={panel} tabIndex={-1} role="region" aria-label="Clinic Assistant" onKeyDown={event=>{if(event.key==='Escape'){event.stopPropagation();closeToTrigger()}}}><div className="assistant-head"><div className="assistant-avatar"><Icon name="robot" size={19}/></div><div><b>Clinic Assistant</b><small>Clinic navigation & workflow help</small></div><button className="icon-btn" aria-label="Close clinic help" onClick={closeToTrigger}><Icon name="x" size={16}/></button></div><div className="assistant-body"><div className="assistant-bubble">Hi! I can help you navigate the clinic system. I won’t diagnose conditions or make treatment decisions.</div>{answer&&<div className="assistant-bubble answer">{answer}</div>}<div className="assistant-quick">{quick.map(q=><button key={q} onClick={()=>reply(q)}>{q}</button>)}</div></div></div>}
-  </>
-}
-
+// M7: the Patient-only Clinic Assistant lives in assistant-panel.jsx (server-backed in a clinic-server session; an offline demo
+// preview otherwise). Shell renders it only for role==='patient'. See PHASE4B3_ONBOARDING_BOOKING.md for the FAB placement rules.
 // Patient mobile Menu (the bottom nav's 4th item, replacing "Me" as a permanent destination). Reuses Modal
 // for accessible dialog/focus-trap behavior; the CSS class alone makes it read as a bottom sheet on mobile,
 // not the Staff/Dentist/Owner-styled workspace drawer. Pass 1 remediation: a curated, grouped directory
@@ -211,7 +185,7 @@ export function Shell({ role, page, setPage, onLogout, activeBranch, setActiveBr
     {role==='patient'&&<ConfirmDialog open={logoutConfirmOpen} title="Log out?" tone="default" confirmLabel="Log out" cancelLabel="Cancel" className="patient-logout-dialog" onConfirm={()=>{setLogoutConfirmOpen(false);onLogout()}} onCancel={()=>setLogoutConfirmOpen(false)}>
       Are you sure you want to log out of your account?
     </ConfirmDialog>}
-    {role==='patient'&&<ClinicAssistant open={assistantOpen} onOpenChange={setAssistantOpen}/>}
+    {role==='patient'&&<ClinicAssistant open={assistantOpen} onOpenChange={setAssistantOpen} server={!!store?.session?.serverUserId} onContact={()=>notifyingSetPage('messages')}/>}
   </div></ShellActionsContext.Provider>
 }
 

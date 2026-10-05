@@ -8,7 +8,7 @@ import React from 'react'
 import { renderToString } from 'react-dom/server'
 
 const require=createRequire(import.meta.url)
-const files=['components.jsx','store.jsx','layout.jsx','clock.js','contracts.js','workflow.js','phase2.js','phase3-contracts.js','orchestration.js','pages/Dashboards.jsx','pages/Scheduling.jsx','pages/PatientFlow.jsx','pages/Clinical.jsx','pages/FinanceCommunication.jsx','pages/Admin.jsx','pages/Pricing.jsx','pages/AuditTrail.jsx','audit-api.js','automation-api.js','analytics-api.js','hmo-api.js','pages/PatientLoyalty.jsx','pages/PatientRegister.jsx','pages/PatientBook.jsx','pages/PatientMe.jsx','pages/PatientVisits.jsx','pages/PatientHome.jsx','loyalty.js','registration.js','scheduling.js','booking-drafts.js','geo.js','patient-view.js','data.js']
+const files=['assistant-panel.jsx','components.jsx','store.jsx','layout.jsx','clock.js','contracts.js','workflow.js','phase2.js','phase3-contracts.js','orchestration.js','pages/Dashboards.jsx','pages/Scheduling.jsx','pages/PatientFlow.jsx','pages/Clinical.jsx','pages/FinanceCommunication.jsx','pages/Admin.jsx','pages/Pricing.jsx','pages/AuditTrail.jsx','audit-api.js','automation-api.js','analytics-api.js','hmo-api.js','pages/PatientLoyalty.jsx','pages/PatientRegister.jsx','pages/PatientBook.jsx','pages/PatientMe.jsx','pages/PatientVisits.jsx','pages/PatientHome.jsx','loyalty.js','registration.js','scheduling.js','booking-drafts.js','geo.js','patient-view.js','data.js']
 const result=await build({stdin:{contents:[...files.map(file=>`export * from './src/${file}';`),`export * from './tests/support/server-appointments.js';`].join('\n'),resolveDir:process.cwd()},bundle:true,write:false,platform:'node',format:'esm',plugins:[{name:'shared-react',setup(b){b.onResolve({filter:/^react$/},()=>({path:pathToFileURL(require.resolve('react')).href,external:true}))}}]})
 const m=await import('data:text/javascript;base64,'+Buffer.from(result.outputFiles[0].text).toString('base64'))
 m.setClockSource(()=>new Date('2026-09-19T02:08:00Z'))
@@ -45,6 +45,11 @@ renderToString(React.createElement(m.Login,{onLogin:()=>{}}))
 // Production shell: no demo-reset control and no presentation-only Module Coverage page for any role.
 for(const role of Object.keys(m.NAV)){const shell=render('dashboard',role);assert.ok(!/Reset demo|demo workspace/i.test(shell),`${role} shell exposes no demo reset`);assert.ok(shell.includes('Log out'),`${role} shell keeps Log out`)}
 assert.equal(m.ModulesPage,undefined,'the professor-facing Module Coverage page is removed')
+// M7: the Patient assistant panel is server-backed (typed question box) in a clinic-server session and an explicitly labelled demo otherwise.
+{const server=renderToString(React.createElement(m.ClinicAssistant,{open:true,onOpenChange(){},server:true}));const demo=renderToString(React.createElement(m.ClinicAssistant,{open:true,onOpenChange(){},server:false}))
+assert.ok(server.includes('Ask about using the clinic system')&&!server.includes('Offline demo preview'),'server-mode assistant has the question box and no demo label')
+assert.ok(demo.includes('Offline demo preview')&&!demo.includes('Ask about using the clinic system'),'the demo assistant is labelled and has no free-text box')
+assert.ok(/can.t diagnose/.test(server.replace(/&#x27;|’/g,"'")),'the scope is stated up front')}
 // M13: the Owner pricing page renders its honest loading state under SSR (no fetch runs) and the Branches screen labels
 // the reference fee as unconfirmed rather than as a price.
 {const pricing=render('pricing','owner');assert.ok(pricing.includes('Services &amp; Pricing')&&pricing.includes('Loading prices'),'pricing page renders');assert.ok(!/reference fee/i.test(pricing),'no reference fee is shown on the pricing page')}
