@@ -235,6 +235,15 @@ export function queueCommand(id, name, payload, key) { return command(`/api/queu
 // M7 Patient assistant: the ONLY input is the message; the server derives everything else and holds the provider credential.
 export function askAssistant(message) { return request('/api/assistant/messages', { method: 'POST', body: JSON.stringify({ message }) }) }
 
+// M17 in-app human conversations (cursor-paged; there is no create/edit/delete route).
+export function listConversations(params) { return request(`/api/conversations${query(params)}`) }
+export function conversationSummary() { return request('/api/conversations/summary') }
+export function listConversationMessages(id, params) { return request(`/api/conversations/${encodeURIComponent(id)}/messages${query(params)}`) }
+export function sendConversationMessage(id, body, key) { return command(`/api/conversations/${encodeURIComponent(id)}/messages`, { body }, key) }
+// The browser names the NEWEST message it has actually displayed; the server moves this participant's marker forward only.
+export function markConversationRead(id, upTo) { return command(`/api/conversations/${encodeURIComponent(id)}/read`, { up_to: upTo }) }
+export function closeConversation(id, payload, key) { return command(`/api/conversations/${encodeURIComponent(id)}/close`, payload, key) }
+
 // M16 external inquiries (manually captured by Staff; no social-platform integration). Cursor-paged, newest first.
 export function listInquiries(params) { return request(`/api/inquiries${query(params)}`) }
 export function inquirySummary() { return request('/api/inquiries/summary') }

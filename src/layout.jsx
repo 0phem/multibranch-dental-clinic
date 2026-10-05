@@ -8,6 +8,7 @@ import { patientConversations } from './patient-view.js'
 import { AuthShell } from './pages/AuthShell.jsx'
 import { PasswordField } from './pages/PasswordField.jsx'
 import { ClinicAssistant } from './assistant-panel.jsx'
+import { loadConversationSummary } from './messaging-api.js'
 export { Brand } from './Brand.jsx'
 import { Brand } from './Brand.jsx'
 
@@ -132,7 +133,15 @@ export function Shell({ role, page, setPage, onLogout, activeBranch, setActiveBr
   const initials=name.split(' ').map(x=>x[0]).filter(Boolean).slice(0,2).join('')
   const unread=visibleNotifications(store.state,session).filter(n=>!n.read).length
   const groups=navGroups(role).map(([title,items])=>[title,items.filter(([key])=>canAccessPage(store.state,session,key))]).filter(([,items])=>items.length)
-  const unreadMessages=role==='patient'?patientConversations(store.state,session).filter(c=>c.unread).length:0
+  // M17: in a clinic-server session the unread badge comes ONLY from the server (null = not known yet / unavailable: no badge, never a number).
+  const [serverUnread,setServerUnread]=React.useState(null)
+  React.useEffect(()=>{
+    if(role!=='patient'||!session?.serverUserId)return
+    let live=true
+    loadConversationSummary().then(r=>{if(live)setServerUnread(r.ok?r.unread:null)})
+    return()=>{live=false}
+  },[role,session?.serverUserId,page])
+  const unreadMessages=role==='patient'?(session?.serverUserId?(Number.isInteger(serverUnread)?serverUnread:0):patientConversations(store.state,session).filter(c=>c.unread).length):0
   // Lets a booking page observe an in-app Patient navigation (Pass 2: an honest "booking saved"/"couldn't
   // be saved" toast) without Shell owning that page's state, and without ever blocking navigation itself —
   // the listener is purely notified, its return value is never consulted. Logout goes through the

@@ -12,6 +12,7 @@ use App\Http\Controllers\PatientRegistrationController;
 use App\Http\Controllers\PricingController;
 use App\Http\Controllers\QueueController;
 use App\Http\Controllers\AssistantController;
+use App\Http\Controllers\ConversationController;
 use App\Http\Controllers\InquiryController;
 use App\Http\Controllers\TreatmentController;
 use App\Http\Controllers\UserBranchScopeController;
@@ -203,6 +204,18 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureAccountAccess::cla
         Route::post('/{hmoCase}/escalate', [HmoController::class, 'escalate'])->middleware('role:staff');
         Route::post('/{hmoCase}/response', [HmoController::class, 'respond'])->middleware('role:staff');
         Route::post('/{hmoCase}/withdraw', [HmoController::class, 'withdraw'])->middleware('role:staff');
+    });
+
+    // M17 Unified Patient Messaging: in-app human conversations between an identified Patient and explicit clinic participants. Patient,
+    // Staff and Dentist only (Owner has none); no create/edit/delete route; sending is rate-limited per account (a technical bound).
+    Route::prefix('conversations')->middleware('role:patient,staff,dentist')->group(function () {
+        Route::get('/', [ConversationController::class, 'index']);
+        Route::get('/summary', [ConversationController::class, 'summary']);
+        Route::get('/{conversation}', [ConversationController::class, 'show']);
+        Route::get('/{conversation}/messages', [ConversationController::class, 'messages']);
+        Route::post('/{conversation}/messages', [ConversationController::class, 'send'])->middleware('throttle:m17-send');
+        Route::post('/{conversation}/read', [ConversationController::class, 'read']);
+        Route::post('/{conversation}/close', [ConversationController::class, 'close']);
     });
 
     // M16 Social Media & External Inquiry Management: manually captured pre-booking inquiries, Staff only (assigned Staff in an

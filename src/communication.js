@@ -20,6 +20,7 @@ export function communicationActions(run) {
     return {ok:true}
   })
   const markConversationRead=run(({state,session,now},id)=>{
+    if(session.serverUserId)return fail('Conversations are managed on the clinic server. Use the Messages page.')
     const c=state.conversations.find(c=>c.id===id)
     if(!canReadConversation(state,session,c))return fail('Conversation is outside your participant scope.')
     if(!c.unreadUserIds.includes(session.userId))return {ok:true,unchanged:true,record:c}
@@ -28,6 +29,7 @@ export function communicationActions(run) {
     return {ok:true,record}
   })
   const replyToConversation=run(({state,session,now,event},id,text,commandId)=>{
+    if(session.serverUserId)return fail('Messages are sent through the clinic server. Use the Messages page.')
     const c=state.conversations.find(c=>c.id===id)
     if(!canReadConversation(state,session,c))return fail('Conversation is outside your participant scope.')
     if(!commandId||!clean(text))return fail('Enter a message and a reply command ID.')
@@ -42,6 +44,7 @@ export function communicationActions(run) {
     return {ok:true,record}
   },{name:'conversation.reply',domain:'messaging'})
   const closeConversation=run(({state,session,event},id)=>{
+    if(session.serverUserId)return fail('Conversations are closed through the clinic server. Use the Messages page.')
     const c=state.conversations.find(c=>c.id===id)
     if(!['staff','dentist'].includes(session.role)||!canReadConversation(state,session,c))return fail('Only assigned clinic participants can close this conversation.')
     if(c.status==='Closed')return {ok:true,unchanged:true,record:c}

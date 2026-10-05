@@ -97,6 +97,7 @@ export function normalizeFailure(result) {
     errors: result.errors || {},
     failedChecks: result.failedChecks || [],
     alternatives: result.alternatives || [],
+    ...(result.retry_after ? { retry_after: result.retry_after } : {}),
   }
 }
 

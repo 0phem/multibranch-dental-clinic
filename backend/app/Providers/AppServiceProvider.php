@@ -40,6 +40,16 @@ class AppServiceProvider extends ServiceProvider
                 \Illuminate\Cache\RateLimiting\Limit::perHour(max(1, (int) config('assistant.rate_per_hour')))->by($who.':h')->response($respond),
             ];
         });
+        // M17: per ACCOUNT send bound (storage/spam amplification). A technical safeguard, not a clinic response or conduct policy.
+        \Illuminate\Support\Facades\RateLimiter::for('m17-send', function ($request) {
+            $who = 'user:'.($request->user()?->getAuthIdentifier() ?? 'anon:'.$request->ip());
+            $respond = fn ($request, array $headers) => response()->json(['message' => 'You are sending messages very quickly. Please wait a moment and try again.', 'code' => 'messages_rate_limited', 'retry_after' => (int) ($headers['Retry-After'] ?? 60)], 429, $headers);
+
+            return [
+                \Illuminate\Cache\RateLimiting\Limit::perMinute((int) config('messaging.per_minute', 20))->by($who.':m')->response($respond),
+                \Illuminate\Cache\RateLimiting\Limit::perHour((int) config('messaging.per_hour', 200))->by($who.':h')->response($respond),
+            ];
+        });
         \Illuminate\Support\Facades\RateLimiter::for('m1-register', fn ($request) =>
             \Illuminate\Cache\RateLimiting\Limit::perMinute(30)->by($request->ip()));
         \Illuminate\Support\Facades\RateLimiter::for('m1-otp', fn ($request) =>

@@ -117,7 +117,7 @@ function OwnerDashboard({ activeBranch, setPage, state, session }) {
     <div className="cards-3 top-gap">
       <Card title="Scheduling health"><MetricRow label="Confirmed today" value={appointments.filter(a=>a.status==='Confirmed').length}/><MetricRow label="Pending confirmation" value={appointments.filter(a=>a.status==='Pending').length}/><button className="card-link" onClick={()=>setPage('analytics')}>See scheduling report <Icon name="arrow" size={14}/></button></Card>
       <Card title="HMO health"><MetricRow label="Pending provider response" value={pendingHmo.length}/><MetricRow label="Approved cases" value={liveRecords(state.hmo).filter(h=>h.status==='Approved').length}/><button className="card-link" onClick={()=>setPage('hmo')}>Open HMO overview <Icon name="arrow" size={14}/></button></Card>
-      <Card title="Patient communication"><MetricRow label="Open inquiries" value={session?.serverUserId?'Not available to Owner':state.inquiries.filter(i=>i.status==='Open').length}/><MetricRow label="Active conversations" value={state.conversations.filter(c=>c.status==='Open').length}/><button className="card-link" onClick={()=>setPage('engagement')}>View engagement <Icon name="arrow" size={14}/></button></Card>
+      <Card title="Patient communication"><MetricRow label="Open inquiries" value={session?.serverUserId?'Not available to Owner':state.inquiries.filter(i=>i.status==='Open').length}/><MetricRow label="Active conversations" value={session?.serverUserId?'Not available to Owner':state.conversations.filter(c=>c.status==='Open').length}/><button className="card-link" onClick={()=>setPage('engagement')}>View engagement <Icon name="arrow" size={14}/></button></Card>
     </div>
   </>
 }

@@ -8,6 +8,7 @@ import { sessionForRole } from '../contracts.js'
 import { PatientBillingPage } from './PatientCare.jsx'
 import { PatientMessagesPage } from './PatientMessages.jsx'
 import { ServerInquiriesPage } from './Inquiries.jsx'
+import { ServerMessagesPage } from './ServerMessages.jsx'
 import { listBillingInvoices, listBillingTreatments, createBillingDraft, reviewBillingInvoice, issueBillingInvoice, recordBillingPayment } from '../api-client.js'
 
 function InvoiceCharges({invoice,state}) {
@@ -97,7 +98,14 @@ function DemoInquiriesPage({ store }) {
   </>
 }
 
+// M17: a clinic-server session uses the server-backed conversations (pages/ServerMessages.jsx). The local prototype below survives ONLY
+// for the offline demo (no server session) and is never reachable with a signed-in clinic account.
 export function MessagesPage({ role, store, context }) {
+  if(store.session?.serverUserId)return <ServerMessagesPage store={store} role={role}/>
+  return <DemoMessagesPage role={role} store={store} context={context}/>
+}
+
+function DemoMessagesPage({ role, store, context }) {
   const { state, actions, toast }=store
   const session=store.session||sessionForRole(role,state)
   const relevant=visibleConversations(state,session)
