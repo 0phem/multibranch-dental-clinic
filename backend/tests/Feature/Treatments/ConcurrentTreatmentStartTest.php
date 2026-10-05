@@ -118,4 +118,85 @@ class ConcurrentTreatmentStartTest extends TestCase
         $this->postJson("/api/visits/{$loser->public_id}/treatment", ['expected_revision' => $loser->fresh()->revision], ['Idempotency-Key' => 'next'])->assertCreated();
         $this->assertSame(1, Treatment::where('status', 'In Treatment')->count());
     }
+
+    /** @param list<array{0:string,1:array,2:string,3?:string}> $requests [path, payload, idempotency key, token owner] released together */
+    private function raceCommands(array $requests): array
+    {
+        $startAt = microtime(true) + 2.0;
+        $children = [];
+        foreach ($requests as $request) {
+            [$path, $payload, $key] = $request;
+            $who = $request[3] ?? 'dentist1';
+            $token = $this->u[$who]->createToken('concurrency-test')->plainTextToken;
+            $process = proc_open([PHP_BINARY, base_path('tests/Support/concurrent_request.php'), $token, $path, json_encode($payload), (string) $startAt, json_encode(['Idempotency-Key' => $key])],
+                [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, base_path(),
+                array_merge(getenv(), ['APP_ENV' => 'testing', 'DB_CONNECTION' => 'pgsql', 'DB_DATABASE' => 'dental_clinic_test', 'DB_URL' => '', 'CACHE_STORE' => 'array', 'SESSION_DRIVER' => 'array', 'QUEUE_CONNECTION' => 'sync', 'BCRYPT_ROUNDS' => '4']));
+            $children[] = [$process, $pipes];
+        }
+        $results = [];
+        foreach ($children as [$process, $pipes]) {
+            $out = stream_get_contents($pipes[1]);
+            $err = stream_get_contents($pipes[2]);
+            proc_close($process);
+            $results[] = json_decode($out, true) ?? $this->fail("child process failed: {$out} {$err}");
+        }
+
+        return $results;
+    }
+
+    private function documented(): Treatment
+    {
+        $visit = $this->calledWalkIn('A');
+        $this->actingAsUser('dentist1');
+        $this->postJson("/api/visits/{$visit->public_id}/treatment", ['expected_revision' => $visit->revision], ['Idempotency-Key' => 'start-1'])->assertCreated();
+        $t = Treatment::sole();
+        $this->postJson("/api/treatments/{$t->public_id}/document", ['expected_revision' => 1, 'prescription_required' => false, 'followup_required' => false, 'procedure_summary' => 'Cleaning',
+            'procedures' => [['service_ref' => 'svc1', 'quantity' => 1]]], ['Idempotency-Key' => 'doc-0'])->assertOk();
+
+        return $t->fresh();
+    }
+
+    public function test_two_complete_commands_complete_once_with_one_history_row_and_one_audit_event(): void
+    {
+        $t = $this->documented();
+        $path = "/api/treatments/{$t->public_id}/complete";
+        $results = $this->raceCommands([[$path, ['expected_revision' => 2], 'c-1'], [$path, ['expected_revision' => 2], 'c-2']]);
+        $this->assertSame([200, 200], array_column($results, 'status'), json_encode($results));
+        $this->assertSame(['Completed', 3], [$t->fresh()->status, $t->fresh()->revision]);
+        $this->assertSame(1, \App\Models\TreatmentHistory::where('treatment_id', $t->id)->where('event', 'treatment.completed')->count());
+        $this->assertSame(1, \App\Models\AuditLog::where('action', 'treatment.completed')->count());
+        $this->assertSame('Completed', $t->visit->fresh()->status);
+    }
+
+    public function test_a_documentation_save_racing_completion_has_exactly_one_consistent_winner(): void
+    {
+        $t = $this->documented();
+        $body = ['expected_revision' => 2, 'prescription_required' => false, 'followup_required' => false, 'procedure_summary' => 'Rewritten after completion?', 'procedures' => [['service_ref' => 'svc1', 'quantity' => 3]]];
+        $results = $this->raceCommands([["/api/treatments/{$t->public_id}/complete", ['expected_revision' => 2], 'r-complete'], ["/api/treatments/{$t->public_id}/document", $body, 'r-doc']]);
+        $fresh = $t->fresh();
+        $statuses = array_column($results, 'status');
+        sort($statuses);
+        $lines = TreatmentProcedure::where('treatment_id', $t->id)->get();
+        if ($fresh->status === 'Completed') {
+            // Completion won: the save was refused as stale (its revision is gone) and nothing it carried reached the closed record.
+            $this->assertSame([200, 409], $statuses, json_encode($results));
+            $this->assertSame(['Cleaning', 1], [$fresh->procedure_summary, $lines->sole()->quantity]);
+        } else {
+            // The save won: completion saw a changed revision and was refused as stale; the Treatment stays open and consistent.
+            $this->assertSame([200, 409], $statuses, json_encode($results));
+            $this->assertSame(['In Treatment', 'Rewritten after completion?', 3], [$fresh->status, $fresh->procedure_summary, $lines->sole()->quantity]);
+            $this->assertSame('In Treatment', $t->visit->fresh()->status);
+        }
+        $this->assertSame($fresh->revision, \App\Models\TreatmentHistory::where('treatment_id', $t->id)->max('revision'));
+    }
+
+    public function test_another_dentist_cannot_complete_or_document_a_treatment_they_do_not_own_even_when_racing(): void
+    {
+        $t = $this->documented();
+        $results = $this->raceCommands([["/api/treatments/{$t->public_id}/complete", ['expected_revision' => 2], 'o-1', 'dentist2'], ["/api/treatments/{$t->public_id}/complete", ['expected_revision' => 2], 'o-2', 'dentist1']]);
+        $statuses = array_column($results, 'status');
+        sort($statuses);
+        $this->assertSame([200, 403], $statuses, json_encode($results));
+        $this->assertSame('Completed', $t->fresh()->status);
+    }
 }

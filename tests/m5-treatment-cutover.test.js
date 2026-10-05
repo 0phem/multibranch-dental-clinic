@@ -80,7 +80,39 @@ test('loads Treatments in the bounded window with paging; the Patient uses /trea
   const params = new URL(`http://x${apiCalls()[0].path}`).searchParams
   assert.deepEqual([params.get('from'), params.get('to'), params.get('per_page')], ['2026-06-21', '2026-12-21', '100'])
   await treatmentsApi.loadMyTreatments()
-  assert.equal(apiCalls().at(-1).path, '/api/treatments/mine', 'no Patient id parameter is ever sent')
+  const mine = new URL(`http://x${apiCalls().at(-1).path}`)
+  assert.equal(mine.pathname, '/api/treatments/mine')
+  assert.deepEqual([...mine.searchParams.keys()].sort(), ['per_page'], 'only paging is sent: no Patient id parameter')
+})
+
+test('the Patient history follows the server cursor to the end, and a failed page is an error, never a shorter history', async () => {
+  const pages = { first: { data: [{ id: serverId(1) }], meta: { per_page: 100, next_cursor: 'c1' } }, c1: { data: [{ id: serverId(2) }], meta: { per_page: 100, next_cursor: 'c2' } }, c2: { data: [{ id: serverId(3) }], meta: { per_page: 100, next_cursor: null } } }
+  mockFetch(path => json(200, pages[new URL(`http://x${path}`).searchParams.get('cursor') ?? 'first']))
+  const all = await treatmentsApi.loadMyTreatments()
+  assert.deepEqual([all.ok, all.rows.length, all.truncated], [true, 3, false])
+  assert.deepEqual(apiCalls().map(c => new URL(`http://x${c.path}`).searchParams.get('cursor')), [null, 'c1', 'c2'])
+  mockFetch(path => (new URL(`http://x${path}`).searchParams.get('cursor') === 'c1' ? json(500, { message: 'boom' }) : json(200, pages.first)))
+  const failed = await treatmentsApi.loadMyTreatments()
+  assert.equal(failed.ok, false)
+  assert.equal(failed.rows, undefined, 'no partial history is returned')
+  mockFetch(() => json(200, { data: [{ id: serverId(9) }], meta: { per_page: 100, next_cursor: 'forever' } }))
+  const bounded = await treatmentsApi.loadMyTreatments()
+  assert.deepEqual([bounded.ok, bounded.truncated, bounded.nextCursor], [true, true, 'forever'], 'an over-long history is flagged and its server cursor is kept')
+  // The records beyond the automatic bound stay reachable: continuing from the kept cursor reads the rest, then stops at null.
+  mockFetch(path => {
+    const cursor = new URL(`http://x${path}`).searchParams.get('cursor')
+    return json(200, { data: [{ id: serverId(50) }], meta: { per_page: 100, next_cursor: cursor === 'forever' ? null : 'forever' } })
+  })
+  const rest = await treatmentsApi.loadMyTreatments('forever')
+  assert.deepEqual([rest.ok, rest.rows.length, rest.truncated, rest.nextCursor], [true, 1, false, null])
+  assert.equal(new URL(`http://x${apiCalls()[0].path}`).searchParams.get('cursor'), 'forever')
+  mockFetch(() => json(500, { message: 'boom' }))
+  assert.equal((await treatmentsApi.loadMyTreatments('forever')).ok, false, 'a failed continuation is an error and can be retried with the same cursor')
+  const visits = read('src/pages/PatientVisits.jsx')
+  assert.match(visits, /Load older treatment records/)
+  assert.match(visits, /Only part of your treatment history is shown/)
+  assert.match(read('src/store.jsx'), /loadOlderTreatments/)
+  assert.match(read('src/store.jsx'), /setMyTreatmentsCursor\(myTreated\.nextCursor/)
 })
 
 test('start / document / complete send named commands with Idempotency-Key and expected_revision, never a status or a price', async () => {

@@ -538,4 +538,149 @@ class TreatmentTest extends TestCase
         }
         $this->assertSame(0, Treatment::count(), 'no Treatment shell is created');
     }
+
+    // ---- M5 production hardening ---------------------------------------------------------------------------------------
+
+    private function completedTreatment(string $patient = 'A'): Treatment
+    {
+        $t = $this->started($this->walkIn($patient));
+        $this->doc($t)->assertOk();
+        $this->complete($t)->assertOk();
+
+        return $t->fresh();
+    }
+
+    public function test_a_patient_pages_their_completed_treatments_newest_first_without_gaps_repeats_or_leaks(): void
+    {
+        $made = [];
+        for ($i = 0; $i < 5; $i++) {
+            $this->travel(5)->minutes(); // distinct completion instants; ties would still be ordered by id
+            $made[] = $this->completedTreatment('A')->public_id;
+        }
+        $other = $this->completedTreatment('B')->public_id;
+        $newest = array_reverse($made);
+
+        $this->actingAsUser('patientA');
+        $one = $this->getJson('/api/treatments/mine?per_page=2')->assertOk();
+        $two = $this->getJson('/api/treatments/mine?per_page=2&cursor='.$one->json('meta.next_cursor'))->assertOk();
+        $three = $this->getJson('/api/treatments/mine?per_page=2&cursor='.$two->json('meta.next_cursor'))->assertOk();
+        $this->assertSame($newest, [...array_column($one->json('data'), 'id'), ...array_column($two->json('data'), 'id'), ...array_column($three->json('data'), 'id')]);
+        $this->assertSame($newest[1], $one->json('meta.next_cursor'));
+        $this->assertNull($three->json('meta.next_cursor'));
+        $this->assertNotContains($other, array_column($one->json('data'), 'id'));
+        $this->assertSame(50, $this->getJson('/api/treatments/mine')->json('meta.per_page'));
+        foreach (['per_page=0', 'per_page=101', 'per_page=x', 'cursor=short', 'cursor[]=a'] as $bad) {
+            $this->getJson('/api/treatments/mine?'.$bad)->assertStatus(422);
+        }
+        // Patient B's cursor into Patient A's list (and an unknown cursor) behave identically: an empty page.
+        $this->actingAsUser('patientB');
+        $foreign = $this->getJson('/api/treatments/mine?cursor='.$one->json('meta.next_cursor'))->assertOk();
+        $unknown = $this->getJson('/api/treatments/mine?cursor=01ARZ3NDEKTSV4RRFFQ69G5FAV')->assertOk();
+        $this->assertSame($unknown->json(), $foreign->json());
+        $this->assertSame([], $foreign->json('data'));
+        $this->assertSame([$other], array_column($this->getJson('/api/treatments/mine')->json('data'), 'id'));
+    }
+
+    public function test_only_the_responsible_dentist_starts_and_other_roles_and_identifiers_are_refused(): void
+    {
+        $visit = $this->scheduled();
+        foreach (['dentist2', 'staffB1', 'owner', 'patientA'] as $who) {
+            $this->actingAsUser($who);
+            $this->start($visit)->assertForbidden();
+        }
+        $this->actingAsUser('dentist1');
+        foreach (['999999', 'not-a-ulid', '01ARZ3NDEKTSV4RRFFQ69G5FAV'] as $bad) {
+            $this->postJson("/api/visits/{$bad}/treatment", ['expected_revision' => 1], ['Idempotency-Key' => $this->key()])->assertNotFound();
+            $this->getJson("/api/treatments/{$bad}")->assertNotFound();
+            $this->postJson("/api/treatments/{$bad}/complete", ['expected_revision' => 1], ['Idempotency-Key' => $this->key()])->assertNotFound();
+        }
+        $this->start($visit, null, '')->assertStatus(422); // Idempotency-Key is mandatory
+        $this->assertSame(0, Treatment::count());
+        $this->assertSame('Checked In', $visit->fresh()->status);
+    }
+
+    public function test_forged_identity_state_clock_and_money_fields_are_refused_on_every_command(): void
+    {
+        $visit = $this->scheduled();
+        $this->actingAsUser('dentist1');
+        $forged = ['patient_id' => 1, 'branch_id' => 'b2', 'dentist_id' => 'd2', 'status' => 'Completed', 'started_at' => '2020-01-01T00:00:00Z', 'completed_at' => '2020-01-01T00:00:00Z',
+            'created_by_user_id' => 1, 'invoice_id' => 1, 'billing_status' => 'Paid', 'price' => '1.00', 'amount' => '1.00', 'revision' => 9, 'history' => ['x'], 'audit' => ['x']];
+        foreach ($forged as $field => $value) {
+            $this->postJson("/api/visits/{$visit->public_id}/treatment", ['expected_revision' => $visit->fresh()->revision, $field => $value], ['Idempotency-Key' => $this->key()])->assertStatus(422, "start must refuse {$field}");
+        }
+        $this->assertSame(0, Treatment::count());
+        $t = $this->started($visit);
+        foreach ($forged as $field => $value) {
+            $this->doc($t, [$field => $value])->assertStatus(422, "document must refuse {$field}");
+            $this->postJson("/api/treatments/{$t->public_id}/complete", ['expected_revision' => 1, $field => $value], ['Idempotency-Key' => $this->key()])->assertStatus(422, "complete must refuse {$field}");
+        }
+        // A price or an unknown key inside a procedure line is refused too.
+        $this->doc($t, ['procedures' => [['service_ref' => 'svc1', 'quantity' => 1, 'price' => '1.00']]])->assertStatus(422);
+        $this->doc($t, ['procedures' => [['service_ref' => 'svc1', 'quantity' => 1, 'service_id' => 1]]])->assertStatus(422);
+        $fresh = $t->fresh();
+        $this->assertSame(['In Treatment', 1], [$fresh->status, $fresh->revision]);
+    }
+
+    public function test_a_completed_treatment_is_closed_to_every_command_and_the_database_agrees(): void
+    {
+        $t = $this->completedTreatment();
+        $this->actingAsUser('dentist1');
+        $this->doc($t, ['clinical_notes' => 'rewritten'], $t->revision)->assertStatus(422)->assertJsonPath('code', 'treatment_completed');
+        $this->postJson("/api/treatments/{$t->public_id}/start", [], ['Idempotency-Key' => $this->key()])->assertStatus(404);
+        $this->start($t->visit, null)->assertStatus(409); // treatment_exists
+        foreach (['patch', 'put', 'delete'] as $verb) {
+            $this->{$verb.'Json'}("/api/treatments/{$t->public_id}", ['clinical_notes' => 'x'])->assertStatus(405);
+        }
+        $this->assertSame('Tolerated well.', $t->fresh()->clinical_notes);
+        foreach ([fn () => DB::table('treatments')->where('id', $t->id)->update(['clinical_notes' => 'x']),
+            fn () => DB::table('treatments')->where('id', $t->id)->delete(),
+            fn () => DB::table('treatment_procedures')->where('treatment_id', $t->id)->update(['quantity' => 5]),
+            fn () => DB::table('treatment_procedures')->where('treatment_id', $t->id)->delete(),
+            fn () => DB::table('treatment_history')->where('treatment_id', $t->id)->delete()] as $attempt) {
+            try {
+                DB::transaction($attempt);
+                $this->fail('the database must refuse changing a Completed treatment');
+            } catch (QueryException) {
+                $this->assertTrue(true);
+            }
+        }
+    }
+
+    public function test_a_failure_while_completing_rolls_everything_back(): void
+    {
+        $t = $this->started($this->scheduled());
+        $this->doc($t)->assertOk();
+        $revision = $t->fresh()->revision;
+        TreatmentHistory::creating(fn ($h) => $h->event === 'treatment.completed' ? throw new RuntimeException('simulated failure') : null);
+        $this->withoutExceptionHandling();
+        try {
+            $this->complete($t, $revision);
+            $this->fail('expected the simulated failure');
+        } catch (RuntimeException) {
+        }
+        $fresh = $t->fresh();
+        $this->assertSame(['In Treatment', $revision, null, 'In Treatment', 'In Treatment'], [$fresh->status, $fresh->revision, $fresh->completed_at, $fresh->visit->status, $fresh->visit->appointment->status]);
+        $this->assertSame(0, \App\Models\AuditLog::where('action', 'treatment.completed')->count());
+        $this->assertSame(0, DB::table('command_keys')->where('command', 'treatment.complete')->count());
+    }
+
+    public function test_start_and_completion_emit_minimal_m22_events_without_clinical_text(): void
+    {
+        $t = $this->completedTreatment();
+        $events = \App\Models\AuditLog::whereIn('action', ['treatment.started', 'treatment.completed'])->orderBy('id')->get();
+        $this->assertSame(['treatment.started', 'treatment.completed'], $events->pluck('action')->all());
+        foreach ($events as $event) {
+            $this->assertSame(['clinical', 'dentist', $t->public_id, $t->visit->branch_id], [$event->category, $event->actor_role, $event->auditable_public_id, $event->branch_id]);
+        }
+        $json = json_encode($events->pluck('payload'));
+        foreach (['Tooth sensitivity', 'Clean and review', 'Oral prophylaxis', 'Tolerated well', 'Full mouth', 'service_name', 'notes'] as $text) {
+            $this->assertStringNotContainsString($text, $json);
+        }
+        $this->assertSame(1, $events->last()->payload['procedure_lines']);
+        // A replay of the same command key neither repeats the transition nor the event.
+        $this->actingAsUser('dentist1');
+        $this->postJson("/api/treatments/{$t->public_id}/complete", ['expected_revision' => $t->revision - 1], ['Idempotency-Key' => 'replay-1'])->assertOk();
+        $this->postJson("/api/treatments/{$t->public_id}/complete", ['expected_revision' => $t->revision - 1], ['Idempotency-Key' => 'replay-1'])->assertOk();
+        $this->assertSame(1, \App\Models\AuditLog::where('action', 'treatment.completed')->count());
+    }
 }

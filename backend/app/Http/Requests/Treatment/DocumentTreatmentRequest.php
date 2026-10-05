@@ -41,6 +41,9 @@ class DocumentTreatmentRequest extends FormRequest
             'visit_id' => ['prohibited'],
             'started_at' => ['prohibited'],
             'completed_at' => ['prohibited'],
+            // Identity, ownership, state, clocks, money and audit fields are server context: supplying one is refused, never ignored.
+            ...array_fill_keys(['patient_id', 'branch_id', 'branch_ref', 'dentist_id', 'dentist_profile_id', 'assistant_ref', 'id', 'public_id', 'revision',
+                'created_by_user_id', 'updated_by_user_id', 'reviewed_by', 'billing_status', 'invoice_id', 'price', 'amount', 'fee', 'total', 'history', 'audit'], ['prohibited']),
         ];
     }
 

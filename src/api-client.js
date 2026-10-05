@@ -220,7 +220,8 @@ export function walkInVisit(payload, key) { return command('/api/visits/walk-in'
 // Treatment command on the Visit (there is no standalone Visit start/complete command).
 export function listTreatments(params) { return request(`/api/treatments${query(params)}`) }
 export function getTreatment(id) { return request(`/api/treatments/${encodeURIComponent(id)}`) }
-export function myTreatments() { return request('/api/treatments/mine') }
+// Cursor-paged (newest first): per_page 1-100, cursor = the previous page's meta.next_cursor.
+export function myTreatments(params) { return request(`/api/treatments/mine${query(params)}`) }
 export function startTreatment(visitId, payload, key) { return command(`/api/visits/${encodeURIComponent(visitId)}/treatment`, payload, key) }
 export function treatmentCommand(id, name, payload, key) { return command(`/api/treatments/${encodeURIComponent(id)}/${encodeURIComponent(name)}`, payload, key) }
 

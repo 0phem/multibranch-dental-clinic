@@ -151,7 +151,15 @@ export function PatientQueuePage({ store, setPage }) {
 export function AppointmentsLoadState({ store }) {
   if(store.appointmentsStatus==='loading')return <p className="pt-hint" role="status">Loading your visits…</p>
   if(store.appointmentsStatus==='error')return <Notice tone="warning" title="Your visits couldn’t be loaded">{store.appointmentsError} <Button size="sm" variant="ghost" onClick={()=>store.appointmentFlow?.refresh()}>Try again</Button></Notice>
+  if(store.myTreatmentsCursor)return <TreatmentHistoryMore store={store}/>
   return null
+}
+
+// The automatic fetch of a very long treatment history is bounded; the rest stays reachable through the server cursor.
+function TreatmentHistoryMore({ store }) {
+  const [busy,setBusy]=React.useState(false),[error,setError]=React.useState('')
+  const more=async()=>{setBusy(true);setError('');const result=await store.loadOlderTreatments();setBusy(false);if(!result.ok)setError(result.message||'Older treatment records could not be loaded.')}
+  return <Notice tone="info" title="Only part of your treatment history is shown">Older completed treatments are available. {error&&<span role="alert">{error} </span>}<Button size="sm" variant="soft" disabled={busy} onClick={more}>{error?'Retry':busy?'Loading…':'Load older treatment records'}</Button></Notice>
 }
 
 const FOLLOWUP_NOTE={Open:'Your Dentist recommended a return visit. It isn’t scheduled yet.',Scheduled:'Your follow-up visit is scheduled.',Completed:'This follow-up visit is complete.','Needs clinic review':'The clinic needs to review this record before it can be scheduled.'}

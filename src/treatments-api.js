@@ -101,11 +101,23 @@ export async function loadTreatments(today) {
   return { ok: true, rows, truncated: true }
 }
 
-/** The signed-in Patient's own completed Treatments (safe subset). */
-export async function loadMyTreatments() {
-  const result = await api.myTreatments()
-  if (!result.ok) return normalizeFailure(result)
-  return { ok: true, rows: result.data || [] }
+/**
+ * The signed-in Patient's own completed Treatments (safe subset), newest first, read page by page through the server's cursor.
+ * A history longer than the bounded number of pages is reported as `truncated` so the app never presents a partial history as
+ * complete; a failed page is an explicit failure (never a silently shorter list).
+ */
+export async function loadMyTreatments(startCursor = null) {
+  const rows = []
+  let cursor = startCursor
+  for (let page = 1; page <= MAX_PAGES; page++) {
+    const result = await api.myTreatments({ per_page: PAGE_SIZE, ...(cursor ? { cursor } : {}) })
+    if (!result.ok) return normalizeFailure(result)
+    rows.push(...(result.data || []))
+    cursor = result.meta?.next_cursor ?? null
+    if (!cursor) return { ok: true, rows, truncated: false, nextCursor: null }
+  }
+  // The automatic fetch is bounded, but the server cursor is kept: the Patient continues from it with an explicit action.
+  return { ok: true, rows, truncated: true, nextCursor: cursor }
 }
 
 // Treatment-specific wording for refusals the shared mapper words for appointments.

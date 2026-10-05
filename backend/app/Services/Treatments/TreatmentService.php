@@ -12,6 +12,7 @@ use App\Models\TreatmentHistory;
 use App\Models\TreatmentProcedure;
 use App\Models\User;
 use App\Models\Visit;
+use App\Services\Audit\AuditService;
 use App\Services\Queue\QueueService;
 use App\Services\Visits\VisitCommandException;
 use App\Services\Visits\VisitService;
@@ -93,6 +94,7 @@ final class TreatmentService
                 'updated_by_user_id' => $actor->id,
             ]);
             $this->history($treatment, $actor, 'treatment.started', null);
+            $this->audit($actor, 'treatment.started', $treatment, $current->branch_id, ['visit' => $current->public_id, 'from_status' => null, 'to_status' => 'In Treatment', 'revision' => 1]);
 
             return [$treatment, 201];
         });
@@ -186,6 +188,7 @@ final class TreatmentService
 
             $current->update(['status' => 'Completed', 'completed_at' => ClinicClock::now(), 'revision' => $current->revision + 1, 'updated_by_user_id' => $actor->id]);
             $this->history($current, $actor, 'treatment.completed', 'In Treatment');
+            $this->audit($actor, 'treatment.completed', $current, $visit->branch_id, ['visit' => $visit->public_id, 'from_status' => 'In Treatment', 'to_status' => 'Completed', 'revision' => $current->revision, 'procedure_lines' => $lines->count()]);
             $this->visits->applyClinical($actor, $visit, $appointment, 'Completed');
 
             return [$current, 200];
@@ -285,6 +288,19 @@ final class TreatmentService
         }
 
         return true;
+    }
+
+    /**
+     * Minimal M22 event for the two clinically significant transitions. Public identifiers, the state change and a count only:
+     * never the complaint, plan, notes, summary or procedure detail (that clinical text stays in M5's own history). It is written
+     * in the command's transaction, so a failed audit write rolls the clinical transition back with it.
+     */
+    private function audit(User $actor, string $action, Treatment $treatment, int $branchId, array $payload): void
+    {
+        app(AuditService::class)->record([
+            'action' => $action, 'category' => 'clinical', 'severity' => 'info', 'actor' => $actor, 'target' => $treatment,
+            'branch_id' => $branchId, 'payload' => $payload,
+        ]);
     }
 
     /** Appends the immutable history row with a snapshot of this revision's documentation and procedure lines. */

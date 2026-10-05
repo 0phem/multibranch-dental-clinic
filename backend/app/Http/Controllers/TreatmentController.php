@@ -61,18 +61,30 @@ class TreatmentController extends Controller
         return new TreatmentResource($treatment);
     }
 
-    /** The signed-in Patient's own COMPLETED Treatments (safe subset). The Patient comes from the account, never a parameter. */
+    /**
+     * The signed-in Patient's own COMPLETED Treatments (safe subset), newest first and keyset-paged (per_page 1-100, default 50;
+     * cursor = the last Treatment's public id). The Patient comes from the account, never a parameter; an unknown or another
+     * Patient's cursor yields the same empty page and reveals nothing.
+     */
     public function mine(Request $request)
     {
         $user = $request->user();
         abort_unless($user->role === Role::Patient && $user->patient !== null, 403, 'Forbidden.');
-        $request->validate(['patient_id' => ['prohibited']]);
-        $rows = Treatment::where('status', 'Completed')
-            ->whereHas('visit', fn ($v) => $v->where('patient_id', $user->patient->id))
-            ->with(['visit', 'dentist.person', 'procedures'])
-            ->orderByDesc('completed_at')->orderByDesc('id')->limit(200)->get();
+        $v = $request->validate(['patient_id' => ['prohibited'], 'per_page' => ['nullable', 'integer', 'min:1', 'max:100'], 'cursor' => ['nullable', 'string', 'size:26']]);
+        $per = (int) ($v['per_page'] ?? 50);
+        $own = fn ($visit) => $visit->where('patient_id', $user->patient->id);
+        $query = Treatment::where('status', 'Completed')->whereHas('visit', $own);
+        if (! empty($v['cursor'])) {
+            $at = Treatment::where('status', 'Completed')->whereHas('visit', $own)->where('public_id', strtolower($v['cursor']))->first(['completed_at', 'id']);
+            // Order is (completed_at desc, id desc); the cursor row is looked up inside the Patient's own set only.
+            $query->where(fn ($q) => $at
+                ? $q->where('completed_at', '<', $at->completed_at)->orWhere(fn ($t) => $t->where('completed_at', $at->completed_at)->where('id', '<', $at->id))
+                : $q->whereRaw('false'));
+        }
+        $rows = $query->with(['visit', 'dentist.person', 'procedures'])->orderByDesc('completed_at')->orderByDesc('id')->limit($per + 1)->get();
+        $page = $rows->take($per)->values();
 
-        return PatientTreatmentResource::collection($rows);
+        return response()->json(['data' => PatientTreatmentResource::collection($page)->resolve($request), 'meta' => ['per_page' => $per, 'next_cursor' => $rows->count() > $per ? $page->last()->public_id : null]]);
     }
 
     public function start(TreatmentCommandRequest $request, Visit $visit): JsonResponse
