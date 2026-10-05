@@ -52,6 +52,7 @@ export function communicationActions(run) {
   })
   const canInquiry=(state,session,i)=>session.role==='staff'&&i?.assignedUserId===session.userId&&i.branchId===session.branchId&&state.users.some(u=>u.id===session.userId&&(u.permissions?.includes('inquiries')||(u.roleName||u.role)==='Receptionist'&&u.permissions?.includes('messages')))
   const createInquiry=run(({state,session,now,event},form={},commandId)=>{
+    if(session.serverUserId)return fail('Inquiries are recorded on the clinic server. Use the inquiry worklist.')
     if(!isRecord(form))return fail('Enter valid inquiry details.')
     if(!canInquiry(state,session,{assignedUserId:session.userId,branchId:session.branchId})||!clean(form.name)||!clean(form.topic)||!commandId)return fail('Assigned Staff, contact name, inquiry topic and command ID are required.')
     const old=state.inquiries.find(i=>i.commandId===commandId)
@@ -62,6 +63,7 @@ export function communicationActions(run) {
     return {ok:true,record}
   })
   const updateInquiry=run(({state,session,now,event},id,status)=>{
+    if(session.serverUserId)return fail('Inquiries are managed on the clinic server. Use the inquiry worklist.')
     const i=state.inquiries.find(i=>i.id===id)
     if(!canInquiry(state,session,i)||!['Responded','Closed'].includes(status))return fail('Inquiry action is outside your scope.')
     if(i.status===status)return {ok:true,unchanged:true,record:i}
@@ -72,6 +74,7 @@ export function communicationActions(run) {
     return {ok:true,record}
   })
   const convertInquiry=run(({state,session,now,event},id,appointmentId)=>{
+    if(session.serverUserId)return fail('Inquiries are managed on the clinic server. Use the inquiry worklist.')
     const i=state.inquiries.find(i=>i.id===id),a=state.appointments.find(a=>a.id===appointmentId)
     if(!canInquiry(state,session,i)||!a||a.branchId!==session.branchId||a.status==='Cancelled'||i.patientId&&i.patientId!==a.patientId)return fail('Inquiry and appointment context do not match your scope.')
     if(i.bookedAppointmentId)return i.bookedAppointmentId===appointmentId?{ok:true,unchanged:true,record:i}:fail('Inquiry is already linked to another appointment.')

@@ -215,7 +215,10 @@ export function AnalyticsPage({ activeBranch, store }) {
     { name: 'Scheduling', value: appts.filter(a => a.status === 'Confirmed').length, note: schedulingNote, module: 'M6' },
     { name: 'Queue / patient flow', value: queue.filter(q => q.status === 'Served').length, note: 'Patients served from today’s queue (treatment started)', module: 'M9–M10' },
     { name: 'HMO processing', value: hmo.filter(h => h.status === 'Approved').length, note: 'Approved provider outcomes', module: 'M12' },
-    { name: 'Communication', value: state.inquiries.filter(i => i.status === 'Responded').length + state.conversations.filter(c => c.status === 'Closed').length, note: 'Responded/closed communication records', module: 'M16–M18' },
+    store.session?.serverUserId
+      // Unavailable is not zero: no authoritative inquiry or conversation count exists for the Owner (the M16 API is Staff-only and M17 is not yet server-backed), and M21 has not defined this report.
+      ? { name: 'Communication', value: 'Unavailable', note: 'No authoritative communication count exists yet (M16/M17 reporting is not defined)', module: 'M16–M17' }
+      : { name: 'Communication', value: state.inquiries.filter(i => i.status === 'Responded').length + state.conversations.filter(c => c.status === 'Closed').length, note: 'Responded/closed communication records', module: 'M16–M18' },
     { name: 'Recorded revenue', value: peso.format(paid.reduce((s, i) => s + i.total, 0)), note: 'Paid transaction records', module: 'M11' },
   ]
 

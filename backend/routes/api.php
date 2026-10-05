@@ -12,6 +12,7 @@ use App\Http\Controllers\PatientRegistrationController;
 use App\Http\Controllers\PricingController;
 use App\Http\Controllers\QueueController;
 use App\Http\Controllers\AssistantController;
+use App\Http\Controllers\InquiryController;
 use App\Http\Controllers\TreatmentController;
 use App\Http\Controllers\UserBranchScopeController;
 use App\Http\Controllers\UserManagementController;
@@ -202,6 +203,18 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureAccountAccess::cla
         Route::post('/{hmoCase}/escalate', [HmoController::class, 'escalate'])->middleware('role:staff');
         Route::post('/{hmoCase}/response', [HmoController::class, 'respond'])->middleware('role:staff');
         Route::post('/{hmoCase}/withdraw', [HmoController::class, 'withdraw'])->middleware('role:staff');
+    });
+
+    // M16 Social Media & External Inquiry Management: manually captured pre-booking inquiries, Staff only (assigned Staff in an
+    // authorized branch). No social-platform integration or public submission endpoint exists.
+    Route::prefix('inquiries')->middleware('role:staff')->group(function () {
+        Route::get('/', [InquiryController::class, 'index']);
+        Route::get('/summary', [InquiryController::class, 'summary']);
+        Route::post('/', [InquiryController::class, 'store']);
+        Route::get('/{inquiry}', [InquiryController::class, 'show']);
+        Route::post('/{inquiry}/respond', [InquiryController::class, 'respond']);
+        Route::post('/{inquiry}/close', [InquiryController::class, 'close']);
+        Route::post('/{inquiry}/convert', [InquiryController::class, 'convert']);
     });
 
     // M7 Patient AI Support: Patient-only, stateless, read-only; rate-limited per account (a technical cost/abuse bound).

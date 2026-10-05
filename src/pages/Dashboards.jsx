@@ -7,6 +7,7 @@ import { branchCapacity, dentistName, displayTime, patientName, peso } from '../
 
 import { pendingHours } from '../phase3-contracts.js'
 import { prescriptionTasks } from '../phase2.js'
+import { loadInquirySummary } from '../inquiries-api.js'
 import { clinicDate } from '../clock.js'
 import { encounterContext, isTodayQueue, isActiveQueue, sessionForRole } from '../contracts.js'
 
@@ -15,15 +16,27 @@ export function DashboardPage({ role, activeBranch, setPage, store }) {
   if (role==='patient') return <PatientHome store={store} setPage={setPage}/>
   if (role==='staff') return <StaffDashboard setPage={setPage} activeBranch={activeBranch} state={state} session={store.session}/>
   if (role==='dentist') return <DentistDashboard setPage={setPage} state={state} session={store.session}/>
-  return <OwnerDashboard setPage={setPage} activeBranch={activeBranch} state={state}/>
+  return <OwnerDashboard setPage={setPage} activeBranch={activeBranch} state={state} session={store.session}/>
 }
 
 function StaffDashboard({ activeBranch, setPage, state, session }) {
+  // M16: in a clinic-server session the count comes ONLY from the server (this Staff member's scope). null = loading, 'unavailable' = the
+  // request failed; neither is shown as zero. The browser's local demo inquiries are never counted.
+  const [serverInquiries,setServerInquiries]=React.useState(null)
+  React.useEffect(()=>{
+    if(!session?.serverUserId)return
+    let live=true
+    loadInquirySummary().then(r=>{if(live)setServerInquiries(r.ok?r.open:'unavailable')})
+    return()=>{live=false}
+  },[session?.serverUserId])
   const branchFilter=x=>activeBranch==='All Branches'||x.branch===activeBranch
   const todays=state.appointments.filter(a=>a.date===clinicDate()&&a.status!=='Cancelled'&&branchFilter(a)).sort((a,b)=>a.start.localeCompare(b.start))
   const waiting=state.queue.filter(q=>q.status==='Waiting'&&isTodayQueue(q)&&branchFilter(q))
   const pendingHmo=liveRecords(state.hmo).filter(h=>['Pending','Missing Requirements','Ready for Submission','Returned','Escalated'].includes(h.status)&&branchFilter(h))
-  const openInquiries=state.inquiries.filter(i=>i.status==='Open'&&i.assignedUserId===(session?.userId||ROLE_INFO.staff.userId)&&i.branchId===(session?.branchId||ROLE_INFO.staff.branchId))
+  // M16: in a clinic-server session inquiries live on the server; the browser's local demo inquiries are never counted as real.
+  const demoOpenInquiries=session?.serverUserId?[]:state.inquiries.filter(i=>i.status==='Open'&&i.assignedUserId===(session?.userId||ROLE_INFO.staff.userId)&&i.branchId===(session?.branchId||ROLE_INFO.staff.branchId))
+  const inquiryCountKnown=!session?.serverUserId||Number.isInteger(serverInquiries)
+  const openInquiries=session?.serverUserId?(Number.isInteger(serverInquiries)?new Array(serverInquiries).fill(0):[]):demoOpenInquiries
   const overdueHmo=liveRecords(state.hmo).filter(h=>['Pending','Escalated'].includes(h.status)&&pendingHours(h,state.clock)>=12&&branchFilter(h))
   const branch=state.branches.find(b=>b.name===activeBranch)
   return <>
@@ -32,7 +45,7 @@ function StaffDashboard({ activeBranch, setPage, state, session }) {
       <StatCard label="Appointments today" value={todays.length} hint="Confirmed and pending" icon={<Icon name="calendar" size={18}/>}/>
       <StatCard label="Waiting now" value={waiting.length} hint="Across active dentist queues" tone="blue" icon={<Icon name="queue" size={18}/>}/>
       <StatCard label="HMO needs action" value={pendingHmo.length} hint={`${overdueHmo.length} beyond follow-up threshold`} tone="amber" icon={<Icon name="shield" size={18}/>}/>
-      <StatCard label="Open inquiries" value={openInquiries.length} hint="Prospective patients" tone="purple" icon={<Icon name="message" size={18}/>}/>
+      <StatCard label="Open inquiries" value={session?.serverUserId?(serverInquiries===null?'…':serverInquiries==='unavailable'?'Unavailable':serverInquiries):demoOpenInquiries.length} hint={session?.serverUserId&&serverInquiries==='unavailable'?'The inquiry count could not be loaded':'Assigned to you'} tone="purple" icon={<Icon name="message" size={18}/>}/>
     </div>
     <div className="ops-grid">
       <Card title="Today’s patient flow" subtitle="Upcoming arrivals and current statuses" actions={<button className="text-link" onClick={()=>setPage('appointments')}>View all appointments</button>}>
@@ -42,8 +55,8 @@ function StaffDashboard({ activeBranch, setPage, state, session }) {
         <div className="alert-list">
           {overdueHmo.length>0&&<div className="alert warning"><span className="alert-icon"><Icon name="shield" size={18}/></span><div><b>{overdueHmo.length} HMO case{overdueHmo.length>1?'s':''} overdue</b><span>Follow-up threshold has been reached.</span></div><button onClick={()=>setPage('hmo')}>Review</button></div>}
           {waiting.length>0&&<div className="alert info"><span className="alert-icon"><Icon name="queue" size={18}/></span><div><b>{waiting.length} patient{waiting.length>1?'s':''} waiting</b><span>Monitor queue age and dentist availability.</span></div><button onClick={()=>setPage('queue')}>Open queue</button></div>}
-          {openInquiries.length>0&&<div className="alert neutral"><span className="alert-icon"><Icon name="message" size={18}/></span><div><b>{openInquiries.length} new social inquir{openInquiries.length>1?'ies':'y'}</b><span>Respond before the lead goes cold.</span></div><button onClick={()=>setPage('inquiries')}>Respond</button></div>}
-          {!overdueHmo.length&&!waiting.length&&!openInquiries.length&&<div className="alert success"><span className="alert-icon"><Icon name="shield" size={18}/></span><div><b>Everything is on track</b><span>No urgent operational exceptions right now.</span></div></div>}
+          {openInquiries.length>0&&<div className="alert neutral"><span className="alert-icon"><Icon name="message" size={18}/></span><div><b>{openInquiries.length} open inquir{openInquiries.length>1?'ies':'y'}</b><span>Waiting for a recorded response.</span></div><button onClick={()=>setPage('inquiries')}>Respond</button></div>}
+          {!overdueHmo.length&&!waiting.length&&!openInquiries.length&&inquiryCountKnown&&<div className="alert success"><span className="alert-icon"><Icon name="shield" size={18}/></span><div><b>Everything is on track</b><span>No urgent operational exceptions right now.</span></div></div>}
         </div>
       </Card>
     </div>
@@ -76,7 +89,7 @@ function DentistDashboard({ setPage, state, session }) {
   </>
 }
 
-function OwnerDashboard({ activeBranch, setPage, state }) {
+function OwnerDashboard({ activeBranch, setPage, state, session }) {
   const branchData=state.branches.filter(b=>activeBranch==='All Branches'||b.name===activeBranch).map(b=>branchCapacity(b.name,state))
   const appointments=state.appointments.filter(a=>a.date===clinicDate()&&a.status!=='Cancelled'&&(activeBranch==='All Branches'||a.branch===activeBranch))
   const pendingHmo=liveRecords(state.hmo).filter(h=>['Pending','Escalated'].includes(h.status)&&(activeBranch==='All Branches'||h.branch===activeBranch))
@@ -104,7 +117,7 @@ function OwnerDashboard({ activeBranch, setPage, state }) {
     <div className="cards-3 top-gap">
       <Card title="Scheduling health"><MetricRow label="Confirmed today" value={appointments.filter(a=>a.status==='Confirmed').length}/><MetricRow label="Pending confirmation" value={appointments.filter(a=>a.status==='Pending').length}/><button className="card-link" onClick={()=>setPage('analytics')}>See scheduling report <Icon name="arrow" size={14}/></button></Card>
       <Card title="HMO health"><MetricRow label="Pending provider response" value={pendingHmo.length}/><MetricRow label="Approved cases" value={liveRecords(state.hmo).filter(h=>h.status==='Approved').length}/><button className="card-link" onClick={()=>setPage('hmo')}>Open HMO overview <Icon name="arrow" size={14}/></button></Card>
-      <Card title="Patient communication"><MetricRow label="Open inquiries" value={state.inquiries.filter(i=>i.status==='Open').length}/><MetricRow label="Active conversations" value={state.conversations.filter(c=>c.status==='Open').length}/><button className="card-link" onClick={()=>setPage('engagement')}>View engagement <Icon name="arrow" size={14}/></button></Card>
+      <Card title="Patient communication"><MetricRow label="Open inquiries" value={session?.serverUserId?'Not available to Owner':state.inquiries.filter(i=>i.status==='Open').length}/><MetricRow label="Active conversations" value={state.conversations.filter(c=>c.status==='Open').length}/><button className="card-link" onClick={()=>setPage('engagement')}>View engagement <Icon name="arrow" size={14}/></button></Card>
     </div>
   </>
 }

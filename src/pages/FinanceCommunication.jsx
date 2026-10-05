@@ -7,6 +7,7 @@ import { visibleConversations } from '../phase3-contracts.js'
 import { sessionForRole } from '../contracts.js'
 import { PatientBillingPage } from './PatientCare.jsx'
 import { PatientMessagesPage } from './PatientMessages.jsx'
+import { ServerInquiriesPage } from './Inquiries.jsx'
 import { listBillingInvoices, listBillingTreatments, createBillingDraft, reviewBillingInvoice, issueBillingInvoice, recordBillingPayment } from '../api-client.js'
 
 function InvoiceCharges({invoice,state}) {
@@ -65,7 +66,14 @@ export function BillingPage({ role, store, context }) {
 // M12: the HMO workspace lives in ./Hmo.jsx (server-authoritative minimal foundation).
 export { HmoPage } from './Hmo.jsx'
 
+// M16: a clinic-server session uses the server-backed worklist (pages/Inquiries.jsx). The local prototype below survives ONLY for the
+// offline demo (no server session), is labelled as such, and is never reachable with a signed-in clinic account.
 export function InquiriesPage({ store }) {
+  if(store.session?.serverUserId)return <ServerInquiriesPage store={store}/>
+  return <DemoInquiriesPage store={store}/>
+}
+
+function DemoInquiriesPage({ store }) {
   const { state, actions, toast }=store
   const session=store.session||sessionForRole('staff',state)
   const visible=state.inquiries.filter(i=>i.assignedUserId===session.userId&&i.branchId===session.branchId)
@@ -79,10 +87,10 @@ export function InquiriesPage({ store }) {
   const close=i=>report(actions.updateInquiry(i.id,'Closed'),'Inquiry closed.')
   const linkBooking=()=>{if(report(actions.convertInquiry(linking?.id,appointmentId),'Inquiry linked to its appointment and conversation.')){setLinking(null);setAppointmentId('')}}
   return <>
-    <PageHeader title="Social Media & External Inquiry Management" text="Pre-booking social inquiries become trackable records with source, topic, assignment, response status, follow-up, and conversion to a booked appointment."/>
+    <PageHeader title="Social Media & External Inquiry Management" text="Offline demo preview: these inquiries exist only in this browser. Sign in with a clinic account for the real, server-backed worklist."/>
     <div className="grid-2">
       <Card title="Capture inquiry"><div className="form-grid"><Field label="Source"><select value={newInquiry.source} onChange={e=>{command.current=uid('inquiry');setNewInquiry({...newInquiry,source:e.target.value})}}><option>Facebook</option><option>Instagram</option><option>Website</option></select></Field><Field label="Name"><input value={newInquiry.name} onChange={e=>{command.current=uid('inquiry');setNewInquiry({...newInquiry,name:e.target.value})}}/></Field><Field label="Contact"><input value={newInquiry.contact} onChange={e=>{command.current=uid('inquiry');setNewInquiry({...newInquiry,contact:e.target.value})}}/></Field><Field label="Topic"><input value={newInquiry.topic} onChange={e=>{command.current=uid('inquiry');setNewInquiry({...newInquiry,topic:e.target.value})}}/></Field><Button className="span-2" onClick={add}>Create & Assign Inquiry</Button></div></Card>
-      <Card title="Response automation"><Notice tone="info">Unanswered inquiries remain visible to staff and would generate reminder tasks after the configured response period in a real implementation.</Notice><div className="metric-row"><div><span>Open inquiries</span><small>Awaiting staff action</small></div><b>{visible.filter(i=>i.status==='Open').length}</b></div><div className="metric-row"><div><span>Converted to appointment</span><small>Booked inquiries linked to scheduling</small></div><b>{visible.filter(i=>i.bookedAppointmentId).length}</b></div></Card>
+      <Card title="Demo summary"><Notice tone="info">Offline demo data: no social platform is connected and no reminder or message is sent.</Notice><div className="metric-row"><div><span>Open inquiries</span><small>Awaiting staff action</small></div><b>{visible.filter(i=>i.status==='Open').length}</b></div><div className="metric-row"><div><span>Converted to appointment</span><small>Booked inquiries linked to scheduling</small></div><b>{visible.filter(i=>i.bookedAppointmentId).length}</b></div></Card>
     </div>
     <Card className="top-gap" title="Inquiry worklist"><Table rows={visible} columns={[{key:'source',label:'Source'},{key:'name',label:'Contact'},{key:'topic',label:'Topic'},{key:'assigned',label:'Assigned staff',render:i=>state.users.find(u=>u.id===i.assignedUserId)?.name||'Unassigned'},{key:'receivedAt',label:'Received'},{key:'booking',label:'Appointment',render:i=>i.bookedAppointmentId||'—'},{key:'status',label:'Status',render:i=><Status>{i.status}</Status>},{key:'actions',label:'Actions',render:i=><div className="row-actions">{i.status==='Open'&&<Button size="sm" onClick={()=>respond(i)}>Record response</Button>}{['Responded','Open'].includes(i.status)&&!i.bookedAppointmentId&&<Button size="sm" variant="ghost" onClick={()=>setLinking(i)}>Link booked appointment</Button>}{!['Closed','Converted'].includes(i.status)&&<Button size="sm" variant="ghost" onClick={()=>close(i)}>Close</Button>}</div>}]} /></Card>
     <Modal open={!!linking} onClose={()=>setLinking(null)} title="Convert inquiry to appointment" subtitle="Link the social inquiry to the booking that resulted from the conversation."><Field label="Booked appointment"><select value={appointmentId} onChange={e=>setAppointmentId(e.target.value)}><option value="">Select appointment</option>{state.appointments.filter(a=>a.branchId===session.branchId&&a.status!=='Cancelled').map(a=><option key={a.id} value={a.id}>{dateLabel(a.date)} • {displayTime(a.start)} • {patientName(a.patientId,state.patients)} • {a.service}</option>)}</select></Field><Button className="full" onClick={linkBooking}>Record Appointment Conversion</Button></Modal>

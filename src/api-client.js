@@ -235,6 +235,12 @@ export function queueCommand(id, name, payload, key) { return command(`/api/queu
 // M7 Patient assistant: the ONLY input is the message; the server derives everything else and holds the provider credential.
 export function askAssistant(message) { return request('/api/assistant/messages', { method: 'POST', body: JSON.stringify({ message }) }) }
 
+// M16 external inquiries (manually captured by Staff; no social-platform integration). Cursor-paged, newest first.
+export function listInquiries(params) { return request(`/api/inquiries${query(params)}`) }
+export function inquirySummary() { return request('/api/inquiries/summary') }
+export function createInquiry(payload, key) { return command('/api/inquiries', payload, key) }
+export function inquiryCommand(id, name, payload, key) { return command(`/api/inquiries/${encodeURIComponent(id)}/${encodeURIComponent(name)}`, payload, key) }
+
 // M13 pricing foundation (Owner-confirmed, effective-dated prices). Raw calls only; src/pricing-api.js owns mapping.
 // Cursor-paged (newest first): per_page 1-100, cursor = the previous page's meta.next_cursor.
 export function listServicePrices(params) { return request(`/api/service-prices${query(params)}`) }
