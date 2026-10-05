@@ -13,6 +13,7 @@ use App\Http\Controllers\PricingController;
 use App\Http\Controllers\QueueController;
 use App\Http\Controllers\AssistantController;
 use App\Http\Controllers\ConversationController;
+use App\Http\Controllers\FeedbackController;
 use App\Http\Controllers\InquiryController;
 use App\Http\Controllers\TreatmentController;
 use App\Http\Controllers\UserBranchScopeController;
@@ -204,6 +205,15 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureAccountAccess::cla
         Route::post('/{hmoCase}/escalate', [HmoController::class, 'escalate'])->middleware('role:staff');
         Route::post('/{hmoCase}/response', [HmoController::class, 'respond'])->middleware('role:staff');
         Route::post('/{hmoCase}/withdraw', [HmoController::class, 'withdraw'])->middleware('role:staff');
+    });
+
+    // M26 Patient Feedback & Service Quality — narrow foundation, PATIENT ONLY: submit about an own completed Visit, read own, choose a Visit.
+    // No reviewer endpoint exists (Owner review is only an intended-lifecycle note); Owner/Staff/Dentist/guests: none. No edit/delete/reply/status/publication.
+    Route::prefix('feedback')->group(function () {
+        Route::get('/eligible-visits', [FeedbackController::class, 'eligibleVisits'])->middleware('role:patient');
+        Route::get('/', [FeedbackController::class, 'mine'])->middleware('role:patient');
+        Route::get('/mine', [FeedbackController::class, 'mine'])->middleware('role:patient');
+        Route::post('/', [FeedbackController::class, 'store'])->middleware(['role:patient', 'throttle:m26-submit']);
     });
 
     // M17 Unified Patient Messaging: in-app human conversations between an identified Patient and explicit clinic participants. Patient,

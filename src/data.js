@@ -31,7 +31,7 @@ export const MODULES = [
   { no: 23, name: 'Workflow Automation & Exception Management', owner: 'Delos Santos, Joevan', area: 'Automation', roles: ['owner'], coverage: 'implemented', coverageNote: 'Backend-authoritative workflow rules, immutable system events, automated actions, deduplication and owner monitoring control', implemented: true },
   { no: 24, name: 'Referral & Loyalty Management', owner: 'Millar, John Yzhekiel', area: 'Engagement', roles: ['patient','staff','owner'], enhancement: true, pe: true, implemented: true },
   { no: 25, name: 'Marketing Campaign & Patient Reactivation Management', owner: 'Millar, John Yzhekiel', area: 'Engagement', roles: ['staff','owner'], enhancement: true, pe: true, implemented: false, preview: true },
-  { no: 26, name: 'Patient Feedback & Service Quality Management', owner: 'Group 3 — Shared Enhancement', area: 'Quality', roles: [], coverage: 'planned', coverageNote: 'Defined, not implemented: approved Group 3 shared enhancement (October 4, 2026); no tables, routes or UI exist', implemented: false },
+  { no: 26, name: 'Patient Feedback & Service Quality Management', owner: 'Group 3 — Shared Enhancement', area: 'Quality', roles: ['patient'], coverage: 'partial', coverageNote: 'Partly represented: a Patient-only technical foundation (free-text feedback about an own completed visit, kept immutable) exists. No reviewer access, rating, category, review status, reply, publication or analytics is implemented or approved', implemented: false },
 ]
 
 export const ROLE_INFO = {
@@ -44,7 +44,7 @@ export const ROLE_INFO = {
 export const NAV = {
   patient: [
     ['dashboard','Home'], ['book','Book Appointment'], ['appointments','Visits'], ['queue','Live Queue'],
-    ['hmo','HMO Coverage'], ['messages','Messages'], ['billing','Receipts & Payments'], ['prescriptions','Prescriptions'], ['followups','Follow-Up Care'], ['loyalty','Referral & Loyalty'], ['me','Me']
+    ['hmo','HMO Coverage'], ['messages','Messages'], ['billing','Receipts & Payments'], ['prescriptions','Prescriptions'], ['followups','Follow-Up Care'], ['loyalty','Referral & Loyalty'], ['feedback','Share Feedback'], ['me','Me']
   ],
   staff: [
     ['dashboard','Operations'], ['appointments','Appointments'], ['checkin','Check-In'], ['queue','Live Queue'], ['capacity','Capacity'],

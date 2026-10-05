@@ -8,7 +8,7 @@ import React from 'react'
 import { renderToString } from 'react-dom/server'
 
 const require=createRequire(import.meta.url)
-const files=['assistant-panel.jsx','components.jsx','store.jsx','layout.jsx','clock.js','contracts.js','workflow.js','phase2.js','phase3-contracts.js','orchestration.js','pages/Dashboards.jsx','pages/Scheduling.jsx','pages/PatientFlow.jsx','pages/Clinical.jsx','pages/FinanceCommunication.jsx','pages/Admin.jsx','pages/Pricing.jsx','pages/AuditTrail.jsx','audit-api.js','automation-api.js','analytics-api.js','hmo-api.js','pages/PatientLoyalty.jsx','pages/PatientRegister.jsx','pages/PatientBook.jsx','pages/PatientMe.jsx','pages/PatientVisits.jsx','pages/PatientHome.jsx','loyalty.js','registration.js','scheduling.js','booking-drafts.js','geo.js','patient-view.js','data.js']
+const files=['assistant-panel.jsx','components.jsx','store.jsx','layout.jsx','clock.js','contracts.js','workflow.js','phase2.js','phase3-contracts.js','orchestration.js','pages/Dashboards.jsx','pages/Scheduling.jsx','pages/PatientFlow.jsx','pages/Clinical.jsx','pages/FinanceCommunication.jsx','pages/Admin.jsx','pages/Pricing.jsx','pages/AuditTrail.jsx','audit-api.js','automation-api.js','analytics-api.js','hmo-api.js','pages/PatientLoyalty.jsx','pages/Feedback.jsx','pages/PatientRegister.jsx','pages/PatientBook.jsx','pages/PatientMe.jsx','pages/PatientVisits.jsx','pages/PatientHome.jsx','loyalty.js','registration.js','scheduling.js','booking-drafts.js','geo.js','patient-view.js','data.js']
 const result=await build({stdin:{contents:[...files.map(file=>`export * from './src/${file}';`),`export * from './tests/support/server-appointments.js';`].join('\n'),resolveDir:process.cwd()},bundle:true,write:false,platform:'node',format:'esm',plugins:[{name:'shared-react',setup(b){b.onResolve({filter:/^react$/},()=>({path:pathToFileURL(require.resolve('react')).href,external:true}))}}]})
 const m=await import('data:text/javascript;base64,'+Buffer.from(result.outputFiles[0].text).toString('base64'))
 m.setClockSource(()=>new Date('2026-09-19T02:08:00Z'))
@@ -33,7 +33,7 @@ const initialReferenceData={
 let store
 function Capture(){store=m.useClinic();return null}
 renderToString(React.createElement(m.ClinicProvider,{initialReferenceData},React.createElement(Capture)))
-const pages={dashboard:'DashboardPage',book:'BookingPage',appointments:'AppointmentsPage',schedule:'SchedulePage',checkin:'CheckInPage',queue:'QueuePage',capacity:'CapacityPage',patients:'PatientsPage',treatment:'TreatmentPage',billing:'BillingPage',hmo:'HmoPage',inquiries:'InquiriesPage',messages:'MessagesPage',prescriptions:'PrescriptionsPage',followups:'FollowupsPage',branches:'BranchesPage',team:'TeamPage',analytics:'AnalyticsPage',users:'UsersPage',pricing:'ServicesPricingPage',automation:'AutomationPage',audit:'AuditTrailPage',engagement:'EngagementPage',loyalty:'PatientLoyaltyPage',me:'PatientMePage'}
+const pages={dashboard:'DashboardPage',book:'BookingPage',appointments:'AppointmentsPage',schedule:'SchedulePage',checkin:'CheckInPage',queue:'QueuePage',capacity:'CapacityPage',patients:'PatientsPage',treatment:'TreatmentPage',billing:'BillingPage',hmo:'HmoPage',inquiries:'InquiriesPage',messages:'MessagesPage',prescriptions:'PrescriptionsPage',followups:'FollowupsPage',branches:'BranchesPage',team:'TeamPage',analytics:'AnalyticsPage',users:'UsersPage',pricing:'ServicesPricingPage',automation:'AutomationPage',audit:'AuditTrailPage',engagement:'EngagementPage',loyalty:'PatientLoyaltyPage',feedback:'PatientFeedbackPage',me:'PatientMePage'}
 let count=0
 function render(page,role='staff',context=null){
   const session=m.sessionForRole(role,store.state)
@@ -50,6 +50,11 @@ assert.equal(m.ModulesPage,undefined,'the professor-facing Module Coverage page 
 assert.ok(server.includes('Ask about using the clinic system')&&!server.includes('Offline demo preview'),'server-mode assistant has the question box and no demo label')
 assert.ok(demo.includes('Offline demo preview')&&!demo.includes('Ask about using the clinic system'),'the demo assistant is labelled and has no free-text box')
 assert.ok(/can.t diagnose/.test(server.replace(/&#x27;|’/g,"'")),'the scope is stated up front')}
+// M26: the Patient-only foundation screen renders its honest loading state under SSR and makes no response-time, anonymity, rating or publication promise.
+{const patient=render('feedback','patient')
+assert.ok(patient.includes('Share feedback')&&patient.includes('it is not anonymous')&&patient.includes('has not set a response time'),'Patient feedback page renders honestly')
+assert.ok(!/\bstars?\b|rating|survey|testimonial/i.test(patient),'no rating/survey/testimonial UI')
+assert.ok(!m.NAV.owner.some(([k])=>k==='feedback')&&!m.NAV.staff.some(([k])=>k==='feedback')&&!m.NAV.dentist.some(([k])=>k==='feedback'),'only Patients have a feedback entry (no reviewer authority exists)')}
 // M13: the Owner pricing page renders its honest loading state under SSR (no fetch runs) and the Branches screen labels
 // the reference fee as unconfirmed rather than as a price.
 {const pricing=render('pricing','owner');assert.ok(pricing.includes('Services &amp; Pricing')&&pricing.includes('Loading prices'),'pricing page renders');assert.ok(!/reference fee/i.test(pricing),'no reference fee is shown on the pricing page')}

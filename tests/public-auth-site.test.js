@@ -140,7 +140,7 @@ test('api.me forwards the exact AbortSignal to fetch and returns its abort as ne
 test('every lazy page resolves to its named component export',async()=>{
   const source=readFileSync('src/App.jsx','utf8')
   const imports=[...source.matchAll(/import\('(.+?)'\)\.then\(m=>\(\{default:m\.(\w+)\}\)\)/g)]
-  assert.equal(imports.length,26)
+  assert.equal(imports.length,27)
   for(const [,path,name] of imports){
     const result=await build({entryPoints:[`src/${path.slice(2)}`],bundle:true,write:false,loader:{'.css':'empty'},metafile:true,platform:'node',format:'esm',external:['react']})
     assert.ok(Object.values(result.metafile.outputs).some(output=>output.exports.includes(name)),name)

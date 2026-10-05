@@ -28,6 +28,7 @@ const BillingPage=lazy(()=>import('./pages/FinanceCommunication.jsx').then(m=>({
 const HmoPage=lazy(()=>import('./pages/FinanceCommunication.jsx').then(m=>({default:m.HmoPage})))
 const InquiriesPage=lazy(()=>import('./pages/FinanceCommunication.jsx').then(m=>({default:m.InquiriesPage})))
 const MessagesPage=lazy(()=>import('./pages/FinanceCommunication.jsx').then(m=>({default:m.MessagesPage})))
+const PatientFeedbackPage=lazy(()=>import('./pages/Feedback.jsx').then(m=>({default:m.PatientFeedbackPage})))
 const PatientLoyaltyPage=lazy(()=>import('./pages/PatientLoyalty.jsx').then(m=>({default:m.PatientLoyaltyPage})))
 const PatientMePage=lazy(()=>import('./pages/PatientMe.jsx').then(m=>({default:m.PatientMePage})))
 const AnalyticsPage=lazy(()=>import('./pages/Admin.jsx').then(m=>({default:m.AnalyticsPage})))
@@ -273,6 +274,7 @@ function AppBody() {
     case 'audit': content=<AuditTrailPage store={store}/>; break
     case 'engagement': content=<EngagementPage role={role} store={store}/>; break
     case 'loyalty': content=<PatientLoyaltyPage store={store}/>; break
+    case 'feedback': content=<PatientFeedbackPage store={store}/>; break
     case 'me': content=<PatientMePage store={store} setPage={setPage}/>; break
     default: content=<Notice>This screen is no longer available with your current permissions. <button onClick={()=>setPage('dashboard')}>Return home</button></Notice>;
   }

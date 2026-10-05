@@ -41,7 +41,8 @@ test('MODULES matches the canonical 26-module structure, owners and PE designati
   const m26=data.MODULES.find(m=>m.no===26)
   assert.equal(DOMAIN_MODULE.feedback,26,'M26 uses the stable domain key feedback')
   assert.equal(m26.implemented,false,'M26 is defined but not implemented')
-  assert.equal(m26.coverage,'planned')
+  assert.equal(m26.coverage,'partial','M26 is built but narrower than its canonical scope, like M12/M13/M19')
+  assert.deepEqual(m26.roles,['patient'],'M26 roles = the authorized foundation roles (Patient only; no reviewer authority exists)')
   assert.ok(!m26.pe&&!m26.enhancement,'M26 is a shared enhancement, not a PE')
   assert.equal(Object.keys(DOMAIN_MODULE).length,26)
   // Newly defined modules that are not built yet must not claim full representation.

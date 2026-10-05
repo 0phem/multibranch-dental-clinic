@@ -50,6 +50,16 @@ class AppServiceProvider extends ServiceProvider
                 \Illuminate\Cache\RateLimiting\Limit::perHour((int) config('messaging.per_hour', 200))->by($who.':h')->response($respond),
             ];
         });
+        // M26: per ACCOUNT submission bound (storage amplification). A technical safeguard, not a clinic feedback-frequency policy.
+        \Illuminate\Support\Facades\RateLimiter::for('m26-submit', function ($request) {
+            $who = 'user:'.($request->user()?->getAuthIdentifier() ?? 'anon:'.$request->ip());
+            $respond = fn ($request, array $headers) => response()->json(['message' => 'You are submitting feedback very quickly. Please wait a moment and try again.', 'code' => 'feedback_rate_limited', 'retry_after' => (int) ($headers['Retry-After'] ?? 60)], 429, $headers);
+
+            return [
+                \Illuminate\Cache\RateLimiting\Limit::perMinute((int) config('feedback.per_minute', 5))->by($who.':m')->response($respond),
+                \Illuminate\Cache\RateLimiting\Limit::perHour((int) config('feedback.per_hour', 30))->by($who.':h')->response($respond),
+            ];
+        });
         \Illuminate\Support\Facades\RateLimiter::for('m1-register', fn ($request) =>
             \Illuminate\Cache\RateLimiting\Limit::perMinute(30)->by($request->ip()));
         \Illuminate\Support\Facades\RateLimiter::for('m1-otp', fn ($request) =>

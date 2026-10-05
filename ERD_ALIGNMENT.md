@@ -81,6 +81,7 @@ Returned → corrected/local validation → Ready → resubmission retains case 
 
 | Approved concept | Current frontend mapping | Simplification / integrity boundary |
 | --- | --- | --- |
+| PATIENT_FEEDBACK | **M26 foundation (backend):** `patient_feedback` (PostgreSQL), immutable, Patient-authored, tied to one of the Patient's own completed Visits | **ERD wording conflict (reported, not silently resolved):** the unchanged Data Dictionary row still reads "PE feedback record … Optional" — historical wording from before the October 4, 2026 canonical 26-module structure, which defines M26 as an approved Group 3 shared enhancement and **not** a PE. The ERD artifacts remain unchanged (no ERD change without explicit approval); this note supersedes that wording for current work. The implemented table is far narrower than any ERD feedback record (no rating, category, status, reply or publication), and no runtime/registry logic treats M26 as PE |
 | SOCIAL_INQUIRIES | `inquiries` | Assigned identity/branch; conversation and booked-appointment links; no external channel transport |
 | CONVERSATIONS / CONVERSATION_MESSAGES | `conversations` with `messages[]` | Explicit `participantUserIds`, assigned identity, sender IDs and participant-specific unread/read state; no broad-role ownership |
 | PATIENT_NOTIFICATIONS | `notifications` | Generalized to identity-targeted Patient, Dentist and Staff operational notifications; event/entity IDs, independent read state and validated action context |

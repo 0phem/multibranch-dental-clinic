@@ -235,6 +235,11 @@ export function queueCommand(id, name, payload, key) { return command(`/api/queu
 // M7 Patient assistant: the ONLY input is the message; the server derives everything else and holds the provider credential.
 export function askAssistant(message) { return request('/api/assistant/messages', { method: 'POST', body: JSON.stringify({ message }) }) }
 
+// M26 Patient feedback (foundation, Patient only): submit, own history, eligible Visits. Cursor-paged. There is no reviewer API.
+export function eligibleFeedbackVisits(params) { return request(`/api/feedback/eligible-visits${query(params)}`) }
+export function submitFeedback(payload, key) { return command('/api/feedback', payload, key) }
+export function myFeedback(params) { return request(`/api/feedback/mine${query(params)}`) }
+
 // M17 in-app human conversations (cursor-paged; there is no create/edit/delete route).
 export function listConversations(params) { return request(`/api/conversations${query(params)}`) }
 export function conversationSummary() { return request('/api/conversations/summary') }
