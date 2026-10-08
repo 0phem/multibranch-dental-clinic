@@ -93,7 +93,7 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureAccountAccess::cla
         Route::get('/snapshot', [AutomationController::class, 'snapshot']);
         Route::get('/rules', [AutomationController::class, 'rules']);
         Route::get('/actions', [AutomationController::class, 'actions']);
-        Route::post('/dispatch', [AutomationController::class, 'dispatch']);
+        Route::post('/dispatch', [AutomationController::class, 'dispatch'])->middleware('throttle:20,1');
         Route::get('/export-csv', [AutomationController::class, 'exportCsv']);
     });
 

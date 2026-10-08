@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Enums\Role;
+use App\Http\Requests\Automation\AutomationSnapshotRequest;
+use App\Http\Requests\Automation\DispatchAutomationRequest;
 use App\Models\AutomatedAction;
 use App\Models\WorkflowRule;
 use App\Services\Automation\WorkflowAutomationService;
@@ -22,12 +24,11 @@ class AutomationController extends Controller
         abort_unless($request->user() && $request->user()->role === Role::Owner, 403, 'Automation control and monitoring is restricted to the clinic Owner.');
     }
 
-    public function snapshot(Request $request): JsonResponse
+    public function snapshot(AutomationSnapshotRequest $request): JsonResponse
     {
         $this->authorizeOwner($request);
 
-        $branchId = $request->filled('branch_id') ? (int) $request->input('branch_id') : null;
-        $snapshot = $this->automationService->getAutomationSnapshot($branchId);
+        $snapshot = $this->automationService->getAutomationSnapshot($request->branch()?->id);
 
         return response()->json([
             'data' => $snapshot,
@@ -114,14 +115,11 @@ class AutomationController extends Controller
         ]);
     }
 
-    public function dispatch(Request $request): JsonResponse
+    public function dispatch(DispatchAutomationRequest $request): JsonResponse
     {
         $this->authorizeOwner($request);
 
-        $validated = $request->validate([
-            'rule_code' => ['required', 'string', 'exists:workflow_rules,rule_code'],
-            'payload' => ['nullable', 'array'],
-        ]);
+        $validated = $request->validated();
 
         $action = $this->automationService->triggerManualEvaluation(
             actor: $request->user(),
@@ -131,7 +129,7 @@ class AutomationController extends Controller
 
         return response()->json([
             'data' => $this->automationService->formatActionResource($action),
-            'message' => "Rule {$action->rule->name} executed with status {$action->status}.",
+            'message' => "Rule {$action->rule->name} was evaluated and the evaluation was recorded with status {$action->status}. No business action was performed.",
         ], 201);
     }
 
@@ -167,6 +165,7 @@ class AutomationController extends Controller
                 'Rule Name',
                 'Owner Domain',
                 'Event Type',
+                'Execution',
                 'Result Summary',
                 'Aggregate',
                 'Actor',
@@ -193,7 +192,11 @@ class AutomationController extends Controller
                         $sanitize($action->rule?->name),
                         $sanitize($action->rule?->owner_domain),
                         $sanitize($action->event?->event_type),
-                        $sanitize($action->result_summary),
+                        'Evaluation only',
+                        // A legacy stored description of a proposed action is qualified inside the exported cell itself.
+                        $sanitize($this->automationService->isLegacyDescription($action)
+                            ? '[Legacy description of a proposed action; nothing was executed] '.$action->result_summary
+                            : $action->result_summary),
                         $sanitize($action->event?->aggregate_type ? "{$action->event->aggregate_type}:{$action->event->aggregate_id}" : ''),
                         $sanitize($action->event?->actor?->email ?? 'System Automation'),
                         $sanitize($action->event?->branch?->name ?? 'All Branches'),

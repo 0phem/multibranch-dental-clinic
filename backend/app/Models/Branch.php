@@ -28,6 +28,14 @@ class Branch extends Model
             $field ?? (\Illuminate\Support\Str::isUlid($value) ? 'public_id' : 'legacy_ref'));
     }
 
+    /** The M2 public reference: a public ULID (any case) or the frozen transitional legacy_ref; never the bigint id. */
+    public static function fromPublicReference(string $reference): ?self
+    {
+        return \Illuminate\Support\Str::isUlid($reference)
+            ? static::whereRaw('lower(public_id) = ?', [strtolower($reference)])->first()
+            : static::where('legacy_ref', $reference)->first();
+    }
+
     protected $fillable = [
         'legacy_ref',
         'branch_code',

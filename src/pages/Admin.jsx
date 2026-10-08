@@ -236,7 +236,7 @@ export function AnalyticsPage({ activeBranch, store }) {
     { name: 'Scheduling', value: serverSummary.scheduling.total_appointments, note: `Completion rate: ${rateText(serverSummary.scheduling.completion_rate_pct)} (${serverSummary.scheduling.completed} completed, ${serverSummary.scheduling.cancelled} cancelled)`, module: 'M6' },
     { name: 'Queue / patient flow', value: serverSummary.patient_flow.total_visits, note: `${serverSummary.patient_flow.served_from_queue} served in this period • ${serverSummary.patient_flow.current_waiting} waiting now (today's queue)`, module: 'M9–M10' },
     { name: 'HMO processing', value: serverSummary.hmo.approved, note: `${peso.format(serverSummary.hmo.approved_amount_php)} approved coverage • ${serverSummary.hmo.pending} pending coordinator action`, module: 'M12' },
-    { name: 'Automation health', value: rateText(serverSummary.automation.health_rate_pct), note: `${serverSummary.automation.total_actions} actions executed (${serverSummary.automation.failed} failed)`, module: 'M23' },
+    { name: 'Automation health', value: rateText(serverSummary.automation.health_rate_pct), note: `${serverSummary.automation.total_actions} rule evaluations recorded (${serverSummary.automation.failed} failed); nothing is executed by this module`, module: 'M23' },
   ] : (isServerSession ? [] : clientMetrics)
 
   const exportRows = state.branches.map(b => {
@@ -413,6 +413,9 @@ export function AutomationPage({ store }) {
 
   const [serverData, setServerData] = useState(null)
   const [loading, setLoading] = useState(false)
+  const [loadError, setLoadError] = useState(false)
+  const isServerSession = !!store.session?.serverUserId
+  const [observation, setObservation] = useState('')
   const [runningRule, setRunningRule] = useState(false)
   const [selectedRuleCode, setSelectedRuleCode] = useState('R2_HMO_FOLLOWUP_REMINDER')
   const [filterStatus, setFilterStatus] = useState('all')
@@ -440,12 +443,14 @@ export function AutomationPage({ store }) {
   }
 
   const refreshServer = async () => {
+    setLoading(true)
+    setLoadError(false)
     try {
-      setLoading(true)
-      const data = await fetchAutomationSnapshot()
-      setServerData(data)
+      setServerData(await fetchAutomationSnapshot())
     } catch {
-      // Graceful fallback to client-side data
+      // A clinic-server session shows an explicit unavailable state; only the offline demo uses its local, labelled records.
+      setServerData(null)
+      if (isServerSession) setLoadError(true)
     } finally {
       setLoading(false)
     }
@@ -455,11 +460,19 @@ export function AutomationPage({ store }) {
     refreshServer()
   }, [])
 
+  // Only these rules take an Owner-typed observation. R4 never takes clinical flags: a manual flag is not a Dentist's decision.
+  // The limits mirror the server's validation (0–8760 hours, 0–1440 minutes); the server remains the authority.
+  const observationField = { R2_HMO_FOLLOWUP_REMINDER: { key: 'pending_hours', label: 'Hours the HMO case has been pending', max: 8760 }, R3_CAPACITY_ALERT: { key: 'estimated_wait_minutes', label: 'Estimated wait (minutes)', max: 1440 } }[selectedRuleCode]
+  const observationValid = !observationField || (/^\d{1,5}$/.test(observation) && Number(observation) <= observationField.max)
   const runDiagnostic = async () => {
+    if (!observationValid) return
     try {
       setRunningRule(true)
-      const res = await dispatchAutomationRule(selectedRuleCode, { diagnostic_check: true })
-      toast(res.message || 'Automation rule evaluated successfully.', 'success')
+      const payload = { diagnostic_check: true }
+      if (observationField) payload[observationField.key] = Number(observation)
+      if (selectedRuleCode === 'R1_APPT_LIFECYCLE') payload.action_type = 'created'
+      const res = await dispatchAutomationRule(selectedRuleCode, payload)
+      toast(res.message || 'Rule evaluation recorded. No business action was performed.', 'success')
       await refreshServer()
     } catch (err) {
       toast(err.message || 'Failed to trigger rule evaluation.', 'warning')
@@ -477,12 +490,15 @@ export function AutomationPage({ store }) {
     }
   }
 
-  const rate = serverData ? serverData.health_rate : (state.workflowLog.length ? Math.round((monitor.success / state.workflowLog.length) * 100) : 100)
-  const activeRulesCount = serverData ? serverData.active_rules_count : state.automations.filter(r => r.enabled).length
-  const failedCount = serverData ? serverData.failed_count : monitor.failed.length
-  const totalActions = serverData ? serverData.total_actions : state.workflowLog.length
+  // Share of recorded rule evaluations that finished without a warning or failure; null (shown as "No data") when none exist.
+  const showLocal = !isServerSession
+  const rate = serverData ? serverData.health_rate : (showLocal && state.workflowLog.length ? Math.round((monitor.success / state.workflowLog.length) * 100) : null)
+  const activeRulesCount = serverData ? serverData.active_rules_count : (showLocal ? state.automations.filter(r => r.enabled).length : null)
+  const failedCount = serverData ? serverData.failed_count : (showLocal ? monitor.failed.length : null)
+  const totalActions = serverData ? serverData.total_actions : (showLocal ? state.workflowLog.length : null)
+  const stat = v => (v === null || v === undefined ? '—' : v)
 
-  const rulesList = serverData?.rules || state.automations.map(r => ({
+  const rulesList = serverData?.rules || (!showLocal ? [] : state.automations.map(r => ({
     id: r.id,
     rule_code: r.triggerEvent,
     name: r.event,
@@ -491,9 +507,9 @@ export function AutomationPage({ store }) {
     owner: r.owner,
     is_active: r.enabled,
     last_status: r.lastResult || 'Active',
-  }))
+  })))
 
-  const actionsList = serverData?.recent_actions || state.workflowLog.map(e => ({
+  const actionsList = serverData?.recent_actions || (!showLocal ? [] : state.workflowLog.map(e => ({
     id: e.id,
     executed_at_human: e.at,
     event_type: e.event,
@@ -502,7 +518,13 @@ export function AutomationPage({ store }) {
     status: e.status,
     actor: { name: state.users.find(u => u.id === e.actorUserId)?.name || e.actorUserId || 'Historical' },
     aggregate: e.entityType ? { type: e.entityType, id: e.entityId } : null,
-  }))
+  })))
+
+  // A stored description from before the truthfulness correction names a proposed action; it is shown only as such, never as proof.
+  const isLegacy = x => x.summary_kind === 'legacy_proposed_description'
+  const resultText = x => (isLegacy(x) ? `Legacy description of a proposed action (nothing was executed): “${x.result_summary}”` : (x.result_summary || x.result))
+  // Exceptions come from the server record only; a clinic-server session never shows local demo log entries.
+  const exceptionsList = serverData ? (serverData.recent_exceptions || []) : (showLocal ? [...monitor.failed, ...monitor.warnings] : [])
 
   const filteredActions = filterStatus === 'all'
     ? actionsList
@@ -512,8 +534,8 @@ export function AutomationPage({ store }) {
     <PageHeader
       kicker="System orchestration"
       title="Automation monitor"
-      text="Monitor recorded frontend actions, failures, and warnings. Rules are read-only. No server workers, external delivery, or background scheduler are connected."
-      action={<div style={{ display: 'flex', gap: '8px' }}>
+      text="Monitor recorded rule evaluations, failures and warnings. Rules are read-only. This module evaluates and records only: it does not create invoices, tasks, notifications or messages, and no background worker or external delivery is connected. Threshold values shown are unconfirmed demonstration values, not clinic policy."
+      aside={<div style={{ display: 'flex', gap: '8px' }}>
         <Button onClick={refreshServer} disabled={loading} variant="secondary">
           {loading ? 'Refreshing…' : 'Refresh Snapshot'}
         </Button>
@@ -522,14 +544,18 @@ export function AutomationPage({ store }) {
         </Button>
       </div>}
     />
+    {isServerSession && loadError && <Notice tone="warning">
+      The automation record is unavailable right now, so no figures are shown. <Button variant="ghost" onClick={refreshServer}>Try again</Button>
+    </Notice>}
+    {!isServerSession && <Notice tone="info">Offline demo preview — local example records, not clinic data.</Notice>}
     <div className="stats-grid">
-      <StatCard label="Automation health" value={`${rate}%`} hint="Successful recorded actions" />
-      <StatCard label="Active rules" value={activeRulesCount} hint="Approved workflow rules" tone="blue" />
-      <StatCard label="Failed actions" value={failedCount} hint="Recorded failed attempts" tone="amber" />
-      <StatCard label="Total actions" value={totalActions} hint="Central activity feed" tone="purple" />
+      <StatCard label="Evaluation health" value={rate === null ? 'No data' : `${rate}%`} hint="Recorded rule evaluations that finished without a warning or failure (nothing is executed)" />
+      <StatCard label="Rules in the registry" value={stat(activeRulesCount)} hint="Evaluated only; values are demonstration defaults" tone="blue" />
+      <StatCard label="Failed evaluations" value={stat(failedCount)} hint="Recorded evaluations that could not run" tone="amber" />
+      <StatCard label="Recorded evaluations" value={stat(totalActions)} hint="Central evaluation record" tone="purple" />
     </div>
 
-    <Card title="Run Diagnostic Evaluation" subtitle="Trigger an authoritative verification run for an approved workflow rule" className="top-gap">
+    <Card title="Run Diagnostic Evaluation" subtitle="Record an evaluation of a rule against a value you enter. Evaluation only: nothing is executed and no clinical decision can be supplied." className="top-gap">
       <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
         <div style={{ minWidth: '280px', flex: 1 }}>
           <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--ink)', marginBottom: '4px' }}>
@@ -537,32 +563,38 @@ export function AutomationPage({ store }) {
           </label>
           <select
             value={selectedRuleCode}
-            onChange={e => setSelectedRuleCode(e.target.value)}
+            onChange={e => { setSelectedRuleCode(e.target.value); setObservation('') }}
             style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #d0d7de', fontSize: '13px' }}
           >
-            <option value="R1_APPT_LIFECYCLE">R1 — Appointment Lifecycle (Slot reservation / notification staging)</option>
-            <option value="R2_HMO_FOLLOWUP_REMINDER">R2 — HMO Pending Timer (12h coordinator alert verification)</option>
-            <option value="R3_CAPACITY_ALERT">R3 — Capacity Alert (Wait & threshold monitoring)</option>
-            <option value="R4_TREATMENT_DOWNSTREAM">R4 — Treatment Completion (Draft invoice & Rx obligations)</option>
-            <option value="R5_MESSAGE_ROUTING">R5 — Message Routing (Staff queue assignment)</option>
-            <option value="R6_USER_PROFILE_SYNC">R6 — User Profile Sync (Personnel synchronization)</option>
+            <option value="R1_APPT_LIFECYCLE">R1 — Appointment lifecycle event (evaluation only)</option>
+            <option value="R2_HMO_FOLLOWUP_REMINDER">R2 — HMO pending time (demonstration threshold)</option>
+            <option value="R3_CAPACITY_ALERT">R3 — Estimated wait (demonstration threshold)</option>
+            <option value="R4_TREATMENT_DOWNSTREAM">R4 — Treatment completed event (evaluation only)</option>
+            <option value="R5_MESSAGE_ROUTING">R5 — Message received event (evaluation only)</option>
+            <option value="R6_USER_PROFILE_SYNC">R6 — User change event (evaluation only)</option>
           </select>
         </div>
-        <Button onClick={runDiagnostic} disabled={runningRule}>
+        {observationField && <div style={{ minWidth: '200px' }}>
+          <Field label={observationField.label}>
+            <input type="number" min="0" max={observationField.max} step="1" inputMode="numeric" required value={observation} onChange={e => setObservation(e.target.value)} />
+          </Field>
+        </div>}
+        <Button onClick={runDiagnostic} disabled={runningRule || !observationValid}>
           {runningRule ? 'Evaluating Rule…' : 'Run Rule Evaluation'}
         </Button>
+        <small className="block-muted" style={{ flexBasis: '100%' }}>Each run records a separate evaluation; a repeated run is not de-duplicated.</small>
       </div>
     </Card>
 
     <div className="grid-2 top-gap">
-      <Card title="Workflow health" subtitle="Protected automation rules currently in effect">
+      <Card title="Workflow health" subtitle="Rules evaluated by this module. Their proposed actions are not executed.">
         <div className="automation-rule-list">
           {rulesList.map(r => (
             <div className="automation-rule-row" key={r.id || r.rule_code}>
               <div className="automation-rule-icon">{r.is_active !== false ? '✓' : '—'}</div>
               <div>
                 <b>{r.name || r.rule_code}</b>
-                <span>{r.action}</span>
+                <span>Proposed action (not performed by this module): {r.action}</span>
                 <small>{r.owner || 'System'} • {r.condition}</small>
               </div>
               <Status tone={r.is_active !== false ? 'success' : 'neutral'}>
@@ -575,28 +607,24 @@ export function AutomationPage({ store }) {
 
       <Card title="Recorded exceptions" subtitle="Historical failed attempts and warnings; current case status determines the next action">
         <div className="alert-list">
-          {((serverData?.recent_exceptions && serverData.recent_exceptions.length > 0)
-            ? serverData.recent_exceptions
-            : [...monitor.failed, ...monitor.warnings]
-          ).length > 0 ? (
-            ((serverData?.recent_exceptions && serverData.recent_exceptions.length > 0)
-              ? serverData.recent_exceptions
-              : [...monitor.failed, ...monitor.warnings]
-            ).map(x => (
+          {exceptionsList.length > 0 ? (
+            exceptionsList.map(x => (
               <div className="alert warning" key={x.id}>
                 <div>
                   <b>{x.event_type || x.event || x.rule_name}</b>
-                  <span>{x.result_summary || x.result}</span>
+                  <span>{resultText(x)}</span>
                   <small>{x.executed_at_human || x.createdAt || x.at} • {x.aggregate?.type || x.entityType || 'Action'} {x.aggregate?.id || x.entityId || ''}</small>
                 </div>
                 <Status tone={x.status === 'Failed' ? 'critical' : 'warning'}>{x.status}</Status>
               </div>
             ))
+          ) : (isServerSession && !serverData ? (
+            <Notice tone="info" title="Exceptions unavailable">{loading ? 'Loading…' : 'The automation record could not be loaded.'}</Notice>
           ) : (
             <Notice tone="success" title="No recorded exceptions">
-              No failed attempts or warnings are present in the current activity history.
+              No failed evaluations or warnings are present in the current record.
             </Notice>
-          )}
+          ))}
         </div>
       </Card>
     </div>
@@ -633,7 +661,7 @@ export function AutomationPage({ store }) {
       </div>
     </Card>
 
-    <Card className="top-gap" title="Recent automation activity" subtitle="Central audit trail of system events and triggered actions">
+    <Card className="top-gap" title="Recent automation activity" subtitle="Recorded rule evaluations. A row is not evidence that any invoice, task, notification or message was created.">
       <div style={{ marginBottom: '12px', display: 'flex', gap: '8px' }}>
         <button
           className={`tab-btn ${filterStatus === 'all' ? 'active' : ''}`}
@@ -670,7 +698,7 @@ export function AutomationPage({ store }) {
         { key: 'entity', label: 'Affected record', render: a => a.aggregate ? `${a.aggregate.type} • ${a.aggregate.id}` : `${a.entityType || 'Legacy'} • ${a.entityId || 'Not linked'}` },
         { key: 'actor', label: 'Actor', render: a => a.actor?.name || state.users.find(u => u.id === a.actorUserId)?.name || a.actorUserId || 'Historical record' },
         { key: 'event', label: 'Event', render: a => a.event_type || a.event },
-        { key: 'result', label: 'Result', render: a => a.result_summary || a.result },
+        { key: 'result', label: 'Result', render: a => <>{resultText(a)}{a.execution === 'evaluation_only' && <small className="block-muted">{isLegacy(a) ? 'Evaluation only — this older wording is a proposed action, not evidence that anything was done.' : 'Evaluation only — no business action was performed.'}</small>}</> },
         { key: 'status', label: 'Status', render: r => <Status tone={r.status === 'Success' ? 'success' : r.status === 'Warning' ? 'warning' : 'critical'}>{r.status}</Status> }
       ]} />
     </Card>
