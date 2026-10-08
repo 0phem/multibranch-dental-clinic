@@ -56,7 +56,7 @@ class AnalyticsTest extends TestCase
             'data' => [
                 'period',
                 'period_label',
-                'branch_id',
+                'branch',
                 'financials' => [
                     'total_collected_php',
                     'total_gross_php',
@@ -120,11 +120,10 @@ class AnalyticsTest extends TestCase
     {
         $this->actingAsUser('owner');
 
-        $b1Id = $this->b['b1']->id;
-        $response = $this->getJson("/api/analytics/executive-summary?period=all&branch_id={$b1Id}")
+        $response = $this->getJson('/api/analytics/executive-summary?period=all&branch_id=b1')
             ->assertStatus(200);
 
-        $this->assertEquals($b1Id, $response->json('data.branch_id'));
+        $this->assertSame($this->b['b1']->public_id, $response->json('data.branch.public_id'));
     }
 
     public function test_owner_can_view_branch_performance(): void
@@ -137,7 +136,6 @@ class AnalyticsTest extends TestCase
         $response->assertJsonStructure([
             'data' => [
                 '*' => [
-                    'branch_id',
                     'public_id',
                     'name',
                     'code',

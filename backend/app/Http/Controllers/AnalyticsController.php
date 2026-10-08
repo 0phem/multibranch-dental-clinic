@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Enums\Role;
+use App\Http\Requests\Analytics\AnalyticsQueryRequest;
 use App\Services\Analytics\AnalyticsService;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
@@ -20,52 +21,34 @@ class AnalyticsController extends Controller
         abort_unless($request->user() && $request->user()->role === Role::Owner, 403, 'Executive analytics and reports are restricted to the clinic Owner.');
     }
 
-    public function executiveSummary(Request $request): JsonResponse
+    public function executiveSummary(AnalyticsQueryRequest $request): JsonResponse
     {
         $this->authorizeOwner($request);
 
-        $period = $request->input('period', 'today');
-        $branchId = $request->filled('branch_id') && $request->input('branch_id') !== 'all'
-            ? (int) $request->input('branch_id')
-            : null;
-        $dateFrom = $request->input('date_from');
-        $dateTo = $request->input('date_to');
-
-        $summary = $this->analyticsService->getExecutiveSummary($period, $branchId, $dateFrom, $dateTo);
+        $summary = $this->analyticsService->getExecutiveSummary($request->period(), $request->branch(), $request->dateFrom(), $request->dateTo());
 
         return response()->json([
             'data' => $summary,
         ]);
     }
 
-    public function branchPerformance(Request $request): JsonResponse
+    public function branchPerformance(AnalyticsQueryRequest $request): JsonResponse
     {
         $this->authorizeOwner($request);
 
-        $period = $request->input('period', 'today');
-        $dateFrom = $request->input('date_from');
-        $dateTo = $request->input('date_to');
-
-        $branches = $this->analyticsService->getBranchPerformance($period, $dateFrom, $dateTo);
+        $branches = $this->analyticsService->getBranchPerformance($request->period(), $request->dateFrom(), $request->dateTo(), $request->branch());
 
         return response()->json([
             'data' => $branches,
         ]);
     }
 
-    public function export(Request $request): StreamedResponse
+    public function export(AnalyticsQueryRequest $request): StreamedResponse
     {
         $this->authorizeOwner($request);
 
-        $period = $request->input('period', 'today');
-        $branchId = $request->filled('branch_id') && $request->input('branch_id') !== 'all'
-            ? (int) $request->input('branch_id')
-            : null;
-        $dateFrom = $request->input('date_from');
-        $dateTo = $request->input('date_to');
-
-        $summary = $this->analyticsService->getExecutiveSummary($period, $branchId, $dateFrom, $dateTo);
-        $branches = $this->analyticsService->getBranchPerformance($period, $dateFrom, $dateTo);
+        $summary = $this->analyticsService->getExecutiveSummary($request->period(), $request->branch(), $request->dateFrom(), $request->dateTo());
+        $branches = $this->analyticsService->getBranchPerformance($request->period(), $request->dateFrom(), $request->dateTo(), $request->branch());
 
         $filename = 'operational-analytics-' . CarbonImmutable::now('Asia/Manila')->format('Ymd-His') . '.csv';
 
@@ -92,24 +75,28 @@ class AnalyticsController extends Controller
                 return $value;
             };
 
+            // Money is already an exact decimal string; a metric with no observations is written as text, never 0 or 100.
+            $pct = fn (?int $v): string => $v === null ? 'No data' : $v.'%';
+
             // Section 1: Executive KPI Summary
             fputcsv($handle, ['EXECUTIVE OPERATIONAL SUMMARY']);
             fputcsv($handle, ['Reporting Period', $sanitize($summary['period_label'])]);
+            fputcsv($handle, ['Branch Scope', $sanitize($summary['branch']['name'] ?? 'All Branches')]);
             fputcsv($handle, []);
             fputcsv($handle, ['Metric Category', 'Metric Name', 'Value (PHP / Count)']);
-            fputcsv($handle, ['Financial', 'Total Revenue Collected', number_format($summary['financials']['total_collected_php'], 2)]);
-            fputcsv($handle, ['Financial', 'Gross Invoiced Amount', number_format($summary['financials']['total_gross_php'], 2)]);
-            fputcsv($handle, ['Financial', 'HMO Covered Amount', number_format($summary['financials']['total_hmo_covered_php'], 2)]);
-            fputcsv($handle, ['Financial', 'Outstanding Balance', number_format($summary['financials']['outstanding_balance_php'], 2)]);
+            fputcsv($handle, ['Financial', 'Total Revenue Collected', $summary['financials']['total_collected_php']]);
+            fputcsv($handle, ['Financial', 'Gross Invoiced Amount', $summary['financials']['total_gross_php']]);
+            fputcsv($handle, ['Financial', 'HMO Covered Amount', $summary['financials']['total_hmo_covered_php']]);
+            fputcsv($handle, ['Financial', 'Outstanding Balance', $summary['financials']['outstanding_balance_php']]);
             fputcsv($handle, ['Financial', 'Paid Invoices Count', $summary['financials']['paid_invoices_count']]);
             fputcsv($handle, ['Scheduling', 'Total Appointments', $summary['scheduling']['total_appointments']]);
             fputcsv($handle, ['Scheduling', 'Completed Appointments', $summary['scheduling']['completed']]);
-            fputcsv($handle, ['Scheduling', 'Completion Rate (%)', $summary['scheduling']['completion_rate_pct'] . '%']);
+            fputcsv($handle, ['Scheduling', 'Completion Rate (%)', $pct($summary['scheduling']['completion_rate_pct'])]);
             fputcsv($handle, ['Patient Flow', 'Total Patient Visits', $summary['patient_flow']['total_visits']]);
             fputcsv($handle, ['Patient Flow', 'Served From Queue', $summary['patient_flow']['served_from_queue']]);
             fputcsv($handle, ['HMO Operations', 'Approved Claims Count', $summary['hmo']['approved']]);
-            fputcsv($handle, ['HMO Operations', 'Approved Amount (PHP)', number_format($summary['hmo']['approved_amount_php'], 2)]);
-            fputcsv($handle, ['Automation', 'Automation Health Rate (%)', $summary['automation']['health_rate_pct'] . '%']);
+            fputcsv($handle, ['HMO Operations', 'Approved Amount (PHP)', $summary['hmo']['approved_amount_php']]);
+            fputcsv($handle, ['Automation', 'Automation Health Rate (%)', $pct($summary['automation']['health_rate_pct'])]);
             fputcsv($handle, []);
 
             // Section 2: Branch Comparative Performance
@@ -131,12 +118,12 @@ class AnalyticsController extends Controller
                     $sanitize($b['name']),
                     $sanitize($b['code']),
                     $sanitize($b['city']),
-                    number_format($b['revenue_collected_php'], 2),
+                    $b['revenue_collected_php'],
                     $b['total_appointments'],
                     $b['completed_appointments'],
                     $b['active_queue'],
-                    $b['capacity_threshold'],
-                    $b['estimated_wait_minutes'],
+                    $b['capacity_threshold'] ?? 'Not configured',
+                    $b['estimated_wait_minutes'] ?? 'Not configured',
                 ]);
             }
 

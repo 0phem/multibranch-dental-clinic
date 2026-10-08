@@ -8,206 +8,189 @@ use App\Models\Branch;
 use App\Models\HmoCase;
 use App\Models\Invoice;
 use App\Models\QueueEntry;
-use App\Models\SystemEvent;
 use App\Models\Visit;
+use App\Support\ClinicClock;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\DB;
 
+// M21 read layer. Corrections in this pass (docs/M21_ANALYTICS_TECHNICAL_CORRECTIONS.md): the branch is a resolved Branch
+// model (never a request integer); period windows are half-open [from, until) instants in Asia/Manila and are bound as
+// ISO-8601 strings with an offset, so the database session time zone cannot shift a business day; money is aggregated
+// by PostgreSQL in exact numeric and returned as decimal strings; "no observations" is null, never 100%.
 class AnalyticsService
 {
     /**
-     * Parse requested period into Asia/Manila CarbonImmutable boundaries.
+     * Parse a validated period into Asia/Manila boundaries. `from` is inclusive, `until` exclusive (the start of the
+     * next business day), `to` is the last displayed day. A custom range requires both validated dates.
      */
     public function parsePeriod(?string $period, ?string $dateFrom = null, ?string $dateTo = null): array
     {
-        $now = CarbonImmutable::now('Asia/Manila');
+        $now = CarbonImmutable::now(ClinicClock::TIMEZONE);
         $norm = strtolower(trim((string) $period));
 
-        if ($dateFrom || $dateTo) {
-            $from = $dateFrom ? CarbonImmutable::parse($dateFrom, 'Asia/Manila')->startOfDay() : null;
-            $to = $dateTo ? CarbonImmutable::parse($dateTo, 'Asia/Manila')->endOfDay() : null;
-            return [
-                'from' => $from,
-                'to' => $to,
-                'label' => ($from && $to) ? "{$from->format('M d, Y')} – {$to->format('M d, Y')}" : 'Custom Range',
-                'period' => 'custom',
-            ];
+        if ($dateFrom !== null || $dateTo !== null) {
+            if ($dateFrom === null || $dateTo === null || ! ClinicClock::validDate($dateFrom) || ! ClinicClock::validDate($dateTo) || $dateFrom > $dateTo) {
+                throw new \InvalidArgumentException('A custom range needs a valid start and end date in order.');
+            }
+            $from = CarbonImmutable::createFromFormat('!Y-m-d', $dateFrom, ClinicClock::TIMEZONE);
+            $to = CarbonImmutable::createFromFormat('!Y-m-d', $dateTo, ClinicClock::TIMEZONE);
+
+            return $this->bounds($from, $to, "{$from->format('M d, Y')} – {$to->format('M d, Y')}", 'custom');
         }
 
-        switch ($norm) {
-            case 'today':
-                return [
-                    'from' => $now->startOfDay(),
-                    'to' => $now->endOfDay(),
-                    'label' => "Today ({$now->format('M d, Y')})",
-                    'period' => 'today',
-                ];
+        return match ($norm) {
+            'today', '' => $this->bounds($now->startOfDay(), $now->startOfDay(), "Today ({$now->format('M d, Y')})", 'today'),
+            'this week', 'week' => $this->bounds($now->startOfWeek(), $now->endOfWeek()->startOfDay(), "This Week ({$now->startOfWeek()->format('M d')} – {$now->endOfWeek()->format('M d, Y')})", 'week'),
+            'this month', 'month' => $this->bounds($now->startOfMonth(), $now->endOfMonth()->startOfDay(), "This Month ({$now->format('F Y')})", 'month'),
+            'this year', 'year' => $this->bounds($now->startOfYear(), $now->endOfYear()->startOfDay(), "This Year ({$now->format('Y')})", 'year'),
+            'all', 'all time' => ['from' => null, 'until' => null, 'to' => null, 'label' => 'All Time', 'period' => 'all'],
+            default => throw new \InvalidArgumentException('Unsupported analytics period.'),
+        };
+    }
 
-            case 'this week':
-            case 'week':
-                return [
-                    'from' => $now->startOfWeek(),
-                    'to' => $now->endOfWeek(),
-                    'label' => "This Week ({$now->startOfWeek()->format('M d')} – {$now->endOfWeek()->format('M d, Y')})",
-                    'period' => 'week',
-                ];
+    private function bounds(CarbonImmutable $firstDay, CarbonImmutable $lastDay, string $label, string $period): array
+    {
+        return ['from' => $firstDay, 'until' => $lastDay->addDay()->startOfDay(), 'to' => $lastDay, 'label' => $label, 'period' => $period];
+    }
 
-            case 'this month':
-            case 'month':
-                return [
-                    'from' => $now->startOfMonth(),
-                    'to' => $now->endOfMonth(),
-                    'label' => "This Month ({$now->format('F Y')})",
-                    'period' => 'month',
-                ];
-
-            case 'this year':
-            case 'year':
-                return [
-                    'from' => $now->startOfYear(),
-                    'to' => $now->endOfYear(),
-                    'label' => "This Year ({$now->format('Y')})",
-                    'period' => 'year',
-                ];
-
-            case 'all':
-            case 'all time':
-            default:
-                return [
-                    'from' => null,
-                    'to' => null,
-                    'label' => 'All Time',
-                    'period' => 'all',
-                ];
+    /** Apply the half-open window with offset-bearing ISO strings (independent of the DB session time zone). */
+    private function within($query, string $column, array $bounds)
+    {
+        if ($bounds['from'] && $bounds['until']) {
+            $query->where($column, '>=', $bounds['from']->toIso8601String())->where($column, '<', $bounds['until']->toIso8601String());
         }
+
+        return $query;
+    }
+
+    /** Current Manila clinic day, position-holding queue entries only (Waiting / Called / Treatment Ready). */
+    private function currentQueue(?int $branchId = null): Builder
+    {
+        return QueueEntry::query()
+            ->whereIn('status', QueueEntry::POSITIONAL)
+            ->whereHas('dentistQueue', function ($q) use ($branchId) {
+                $q->where('clinic_date', ClinicClock::today());
+                if ($branchId !== null) {
+                    $q->where('branch_id', $branchId);
+                }
+            });
+    }
+
+    /** A percentage, or null when there are no observations (never a fabricated 100). */
+    private function rate(int $part, int $whole): ?int
+    {
+        return $whole > 0 ? (int) round(($part / $whole) * 100) : null;
     }
 
     /**
-     * Compute authoritative executive summary KPIs.
+     * Compute authoritative executive summary KPIs. Monetary values are exact decimal strings (PostgreSQL numeric).
      */
     public function getExecutiveSummary(
         ?string $period = 'today',
-        ?int $branchId = null,
+        ?Branch $branch = null,
         ?string $dateFrom = null,
         ?string $dateTo = null
     ): array {
         $bounds = $this->parsePeriod($period, $dateFrom, $dateTo);
-        $from = $bounds['from'];
-        $to = $bounds['to'];
+        $branchId = $branch?->id;
 
-        // 1. Invoices & Financials (M11)
+        // 1. Invoices & Financials (M11). Definitions unchanged: invoices created in the window; "collected" is the paid_amount
+        // of Paid invoices (not a payment-date report).
         $invoiceQuery = Invoice::query();
         if ($branchId) {
             $invoiceQuery->where('branch_id', $branchId);
         }
-        if ($from && $to) {
-            $invoiceQuery->whereBetween('created_at', [$from, $to]);
-        }
-
-        $allInvoices = (clone $invoiceQuery)->get();
-        $paidInvoices = $allInvoices->where('status', 'Paid');
-        $issuedInvoices = $allInvoices->where('status', 'Issued');
-
-        $totalCollected = $paidInvoices->sum(fn(Invoice $i) => (float) $i->paid_amount);
-        $totalGross = $allInvoices->whereIn('status', ['Issued', 'Paid'])->sum(fn(Invoice $i) => (float) $i->gross_amount);
-        $totalHmoCovered = $allInvoices->whereIn('status', ['Issued', 'Paid'])->sum(fn(Invoice $i) => (float) $i->hmo_coverage_amount);
-        $outstandingBalance = $issuedInvoices->sum(fn(Invoice $i) => (float) $i->patient_responsibility_amount - (float) $i->paid_amount);
-
-        $avgTicket = $paidInvoices->count() > 0 ? round($totalCollected / $paidInvoices->count(), 2) : 0.00;
+        $this->within($invoiceQuery, 'created_at', $bounds);
+        $fin = $invoiceQuery->toBase()->selectRaw("
+            COUNT(*) AS invoices_count,
+            COUNT(*) FILTER (WHERE status = 'Paid') AS paid_count,
+            COALESCE(SUM(paid_amount) FILTER (WHERE status = 'Paid'), 0)::numeric(16,2)::text AS collected,
+            COALESCE(SUM(gross_amount) FILTER (WHERE status IN ('Issued','Paid')), 0)::numeric(16,2)::text AS gross,
+            COALESCE(SUM(hmo_coverage_amount) FILTER (WHERE status IN ('Issued','Paid')), 0)::numeric(16,2)::text AS hmo,
+            COALESCE(SUM(patient_responsibility_amount - paid_amount) FILTER (WHERE status = 'Issued'), 0)::numeric(16,2)::text AS outstanding,
+            ROUND(AVG(paid_amount) FILTER (WHERE status = 'Paid'), 2)::text AS average_ticket
+        ")->first();
 
         // 2. Appointments & Scheduling (M6)
         $apptQuery = Appointment::query();
         if ($branchId) {
             $apptQuery->where('branch_id', $branchId);
         }
-        if ($from && $to) {
-            $apptQuery->whereBetween('starts_at', [$from, $to]);
-        }
-
-        $appts = (clone $apptQuery)->get();
-        $totalAppts = $appts->count();
-        $confirmedAppts = $appts->where('status', 'Confirmed')->count();
-        $completedAppts = $appts->where('status', 'Completed')->count();
-        $cancelledAppts = $appts->where('status', 'Cancelled')->count();
-        $noShowAppts = $appts->where('status', 'No-show')->count();
-        $inTreatmentAppts = $appts->where('status', 'In Treatment')->count();
-
+        $this->within($apptQuery, 'starts_at', $bounds);
+        $apptCounts = $apptQuery->toBase()->selectRaw('status, COUNT(*) AS n')->groupBy('status')->pluck('n', 'status');
+        $count = fn (string $status): int => (int) ($apptCounts[$status] ?? 0);
+        $totalAppts = (int) $apptCounts->sum();
+        $completedAppts = $count('Completed');
+        $cancelledAppts = $count('Cancelled');
+        $noShowAppts = $count('No-show');
         $terminalAppts = $completedAppts + $cancelledAppts + $noShowAppts;
-        $completionRate = $terminalAppts > 0 ? (int) round(($completedAppts / $terminalAppts) * 100) : 100;
 
-        // 3. Queue & Patient Flow (M9/M10)
+        // 3. Queue & Patient Flow (M9/M10). Visits and Served are historical counts in the window; "currently waiting" is
+        // the live position-holding queue of the current Manila clinic day and does not follow the selected period.
         $visitQuery = Visit::query();
         if ($branchId) {
             $visitQuery->where('branch_id', $branchId);
         }
-        if ($from && $to) {
-            $visitQuery->whereBetween('arrived_at', [$from, $to]);
-        }
+        $this->within($visitQuery, 'arrived_at', $bounds);
         $totalVisits = (clone $visitQuery)->count();
 
-        $queueQuery = QueueEntry::query();
+        $servedQuery = QueueEntry::query()->where('status', 'Served');
         if ($branchId) {
-            $queueQuery->whereHas('visit', fn($q) => $q->where('branch_id', $branchId));
+            $servedQuery->whereHas('visit', fn ($q) => $q->where('branch_id', $branchId));
         }
-        if ($from && $to) {
-            $queueQuery->whereBetween('created_at', [$from, $to]);
-        }
-        $queueEntries = (clone $queueQuery)->get();
-        $servedQueueCount = $queueEntries->where('status', 'Served')->count();
-        $waitingQueueCount = $queueEntries->whereIn('status', ['Waiting', 'Called', 'Treatment Ready'])->count();
+        $this->within($servedQuery, 'created_at', $bounds);
+        $servedQueueCount = $servedQuery->count();
+        $waitingQueueCount = $this->currentQueue($branchId)->count();
 
         // 4. HMO Processing (M12)
         $hmoQuery = HmoCase::query();
         if ($branchId) {
             $hmoQuery->where('branch_id', $branchId);
         }
-        if ($from && $to) {
-            $hmoQuery->whereBetween('created_at', [$from, $to]);
-        }
-        $hmoCases = (clone $hmoQuery)->get();
-        $totalHmo = $hmoCases->count();
-        $approvedHmo = $hmoCases->where('status', 'Approved')->count();
-        $pendingHmo = $hmoCases->whereIn('status', ['Pending', 'Escalated'])->count();
-        $withdrawnHmo = $hmoCases->where('status', 'Withdrawn')->count();
-        $rejectedHmo = $hmoCases->where('status', 'Rejected')->count();
-        $approvedHmoAmount = $hmoCases->where('status', 'Approved')->sum(fn(HmoCase $c) => (float) $c->approved_amount);
+        $this->within($hmoQuery, 'created_at', $bounds);
+        $hmo = $hmoQuery->toBase()->selectRaw("
+            COUNT(*) AS total,
+            COUNT(*) FILTER (WHERE status = 'Approved') AS approved,
+            COUNT(*) FILTER (WHERE status IN ('Pending','Escalated')) AS pending,
+            COUNT(*) FILTER (WHERE status = 'Withdrawn') AS withdrawn,
+            COUNT(*) FILTER (WHERE status = 'Rejected') AS rejected,
+            COALESCE(SUM(approved_amount) FILTER (WHERE status = 'Approved'), 0)::numeric(16,2)::text AS approved_amount
+        ")->first();
 
         // 5. Automation Health (M23)
         $actionQuery = AutomatedAction::query();
         if ($branchId) {
-            $actionQuery->whereHas('event', fn($q) => $q->where('branch_id', $branchId));
+            $actionQuery->whereHas('event', fn ($q) => $q->where('branch_id', $branchId));
         }
-        if ($from && $to) {
-            $actionQuery->whereBetween('executed_at', [$from, $to]);
-        }
-        $totalActions = (clone $actionQuery)->count();
-        $successActions = (clone $actionQuery)->where('status', 'Success')->count();
-        $warningActions = (clone $actionQuery)->where('status', 'Warning')->count();
-        $failedActions = (clone $actionQuery)->where('status', 'Failed')->count();
-        $automationHealthRate = $totalActions > 0 ? (int) round(($successActions / $totalActions) * 100) : 100;
+        $this->within($actionQuery, 'executed_at', $bounds);
+        $actionCounts = $actionQuery->toBase()->selectRaw('status, COUNT(*) AS n')->groupBy('status')->pluck('n', 'status');
+        $totalActions = (int) $actionCounts->sum();
+        $successActions = (int) ($actionCounts['Success'] ?? 0);
 
         return [
             'period' => $bounds['period'],
             'period_label' => $bounds['label'],
-            'branch_id' => $branchId,
+            'branch' => $branch ? ['public_id' => $branch->public_id, 'name' => $branch->name] : null,
             'financials' => [
-                'total_collected_php' => round($totalCollected, 2),
-                'total_gross_php' => round($totalGross, 2),
-                'total_hmo_covered_php' => round($totalHmoCovered, 2),
-                'outstanding_balance_php' => round($outstandingBalance, 2),
-                'invoices_count' => $allInvoices->count(),
-                'paid_invoices_count' => $paidInvoices->count(),
-                'average_ticket_php' => $avgTicket,
+                'total_collected_php' => $fin->collected,
+                'total_gross_php' => $fin->gross,
+                'total_hmo_covered_php' => $fin->hmo,
+                'outstanding_balance_php' => $fin->outstanding,
+                'invoices_count' => (int) $fin->invoices_count,
+                'paid_invoices_count' => (int) $fin->paid_count,
+                // Null when no invoice is Paid in the window; rounded half away from zero to centavos by PostgreSQL ROUND.
+                'average_ticket_php' => $fin->average_ticket,
             ],
             'scheduling' => [
                 'total_appointments' => $totalAppts,
-                'confirmed' => $confirmedAppts,
+                'confirmed' => $count('Confirmed'),
                 'completed' => $completedAppts,
                 'cancelled' => $cancelledAppts,
                 'no_show' => $noShowAppts,
-                'in_treatment' => $inTreatmentAppts,
-                'completion_rate_pct' => $completionRate,
+                'in_treatment' => $count('In Treatment'),
+                // Null when no appointment in the window is Completed, Cancelled or No-show.
+                'completion_rate_pct' => $this->rate($completedAppts, $terminalAppts),
             ],
             'patient_flow' => [
                 'total_visits' => $totalVisits,
@@ -215,69 +198,58 @@ class AnalyticsService
                 'current_waiting' => $waitingQueueCount,
             ],
             'hmo' => [
-                'total_cases' => $totalHmo,
-                'approved' => $approvedHmo,
-                'pending' => $pendingHmo,
-                'withdrawn' => $withdrawnHmo,
-                'rejected' => $rejectedHmo,
-                'approved_amount_php' => round($approvedHmoAmount, 2),
+                'total_cases' => (int) $hmo->total,
+                'approved' => (int) $hmo->approved,
+                'pending' => (int) $hmo->pending,
+                'withdrawn' => (int) $hmo->withdrawn,
+                'rejected' => (int) $hmo->rejected,
+                'approved_amount_php' => $hmo->approved_amount,
             ],
             'automation' => [
                 'total_actions' => $totalActions,
                 'success' => $successActions,
-                'warning' => $warningActions,
-                'failed' => $failedActions,
-                'health_rate_pct' => $automationHealthRate,
+                'warning' => (int) ($actionCounts['Warning'] ?? 0),
+                'failed' => (int) ($actionCounts['Failed'] ?? 0),
+                // Null when no automated action ran in the window.
+                'health_rate_pct' => $this->rate($successActions, $totalActions),
             ],
         ];
     }
 
     /**
-     * Per-branch comparative performance breakdown.
+     * Per-branch comparative performance breakdown (all branches, or only the selected one). Branches are identified
+     * by public ULID only. estimated_wait_minutes is null: the former "15 minutes per position" formula was never
+     * approved by the clinic (M10 wait-time policy is unresolved).
      */
     public function getBranchPerformance(
         ?string $period = 'today',
         ?string $dateFrom = null,
-        ?string $dateTo = null
+        ?string $dateTo = null,
+        ?Branch $branch = null
     ): Collection {
         $bounds = $this->parsePeriod($period, $dateFrom, $dateTo);
-        $from = $bounds['from'];
-        $to = $bounds['to'];
 
-        $branches = Branch::orderBy('name')->get();
+        $branches = Branch::query()->when($branch, fn ($q) => $q->where('id', $branch->id))->orderBy('name')->get();
 
-        return $branches->map(function (Branch $b) use ($from, $to) {
-            $invoices = Invoice::where('branch_id', $b->id)
-                ->when($from && $to, fn($q) => $q->whereBetween('created_at', [$from, $to]))
-                ->where('status', 'Paid')
-                ->get();
+        return $branches->map(function (Branch $b) use ($bounds) {
+            $revenue = $this->within(Invoice::query()->where('branch_id', $b->id)->where('status', 'Paid'), 'created_at', $bounds)
+                ->toBase()->selectRaw('COALESCE(SUM(paid_amount), 0)::numeric(16,2)::text AS v')->value('v');
 
-            $revenue = $invoices->sum(fn(Invoice $i) => (float) $i->paid_amount);
-
-            $apptsQuery = Appointment::where('branch_id', $b->id)
-                ->when($from && $to, fn($q) => $q->whereBetween('starts_at', [$from, $to]));
+            $apptsQuery = $this->within(Appointment::query()->where('branch_id', $b->id), 'starts_at', $bounds);
             $totalAppts = (clone $apptsQuery)->count();
             $completedAppts = (clone $apptsQuery)->where('status', 'Completed')->count();
 
-            $activeQueue = QueueEntry::whereHas('visit', fn($q) => $q->where('branch_id', $b->id))
-                ->whereIn('status', ['Waiting', 'Called', 'Treatment Ready'])
-                ->count();
-
-            $capacityThreshold = $b->capacity_threshold ?: 80;
-            $estimatedWait = $activeQueue * 15; // Approximate 15m per positional entry
-
             return [
-                'branch_id' => $b->id,
                 'public_id' => $b->public_id,
                 'name' => $b->name,
                 'code' => $b->branch_code,
                 'city' => $b->city,
-                'revenue_collected_php' => round($revenue, 2),
+                'revenue_collected_php' => $revenue,
                 'total_appointments' => $totalAppts,
                 'completed_appointments' => $completedAppts,
-                'active_queue' => $activeQueue,
-                'capacity_threshold' => $capacityThreshold,
-                'estimated_wait_minutes' => $estimatedWait,
+                'active_queue' => $this->currentQueue($b->id)->count(),
+                'capacity_threshold' => $b->capacity_threshold,
+                'estimated_wait_minutes' => null,
                 'is_open' => $b->status === 'Open',
             ];
         });

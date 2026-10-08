@@ -169,20 +169,28 @@ export function AnalyticsPage({ activeBranch, store }) {
   const [serverSummary, setServerSummary] = useState(null)
   const [serverBranches, setServerBranches] = useState(null)
   const [loading, setLoading] = useState(false)
+  const [loadError, setLoadError] = useState(false)
+  const isServerSession = !!store.session?.serverUserId
 
   const activeBranchRecord = state.branches.find(b => b.name === activeBranch)
-  const activeBranchId = activeBranch === 'All Branches' ? null : (activeBranchRecord?.id || null)
+  // The server resolves a public ULID (preferred) or the transitional legacy reference; never an internal number.
+  const activeBranchId = activeBranch === 'All Branches' ? null : (activeBranchRecord?.publicId || activeBranchRecord?.id || null)
 
   const loadData = async () => {
+    setLoading(true)
+    setLoadError(false)
+    // Never keep figures for a previous branch/period on screen while a new request is in flight or after it fails.
+    setServerSummary(null)
+    setServerBranches(null)
     try {
-      setLoading(true)
       const p = period.toLowerCase()
       const summary = await fetchExecutiveSummary({ period: p, branch_id: activeBranchId })
+      const branches = await fetchBranchPerformance({ period: p, branch_id: activeBranchId })
       setServerSummary(summary)
-      const branches = await fetchBranchPerformance({ period: p })
       setServerBranches(branches)
     } catch {
-      // Graceful fallback to client-side data
+      // A clinic-server session shows an explicit unavailable state; only the offline demo falls back to local data.
+      if (isServerSession) setLoadError(true)
     } finally {
       setLoading(false)
     }
@@ -222,13 +230,14 @@ export function AnalyticsPage({ activeBranch, store }) {
     { name: 'Recorded revenue', value: peso.format(paid.reduce((s, i) => s + i.total, 0)), note: 'Paid transaction records', module: 'M11' },
   ]
 
+  const rateText = v => (v === null || v === undefined ? 'No data' : `${v}%`)
   const metrics = serverSummary ? [
-    { name: 'Recorded revenue', value: peso.format(serverSummary.financials.total_collected_php), note: `Real collections from ${serverSummary.financials.paid_invoices_count} paid invoice(s) • Gross: ${peso.format(serverSummary.financials.total_gross_php)}`, module: 'M11' },
-    { name: 'Scheduling', value: serverSummary.scheduling.total_appointments, note: `Completion rate: ${serverSummary.scheduling.completion_rate_pct}% (${serverSummary.scheduling.completed} completed, ${serverSummary.scheduling.cancelled} cancelled)`, module: 'M6' },
-    { name: 'Queue / patient flow', value: serverSummary.patient_flow.total_visits, note: `${serverSummary.patient_flow.served_from_queue} served • ${serverSummary.patient_flow.current_waiting} currently waiting`, module: 'M9–M10' },
+    { name: 'Recorded revenue', value: peso.format(serverSummary.financials.total_collected_php), note: `Paid invoices created in this period: ${serverSummary.financials.paid_invoices_count} • Gross invoiced: ${peso.format(serverSummary.financials.total_gross_php)}`, module: 'M11' },
+    { name: 'Scheduling', value: serverSummary.scheduling.total_appointments, note: `Completion rate: ${rateText(serverSummary.scheduling.completion_rate_pct)} (${serverSummary.scheduling.completed} completed, ${serverSummary.scheduling.cancelled} cancelled)`, module: 'M6' },
+    { name: 'Queue / patient flow', value: serverSummary.patient_flow.total_visits, note: `${serverSummary.patient_flow.served_from_queue} served in this period • ${serverSummary.patient_flow.current_waiting} waiting now (today's queue)`, module: 'M9–M10' },
     { name: 'HMO processing', value: serverSummary.hmo.approved, note: `${peso.format(serverSummary.hmo.approved_amount_php)} approved coverage • ${serverSummary.hmo.pending} pending coordinator action`, module: 'M12' },
-    { name: 'Automation health', value: `${serverSummary.automation.health_rate_pct}%`, note: `${serverSummary.automation.total_actions} actions executed (${serverSummary.automation.failed} failed)`, module: 'M23' },
-  ] : clientMetrics
+    { name: 'Automation health', value: rateText(serverSummary.automation.health_rate_pct), note: `${serverSummary.automation.total_actions} actions executed (${serverSummary.automation.failed} failed)`, module: 'M23' },
+  ] : (isServerSession ? [] : clientMetrics)
 
   const exportRows = state.branches.map(b => {
     const c = branchCapacity(b.name, state)
@@ -252,6 +261,10 @@ export function AnalyticsPage({ activeBranch, store }) {
         </Button>
       </div>}
     />
+    {isServerSession && loadError && <Notice tone="warning">
+      Analytics are unavailable right now, so no figures are shown. <Button variant="ghost" onClick={loadData}>Try again</Button>
+    </Notice>}
+    {isServerSession && loading && !serverSummary && !loadError && <p className="muted-copy" role="status">Loading analytics…</p>}
     <div className="cards-3">
       {metrics.map(m => (
         <Card key={m.name} title={m.name}>
@@ -262,25 +275,29 @@ export function AnalyticsPage({ activeBranch, store }) {
       ))}
     </div>
     <div className="grid-2 top-gap">
-      <Card title="Branch workload report" subtitle={serverSummary ? `Authoritative comparative data for ${serverSummary.period_label}` : undefined}>
+      <Card title="Branch workload report" subtitle={serverSummary ? `Authoritative comparative data for ${serverSummary.period_label}` : (isServerSession ? undefined : 'Offline demo preview — example capacity values, not clinic data')}>
         <div className="branch-bars">
-          {(serverBranches || state.branches.filter(b => activeBranch === 'All Branches' || b.name === activeBranch)).map(b => {
-            const isServer = !!b.revenue_collected_php !== undefined && b.active_queue !== undefined
-            const workload = isServer ? Math.min(100, Math.round((b.active_queue / Math.max(1, b.capacity_threshold || 80)) * 100)) : branchCapacity(b.name, state).workload
-            const threshold = b.capacity_threshold || 80
+          {isServerSession && !serverBranches && <p className="muted-copy">{loading ? 'Loading branch figures…' : 'Branch figures are unavailable.'}</p>}
+          {(serverBranches || (isServerSession ? [] : state.branches.filter(b => activeBranch === 'All Branches' || b.name === activeBranch))).map(b => {
+            const isServer = b.active_queue !== undefined
+            // A clinic-server branch has no approved capacity (the stored 80/80/75 thresholds are unconfirmed demo configuration and a queue
+            // count is not a percentage), so no workload percentage is computed or drawn. Only the offline demo keeps its labelled example calculation.
+            const workload = isServer ? null : branchCapacity(b.name, state).workload
+            const threshold = isServer ? null : branchCapacity(b.name, state).threshold
+            const estimateKnown = !isServer || (b.estimated_wait_minutes !== null && b.estimated_wait_minutes !== undefined)
             const waiting = isServer ? b.active_queue : branchCapacity(b.name, state).waiting
             const booked = isServer ? b.total_appointments : branchCapacity(b.name, state).booked
             const estimate = isServer ? b.estimated_wait_minutes : branchCapacity(b.name, state).estimate
             const revenue = isServer ? peso.format(b.revenue_collected_php) : null
 
-            return <div key={b.id || b.branch_id}>
+            return <div key={b.public_id || b.id}>
               <div className="bar-label">
                 <span>{b.name}</span>
-                <b>{workload}%</b>
+                {workload === null ? <b>Capacity not configured</b> : <b>{workload}%</b>}
               </div>
-              <Progress value={workload} threshold={threshold} />
+              {workload !== null && <Progress value={workload} threshold={threshold} />}
               <small>
-                {waiting} waiting • {booked} appointments • ~{estimate} min wait
+                {waiting} waiting now • {booked} appointments{estimateKnown ? ` • ~${estimate} min wait` : ' • wait estimate not configured'}
                 {revenue ? ` • Revenue: ${revenue}` : ''}
               </small>
             </div>

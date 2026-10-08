@@ -387,6 +387,7 @@ Ask these when the owning module is about to be completed or returned to. They a
 | --- | --- | --- | --- | --- | --- |
 | DQ-74 | Which numbers do you want to watch regularly? You said "better" means shorter waits and real-time updates. | PRODUCT · PARTIALLY ANSWERED | M21, M10, M18 | Q32 is qualitative; no metric definitions exist → asked last, after domain rules settle. | Only metrics with authoritative sources; unsupported ones show "Unavailable". |
 | DQ-75 | Should reports break results down by branch, by Dentist, or by service? | PRODUCT · UNRESOLVED | M21, M26 | M26 §40.18; M2 notes a branch-reference defect in M21 (section 11) → defines attribution. | Branch-level aggregates only where authoritative. |
+| DQ-113 | When the Owner looks at money collected, should it be counted by the day the payment was received, or by the day the invoice was created? | PRODUCT · UNRESOLVED | M21, M11 | Today "collected" is the `paid_amount` of Paid invoices selected by invoice `created_at`, labelled "Paid invoices created in this period"; M11 payments carry their own received date (`docs/M21_ANALYTICS_TECHNICAL_CORRECTIONS.md` §4). No existing decision covers the date basis (DQ-74/DQ-75 ask which numbers and breakdowns, not the date basis) → defines the revenue reporting basis. | Keep the current invoice-creation basis and its honest label; no payment-date report. |
 | DQ-76 | Who may review the audit history? Should the Owner see Staff and Dentist activity, and should anyone see their own? | POLICY · PARTIALLY ANSWERED | M22 | Owner-only is the existing contract (M22 §9, §36.1) → confirm. | Owner only (today). |
 | DQ-77 | Should looking at a patient record, or opening a document, be written down (who looked, when)? | POLICY · UNRESOLVED | M22, M4, M14 | Reads are not audited (M22 §17, §19; M4 §32.7; M14 §33.6) → defines read-audit. | No read auditing. |
 | DQ-78 | May the audit history be exported, and by whom? | POLICY · PARTIALLY ANSWERED | M22 | A bounded Owner-only CSV export exists as a kept capability (M22 §21) → confirm. | Owner-only (today). |
@@ -635,6 +636,8 @@ Not fixed here. A finding is ENGINEERING only if it is wrong regardless of clini
 | E-4 | M23 | Rule results assert actions that nothing performs: "Draft invoice created" (always, R4), "follow-up task staged" (R2), "routed to … inbox" (R5), "account synchronised" (R6), "calendar reservation and notification dispatch staged" (R1); R3's written condition includes "branch load" but only wait time is evaluated; R4 text says "Recall / follow-up" for a follow-up | `WorkflowAutomationService.php:143–232`; the seed `condition_description`/`action_description` | Success/Warning rows and M22 events state work that did not happen (honest-UI rule, CLAUDE.md "do not fabricate workflow statuses") | M23 |
 | E-5 | M21, M23 | "No data" is shown as 100%: automation health defaults to 100 with zero actions, appointment completion rate to 100 with no terminal appointments | `WorkflowAutomationService.php:262`; `AnalyticsService.php:137,188`; `src/pages/Admin.jsx:463` | Unavailable must never be shown as a success value | M21, M23 |
 
+**Status update (branch `feature/m21-analytics-technical-corrections`, uncommitted; see `docs/M21_ANALYTICS_TECHNICAL_CORRECTIONS.md`):** E-1, E-2 and E-3 are corrected there, and E-5 is corrected for M21's own summary and page (completion rate and average ticket are `null` with no data). **E-4 (M23 result text) is still open, and the M23-side "100% with no actions" default (`WorkflowAutomationService.php:262`, Automation Monitor) is still open.** The same pass also fixed two further M21 findings (CodeRabbit CR-01 date validation, CR-02 current-clinic-day queue) and removed the unapproved 15-minutes-per-position wait estimate from server analytics (now `null`; the formula stays a clinic decision, PI-24/PI-25). A new open business-definition question — whether "collected" revenue should be reported by payment date rather than invoice creation date — is tracked as **DQ-113** (deferred, M21/M11), which raises the totals to 113 deferred and 173 distinct clinic decisions. The M23 Automation Monitor's own no-data default is **pending M23** (see the M21 document §6).
+
 Documentation, not code: the registry marks M23 `implemented: true` ("automated actions") while `MODULE_COVERAGE.md` says "Implemented frontend … no … background worker" and the code only records events and runs Owner-dispatched evaluations (section 13, item 2). Correct the wording in the M23 pass.
 
 Not engineering defects (policy or provenance): the 12-hour, 35-minute, 24-hour and 80/80/75 values; the two wait estimators; the three independent code constants carrying the 12-hour value. Known, already documented limitations carried unchanged: TD-10, TD-23.
@@ -666,14 +669,14 @@ If the clinic answers **"No formal policy — keep human judgment"**, the system
 | --- | --- |
 | Questions in the first draft | 134 (132 distinct: draft A-01 and A-02 repeated H-01 and S-10/S-11) |
 | Primary follow-up interview (PI-01–PI-60) | 60 (23 PARTIALLY ANSWERED, 37 UNRESOLVED) |
-| Deferred / module-specific (DQ-01–DQ-112) | 112 (13 PARTIALLY ANSWERED, 99 UNRESOLVED); 11 of them (DQ-102–DQ-112) are conditional on the M24/M25 gates |
-| **Distinct clinic decisions** | **172** (60 + 112) |
-| Team / deployment / integration decisions (TD-01–TD-24) | 24 — **separate from, and not counted inside, the 172** (not for the clinic) |
+| Deferred / module-specific (DQ-01–DQ-113) | 113 (13 PARTIALLY ANSWERED, 100 UNRESOLVED); 11 of them (DQ-102–DQ-112) are conditional on the M24/M25 gates |
+| **Distinct clinic decisions** | **173** (60 + 113; DQ-113 added during the M21 correction pass) |
+| Team / deployment / integration decisions (TD-01–TD-24) | 24 — **separate from, and not counted inside, the 173** (not for the clinic) |
 | Old draft questions removed because already answered | 6 (P-05, C-07, C-08, C-11, S-06, S-13) |
 | Old draft questions moved to TEAM | 8 (P-12, R-14, C-13, B-17, N-03, I-02, I-16, K-05) |
 | Old draft questions merged as duplicates | 6 (P-04, S-12, B-12, A-01, A-02, A-05) |
 | Old draft questions carried forward (kept, narrowed or split) | 114 |
-| New decisions added from fully read sources | 37 (PI 10 + DQ 27) |
+| New decisions added | 38 (PI 10 + DQ 28: 37 from the fully read sources, plus DQ-113 from the M21 correction pass) |
 | Items narrowed by an interview or contract fact (status PARTIALLY ANSWERED) | 36 (23 PI + 13 DQ) |
 
 The distinct-decision count rose from 134 because compound draft questions were split to one decision each, and because the full sources contained decisions the excerpts had hidden. The **primary interview is 60 short questions for three respondent types (Owner, receptionist, Dentist)**, not a single sitting; sections 4.1–4.10 can be taken as separate sessions.
@@ -723,6 +726,7 @@ One question now serves every module it affects: operating hours (PI-14, once, f
 
 - **Interview-derived (Q1–Q32):** PI-04 (Q31), PI-13 (Q15 and OPERATING_MODE §3), PI-27 (Q7 vs Q8), PI-34 (Q23), PI-38 (Q16), PI-40 (Q15/Q27), PI-51 (Q17/Q18), PI-56, PI-57, PI-58 (Q1, Q12, OPERATING_MODE §8), DQ-74 (Q32).
 - **From previously truncated report sections:** M7 — DQ-13, DQ-17; M11 — DQ-28, DQ-29; M13 — DQ-35; M16 — DQ-49, DQ-50, DQ-51; M17 — DQ-57, DQ-58; M26 — DQ-89, DQ-92, DQ-99.
+- **From the M21 correction pass:** DQ-113 (revenue date basis).
 - **From the canonical documents:** DQ-01 (M2 demo phones), DQ-20 (OPERATING_MODE §3: no online-payment policy), DQ-41, DQ-43, DQ-46 (M14), DQ-65, DQ-66, DQ-68 (CONTRACTS §10–11), DQ-69, DQ-73 (CONTRACTS follow-up), DQ-104, DQ-105 (OPERATING_MODE §9), DQ-111 (M25).
 
 ### 13.6 Documentation conflicts and stale wording found (reported, not edited)
