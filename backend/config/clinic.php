@@ -24,4 +24,22 @@ return [
 
     // Optional contact address printed in email footers. Empty = no address is shown (none is invented).
     'support_email' => env('CLINIC_SUPPORT_EMAIL'),
+
+    // White-label branding (decision 12) used by every email and PDF through App\Support\Brand. The defaults are the clinic's
+    // own published identity (src/clinic-config.js) and the supplied logo; change any of them here or in backend/.env, and every
+    // template follows. Branch name, address and phone come from the branches table; the BIR fields are per branch too.
+    'brand' => [
+        'name' => env('CLINIC_NAME', 'Dr. Dana E. Roxas Dental Clinic'),
+        'name_line' => env('CLINIC_NAME_LINE', 'Dr. Dana E. Roxas'),
+        'subtitle' => env('CLINIC_NAME_SUBTITLE', 'Dental Clinic'),
+        // A PNG (Gmail and Outlook ignore SVG), roughly square, about 128 px and under 40 KB: it is embedded in each message.
+        // The default is a scaled copy of public/images/logo.png; the original file is never modified.
+        'logo' => env('CLINIC_BRAND_LOGO', resource_path('brand/logo-email@2x.png')),
+        'primary' => env('CLINIC_BRAND_PRIMARY', '#1865ac'),
+        'primary_dark' => env('CLINIC_BRAND_PRIMARY_DARK', '#124b80'),
+        'accent' => env('CLINIC_BRAND_ACCENT', '#0c9b8e'),
+        'address' => env('CLINIC_ADDRESS', 'Bocaue, Bulacan'),
+        'phone' => env('CLINIC_PHONE', '0922 878 7341'),
+        'email' => env('CLINIC_EMAIL', env('CLINIC_SUPPORT_EMAIL', 'danaroxas.dentalclinic@gmail.com')),
+    ],
 ];
