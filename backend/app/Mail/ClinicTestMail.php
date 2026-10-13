@@ -18,14 +18,15 @@ class ClinicTestMail extends Mailable
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: 'SMTP Diagnostic Test - Dr. Dana E. Roxas Dental Clinic'
+            subject: 'SMTP Diagnostic Test - '.\App\Support\Brand::name()
         );
     }
 
     public function content(): Content
     {
         return new Content(
-            view: 'emails.test-mail'
+            view: 'emails.test-mail',
+            text: 'emails.test-mail-text'
         );
     }
 }

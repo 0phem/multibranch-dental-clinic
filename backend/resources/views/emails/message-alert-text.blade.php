@@ -5,7 +5,7 @@ You have a new message
 
 Hi {{ $name }},
 
-The {{ $clinic }} team sent you a message in your patient portal. Sign in to read and reply.
+The {{ $clinic }} team sent you a message in your patient portal. Sign in to read it and reply.
 
 Sign in to read it: {{ $link }}
 

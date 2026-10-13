@@ -33,7 +33,7 @@ class SecurityNoticeMail extends Mailable
 
     private function copy(): array
     {
-        $clinic = config('mail.from.name') ?: config('app.name');
+        $clinic = \App\Support\Brand::name();
         $app = rtrim((string) config('app.frontend_url'), '/');
 
         return match ($this->kind) {

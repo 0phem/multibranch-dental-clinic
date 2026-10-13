@@ -20,11 +20,11 @@ class AppointmentChangedMail extends Mailable
     {
         $what = $this->change === 'cancelled' ? 'Appointment Cancelled' : 'Appointment Rescheduled';
 
-        return new Envelope(subject: $what.' - '.($this->appointment->appointment_code ?? 'Dr. Dana E. Roxas Dental Clinic'));
+        return new Envelope(subject: $what.' - '.($this->appointment->appointment_code ?? \App\Support\Brand::name()));
     }
 
     public function content(): Content
     {
-        return new Content(view: 'emails.appointment-changed', with: ['appointment' => $this->appointment, 'change' => $this->change]);
+        return new Content(view: 'emails.appointment-changed', text: 'emails.appointment-changed-text', with: ['appointment' => $this->appointment, 'change' => $this->change]);
     }
 }

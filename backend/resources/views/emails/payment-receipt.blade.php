@@ -1,72 +1,39 @@
-@extends('emails.layout', ['subject' => 'Official Payment Receipt - Dr. Dana E. Roxas Dental Clinic'])
+@extends('emails.layout', [
+    'subject' => $subjectLine, 'branch' => $branch,
+    'preheader' => 'We received your payment of '.$amount.' for invoice '.$invoice->invoice_number.'. Your PDF receipt is attached.',
+    'reason' => 'You received this because a payment was recorded for your account at '.\App\Support\Brand::name().'.',
+])
 
 @section('content')
-    <h2>Official Payment Receipt</h2>
-    <p>Dear {{ $invoice->patient?->person?->first_name ?? 'Valued Patient' }},</p>
-    <p>Thank you for your payment. Your dental invoice has been fully settled. Below is your official digital payment receipt:</p>
+    <p style="margin:0 0 14px;">@include('emails.partials.badge', ['tone' => 'success', 'text' => 'Paid'])</p>
+    @include('emails.partials.heading', ['text' => 'Payment Receipt'])
+    <p style="margin:0 0 4px;">Hi {{ $firstName }},</p>
+    <p style="margin:0;">Thank you. We received your payment for invoice <strong>{{ $invoice->invoice_number }}</strong>. Here are the details for your records.</p>
 
-    <div class="card">
-        <div class="detail-row">
-            <span class="detail-label">Receipt Number</span>
-            <span class="detail-value"><strong>{{ $receipt->receipt_number }}</strong></span>
-        </div>
-        <div class="detail-row">
-            <span class="detail-label">Invoice Number</span>
-            <span class="detail-value">{{ $invoice->invoice_number }}</span>
-        </div>
-        <div class="detail-row">
-            <span class="detail-label">Clinic Branch</span>
-            <span class="detail-value">{{ $invoice->branch?->name ?? 'Dental Clinic Branch' }}</span>
-        </div>
-        <div class="detail-row">
-            <span class="detail-label">Payment Date</span>
-            <span class="detail-value">{{ \Carbon\Carbon::parse($receipt->issued_at ?? now())->format('F d, Y h:i A') }}</span>
-        </div>
-        <div class="detail-row">
-            <span class="detail-label">Payment Method</span>
-            <span class="detail-value">{{ $receipt->method }}</span>
-        </div>
-        @if($receipt->external_reference)
-        <div class="detail-row">
-            <span class="detail-label">Reference ID</span>
-            <span class="detail-value" style="font-family: monospace; font-size: 12px;">{{ $receipt->external_reference }}</span>
-        </div>
-        @endif
-        <div class="detail-row">
-            <span class="detail-label">Amount Paid</span>
-            <span class="detail-value" style="font-size: 16px; color: #0284c7;">₱{{ number_format((float)$receipt->amount, 2) }}</span>
-        </div>
-        <div class="detail-row">
-            <span class="detail-label">Balance Remaining</span>
-            <span class="detail-value" style="color: #059669;">₱0.00 (Fully Settled)</span>
-        </div>
-    </div>
+    @include('emails.partials.amount', ['label' => 'Amount paid', 'amount' => $amount, 'note' => $paidAt])
 
-    @if($invoice->lines && count($invoice->lines) > 0)
-    <h3 style="font-size: 15px; margin-top: 24px; margin-bottom: 8px;">Itemized Dental Procedures</h3>
-    <table style="width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 20px;">
-        <thead>
-            <tr style="background-color: #f1f5f9; border-bottom: 2px solid #cbd5e1; text-align: left;">
-                <th style="padding: 8px;">Procedure</th>
-                <th style="padding: 8px; text-align: center;">Qty</th>
-                <th style="padding: 8px; text-align: right;">Unit Price</th>
-                <th style="padding: 8px; text-align: right;">Total</th>
-            </tr>
-        </thead>
-        <tbody>
-            @foreach($invoice->lines as $line)
-            <tr style="border-bottom: 1px solid #e2e8f0;">
-                <td style="padding: 8px;"><strong>{{ $line->service_name }}</strong></td>
-                <td style="padding: 8px; text-align: center;">{{ $line->quantity }}</td>
-                <td style="padding: 8px; text-align: right;">₱{{ number_format((float)$line->unit_price, 2) }}</td>
-                <td style="padding: 8px; text-align: right;">₱{{ number_format((float)$line->line_total, 2) }}</td>
-            </tr>
-            @endforeach
-        </tbody>
-    </table>
+    @include('emails.partials.details', ['title' => 'Receipt details', 'rows' => [
+        ['Receipt number', $receipt->receipt_number],
+        ['Invoice number', $invoice->invoice_number],
+        ['Clinic branch', $branch?->name],
+        ['Payment date', $paidAt],
+        ['Payment method', $method],
+        ['Reference ID', $reference, true],
+        ['Balance remaining', $balance],
+    ]])
+
+    @if ($invoice->lines->isNotEmpty())
+        @include('emails.partials.items', ['invoice' => $invoice])
     @endif
 
-    <p style="font-size: 13px; color: #64748b; margin-top: 16px;">
-        This serves as your official electronic acknowledgment of payment. You can access and print your historical receipts anytime by logging into your patient portal.
-    </p>
+    @include('emails.partials.callout', $settled
+        ? ['tone' => 'success', 'text' => 'Fully settled. This invoice has no remaining balance.']
+        : ['tone' => 'warning', 'text' => 'Balance remaining: '.$balance.'.'])
+
+    @if ($bir)
+        @include('emails.partials.details', ['title' => 'Business registration', 'rows' => collect($bir)->map(fn ($v, $k) => [$k, $v])->values()->all()])
+    @endif
+
+    @include('emails.partials.button', ['url' => $portalUrl, 'label' => 'View in your patient portal'])
+    <p class="t-muted" style="margin:0 0 8px; font-size:14px; line-height:21px; color:#5b6b7f;">&#128206; A PDF copy of this Payment Receipt is attached to this email for printing or saving.</p>
 @endsection

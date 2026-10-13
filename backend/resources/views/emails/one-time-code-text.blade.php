@@ -7,10 +7,10 @@ Hi {{ $name }},
 
 {{ $intro }}
 
-Your code: {{ substr($code, 0, 3) }} {{ substr($code, 3) }}
+Your verification code: {{ $code }}
 It expires in {{ $minutes }} minutes and works once.
 
-Never share this code with anyone, including clinic staff.
+Never share this code with anyone, including clinic staff. We will never call or message you to ask for it.
 
 {{ $ignore }}
 @endsection

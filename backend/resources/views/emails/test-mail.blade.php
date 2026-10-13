@@ -1,30 +1,12 @@
-@extends('emails.layout', ['subject' => 'SMTP Diagnostic Test - Dr. Dana E. Roxas Dental Clinic'])
+@extends('emails.layout', ['subject' => 'SMTP Diagnostic Test - '.\App\Support\Brand::name(), 'preheader' => 'Mail settings diagnostic message.', 'reason' => 'You received this because someone ran the clinic mail diagnostic.'])
 
 @section('content')
-    <h2>SMTP Configuration Test</h2>
-    <p>Hello Clinic Administrator,</p>
-    <p>This is a diagnostic test email. Receiving it shows that this message reached your inbox; it does not confirm delivery of any other email.</p>
-
-    <div class="card">
-        <div class="detail-row">
-            <span class="detail-label">Status</span>
-            <span class="detail-value">Diagnostic message</span>
-        </div>
-        <div class="detail-row">
-            <span class="detail-label">Mail Driver</span>
-            <span class="detail-value">{{ config('mail.default') }}</span>
-        </div>
-        <div class="detail-row">
-            <span class="detail-label">Sender Address</span>
-            <span class="detail-value">{{ config('mail.from.address') }}</span>
-        </div>
-        <div class="detail-row">
-            <span class="detail-label">Dispatched At</span>
-            <span class="detail-value">{{ now()->setTimezone('Asia/Manila')->format('Y-m-d h:i:s A T') }}</span>
-        </div>
-    </div>
-
-    <p style="font-size: 13px; color: #64748b; margin-top: 16px;">
-        Other clinic emails use the same mail settings.
-    </p>
+    @include('emails.partials.heading', ['eyebrow' => 'Diagnostic', 'text' => 'Mail settings test'])
+    <p style="margin:0 0 18px;">This is a diagnostic test email. Receiving it shows that this message reached your inbox; it does not confirm delivery of any other email.</p>
+    @include('emails.partials.details', ['rows' => [
+        ['Mail driver', config('mail.default')],
+        ['Sender address', config('mail.from.address')],
+        ['Sent at', \App\Support\ClinicClock::now()->format('F j, Y g:i:s A').' (Philippine time)'],
+    ]])
+    <p class="t-muted" style="margin:0 0 8px; font-size:14px; color:#5b6b7f;">Other clinic emails use the same mail settings.</p>
 @endsection

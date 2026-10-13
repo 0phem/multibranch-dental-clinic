@@ -20,7 +20,7 @@ class AppointmentConfirmationMail extends Mailable
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: 'Appointment Confirmed - ' . ($this->appointment->appointment_code ?? 'Dr. Dana E. Roxas Dental Clinic')
+            subject: 'Appointment Confirmed - ' . ($this->appointment->appointment_code ?? \App\Support\Brand::name())
         );
     }
 
@@ -28,6 +28,7 @@ class AppointmentConfirmationMail extends Mailable
     {
         return new Content(
             view: 'emails.appointment-confirmation',
+            text: 'emails.appointment-confirmation-text',
             with: [
                 'appointment' => $this->appointment,
             ]

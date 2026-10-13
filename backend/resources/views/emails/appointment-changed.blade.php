@@ -1,26 +1,25 @@
-@extends('emails.layout', ['subject' => ($change === 'cancelled' ? 'Appointment Cancelled' : 'Appointment Rescheduled').' - Dr. Dana E. Roxas Dental Clinic'])
+@php($start = \App\Support\ClinicClock::local($appointment->starts_at))
+@php($cancelled = $change === 'cancelled')
+@extends('emails.layout', [
+    'subject' => ($cancelled ? 'Appointment Cancelled' : 'Appointment Rescheduled').' - '.$appointment->appointment_code, 'branch' => $appointment->branch,
+    'preheader' => $cancelled ? 'Your appointment on '.$start->format('F j, Y').' was cancelled.' : 'Your appointment moved to '.$start->format('F j, Y').' at '.$start->format('g:i A').'.',
+    'reason' => 'You received this because an appointment on your account at '.\App\Support\Brand::name().' changed.',
+])
 
 @section('content')
-    <h2>{{ $change === 'cancelled' ? 'Appointment Cancelled' : 'Appointment Rescheduled' }}</h2>
-    <p>Dear {{ $appointment->patient?->person?->first_name ?? 'Patient' }},</p>
-    @if($change === 'cancelled')
-        <p>Your appointment below has been cancelled.</p>
-    @else
-        <p>Your appointment has been moved. These are the new details:</p>
-    @endif
-    @php($start = \App\Support\ClinicClock::local($appointment->starts_at))
-    <div class="card">
-        <div class="detail-row"><span class="detail-label">Appointment Reference</span><span class="detail-value"><strong>{{ $appointment->appointment_code }}</strong></span></div>
-        <div class="detail-row"><span class="detail-label">Clinic Branch</span><span class="detail-value">{{ $appointment->branch?->name }}</span></div>
-        <div class="detail-row"><span class="detail-label">Date</span><span class="detail-value">{{ $start->format('F d, Y (l)') }}</span></div>
-        <div class="detail-row"><span class="detail-label">Time</span><span class="detail-value">{{ $start->format('h:i A') }}</span></div>
-        @if($appointment->dentist?->person)
-        <div class="detail-row"><span class="detail-label">Dentist</span><span class="detail-value">Dr. {{ $appointment->dentist->person->first_name }} {{ $appointment->dentist->person->last_name }}</span></div>
-        @endif
-        @if($appointment->service)
-        <div class="detail-row"><span class="detail-label">Service</span><span class="detail-value">{{ $appointment->service->name }}</span></div>
-        @endif
-        <div class="detail-row"><span class="detail-label">Status</span><span class="detail-value">{{ $appointment->status }}</span></div>
-    </div>
-    <p style="font-size: 13px; color: #64748b; margin-top: 20px;">If this change is unexpected, contact your clinic branch.</p>
+    <p style="margin:0 0 14px;">@include('emails.partials.badge', $cancelled ? ['tone' => 'due', 'text' => 'Cancelled'] : ['tone' => 'info', 'text' => 'Rescheduled'])</p>
+    @include('emails.partials.heading', ['text' => $cancelled ? 'Your appointment was cancelled' : 'Your appointment was moved'])
+    <p style="margin:0 0 4px;">Hi {{ $appointment->patient?->person?->first_name ?? 'there' }},</p>
+    <p style="margin:0 0 18px;">{{ $cancelled ? 'The appointment below has been cancelled.' : 'Your appointment has a new date and time. These are the new details.' }}</p>
+    @include('emails.partials.details', ['title' => 'Appointment details', 'rows' => [
+        ['Reference', $appointment->appointment_code],
+        ['Clinic branch', $appointment->branch?->name],
+        ['Date', $start->format('F j, Y (l)')],
+        ['Time', $start->format('g:i A')],
+        ['Dentist', $appointment->dentist?->person ? 'Dr. '.$appointment->dentist->person->first_name.' '.$appointment->dentist->person->last_name : null],
+        ['Service', $appointment->service?->name],
+        ['Status', $appointment->status],
+    ]])
+    @include('emails.partials.button', ['url' => \App\Support\Brand::forEmail()['portal_url'], 'label' => 'View in your patient portal'])
+    @include('emails.partials.callout', ['tone' => 'info', 'text' => 'If this change is unexpected, contact your clinic branch.'])
 @endsection

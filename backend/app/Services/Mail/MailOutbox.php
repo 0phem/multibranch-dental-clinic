@@ -30,7 +30,7 @@ use Illuminate\Support\Facades\DB;
  */
 class MailOutbox
 {
-    public const PURPOSES = ['appointment_confirmation', 'appointment_rescheduled', 'appointment_cancelled', 'payment_receipt', 'message_alert'];
+    public const PURPOSES = ['appointment_confirmation', 'appointment_rescheduled', 'appointment_cancelled', 'payment_receipt', 'invoice_issued', 'message_alert'];
 
     public function __construct(private readonly MailDispatcher $dispatcher) {}
 
@@ -157,6 +157,14 @@ class MailOutbox
             $patient = $receipt->invoice?->patient;
 
             return [new PaymentReceiptMail($receipt->invoice, $receipt), $receipt->invoice, false, $patient?->user?->email ?? $patient?->person?->email];
+        }
+        if ($dispatch->subject_type === 'invoice') {
+            $invoice = \App\Models\Invoice::where('public_id', $dispatch->subject_public_id)->with(['patient.person', 'patient.user', 'branch', 'lines'])->first();
+            // Paid (or no longer Issued) before the worker ran: the receipt email covers it, so this invoice email is not needed.
+            if (! $invoice || $invoice->status !== 'Issued') return [null, $invoice, true, null];
+            $patient = $invoice->patient;
+
+            return [new \App\Mail\InvoiceMail($invoice), $invoice, false, $patient?->user?->email ?? $patient?->person?->email];
         }
 
         return [null, null, true, null];

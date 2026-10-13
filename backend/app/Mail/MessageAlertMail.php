@@ -19,12 +19,12 @@ class MessageAlertMail extends Mailable
 
     public function envelope(): Envelope
     {
-        return new Envelope(subject: 'You have a new message from '.(config('mail.from.name') ?: config('app.name')));
+        return new Envelope(subject: 'You have a new message from '.\App\Support\Brand::name());
     }
 
     public function content(): Content
     {
-        $clinic = config('mail.from.name') ?: config('app.name');
+        $clinic = \App\Support\Brand::name();
 
         return new Content(view: 'emails.message-alert', text: 'emails.message-alert-text', with: [
             'subjectLine' => $this->envelope()->subject, 'clinic' => $clinic, 'name' => $this->firstName ?: 'there',
