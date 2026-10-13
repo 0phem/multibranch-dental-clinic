@@ -5,6 +5,7 @@ import { patientContext } from '../patient-view.js'
 import { DefinitionList, RecordCard } from '../patient-ui.jsx'
 import { loadPatientRecord } from '../patient-records-api.js'
 import { commandKey } from '../appointments-api.js'
+import { ChangeEmailButton } from './ChangeEmailDialog.jsx'
 import { fetchMyDocuments, fetchMyConsents, submitDocumentUpload, retractDocument, downloadDocumentFile } from '../documents-api.js'
 
 const NO_ACCOUNT = <Notice tone="warning" title="We couldn’t confirm your account">Reopen your workspace, or ask the clinic to check your account access.</Notice>
@@ -129,7 +130,8 @@ export function PatientMePage({ store, setPage }) {
           { label: 'Date of birth', value: ctx.patient.dob ? dateLabel(ctx.patient.dob) : null },
           { label: 'Preferred branch', value: branch?.name },
         ]}/>}
-      <p className="pt-hint">Editing your profile will be available once secure, verified changes are supported. Contact the clinic if any of this needs to change now.</p>
+      {serverProfile && profile.status === 'ready' && <div style={{ marginTop: '12px' }}><ChangeEmailButton/></div>}
+      <p className="pt-hint">You can change your sign-in email here. Other profile changes will be available once secure, verified changes are supported; contact the clinic if any of them needs to change now.</p>
     </section>
 
     <section className="pt-record" aria-labelledby="pt-me-consents-title" style={{ marginTop: '20px' }}>

@@ -47,7 +47,7 @@ function navGroups(role,serverSession=false){
 // role picker to trust or forge. `onLogin(email,password)` is expected to return a Promise resolving to
 // `{ok:true}` or `{ok:false, message}` (see App.jsx / api-client.js); this component owns only its own
 // submitting/error UI state, never the auth result itself.
-export function Login({ onLogin, onShowRegister }) {
+export function Login({ onLogin, onShowRegister, onForgotPassword }) {
   const [email,setEmail]=React.useState('')
   const [password,setPassword]=React.useState('')
   const [submitting,setSubmitting]=React.useState(false)
@@ -66,6 +66,7 @@ export function Login({ onLogin, onShowRegister }) {
       <form onSubmit={submit} noValidate aria-busy={submitting}>
         <Field label="Email" required><input type="email" autoComplete="email" value={email} onChange={e=>{setEmail(e.target.value);setError('')}}/></Field>
         <PasswordField label="Password" autoComplete="current-password" value={password} onChange={e=>{setPassword(e.target.value);setError('')}}/>
+        {onForgotPassword&&<p className="login-forgot"><button type="button" className="text-link" onClick={onForgotPassword}>Forgot password?</button></p>}
         {error&&<Notice tone="warning" title="Couldn’t sign in">{error}</Notice>}
         <Button type="submit" className="login-button" icon="arrow" disabled={submitting}>{submitting?'Signing in…':'Sign in'}</Button>
       </form>

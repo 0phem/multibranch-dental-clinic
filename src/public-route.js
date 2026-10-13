@@ -1,2 +1,2 @@
-export const publicViewFromHash=hash=>hash.startsWith('#accept-invitation')?'accept':hash==='#create-account'?'register':hash==='#verify-email'?'verify':hash==='#sign-in'?'login':'home'
+export const publicViewFromHash=hash=>hash.startsWith('#accept-invitation')?'accept':hash==='#create-account'?'register':hash==='#verify-email'?'verify':hash==='#forgot-password'?'forgot':hash==='#sign-in'?'login':'home'
 export const publicSections=new Set(['home','about','features','portal','locations','contact','public-main'])

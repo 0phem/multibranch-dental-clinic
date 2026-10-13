@@ -123,6 +123,23 @@ export function resendRegistrationEmail(email) {
   return request('/api/register/resend', { method: 'POST', body: JSON.stringify({ email }) })
 }
 
+// M1 password reset by emailed code (same answer whether or not the email has an account) and sign-in email change.
+export function requestPasswordReset(email) {
+  return request('/api/password/forgot', { method: 'POST', body: JSON.stringify({ email }) })
+}
+
+export function resetPassword({ email, otp, password, passwordConfirmation }) {
+  return request('/api/password/reset', { method: 'POST', body: JSON.stringify({ email, otp, password, password_confirmation: passwordConfirmation }) })
+}
+
+export function requestEmailChange({ newEmail, currentPassword }) {
+  return request('/api/account/email', { method: 'POST', body: JSON.stringify({ new_email: newEmail, current_password: currentPassword }) })
+}
+
+export function confirmEmailChange(otp) {
+  return request('/api/account/email/confirm', { method: 'POST', body: JSON.stringify({ otp }) })
+}
+
 // Logout is honest about what actually happened: `backendConfirmed` is true only when the server itself
 // confirmed the session was invalidated. A network/server failure still resets the cached CSRF state (the next
 // login should never reuse a token from a session that may no longer exist) but must not be reported as a
