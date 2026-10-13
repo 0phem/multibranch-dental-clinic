@@ -25,10 +25,20 @@ No new-device or sign-in OTP (decision 6).
 
 Counted **before** any account lookup, so the limit itself reveals nothing:
 
-- 5 per email + IP per hour (`OTP_HOURLY_PER_EMAIL_IP`);
-- 10 per email per 24 hours, any IP and any purpose, including the "someone tried to register" notice (`OTP_DAILY_PER_EMAIL`).
+- **Hourly:** 5 per email + IP per hour (`OTP_HOURLY_PER_EMAIL_IP`). It only ever limits the caller's own IP.
+- **Daily:** 10 per email per 24 hours, any IP (`OTP_DAILY_PER_EMAIL`), in **two separate buckets** (decision 1 of the Priority 2 review):
+  - `account`: registration codes, resends, the "someone tried to register" notice, and email-change codes (counted for the new address).
+  - `reset`: password-reset codes.
 
 The route throttle `m1-otp` (30/min per IP) still applies to every endpoint above.
+
+**Remaining trade-off.**
+- **Separation:** flooding one bucket for someone else's address no longer blocks the other. Registration spam cannot stop the owner from resetting their password, and reset spam cannot stop registration or email change.
+- **Still possible:** someone sending from many IPs can use up an address's 10 daily **reset** sends and delay that owner's password reset by up to 24 hours. The same applies to registration or email change via the account bucket.
+  - What they gain: nothing, because every code goes only to the address's own inbox.
+  - What's limited: the owner's ability to get a new code that day. Codes already sent stay valid for their 10 minutes.
+- **Why it isn't removed:** that would mean raising or dropping the per-email cap, which is the protection against flooding an inbox (decision 6).
+- **If it happens:** the clinic can help the person in person (for example, the Owner changes the email or the person waits until the next day).
 
 ## Sending: once, after commit (`MailDispatcher::queueOnce` → `App\Jobs\SendOnceMail`)
 
@@ -44,7 +54,8 @@ The route throttle `m1-otp` (30/min per IP) still applies to every endpoint abov
 
 - Registration: an existing address gets the same status, body shape and similar timing (the same bcrypt work runs). Nothing is created and the submitted password is discarded. The owner receives either "someone tried to register with your email: sign in or reset your password" (usable account) or "this email is already on file: contact the clinic" (a walk-in record, or an inactive/deleted account).
 - Password reset request: one message for every address.
-- Email change: one message whether or not the new address is free.
+- Password reset, registration verify and registration resend: **one answer for every failure**. Unknown address, wrong, expired or used-up code, already-verified account and the 60 s wait all look the same, and unknown addresses do the same bcrypt work. Wrong codes still count toward the 5-try limit. (Security review, 2026-10-13.)
+- Email change: one message whether or not the new address is free. The current-password check allows 5 wrong guesses per account per 15 minutes, on top of the per-IP route limit.
 - **Known remaining signal:** registration still refuses a matching phone number (or name plus date of birth) with a 422 ("an existing patient record may already match"). This is the pre-existing duplicate-patient safeguard. Removing it is a clinic-policy decision about duplicate records (open item).
 
 ## Audit (M22, no address or code in any payload)

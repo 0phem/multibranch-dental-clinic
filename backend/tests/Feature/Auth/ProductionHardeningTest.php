@@ -144,12 +144,17 @@ class ProductionHardeningTest extends TestCase
         $this->assertSame(1,EmailVerificationOtp::count());
     }
 
-    public function test_resend_cooldown_reports_remaining_seconds(): void
+    public function test_resend_inside_the_cooldown_sends_nothing_and_answers_like_any_address(): void
     {
         $user=User::factory()->unverified()->create();
         EmailVerificationOtp::create(['user_id'=>$user->id,'digest'=>Hash::make('123456'),'attempts'=>0,'expires_at'=>now()->addMinutes(10),'sent_at'=>now()->subSeconds(10)]);
-        $response=$this->postJson('/api/register/resend',['email'=>$user->email])->assertStatus(429);
-        $this->assertGreaterThanOrEqual(49,$response->json('retry_after'));
+        Mail::fake();
+        $known=$this->postJson('/api/register/resend',['email'=>$user->email])->assertOk()->json();
+        $unknown=$this->postJson('/api/register/resend',['email'=>'nobody@example.test'])->assertOk()->json();
+        $this->assertSame($known['message'],$unknown['message']);
+        $this->assertSame(array_keys($known['data']),array_keys($unknown['data']));
+        Mail::assertNothingSent();
+        $this->assertSame(1,EmailVerificationOtp::count());
     }
 
     public function test_email_change_invalidates_old_code_verification_and_sessions(): void

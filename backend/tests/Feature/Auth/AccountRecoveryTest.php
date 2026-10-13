@@ -52,7 +52,8 @@ class AccountRecoveryTest extends TestCase
 
     private function clearLimits(string $email): void
     {
-        RateLimiter::clear('otp-send:day:'.sha1($email));
+        RateLimiter::clear('otp-send:day:account:'.sha1($email));
+        RateLimiter::clear('otp-send:day:reset:'.sha1($email));
         RateLimiter::clear('otp-send:hour:'.sha1($email.'|127.0.0.1'));
     }
 
@@ -88,21 +89,31 @@ class AccountRecoveryTest extends TestCase
 
     // ---- caps -------------------------------------------------------------------------------------------------
 
-    public function test_daily_cap_of_ten_sends_per_email_across_purposes_and_addresses(): void
+    public function test_daily_cap_of_ten_per_email_counts_reset_and_account_sends_separately(): void
     {
         $user = $this->account();
         config(['clinic.otp_hourly_per_email_ip' => 100]);
+        // An attacker floods registration attempts for the address from many IPs: the account bucket fills…
         for ($i = 0; $i < 10; $i++) {
+            $this->withServerVariables(['REMOTE_ADDR' => "10.1.0.$i"])->postJson('/api/register', $this->payload(['email' => $user->email]))->assertCreated();
+        }
+        $this->withServerVariables(['REMOTE_ADDR' => '10.1.0.99'])->postJson('/api/register', $this->payload(['email' => $user->email]))
+            ->assertStatus(429)->assertJsonPath('code', 'otp_rate_limited');
+        // …but the owner can still reset the password (separate bucket).
+        $this->withServerVariables(['REMOTE_ADDR' => '10.9.0.1'])->postJson('/api/password/forgot', ['email' => $user->email])->assertOk();
+        Mail::assertSent(OneTimeCodeMail::class, fn ($m) => $m->hasTo($user->email) && $m->purpose === 'password_reset');
+
+        // The reverse: a flooded reset bucket does not block registration or email-change sends for another address.
+        for ($i = 0; $i < 9; $i++) {
             $this->travel(61)->seconds();
-            $this->withServerVariables(['REMOTE_ADDR' => "10.0.0.$i"])->postJson('/api/password/forgot', ['email' => $user->email])->assertOk();
+            $this->withServerVariables(['REMOTE_ADDR' => "10.2.0.$i"])->postJson('/api/password/forgot', ['email' => $user->email])->assertOk();
         }
         $this->travel(61)->seconds();
-        $this->withServerVariables(['REMOTE_ADDR' => '10.0.0.99'])->postJson('/api/password/forgot', ['email' => $user->email])
-            ->assertStatus(429)->assertJsonPath('code', 'otp_rate_limited');
-        $this->withServerVariables(['REMOTE_ADDR' => '10.0.0.98'])->postJson('/api/register', $this->payload(['email' => $user->email]))->assertStatus(429);
+        $this->withServerVariables(['REMOTE_ADDR' => '10.2.0.99'])->postJson('/api/password/forgot', ['email' => $user->email])->assertStatus(429);
+        $this->postJson('/api/register', $this->payload(['email' => 'someone.new@example.com', 'phone' => '+639171234567']))->assertCreated();
         // An address with no account is limited the same way, so the limit reveals nothing either.
-        for ($i = 0; $i < 10; $i++) $this->postJson('/api/password/forgot', ['email' => "nobody$i@example.com"]);
-        $this->assertSame(10, EmailVerificationOtp::where('purpose', 'password_reset')->count());
+        for ($i = 0; $i < 11; $i++) $last = $this->postJson('/api/password/forgot', ['email' => 'nobody@example.com']);
+        $last->assertStatus(429);
         $this->travel(1)->days();
         $this->postJson('/api/password/forgot', ['email' => $user->email])->assertOk();
     }
@@ -213,7 +224,7 @@ class AccountRecoveryTest extends TestCase
         $this->assertSame(0, DB::table('sessions')->where('user_id', $user->id)->count());
         Mail::assertSent(SecurityNoticeMail::class, fn ($m) => $m->hasTo($user->email) && $m->kind === 'password_changed');
         $this->postJson('/api/password/reset', ['email' => $user->email, 'otp' => $code, 'password' => 'Again1234x', 'password_confirmation' => 'Again1234x'])
-            ->assertStatus(422)->assertJsonPath('code', 'otp_expired'); // single use
+            ->assertStatus(422)->assertJsonPath('code', 'invalid_otp'); // single use (one generic answer)
         $this->postJson('/api/login', ['email' => $user->email, 'password' => 'NewPassw0rd'])->assertOk();
         $this->assertSame(['auth.password_reset_requested', 'auth.password_reset_completed'],
             AuditLog::whereIn('action', ['auth.password_reset_requested', 'auth.password_reset_completed'])->orderBy('id')->pluck('action')->all());
@@ -227,17 +238,18 @@ class AccountRecoveryTest extends TestCase
         $code = $this->codeSentTo($user->email);
         $wrong = $code === '000000' ? '111111' : '000000';
         $body = fn ($otp, $email = null) => ['email' => $email ?? $user->email, 'otp' => $otp, 'password' => 'NewPassw0rd', 'password_confirmation' => 'NewPassw0rd'];
-        $this->postJson('/api/password/reset', $body($code, 'nobody@example.com'))->assertStatus(422)->assertJsonPath('code', 'invalid_otp');
-        for ($i = 0; $i < 4; $i++) $this->postJson('/api/password/reset', $body($wrong))->assertStatus(422)->assertJsonPath('code', 'invalid_otp');
-        $this->postJson('/api/password/reset', $body($wrong))->assertStatus(422)->assertJsonPath('code', 'otp_attempt_limit');
-        $this->postJson('/api/password/reset', $body($code))->assertStatus(422);
+        // Unknown email, wrong code, exhausted code and expired code all get the identical answer (no account enumeration).
+        $unknown = $this->postJson('/api/password/reset', $body($code, 'nobody@example.com'))->assertStatus(422)->json();
+        for ($i = 0; $i < 5; $i++) $this->assertSame($unknown, $this->postJson('/api/password/reset', $body($wrong))->assertStatus(422)->json());
+        $this->assertSame($unknown, $this->postJson('/api/password/reset', $body($code))->assertStatus(422)->json(), 'the 5 wrong tries used the code up');
+        $this->assertNotNull(EmailVerificationOtp::where('purpose', 'password_reset')->sole()->consumed_at);
         $this->assertTrue(Hash::check('Passw0rd!', $user->fresh()->password));
 
         $this->travel(61)->seconds();
         $this->postJson('/api/password/forgot', ['email' => $user->email]);
         $code = $this->codeSentTo($user->email);
         $this->travel(11)->minutes();
-        $this->postJson('/api/password/reset', $body($code))->assertStatus(422)->assertJsonPath('code', 'otp_expired');
+        $this->assertSame($unknown, $this->postJson('/api/password/reset', $body($code))->assertStatus(422)->json());
     }
 
     public function test_a_new_code_invalidates_the_previous_one(): void
@@ -300,6 +312,17 @@ class AccountRecoveryTest extends TestCase
         $this->assertSame(['account.email_change_requested', 'account.email_changed'], AuditLog::whereIn('action', ['account.email_change_requested', 'account.email_changed'])->orderBy('id')->pluck('action')->all());
     }
 
+    public function test_wrong_current_passwords_are_limited_per_account(): void
+    {
+        $user = $this->account();
+        Sanctum::actingAs($user);
+        for ($i = 0; $i < 5; $i++) {
+            $this->withServerVariables(['REMOTE_ADDR' => "10.3.0.$i"])->postJson('/api/account/email', ['new_email' => 'x@example.com', 'current_password' => "wrong$i"])->assertStatus(422);
+        }
+        $this->postJson('/api/account/email', ['new_email' => 'x@example.com', 'current_password' => 'Passw0rd!'])->assertStatus(429);
+        Mail::assertNothingSent();
+    }
+
     public function test_an_address_in_use_gets_the_same_answer_but_no_code(): void
     {
         $user = $this->account();
@@ -312,6 +335,20 @@ class AccountRecoveryTest extends TestCase
         Mail::assertNotSent(OneTimeCodeMail::class, fn ($m) => $m->hasTo($other->email));
         Mail::assertSent(OneTimeCodeMail::class, 1);
         $this->assertSame(1, EmailVerificationOtp::where('purpose', 'email_change')->count());
+    }
+
+    public function test_a_reset_code_sent_to_the_old_address_dies_when_the_email_changes(): void
+    {
+        $user = $this->account();
+        $this->postJson('/api/password/forgot', ['email' => $user->email])->assertOk();
+        $resetCode = $this->codeSentTo($user->email);
+        Sanctum::actingAs($user);
+        $this->postJson('/api/account/email', ['new_email' => 'moved@example.com', 'current_password' => 'Passw0rd!'])->assertOk();
+        $this->postJson('/api/account/email/confirm', ['otp' => $this->codeSentTo('moved@example.com')])->assertOk();
+        $this->postJson('/api/password/reset', ['email' => 'moved@example.com', 'otp' => $resetCode, 'password' => 'Hijack1234', 'password_confirmation' => 'Hijack1234'])
+            ->assertStatus(422);
+        $this->assertTrue(Hash::check('Passw0rd!', $user->fresh()->password));
+        $this->assertSame(0, EmailVerificationOtp::where('user_id', $user->id)->whereNull('consumed_at')->count());
     }
 
     public function test_an_email_change_code_cannot_reset_a_password_or_verify_registration(): void

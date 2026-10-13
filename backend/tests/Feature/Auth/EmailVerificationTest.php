@@ -72,7 +72,8 @@ class EmailVerificationTest extends TestCase
         $this->assertNotSame($sessionBeforeVerification, $this->app['session']->getId());
         $this->assertNotNull($user->fresh()->email_verified_at);
         $this->getJson('/api/me')->assertOk()->assertJsonPath('data.email', $user->email);
-        $this->postJson('/api/register/verify', ['email' => $user->email, 'otp' => $code])->assertStatus(422)->assertJsonPath('code', 'already_verified');
+        // Already verified gets the same generic answer as any other failure (no account enumeration).
+        $this->postJson('/api/register/verify', ['email' => $user->email, 'otp' => $code])->assertStatus(422)->assertJsonPath('code', 'invalid_otp');
     }
 
     public function test_wrong_expired_and_exhausted_otps_are_rejected(): void
@@ -81,20 +82,24 @@ class EmailVerificationTest extends TestCase
         for ($i = 0; $i < 4; $i++) {
             $this->postJson('/api/register/verify', ['email' => $user->email, 'otp' => '000000'])->assertStatus(422)->assertJsonPath('code', 'invalid_otp');
         }
-        $this->postJson('/api/register/verify', ['email' => $user->email, 'otp' => '000000'])->assertStatus(422)->assertJsonPath('code', 'otp_attempt_limit');
+        $unknown = $this->postJson('/api/register/verify', ['email' => 'nobody@example.com', 'otp' => '000000'])->assertStatus(422)->json();
+        $this->assertSame($unknown, $this->postJson('/api/register/verify', ['email' => $user->email, 'otp' => '000000'])->assertStatus(422)->json(), 'the 5th wrong try answers like an unknown email');
         $this->assertNotNull(EmailVerificationOtp::first()->fresh()->consumed_at);
         $this->assertNull($user->fresh()->email_verified_at);
 
         [, $code, $user] = $this->register(['email' => 'expired@example.com', 'phone' => '+639171234567', 'first_name' => 'Expired']);
         EmailVerificationOtp::where('user_id', $user->id)->update(['expires_at' => now()->subMinute()]);
-        $this->postJson('/api/register/verify', ['email' => $user->email, 'otp' => $code])->assertStatus(422)->assertJsonPath('code', 'otp_expired');
+        $this->assertSame($unknown, $this->postJson('/api/register/verify', ['email' => $user->email, 'otp' => $code])->assertStatus(422)->json(), 'expired answers like an unknown email');
     }
 
     public function test_resend_invalidates_previous_code_and_enforces_cooldown(): void
     {
         [$data, $oldCode, $user] = $this->register();
         RateLimiter::clear('otp-send:hour:'.sha1($user->email.'|'.$this->app['request']->ip()));
-        $this->postJson('/api/register/resend', ['email' => $user->email])->assertStatus(429)->assertJsonPath('code', 'otp_resend_cooldown');
+        // Inside the 60 s wait: the same 200 answer as for any address, and no new code.
+        $this->assertSame(array_keys($this->postJson('/api/register/resend', ['email' => 'nobody@example.com'])->assertOk()->json('data')),
+            array_keys($this->postJson('/api/register/resend', ['email' => $user->email])->assertOk()->json('data')));
+        $this->assertSame(1, EmailVerificationOtp::where('user_id', $user->id)->count());
         Carbon::setTestNow(now()->addSeconds(61));
         Mail::fake();
         $this->postJson('/api/register/resend', ['email' => $user->email])->assertOk();

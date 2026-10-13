@@ -12,9 +12,12 @@ use App\Services\Auth\OtpThrottle;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 
 class EmailVerificationController extends Controller
 {
+    private const GENERIC_FAILURE = ['invalid_otp', 'That code is not valid or has expired. Request a new code if you need one.'];
+
     public function __construct(private readonly OneTimeCodes $codes) {}
 
     public function verify(Request $request)
@@ -31,11 +34,16 @@ class EmailVerificationController extends Controller
                 ->where('role', Role::Patient->value)
                 ->lockForUpdate()
                 ->first();
-            if (! $user || $user->account_status !== 'Active') return ['failure' => ['invalid_otp', 'That code is not valid.']];
-            if ($user->email_verified_at) return ['failure' => ['already_verified', 'This email address is already verified.']];
+            // Unknown, inactive, already verified, wrong, expired and used-up codes all get ONE answer (and the same bcrypt work), so
+            // this endpoint cannot be used to learn whether an address is registered. Wrong codes still count toward the 5-try limit.
+            if (! $user || $user->account_status !== 'Active' || $user->email_verified_at) {
+                Hash::check($data['otp'], '$2y$12$H5ntb6FLY.qFGr/Rba08b.Dt0raoSs2QEEhzAIt5grrYJ3L8/f/q2');
+
+                return ['failure' => self::GENERIC_FAILURE];
+            }
 
             $check = $this->codes->check($user, EmailVerificationOtp::REGISTRATION, $data['otp']);
-            if (isset($check['failure'])) return $check;
+            if (isset($check['failure'])) return ['failure' => self::GENERIC_FAILURE];
 
             $user->forceFill(['email_verified_at' => now()])->save();
             app(\App\Services\Audit\AuditService::class)->recordAuth('account.email_verified', $user);
@@ -57,35 +65,23 @@ class EmailVerificationController extends Controller
         $email = strtolower(trim($data['email']));
         if ($wait = app(OtpThrottle::class)->hit($email, (string) $request->ip())) return OtpThrottle::limited($wait);
 
-        $result = DB::transaction(function () use ($email) {
+        DB::transaction(function () use ($email) {
             // The user row is the per-account mutex: concurrent resends cannot both observe the same
             // previous OTP as usable and commit two new usable rows.
             $user = User::where('email', $email)
                 ->where('role', Role::Patient->value)
                 ->lockForUpdate()
                 ->first();
-            if (! $user || $user->account_status !== 'Active' || $user->email_verified_at) return ['generic' => true];
-
-            if ($wait = $this->codes->cooldown($user, EmailVerificationOtp::REGISTRATION)) return ['cooldown' => $wait];
-            $otp = $this->codes->issue($user->load('person'), EmailVerificationOtp::REGISTRATION, $user->email);
-            return ['user' => $user, 'sent_at' => $otp->sent_at];
+            if (! $user || $user->account_status !== 'Active' || $user->email_verified_at) return;
+            // Inside the 60-second wait the earlier code stays valid; a different answer here would reveal the account.
+            if ($this->codes->cooldown($user, EmailVerificationOtp::REGISTRATION)) return;
+            $this->codes->issue($user->load('person'), EmailVerificationOtp::REGISTRATION, $user->email);
         });
 
-        if (! empty($result['generic'])) {
-            return response()->json(['message' => 'If this account can be verified, a new code can be requested.', 'data' => ['verification_required' => true]]);
-        }
-        if (isset($result['cooldown'])) {
-            return response()->json([
-                'message' => 'Please wait before requesting another code.',
-                'code' => 'otp_resend_cooldown',
-                'retry_after' => $result['cooldown'],
-            ], 429);
-        }
-
-        return response()->json(['data' => [
-            'email' => $result['user']->email,
-            'verification_required' => true,
-            'resend_available_at' => $result['sent_at']->copy()->addSeconds((int) config('clinic.otp_resend_cooldown_seconds', 60))->toISOString(),
-        ]]);
+        // One answer for every address (registered or not, verified or not, inside the wait or not).
+        return response()->json([
+            'message' => 'If this email is waiting for verification, we sent it a new code.',
+            'data' => ['verification_required' => true, 'resend_available_at' => now()->addSeconds((int) config('clinic.otp_resend_cooldown_seconds', 60))->toISOString()],
+        ]);
     }
 }

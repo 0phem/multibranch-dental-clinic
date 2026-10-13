@@ -15,6 +15,7 @@ use App\Support\ClinicClock;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\RateLimiter;
 
 /**
  * M1 self-service change of the sign-in email (any signed-in role). Two steps:
@@ -35,11 +36,16 @@ class EmailChangeController extends Controller
         ]);
         $newEmail = strtolower(trim($data['new_email']));
         $actor = $request->user();
+        // Per-account bound on password guesses from a (possibly stolen) session: 5 wrong passwords per 15 minutes.
+        $guessKey = 'email-change-password:'.$actor->id;
+        if (RateLimiter::tooManyAttempts($guessKey, 5)) return OtpThrottle::limited(RateLimiter::availableIn($guessKey));
         if (! Hash::check($data['current_password'], $actor->password)) {
+            RateLimiter::hit($guessKey, 900);
             $this->audit->recordAuth('account.email_change_password_failed', $actor, [], 'warning');
 
             return OneTimeCodes::failure('invalid_password', 'Your current password is not correct.', 'current_password');
         }
+        RateLimiter::clear($guessKey);
         if ($newEmail === $actor->email) return OneTimeCodes::failure('same_email', 'This is already your sign-in email.', 'new_email');
         if ($wait = app(OtpThrottle::class)->hit($newEmail, (string) $request->ip())) return OtpThrottle::limited($wait);
 
@@ -79,6 +85,8 @@ class EmailChangeController extends Controller
             if ($this->taken($newEmail, $user)) return ['failure' => ['email_unavailable', 'This email address cannot be used. Choose a different one.']];
 
             $oldEmail = $user->email;
+            // Every other unused code (a password reset or registration code sent to the OLD address) dies with the old address.
+            EmailVerificationOtp::where('user_id', $user->id)->whereNull('consumed_at')->update(['consumed_at' => now()]);
             $user->person?->forceFill(['email' => $newEmail])->save();
             $user->forceFill(['email' => $newEmail, 'email_verified_at' => now()])->save(); // signs every session out
             $this->audit->recordAuth('account.email_changed', $user);

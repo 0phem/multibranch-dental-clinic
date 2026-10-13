@@ -27,13 +27,15 @@ use Illuminate\Validation\Rules\Password;
  */
 class PasswordResetController extends Controller
 {
+    private const GENERIC_FAILURE = ['invalid_otp', 'That code is not valid or has expired. Request a new code if you need one.'];
+
     public function __construct(private readonly OneTimeCodes $codes, private readonly AuditService $audit) {}
 
     public function forgot(Request $request)
     {
         $data = $request->validate(['email' => ['required', 'email:rfc', 'max:255']]);
         $email = strtolower(trim($data['email']));
-        if ($wait = app(OtpThrottle::class)->hit($email, (string) $request->ip())) return OtpThrottle::limited($wait);
+        if ($wait = app(OtpThrottle::class)->hit($email, (string) $request->ip(), OtpThrottle::RESET)) return OtpThrottle::limited($wait);
 
         DB::transaction(function () use ($email) {
             $user = User::where('email', $email)->lockForUpdate()->first();
@@ -64,10 +66,12 @@ class PasswordResetController extends Controller
             if (! $user || $user->account_status !== 'Active') {
                 Hash::check($data['otp'], '$2y$12$H5ntb6FLY.qFGr/Rba08b.Dt0raoSs2QEEhzAIt5grrYJ3L8/f/q2'); // same work as a real check
 
-                return ['failure' => ['invalid_otp', 'That code is not valid.']];
+                return ['failure' => self::GENERIC_FAILURE];
             }
+            // Wrong, expired, used-up and exhausted codes still count toward the 5-try limit, but all get the SAME answer as an unknown
+            // email: a different reply ("expired" vs "not valid") would reveal that the address has an account.
             $check = $this->codes->check($user, EmailVerificationOtp::PASSWORD_RESET, $data['otp']);
-            if (isset($check['failure'])) return $check;
+            if (isset($check['failure'])) return ['failure' => self::GENERIC_FAILURE];
 
             // A reset may follow a compromise: any pending email-change code is cancelled too.
             EmailVerificationOtp::where('user_id', $user->id)->where('purpose', EmailVerificationOtp::EMAIL_CHANGE)->whereNull('consumed_at')->update(['consumed_at' => now()]);
