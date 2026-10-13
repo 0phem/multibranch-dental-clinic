@@ -4,7 +4,6 @@ namespace App\Services\Auth;
 
 use App\Mail\PatientEmailVerificationOtp;
 use App\Models\User;
-use Illuminate\Support\Facades\Mail;
 use RuntimeException;
 
 class OtpDelivery
@@ -14,7 +13,9 @@ class OtpDelivery
         if (app()->environment('production') && ! $this->safeMailer(config('mail.default'))) {
             throw new RuntimeException('Verification requires a delivery transport.');
         }
-        Mail::to($user->email)->send(new PatientEmailVerificationOtp($code));
+        // M18: one dispatcher reports the real outcome; a failure still raises so registration returns its 503.
+        $result = app(\App\Services\Mail\MailDispatcher::class)->send($user->email, new PatientEmailVerificationOtp($code), 'patient_email_verification', null, $user);
+        if ($result['status'] === 'failed') throw new RuntimeException('Verification email could not be sent.');
     }
 
     private function safeMailer(?string $name, array $seen = []): bool

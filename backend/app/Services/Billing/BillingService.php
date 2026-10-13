@@ -131,7 +131,7 @@ final class BillingService {
         try {
             $patientEmail = $i->patient?->user?->email ?? $i->patient?->person?->email;
             if ($patientEmail) {
-                \Illuminate\Support\Facades\Mail::to($patientEmail)->send(new \App\Mail\PaymentReceiptMail($i, $receipt));
+                app(\App\Services\Mail\MailDispatcher::class)->send($patientEmail, new \App\Mail\PaymentReceiptMail($i, $receipt), 'payment_receipt', $actor, $i);
             }
         } catch (\Throwable $e) {
             report($e); // the receipt e-mail is a courtesy copy: a mail failure is logged, never silent, and never undoes the payment

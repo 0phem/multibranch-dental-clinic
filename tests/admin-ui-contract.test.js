@@ -10,8 +10,9 @@ const team=source.match(/export function TeamPage[\s\S]*?export function Analyti
 test('M1 User & Access Management: the User Management screen exposes canonical creation roles only',()=>{
   assert.match(users,/title="User Management"/)
   assert.match(users,/value="patient"/)
-  assert.match(users,/Staff \(temporarily unavailable\)/)
-  assert.match(users,/Dentist \(temporarily unavailable\)/)
+  // M1: Staff/Dentist are provisioned by Owner email invitation, never created here with a password.
+  assert.match(users,/<option value="staff" disabled>Staff \(use Invite an employee\)/)
+  assert.match(users,/<option value="dentist" disabled>Dentist \(use Invite an employee\)/)
   assert.doesNotMatch(users,/Owner.*option|value="owner"/)
 })
 

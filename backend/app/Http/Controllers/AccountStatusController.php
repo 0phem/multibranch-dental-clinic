@@ -27,6 +27,11 @@ class AccountStatusController extends Controller
         return DB::transaction(function () use ($request, $target, $status) {
             $owners = User::where('role', Role::Owner)->orderBy('id')->lockForUpdate()->get();
             $user = User::whereKey($target->id)->lockForUpdate()->firstOrFail();
+            // An Invited/Revoked employee invitation is activated only by its holder setting a password through the emailed
+            // link (M1); suspend/restore never turns an invitation into a usable account.
+            if (in_array($user->account_status, ['Invited', 'Revoked'], true)) {
+                throw ValidationException::withMessages(['user' => 'This account is an employee invitation. Use resend or cancel instead.']);
+            }
             if ($status !== 'Active' && ($request->user()->is($user) ||
                 ($user->role === Role::Owner && $user->account_status === 'Active' && $owners->where('account_status', 'Active')->count() <= 1))) {
                 throw ValidationException::withMessages(['user' => 'You cannot suspend your own account or the last active Owner.']);

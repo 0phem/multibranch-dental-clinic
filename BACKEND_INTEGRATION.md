@@ -75,6 +75,14 @@ entry also re-checking that the backend's own role matches — email alone is ne
   "no workspace configured yet" message. **Known limitation** — a second local Staff identity would need to
   exist before this account can be mapped.
 
+**Server-provisioned Staff/Dentist (M1, 2026-10-13).** Any other Staff or Dentist account opens its own workspace from
+`/api/me`'s `employee` block (the person's own profile `legacy_ref`, working branch and title). The local projection is
+keyed by the server user public id, which is also the profile's `userId` link, so validation fails closed unless the
+server profile belongs to exactly this account and branch. Page permissions mirror the server's role-based
+authorization (identical for every member of the role, never derived from a title; PI-09 open). An account with no
+profile (for example `staff.assistant@example.test` in the local data) still fails closed. Employees are provisioned by
+Owner email invitation (`/api/employee-invitations`, public `/api/invitations/accept`).
+
 **Patient** works two ways:
 - The one aligned demo account (`patient@example.test`) explicitly maps to the existing, already-populated
   local Patient (Maria Santos) — so logging in through the real backend still demonstrates her existing

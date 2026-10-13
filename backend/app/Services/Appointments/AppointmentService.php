@@ -81,16 +81,7 @@ final class AppointmentService
             ]);
             $this->record($appointment, $actor, 'appointment.created', null);
 
-            try {
-                $patientUser = $patient->user ?? $patient->loadMissing('user')->user;
-                if ($patientUser?->email) {
-                    \Illuminate\Support\Facades\Mail::to($patientUser->email)->send(
-                        new \App\Mail\AppointmentConfirmationMail($appointment->loadMissing(['patient.person', 'branch', 'service', 'dentist.person']))
-                    );
-                }
-            } catch (\Throwable $e) {
-                \Illuminate\Support\Facades\Log::warning('Could not send appointment confirmation email: ' . $e->getMessage());
-            }
+            $this->notifyPatient($appointment, $actor, 'appointment_confirmation');
 
             return [$appointment, 201];
         });
@@ -131,6 +122,7 @@ final class AppointmentService
                 'updated_by_user_id' => $actor->id,
             ]);
             $this->record($current, $actor, 'appointment.rescheduled', $from);
+            $this->notifyPatient($current, $actor, 'appointment_rescheduled');
 
             return [$current, 200];
         });
@@ -169,8 +161,32 @@ final class AppointmentService
                 'updated_by_user_id' => $actor->id,
             ]);
             $this->record($current, $actor, 'appointment.cancelled', $from);
+            $this->notifyPatient($current, $actor, 'appointment_cancelled');
 
             return [$current, 200];
+        });
+    }
+
+    /**
+     * M18 / PI-29: tell the Patient by email that their appointment was booked or changed. Runs only AFTER the command's
+     * transaction commits (a rolled-back command sends nothing), through the dispatcher that records the real outcome
+     * (logged locally / accepted by transport / failed). A mail problem never undoes or fails the appointment command.
+     * An idempotent replay returns the stored response and never re-enters here, so it sends nothing twice.
+     */
+    private function notifyPatient(Appointment $appointment, User $actor, string $purpose): void
+    {
+        \Illuminate\Support\Facades\DB::afterCommit(function () use ($appointment, $actor, $purpose) {
+            try {
+                $appointment->loadMissing(['patient.person', 'patient.user', 'branch', 'service', 'dentist.person']);
+                $email = $appointment->patient?->user?->email;
+                if (! $email) return;
+                $mail = $purpose === 'appointment_confirmation'
+                    ? new \App\Mail\AppointmentConfirmationMail($appointment)
+                    : new \App\Mail\AppointmentChangedMail($appointment, $purpose === 'appointment_cancelled' ? 'cancelled' : 'rescheduled');
+                app(\App\Services\Mail\MailDispatcher::class)->send($email, $mail, $purpose, $actor, $appointment);
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('Appointment email could not be prepared.', ['purpose' => $purpose, 'exception' => $e::class]);
+            }
         });
     }
 

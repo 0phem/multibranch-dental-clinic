@@ -22,6 +22,14 @@ export function sessionForRole(role, state) {
   return {...session,active:validSession(state,session)}
 }
 
+// M1: re-derive a server-provisioned Staff/Dentist session from its own identity fields (never from ROLE_INFO), so a
+// real employee is never swapped for the demo identity when reference data arrives.
+export function sessionForEmployee(state, base) {
+  if(!base||!['staff','dentist'].includes(base.role)||!base.employeeBridge)return null
+  const {active:_ignored,...rest}=base
+  return {...rest,active:validSession(state,{...rest,active:true})}
+}
+
 // Derive a Patient session strictly from a resolved USER -> PATIENT relationship, never from a browser-supplied
 // Patient/Person ID. Fails closed (returns null) for a non-Patient account or an ambiguous/duplicate link, the same
 // way validSession would reject it; it never guesses which of several matching rows was intended.

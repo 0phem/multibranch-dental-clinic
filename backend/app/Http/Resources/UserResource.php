@@ -32,10 +32,28 @@ class UserResource extends JsonResource
                 'id' => $this->patient->public_id,
                 'code' => $this->patient->patient_code,
             ] : null,
+            // M1: the signed-in Staff/Dentist's OWN operational profile reference (legacy_ref), its working branch and
+            // display title, so the frontend can open that person's workspace without a hard-coded identity table.
+            // Authorization still comes only from the role (route middleware) and branch_scopes below.
+            'employee' => $this->employeeProfile(),
             // Explicit authorization branch scopes (user_branch_scopes). Owner authority is global by policy and
             // does not depend on this list; operational work assignment is never included here.
             'branch_scopes' => $this->branchScopes()->with('branch')->orderBy('branch_id')->get()
                 ->map(fn ($scope) => ['id' => $scope->branch->legacy_ref, 'name' => $scope->branch->name])->values(),
         ];
+    }
+
+    private function employeeProfile(): ?array
+    {
+        if ($this->role->value === 'staff') {
+            $profile = $this->staffProfile()->with('branch')->first();
+            return $profile ? ['profile_id' => $profile->legacy_ref, 'branch_id' => $profile->branch?->legacy_ref, 'title' => $profile->title] : null;
+        }
+        if ($this->role->value === 'dentist') {
+            $profile = $this->dentistProfile()->with(['branches' => fn ($q) => $q->orderBy('branches.id')])->first();
+            return $profile ? ['profile_id' => $profile->legacy_ref, 'branch_id' => $profile->branches->first()?->legacy_ref, 'title' => null] : null;
+        }
+
+        return null;
     }
 }

@@ -220,3 +220,4 @@ a{color:inherit}
 .daycal-week .daycal-day-head{flex-direction:column;align-items:flex-start;gap:0}.daycal-week .daycal-day-head h3{width:100%}
 @media (min-width:1300px){.daycal-week{grid-template-columns:repeat(7,minmax(0,1fr))}}
 .daycal-today-tag{display:inline-block;margin-left:6px;padding:1px 8px;border-radius:999px;background:#e6f0f8;font-size:12px}
+.scope-list{border:0;padding:0;margin:0;display:grid;gap:8px}.scope-option{display:flex;align-items:center;gap:10px;min-height:44px;padding:0 12px;border:1px solid var(--line);border-radius:10px}.scope-option input{width:18px;height:18px}

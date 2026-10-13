@@ -26,8 +26,10 @@ test('Patient billing page contains PayMongo checkout button and payment return 
 
 test('Admin automation page contains SMTP mailer diagnostics tool for clinic Owner', () => {
   assert.match(admin, /sendTestEmail/)
-  assert.match(admin, /Clinic SMTP Mailer Diagnostics/)
+  assert.match(admin, /title="Email sending check"/)
   assert.match(admin, /Test recipient email/)
   assert.match(admin, /Send Test Email/)
-  assert.match(admin, /Diagnostic Email Dispatched/)
+  // M18/TD-25: the result is the server-reported outcome, never a blanket success claim.
+  assert.doesNotMatch(admin, /Diagnostic Email Dispatched/)
+  assert.match(admin, /Not emailed \(local mail log only\)/)
 })

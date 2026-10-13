@@ -90,7 +90,8 @@ async function request(path, options = {}, { allowCsrfRetry = true } = {}) {
     if (response.status === 204) return { ok: true, data: null }
     const body = await response.json().catch(() => null)
     // Paginated lists keep their meta/links so a client can page through a bounded range.
-    return { ok: true, data: body?.data ?? body, ...(body?.meta ? { meta: body.meta } : {}), ...(body?.links ? { links: body.links } : {}) }
+    // M18: a command that sent email reports its dispatch outcome next to `data`.
+    return { ok: true, data: body?.data ?? body, ...(body?.meta ? { meta: body.meta } : {}), ...(body?.links ? { links: body.links } : {}), ...(body?.delivery ? { delivery: body.delivery } : {}) }
   }
   const failure = await parseFailure(response)
   if (failure.kind === 'csrf') {
@@ -186,6 +187,9 @@ export function updateDentistProfile(legacyRef, payload) {
 export function listUserAccounts() { return request('/api/users') }
 export function createUserAccountRemote(payload) { return request('/api/users', { method: 'POST', body: JSON.stringify(payload) }) }
 export function updateUserAccountRemote(id, payload) { return request(`/api/users/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(payload) }) }
+// M1 Staff authorization branch scopes (Owner-only on the server).
+export function getBranchScopes(id) { return request(`/api/users/${encodeURIComponent(id)}/branch-scopes`) }
+export function setBranchScopes(id, branchRefs) { return request(`/api/users/${encodeURIComponent(id)}/branch-scopes`, { method: 'PUT', body: JSON.stringify({ branch_refs: branchRefs }) }) }
 export function deleteUserAccountRemote(id) { return request(`/api/users/${encodeURIComponent(id)}`, { method: 'DELETE' }) }
 
 // M6 Appointment API (server-authoritative appointments). Raw calls only; src/appointments-api.js owns paging,
@@ -290,6 +294,12 @@ export function createPayMongoCheckout(invoiceId, payload = {}) {
     body: JSON.stringify(payload),
   })
 }
+// M1 employee invitations (Owner) and public acceptance.
+export function listEmployeeInvitations() { return request('/api/employee-invitations') }
+export function createEmployeeInvitation(payload) { return request('/api/employee-invitations', { method: 'POST', body: JSON.stringify(payload) }) }
+export function resendEmployeeInvitation(id) { return request(`/api/employee-invitations/${encodeURIComponent(id)}/resend`, { method: 'POST', body: '{}' }) }
+export function cancelEmployeeInvitation(id) { return request(`/api/employee-invitations/${encodeURIComponent(id)}/cancel`, { method: 'POST', body: '{}' }) }
+export function acceptEmployeeInvitation(payload) { return request('/api/invitations/accept', { method: 'POST', body: JSON.stringify(payload) }) }
 export function sendTestEmail(recipientEmail) {
   return request('/api/mail/test', {
     method: 'POST',

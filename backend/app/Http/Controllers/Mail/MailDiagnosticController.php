@@ -7,7 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Mail\ClinicTestMail;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Mail;
+use App\Services\Mail\MailDispatcher;
 
 class MailDiagnosticController extends Controller
 {
@@ -24,22 +24,18 @@ class MailDiagnosticController extends Controller
 
         $recipient = $validated['recipient_email'] ?? $user->email;
 
-        try {
-            Mail::to($recipient)->send(new ClinicTestMail());
+        // M18 (TD-25): report only what is known. A log/array mailer sends nothing; a real transport's acceptance is not
+        // proof of inbox delivery.
+        $result = app(MailDispatcher::class)->send($recipient, new ClinicTestMail(), 'mail_diagnostic', $user);
 
-            return response()->json([
-                'ok' => true,
-                'message' => "Test email successfully dispatched to {$recipient} using transport driver '" . config('mail.default') . "'.",
-                'driver' => config('mail.default'),
-                'recipient' => $recipient,
-                'sent_at' => now()->toIso8601String(),
-            ]);
-        } catch (\Throwable $e) {
-            return response()->json([
-                'ok' => false,
-                'message' => 'Failed to dispatch test email: ' . $e->getMessage(),
-                'driver' => config('mail.default'),
-            ], 500);
-        }
+        return response()->json([
+            'ok' => $result['status'] !== 'failed',
+            'status' => $result['status'],
+            'message' => $result['message'],
+            'driver' => $result['mailer'],
+            'transport_kind' => $result['transport_kind'],
+            'recipient' => $recipient,
+            'attempted_at' => now()->toIso8601String(),
+        ], $result['status'] === 'failed' ? 502 : 200);
     }
 }

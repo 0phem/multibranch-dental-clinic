@@ -15,6 +15,8 @@ import { DEFAULT_COUNTRY, normalizePhoneNumber, sanitizePhoneInput } from '../ph
 import { fetchAutomationSnapshot, dispatchAutomationRule, downloadAutomationCsv } from '../automation-api.js'
 import { fetchExecutiveSummary, fetchBranchPerformance, downloadAnalyticsCsv } from '../analytics-api.js'
 import { sendTestEmail } from '../api-client.js'
+import { EmployeeInvitations } from './EmployeeInvitations.jsx'
+import { BranchAccessDialog } from './BranchAccessDialog.jsx'
 
 export function BranchesPage({ store }) {
   const { state, actions, toast }=store
@@ -330,6 +332,7 @@ export function UsersPage({ store }) {
   const [edit,setEdit]=useState(null)
   const [editPhoneLocal,setEditPhoneLocal]=useState('')
   const [deleteTarget,setDeleteTarget]=useState(null)
+  const [scopeTarget,setScopeTarget]=useState(null)
   const localPhone=value=>{
     const digits=String(value||'').replace(/\D/g,'')
     if(digits.startsWith('63'))return digits.slice(2,12)
@@ -376,7 +379,7 @@ export function UsersPage({ store }) {
   }
   return <>
     <PageHeader title="User Management" text="Manage user accounts, roles, and account information."/>
-    <Notice tone="info" title="Current scope">Patient accounts can be created here. Staff and Dentist account creation is unavailable until profile provisioning is migrated. Roles are read-only after creation.</Notice>
+    <Notice tone="info" title="Current scope">Patient accounts can be created here directly. Staff and Dentists are invited by email below and set their own password. Roles are read-only after creation.</Notice>
     <div className="grid-2 top-gap">
       <Card title="Create user account" subtitle="Create a Patient login with the clinic’s standard account security.">
         <div className="form-grid">
@@ -384,21 +387,23 @@ export function UsersPage({ store }) {
           <Field label="Last name" required><input value={form.lastName} onChange={e=>setForm({...form,lastName:e.target.value})}/></Field>
           <Field label="Mobile number" hint={`Enter 10 digits after ${DEFAULT_COUNTRY.dial}, for example 9171234567.`}><div className="phone-field"><span className="phone-field-code" aria-hidden="true">{DEFAULT_COUNTRY.dial}</span><input type="tel" inputMode="numeric" aria-label="Mobile number" className="phone-field-number" placeholder="9171234567" maxLength={DEFAULT_COUNTRY.digits} value={phoneLocal} onChange={e=>setPhoneLocal(sanitizePhoneInput(e.target.value))}/></div></Field>
           <Field label="Email" required><input type="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})}/></Field>
-          <Field label="Role"><select value={form.role} onChange={e=>setForm({...form,role:e.target.value})}><option value="patient">Patient</option><option value="staff" disabled>Staff (temporarily unavailable)</option><option value="dentist" disabled>Dentist (temporarily unavailable)</option></select></Field>
+          <Field label="Role"><select value={form.role} onChange={e=>setForm({...form,role:e.target.value})}><option value="patient">Patient</option><option value="staff" disabled>Staff (use Invite an employee)</option><option value="dentist" disabled>Dentist (use Invite an employee)</option></select></Field>
           <Field label="Initial Password" required hint="At least 8 characters with letters and numbers."><input type="password" autoComplete="new-password" value={form.password} onChange={e=>setForm({...form,password:e.target.value})}/></Field>
           <Field label="Confirm Password" required><input type="password" autoComplete="new-password" value={form.passwordConfirmation} onChange={e=>setForm({...form,passwordConfirmation:e.target.value})}/></Field>
           <Button className="span-2" onClick={add} disabled={submitting}>{submitting?'Creating…':'Create Patient Account'}</Button>
         </div>
       </Card>
-      <Card title="Account roles" subtitle="Roles are authorization categories. Staff job titles are maintained separately in personnel management."><div className="permission-list"><div><b>Patient</b><span>Patient portal access</span></div><div><b>Staff</b><span>Creation deferred pending profile provisioning</span></div><div><b>Dentist</b><span>Creation deferred pending profile provisioning</span></div></div></Card>
+      <Card title="Account roles" subtitle="Roles are authorization categories. Staff job titles are maintained separately in personnel management."><div className="permission-list"><div><b>Patient</b><span>Patient portal access</span></div><div><b>Staff</b><span>Invited by email by the Owner; sets their own password</span></div><div><b>Dentist</b><span>Invited by email by the Owner; sets their own password</span></div></div></Card>
     </div>
+    <EmployeeInvitations store={store}/>
     <Card className="top-gap" title="User accounts" subtitle="Only real backend login accounts appear here.">
       {loading?<p className="muted-copy" role="status">Loading user accounts…</p>:error?<Notice tone="warning" title="Couldn’t load user accounts">{error}<Button size="sm" variant="ghost" onClick={load}>Try again</Button></Notice>:<Table rows={records} caption="User accounts" columns={[
         {key:'name',label:'Name'}, {key:'email',label:'Email'}, {key:'phone',label:'Phone',render:u=>u.phone||'—'},
         {key:'role',label:'Role',render:u=>u.role==='owner'?'Owner':u.role==='dentist'?'Dentist':u.role==='staff'?'Staff':'Patient'},
-        {key:'action',label:'Actions',render:u=><div className="row-actions"><Button size="sm" variant="ghost" onClick={()=>{setEdit({...u});setEditPhoneLocal(localPhone(u.phone))}}>Edit</Button><Button size="sm" variant="danger" onClick={()=>setDeleteTarget(u)}>Delete</Button></div>}
+        {key:'action',label:'Actions',render:u=><div className="row-actions">{u.role==='staff'&&<Button size="sm" variant="soft" onClick={()=>setScopeTarget(u)}>Branch access</Button>}<Button size="sm" variant="ghost" onClick={()=>{setEdit({...u});setEditPhoneLocal(localPhone(u.phone))}}>Edit</Button><Button size="sm" variant="danger" onClick={()=>setDeleteTarget(u)}>Delete</Button></div>}
       ]}/>}
     </Card>
+    {scopeTarget&&<BranchAccessDialog user={scopeTarget} branches={store.state.branches||[]} onClose={()=>setScopeTarget(null)} onSaved={()=>toast('Branch access saved.','success')}/>}
     <Modal open={!!edit} onClose={()=>setEdit(null)} title="Edit user account" subtitle="Role and personnel information are read-only here.">
       {edit&&<div className="form-grid"><Field label="First name" required><input value={edit.firstName} onChange={e=>setEdit({...edit,firstName:e.target.value})}/></Field><Field label="Last name" required><input value={edit.lastName} onChange={e=>setEdit({...edit,lastName:e.target.value})}/></Field><Field label="Email" required><input type="email" value={edit.email} onChange={e=>setEdit({...edit,email:e.target.value})}/></Field><Field label="Mobile number" hint={`Enter 10 digits after ${DEFAULT_COUNTRY.dial}, or leave blank.`}><div className="phone-field"><span className="phone-field-code" aria-hidden="true">{DEFAULT_COUNTRY.dial}</span><input type="tel" inputMode="numeric" aria-label="Mobile number" className="phone-field-number" placeholder="9171234567" maxLength={DEFAULT_COUNTRY.digits} value={editPhoneLocal} onChange={e=>setEditPhoneLocal(sanitizePhoneInput(e.target.value))}/></div></Field><Field label="Role" hint="Role cannot be changed from User Management."><input value={edit.role==='owner'?'Owner':edit.role==='dentist'?'Dentist':edit.role==='staff'?'Staff':'Patient'} readOnly disabled aria-label="Role"/></Field><Button className="span-2" onClick={saveEdit} disabled={submitting}>{submitting?'Saving…':'Save Account Information'}</Button></div>}
     </Modal>
@@ -428,12 +433,15 @@ export function AutomationPage({ store }) {
     setTestEmailResult(null)
     try {
       const res = await sendTestEmail(testEmailRecipient.trim() || undefined)
+      // M18 (TD-25): show exactly what the server knows — a log mailer sends nothing; transport acceptance is not inbox delivery.
+      const info = res.ok ? (res.data || {}) : null
       if (res.ok) {
-        setTestEmailResult({ tone: 'success', title: 'Diagnostic Email Dispatched', message: `Test email sent to ${res.recipient || testEmailRecipient || 'configured clinic mailbox'}.` })
-        toast('SMTP test email dispatched successfully.', 'success')
+        const local = info.status === 'logged_only'
+        setTestEmailResult({ tone: local ? 'warning' : 'info', title: local ? 'Not emailed (local mail log only)' : 'Accepted by the mail transport', message: info.message || 'Inbox delivery is not confirmed.' })
+        toast(local ? 'Test email recorded locally only.' : 'Test email accepted by the mail transport.', local ? 'warning' : 'info')
       } else {
-        setTestEmailResult({ tone: 'warning', title: 'Dispatch Failed', message: res.message || 'Failed to send diagnostic test email.' })
-        toast(res.message || 'SMTP diagnostic failed.', 'warning')
+        setTestEmailResult({ tone: 'warning', title: 'Send failed', message: res.message || 'The test email could not be sent.' })
+        toast(res.message || 'Test email failed.', 'warning')
       }
     } catch (err) {
       setTestEmailResult({ tone: 'warning', title: 'Error', message: err.message || 'Unexpected network error.' })
@@ -629,10 +637,10 @@ export function AutomationPage({ store }) {
       </Card>
     </div>
 
-    <Card className="top-gap" title="Clinic SMTP Mailer Diagnostics" subtitle="Verify mail transport connectivity, TLS handshake, and delivery to test inboxes">
+    <Card className="top-gap" title="Email sending check" subtitle="Shows whether the clinic mail transport accepts a test message. Only receiving it in the inbox proves delivery.">
       <div style={{ maxWidth: '520px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
         <p className="text-secondary text-sm">
-          Send a diagnostic email using the clinic's configured mail transport. This validates outgoing server settings, SSL/TLS, and template rendering without generating production patient records.
+          Send a test email through the clinic's configured mail transport. The result says whether it was only logged locally, accepted by the transport, or failed. It creates no patient record.
         </p>
         <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-end' }}>
           <div style={{ flex: 1 }}>

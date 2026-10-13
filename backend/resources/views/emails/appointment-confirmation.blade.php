@@ -14,13 +14,15 @@
             <span class="detail-label">Clinic Branch</span>
             <span class="detail-value">{{ $appointment->branch?->name ?? 'Dental Clinic Branch' }}</span>
         </div>
+        {{-- Clinic-local date and time of the booked slot (starts_at), never the time the email was rendered. --}}
+        @php($start = \App\Support\ClinicClock::local($appointment->starts_at))
         <div class="detail-row">
             <span class="detail-label">Date</span>
-            <span class="detail-value">{{ \Carbon\Carbon::parse($appointment->appointment_date)->format('F d, Y (l)') }}</span>
+            <span class="detail-value">{{ $start->format('F d, Y (l)') }}</span>
         </div>
         <div class="detail-row">
             <span class="detail-label">Time</span>
-            <span class="detail-value">{{ \Carbon\Carbon::parse($appointment->start_time)->format('h:i A') }}</span>
+            <span class="detail-value">{{ $start->format('h:i A') }}</span>
         </div>
         @if($appointment->dentist?->person)
         <div class="detail-row">
@@ -38,10 +40,6 @@
             <span class="detail-label">Status</span>
             <span class="detail-value" style="color: #059669;">{{ $appointment->status }}</span>
         </div>
-    </div>
-
-    <div style="background-color: #eff6ff; border-left: 4px solid #3b82f6; padding: 12px 16px; margin: 20px 0; border-radius: 4px; font-size: 13px; color: #1e40af;">
-        <strong>Patient Arrival Reminder:</strong> Please arrive 10–15 minutes prior to your scheduled time for intake and triage check-in. If you are covered by an HMO provider, please bring your physical card and government ID.
     </div>
 
     <p style="font-size: 13px; color: #64748b; margin-top: 20px;">

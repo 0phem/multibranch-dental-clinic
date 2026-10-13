@@ -9,7 +9,7 @@ import {
 } from './data.js'
 import { uid, nowLabel } from './logic.js'
 import { clinicNow, rebaseDemoRecords } from './clock.js'
-import { normalizeClinicState, sessionForRole, persistableCollection } from './contracts.js'
+import { normalizeClinicState, sessionForEmployee, sessionForRole, persistableCollection } from './contracts.js'
 import { createWorkflowActions } from './workflow.js'
 import { createRegistrationAction } from './registration.js'
 import { createIdentityBridge } from './identity-bridge.js'
@@ -148,7 +148,7 @@ export function ClinicProvider({ children, initialReferenceData, initialServerAp
   const [clock,setClock]=useState(clinicNow)
   useEffect(()=>{const timer=setInterval(()=>{setClock(clinicNow());if(sessionRef.current?.role==='staff'){actionsRef.current?.evaluateOperationalReminders()}},15000);return ()=>clearInterval(timer)},[])
   // Server-provided identity fields (Patient public_id, Staff branch scopes from /api/me) survive local re-derivation.
-  const setSession=role=>{const derived=role?sessionForRole(role,stateRef.current):null;const next=derived&&sessionRef.current?.role===role?{...derived,serverUserId:sessionRef.current.serverUserId??null,patientPublicId:sessionRef.current.patientPublicId??null,branchScopes:sessionRef.current.branchScopes}:derived;sessionRef.current=next;setSessionState(next);if(next?.role==='staff'){actionsRef.current?.evaluateOperationalReminders()}return next}
+  const setSession=role=>{const derived=role?(sessionRef.current?.employeeBridge&&sessionRef.current.role===role?sessionForEmployee(stateRef.current,sessionRef.current):sessionForRole(role,stateRef.current)):null;const next=derived&&sessionRef.current?.role===role?{...derived,serverUserId:sessionRef.current.serverUserId??null,patientPublicId:sessionRef.current.patientPublicId??null,branchScopes:sessionRef.current.branchScopes}:derived;sessionRef.current=next;setSessionState(next);if(next?.role==='staff'){actionsRef.current?.evaluateOperationalReminders()}return next}
 
   // Phase 2A reference-data bootstrap (plan section H/J). Fires once a session exists, role-aware (Patient
   // never triggers a /api/staff call — see fetchReferenceData). A logged-out session clears back to idle so

@@ -8,6 +8,7 @@ import { PublicSite } from './pages/PublicSite.jsx'
 import { publicViewFromHash, publicSections } from './public-route.js'
 import { ChunkBoundary, StartupLoading } from './StartupLoading.jsx'
 import { AuthShell } from './pages/AuthShell.jsx'
+import { AcceptInvitation } from './pages/AcceptInvitation.jsx'
 import { bootstrapSession } from './session-bootstrap.js'
 
 const PatientRegister=lazy(()=>import('./pages/PatientRegister.jsx').then(m=>({default:m.PatientRegister})))
@@ -230,7 +231,9 @@ function AppBody() {
 
   if (!role) return <>
     {authError&&<Notice tone="warning">{authError}</Notice>}
-    {verification||publicView==='verify'
+    {publicView==='accept'
+      ?<AcceptInvitation hash={typeof window==='undefined'?'':window.location.hash} onSignIn={()=>{window.location.hash='sign-in';setPublicView('login')}}/>
+      :verification||publicView==='verify'
       ?<EmailVerification email={verification?.email} initialResendAvailableAt={verification?.resendAvailableAt} onVerify={verifyRegistration} onResend={resendRegistration} onBack={()=>{setVerification(null);setShowRegister(false)}}/>
       :showRegister
       ?<ChunkBoundary><Suspense fallback={<AuthShell><StartupLoading compact label="Opening registration…"/></AuthShell>}><PatientRegister onRegister={register} onCancel={()=>{setAuthError('');setShowRegister(false)}}/></Suspense></ChunkBoundary>

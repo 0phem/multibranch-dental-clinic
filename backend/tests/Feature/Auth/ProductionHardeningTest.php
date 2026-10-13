@@ -199,7 +199,9 @@ class ProductionHardeningTest extends TestCase
         Log::spy();
         $response=$this->postJson('/api/register',$this->payload())->assertStatus(503);
         $this->assertStringNotContainsString('SECRET',$response->getContent());
-        Log::shouldHaveReceived('warning')->once()->with('Patient verification email delivery failed.');
+        Log::shouldHaveReceived('warning')->with('Patient verification email delivery failed.')->once();
+        // M18's dispatcher also records the failure, with the exception class only (never its message).
+        Log::shouldHaveReceived('warning')->with('Mail dispatch failed.', ['purpose' => 'patient_email_verification', 'exception' => \RuntimeException::class])->once();
         Log::shouldNotHaveReceived('error');
     }
 

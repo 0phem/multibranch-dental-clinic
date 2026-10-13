@@ -37,6 +37,8 @@ use Illuminate\Support\Facades\Route;
 // Public identity/auth boundary (Backend Foundation 1A). The one thing a stranger may do is create their own
 // Patient identity — see RegisteredPatientController.
 Route::post('/register', [RegisteredPatientController::class, 'store'])->middleware('throttle:m1-register');
+// M1: public acceptance of an Owner-sent employee invitation (single-use link; generic failures; throttled).
+Route::post('/invitations/accept', [\App\Http\Controllers\EmployeeInvitationController::class, 'accept'])->middleware('throttle:m1-otp');
 Route::post('/register/verify', [EmailVerificationController::class, 'verify'])->middleware('throttle:m1-otp');
 Route::post('/register/resend', [EmailVerificationController::class, 'resend'])->middleware('throttle:m1-otp');
 Route::post('/login', [AuthenticatedSessionController::class, 'store'])->middleware('throttle:m1-login');
@@ -106,6 +108,13 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureAccountAccess::cla
 
     // M1 User Management is a separate backend-authoritative account collection. It intentionally does not
     // replace the transitional frontend state.users collection or provision Staff/Dentist profiles.
+    // M1 employee provisioning: Owner-only Staff/Dentist email invitations (PI-01 Owner approval, PI-02 email invitation).
+    Route::prefix('employee-invitations')->middleware('role:owner')->group(function () {
+        Route::get('/', [\App\Http\Controllers\EmployeeInvitationController::class, 'index']);
+        Route::post('/', [\App\Http\Controllers\EmployeeInvitationController::class, 'store']);
+        Route::post('/{user}/resend', [\App\Http\Controllers\EmployeeInvitationController::class, 'resend']);
+        Route::post('/{user}/cancel', [\App\Http\Controllers\EmployeeInvitationController::class, 'cancel']);
+    });
     Route::prefix('users')->middleware('role:owner')->group(function () {
         Route::get('/', [UserManagementController::class, 'index']);
         Route::post('/', [UserManagementController::class, 'store']);

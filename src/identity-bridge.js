@@ -1,4 +1,4 @@
-import { sessionForRole, sessionForUser } from './contracts.js'
+import { sessionForEmployee, sessionForRole, sessionForUser } from './contracts.js'
 import { uid } from './logic.js'
 import { clinicNow } from './clock.js'
 
@@ -45,9 +45,57 @@ export function createIdentityBridge({ getState, commit, clock = clinicNow }) {
     }
     // Any backend account not in the explicit table above fails closed unless it is a Patient — any number
     // of real people can register as a Patient, so that path is general-purpose, not table-based.
+    if (me.role === 'staff' || me.role === 'dentist') return bridgeEmployee(me, { getState, commit })
     if (me.role !== 'patient') return { ok: false, reason: 'no-local-identity' }
     return bridgePatient(me, { getState, commit, clock })
   }
+}
+
+// M1: page permissions for a server-provisioned employee mirror what the SERVER authorizes for the role (route
+// middleware role:staff / role:dentist); they are the same for every member of the role and are never derived from a
+// job title (PI-09 is unanswered: narrowing a role by duty needs a clinic decision and a server change first). They
+// equal the long-standing local Staff and Dentist workspaces.
+export const EMPLOYEE_ROLE_PERMISSIONS = Object.freeze({
+  staff: Object.freeze(['appointments', 'checkin', 'queue', 'patient-demographics', 'billing', 'hmo', 'messages', 'followups']),
+  dentist: Object.freeze(['schedule', 'queue', 'clinical-records', 'treatment', 'prescriptions', 'followups', 'messages']),
+})
+const LEGACY_STAFF_TITLES = ['Receptionist', 'Dental Assistant', 'HMO Coordinator', 'Cashier', 'Patient Engagement Staff']
+
+// M1: a Staff/Dentist account that is not one of the demo seeds opens its OWN workspace from the server's answer:
+// `me.employee` names the person's operational profile (server legacy_ref) and working branch. The local projection is
+// keyed by the server user public id, so the server profile's `userId` link matches it exactly. Fails closed on any
+// missing or contradictory link; it never borrows another person's identity.
+function bridgeEmployee(me, { getState, commit }) {
+  const emp = me.employee
+  if (typeof me.id !== 'string' || me.account_status !== 'Active' || !emp || typeof emp.profile_id !== 'string' || !emp.profile_id || typeof emp.branch_id !== 'string' || !emp.branch_id)
+    return { ok: false, reason: 'no-employee-profile' }
+  const state = getState()
+  const personId = `per-${emp.profile_id}`
+  const title = cleanText(emp.title)
+  const roleName = me.role === 'dentist' ? 'Dentist' : LEGACY_STAFF_TITLES.includes(title) ? title : 'Staff'
+  const permissions = [...EMPLOYEE_ROLE_PERMISSIONS[me.role]]
+  const existing = state.users.find(u => u.id === me.id)
+  if (existing && (existing.backendUserId !== me.id || existing.backendEmployeeProfileId !== emp.profile_id || existing.personId !== personId)) return { ok: false, reason: 'identity-mismatch' }
+  if (!existing && state.users.some(u => u.personId === personId || u.backendUserId === me.id)) return { ok: false, reason: 'identity-conflict' }
+  const otherPerson = state.persons.find(p => p.id === personId)
+  if (otherPerson && !existing) return { ok: false, reason: 'identity-conflict' }
+  const person = { id: personId, firstName: cleanText(me.first_name), lastName: cleanText(me.last_name), email: cleanText(me.email).toLowerCase(), phone: cleanText(me.phone), dob: '', sex: '', address: '' }
+  const user = {
+    ...(existing || {}), id: me.id, personId, username: person.email, login: person.email, roleName, role: roleName,
+    branchId: emp.branch_id, accountStatus: 'Active', status: 'Active', permissions,
+    backendUserId: me.id, backendEmployeeProfileId: emp.profile_id,
+  }
+  commit({
+    persons: existing ? state.persons.map(p => p.id === personId ? { ...p, ...person } : p) : [...state.persons, person],
+    users: existing ? state.users.map(u => u.id === me.id ? user : u) : [...state.users, user],
+  })
+  const base = {
+    role: me.role, label: me.role === 'dentist' ? 'Dentist' : 'Staff', name: `${me.role === 'dentist' ? 'Dr. ' : ''}${cleanText(me.name) || person.email}`,
+    subtitle: me.role === 'dentist' ? 'Clinical Services' : title || 'Staff', userId: me.id, branchId: emp.branch_id, employeeBridge: true,
+    ...(me.role === 'dentist' ? { dentistId: emp.profile_id } : { staffId: emp.profile_id }),
+  }
+  // Reference data (server staff/dentist profiles) may still be loading: the session is re-validated when it arrives.
+  return { ok: true, session: sessionForEmployee(getState(), base) }
 }
 
 // Upserts a minimal local Person/Patient/User projection for a real, backend-authenticated Patient who has no

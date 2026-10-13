@@ -62,6 +62,18 @@ class User extends Authenticatable
         return 'public_id';
     }
 
+    /** Operational Staff profile of the same Person (person_id link; M1 invitations and roster reads). */
+    public function staffProfile(): \Illuminate\Database\Eloquent\Relations\HasOne
+    {
+        return $this->hasOne(StaffProfile::class, 'person_id', 'person_id');
+    }
+
+    /** Operational Dentist profile of the same Person. */
+    public function dentistProfile(): \Illuminate\Database\Eloquent\Relations\HasOne
+    {
+        return $this->hasOne(DentistProfile::class, 'person_id', 'person_id');
+    }
+
     public function person(): BelongsTo
     {
         return $this->belongsTo(Person::class);

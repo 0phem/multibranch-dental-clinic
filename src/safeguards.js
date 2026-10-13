@@ -4,7 +4,8 @@ import { isServerId } from './appointments-api.js'
 export const isRecord=value=>!!value&&typeof value==='object'&&!Array.isArray(value)
 export const validTime=value=>typeof value==='string'&&/^([01]\d|2[0-3]):[0-5]\d$/.test(value)
 const active=u=>!!u&&(u.accountStatus||u.status)==='Active'
-const staffRoles=['Receptionist','Dental Assistant','HMO Coordinator','Cashier','Patient Engagement Staff']
+// 'Staff' is the generic label for a server-provisioned Staff member whose job title is not one of the legacy local titles.
+const staffRoles=['Receptionist','Dental Assistant','HMO Coordinator','Cashier','Patient Engagement Staff','Staff']
 
 // Revalidate identity claims against the CURRENT store, never just session flags.
 export function validSession(state,session,now=clinicNow()) {
