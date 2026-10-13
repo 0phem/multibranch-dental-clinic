@@ -261,7 +261,7 @@ export function eligibleFeedbackVisits(params) { return request(`/api/feedback/e
 export function submitFeedback(payload, key) { return command('/api/feedback', payload, key) }
 export function myFeedback(params) { return request(`/api/feedback/mine${query(params)}`) }
 
-// M17 in-app human conversations (cursor-paged; there is no create/edit/delete route).
+// M17 in-app human conversations (cursor-paged; a Patient may start a front-desk conversation; no edit/delete route).
 export function listConversations(params) { return request(`/api/conversations${query(params)}`) }
 export function conversationSummary() { return request('/api/conversations/summary') }
 export function listConversationMessages(id, params) { return request(`/api/conversations/${encodeURIComponent(id)}/messages${query(params)}`) }
@@ -269,6 +269,13 @@ export function sendConversationMessage(id, body, key) { return command(`/api/co
 // The browser names the NEWEST message it has actually displayed; the server moves this participant's marker forward only.
 export function markConversationRead(id, upTo) { return command(`/api/conversations/${encodeURIComponent(id)}/read`, { up_to: upTo }) }
 export function closeConversation(id, payload, key) { return command(`/api/conversations/${encodeURIComponent(id)}/close`, payload, key) }
+export function conversationStartOptions() { return request('/api/conversations/start-options') }
+export function startConversation(payload, key) { return command('/api/conversations', payload, key) }
+export function conversationPresence() { return request('/api/conversations/presence', { method: 'POST', body: '{}' }) }
+export function conversationDentistOptions(id) { return request(`/api/conversations/${encodeURIComponent(id)}/dentist-options`) }
+export function addConversationDentist(id, dentistId) { return request(`/api/conversations/${encodeURIComponent(id)}/participants`, { method: 'POST', body: JSON.stringify({ dentist_id: dentistId }) }) }
+// M17 realtime: private-channel authorization for the socket client (same session cookie + CSRF as every call).
+export function authorizeChannel(socketId, channelName) { return request('/api/broadcasting/auth', { method: 'POST', body: JSON.stringify({ socket_id: socketId, channel_name: channelName }) }) }
 
 // M16 external inquiries (manually captured by Staff; no social-platform integration). Cursor-paged, newest first.
 export function listInquiries(params) { return request(`/api/inquiries${query(params)}`) }

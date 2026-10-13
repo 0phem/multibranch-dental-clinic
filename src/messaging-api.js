@@ -18,6 +18,9 @@ export function mapConversation(row) {
     patientName: row.patient?.name ?? '',
     patientCode: row.patient?.code ?? '',
     branchName: row.branch?.name ?? '',
+    branchRef: row.branch?.ref ?? '',
+    assignedName: row.assigned?.name ?? '',
+    assignedToMe: row.assigned?.mine === true,
     participants: (row.participants || []).map(p => ({ name: p.name ?? '', role: p.role ?? '' })),
     unread: Number.isInteger(row.unread) ? row.unread : 0,
     lastMessageAt: row.last_message_at ?? null,
@@ -33,8 +36,52 @@ export function mapMessage(row) {
 export async function loadConversations(cursor = null) {
   const result = await api.listConversations({ per_page: 25, ...(cursor ? { cursor } : {}) })
   if (!result.ok) return normalizeFailure(result)
-  return { ok: true, rows: (result.data || []).map(mapConversation), nextCursor: result.meta?.next_cursor ?? null }
+  return { ok: true, rows: (result.data || []).map(mapConversation), nextCursor: result.meta?.next_cursor ?? null, channels: Array.isArray(result.meta?.channels) ? result.meta.channels : [] }
 }
+
+/**
+ * Messages NEWER than `afterId`, oldest first. The one sync read used both after a realtime signal and by the polling fallback, so the
+ * two paths always show the same server projection.
+ */
+export async function loadNewerMessages(conversationId, afterId) {
+  if (!afterId) return loadMessages(conversationId).then(r => (r.ok ? { ok: true, rows: [...r.rows].reverse(), more: false } : r))
+  const result = await api.listConversationMessages(conversationId, { after: afterId, per_page: 100 })
+  if (!result.ok) return normalizeFailure(result)
+  return { ok: true, rows: (result.data || []).map(mapMessage), more: result.meta?.more === true }
+}
+
+/** Branches a Patient can write to, and the suggested one (latest visit or appointment, else their preferred branch). */
+export async function loadStartOptions() {
+  const result = await api.conversationStartOptions()
+  if (!result.ok) return normalizeFailure(result)
+  const d = result.data || {}
+  return { ok: true, branches: (d.branches || []).map(b => ({ id: b.id, name: b.name })), defaultBranchId: d.default_branch_id ?? '', defaultReason: d.default_reason ?? null }
+}
+
+/** A Patient's first message to a branch front desk. Their open conversation at that branch is reused by the server. */
+export async function startConversation(branchId, body, key) {
+  const text = String(body ?? '').trim()
+  if (!branchId) return { ok: false, kind: 'validation', message: 'Choose a branch.' }
+  if (!text) return { ok: false, kind: 'validation', message: 'Write a message first.' }
+  if (text.length > MAX_MESSAGE) return { ok: false, kind: 'validation', message: `Keep a message under ${MAX_MESSAGE} characters.` }
+  const result = await api.startConversation({ branch_id: branchId, body: text }, key)
+  if (!result.ok) return normalizeFailure(result)
+  return { ok: true, conversationId: result.data?.conversation?.id, reused: result.data?.conversation?.reused === true, message: mapMessage(result.data?.message || {}) }
+}
+
+export async function loadDentistOptions(conversationId) {
+  const result = await api.conversationDentistOptions(conversationId)
+  if (!result.ok) return normalizeFailure(result)
+  return { ok: true, rows: (result.data || []).map(d => ({ id: d.id, name: d.name ?? '', participant: d.participant === true })) }
+}
+
+export async function addDentist(conversationId, dentistId) {
+  const result = await api.addConversationDentist(conversationId, dentistId)
+  return result.ok ? { ok: true, added: result.data?.added === true } : normalizeFailure(result)
+}
+
+/** Heartbeat: tells the server this person is in the app (so it does not email them about a message they can already see). */
+export function sendPresence() { return api.conversationPresence() }
 
 /** Newest-first page (the server order). `cursor` continues to OLDER messages; a failed page is an error, never a shorter history. */
 export async function loadMessages(conversationId, cursor = null) {

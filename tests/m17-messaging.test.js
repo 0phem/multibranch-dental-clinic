@@ -37,8 +37,9 @@ test('marking read names the newest displayed message and nothing else; with not
   assert.deepEqual(await messaging.markRead('conv', null), { ok: true, skipped: true })
   assert.equal(calls.length, before)
   const page = read('src/pages/ServerMessages.jsx')
-  assert.match(page, /const newestShown = thread\?\.length \? thread\[thread\.length - 1\]\.id : null/)
-  assert.match(page, /markRead\(selectedId, newestShown\)\.then\(r => \{ if \(live && r\.ok\) refreshList\(\) \}\)/)
+  // Read state follows the newest DISPLAYED server message of the selected conversation (pending sends are not server messages).
+  assert.match(page, /const newestShown = thread\?\.messages\?\.length \? thread\.messages\[thread\.messages\.length - 1\]\.id : null/)
+  assert.match(page, /markRead\(selectedId, newestShown\)\.then\(r => \{ if \(current && r\.ok\) refreshList\(\) \}\)/)
   assert.doesNotMatch(page, /unread: 0/, 'the browser never decides the unread count; it re-reads the server')
 })
 
@@ -100,13 +101,17 @@ test('message text stays a plain string and is rendered only as React text; no l
 test('the screen claims only what is real: in-app messages, no delivery/seen/typing/online, no local storage, no timers of its own', () => {
   const page = read('src/pages/ServerMessages.jsx')
   const visible = page.split('\n').filter(l => !l.trim().startsWith('//')).join('\n')
-  assert.match(visible, /These messages stay inside this application\. Nothing is sent by SMS, e-mail or social media, and “unread” only means not yet opened here/)
+  // Priority 2: an offline Patient may get a content-free email alert, so the screen says exactly that.
+  assert.match(visible, /These messages stay inside this application\. Nothing is sent by SMS or social media, and “unread” only means not yet opened here/)
+  assert.match(visible, /we email you a short alert — never the message itself/)
   assert.doesNotMatch(visible, /\b(Delivered|Seen|Typing|typing\.\.\.|Online|Synced|Read receipt|Read at)\b/)
   assert.doesNotMatch(visible + read('src/messaging-api.js'), /localStorage|sessionStorage|indexedDB|setTimeout|setInterval/)
   assert.match(visible, /useVisibleRefresh/)
-  for (const text of ['Load older messages', 'Older messages unavailable', 'Try again', 'Looking|Loading messages', 'Conversations unavailable', 'No conversations yet']) assert.match(visible, new RegExp(text))
+  for (const text of ['Load older messages', 'Older messages unavailable', 'Retry', 'Looking|Loading messages', 'Conversations unavailable', 'No conversations yet']) assert.match(visible, new RegExp(text))
   assert.match(visible, /maxLength=\{MAX_MESSAGE\}/)
-  assert.match(visible, /sendError\)\s*key\.current = commandKey\(\)|if \(sendError\) key\.current = commandKey\(\)/, 'a retry of the SAME text reuses the same key; editing the text starts a new one')
+  // A retry resends the failed item with ITS key (never a new one); keys and drafts are per conversation (tests/m17-realtime-messaging.test.js).
+  assert.match(visible, /const snapshot = drafts\.current\.snapshot\(selected\.id\)/)
+  assert.match(visible, /onClick=\{\(\) => deliver\(selected\.id, p\)\}>Retry/)
 })
 
 test('dispatch: a clinic-server session always uses the server page; the demo is isolated; dashboards and the badge never use demo conversations', () => {

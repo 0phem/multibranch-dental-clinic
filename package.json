@@ -11,8 +11,10 @@
     "test:smoke": "node scripts/render-smoke.mjs"
   },
   "dependencies": {
+    "laravel-echo": "2.5.0",
     "leaflet": "^1.9.4",
     "libphonenumber-js": "^1.13.14",
+    "pusher-js": "8.6.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1"
   },

@@ -10,6 +10,7 @@ import { ChunkBoundary, StartupLoading } from './StartupLoading.jsx'
 import { AuthShell } from './pages/AuthShell.jsx'
 import { AcceptInvitation } from './pages/AcceptInvitation.jsx'
 import { PasswordReset } from './pages/PasswordReset.jsx'
+import { stopRealtime } from './realtime.js'
 import { bootstrapSession } from './session-bootstrap.js'
 
 const PatientRegister=lazy(()=>import('./pages/PatientRegister.jsx').then(m=>({default:m.PatientRegister})))
@@ -187,6 +188,7 @@ function AppBody() {
   const resendRegistration=async email=>api.resendRegistrationEmail(email)
 
   const signedOut=()=>{
+    stopRealtime() // M17: no socket keeps listening for the previous account
     store.adoptSession(null)
     setContext(null);setPageState('dashboard');setActiveBranch('All Branches');setShowRegister(false);setVerification(null)
     setAuthPhase('unauthenticated')
