@@ -10,16 +10,19 @@ import { prescriptionTasks } from '../phase2.js'
 import { loadInquirySummary } from '../inquiries-api.js'
 import { clinicDate } from '../clock.js'
 import { encounterContext, isTodayQueue, isActiveQueue, sessionForRole } from '../contracts.js'
+import { countQueue } from '../queue-counts.js'
+import { QueueByBranch, useQueueVisibility } from './QueueCounts.jsx'
+import { clinicNow } from '../clock.js'
 
 export function DashboardPage({ role, activeBranch, setPage, store }) {
   const { state }=store
   if (role==='patient') return <PatientHome store={store} setPage={setPage}/>
-  if (role==='staff') return <StaffDashboard setPage={setPage} activeBranch={activeBranch} state={state} session={store.session}/>
+  if (role==='staff') return <StaffDashboard setPage={setPage} activeBranch={activeBranch} state={state} session={store.session} store={store}/>
   if (role==='dentist') return <DentistDashboard setPage={setPage} state={state} session={store.session}/>
-  return <OwnerDashboard setPage={setPage} activeBranch={activeBranch} state={state} session={store.session}/>
+  return <OwnerDashboard setPage={setPage} activeBranch={activeBranch} state={state} session={store.session} store={store}/>
 }
 
-function StaffDashboard({ activeBranch, setPage, state, session }) {
+function StaffDashboard({ activeBranch, setPage, state, session, store }) {
   // M16: in a clinic-server session the count comes ONLY from the server (this Staff member's scope). null = loading, 'unavailable' = the
   // request failed; neither is shown as zero. The browser's local demo inquiries are never counted.
   const [serverInquiries,setServerInquiries]=React.useState(null)
@@ -32,6 +35,12 @@ function StaffDashboard({ activeBranch, setPage, state, session }) {
   const branchFilter=x=>activeBranch==='All Branches'||x.branch===activeBranch
   const todays=state.appointments.filter(a=>a.date===clinicDate()&&a.status!=='Cancelled'&&branchFilter(a)).sort((a,b)=>a.start.localeCompare(b.start))
   const waiting=state.queue.filter(q=>q.status==='Waiting'&&isTodayQueue(q)&&branchFilter(q))
+  // Clinic-server session: the live count is the server queue's awaiting-treatment tally (Waiting + Called + Treatment Ready),
+  // shown only after a successful, complete response for today's clinic day. The browser demo keeps its own Waiting filter.
+  const qvis=useQueueVisibility(store)
+  const serverQueue=qvis.mode!=='demo'
+  const qCounts=serverQueue&&qvis.mode==='ready'?countQueue(state.queue,{branchId:state.branches.find(b=>b.name===activeBranch)?.id??null,date:clinicNow().date}):null
+  const waitingCount=serverQueue?qCounts?.awaiting:waiting.length
   const pendingHmo=liveRecords(state.hmo).filter(h=>['Pending','Missing Requirements','Ready for Submission','Returned','Escalated'].includes(h.status)&&branchFilter(h))
   // M16: in a clinic-server session inquiries live on the server; the browser's local demo inquiries are never counted as real.
   const demoOpenInquiries=session?.serverUserId?[]:state.inquiries.filter(i=>i.status==='Open'&&i.assignedUserId===(session?.userId||ROLE_INFO.staff.userId)&&i.branchId===(session?.branchId||ROLE_INFO.staff.branchId))
@@ -43,7 +52,7 @@ function StaffDashboard({ activeBranch, setPage, state, session }) {
     <PageHeader kicker="Front desk workspace" title="Today’s clinic operations" text={`Keep arrivals, queues, appointments and patient requests moving smoothly${branch?` at ${branch.name}`:''}.`} aside={<Button onClick={()=>setPage('checkin')} icon="checkin">Check in patient</Button>}/>
     <div className="stats-grid">
       <StatCard label="Appointments today" value={todays.length} hint="Confirmed and pending" icon={<Icon name="calendar" size={18}/>}/>
-      <StatCard label="Waiting now" value={waiting.length} hint="Across active dentist queues" tone="blue" icon={<Icon name="queue" size={18}/>}/>
+      <StatCard label={serverQueue?'Awaiting treatment':'Waiting now'} value={serverQueue?(qCounts?qCounts.awaiting:qvis.mode==='loading'?'…':'Unavailable'):waiting.length} hint={serverQueue?(qCounts?'Waiting + Called + Treatment Ready':qvis.message):'Across active dentist queues'} tone="blue" icon={<Icon name="queue" size={18}/>}/>
       <StatCard label="HMO needs action" value={pendingHmo.length} hint={`${overdueHmo.length} beyond follow-up threshold`} tone="amber" icon={<Icon name="shield" size={18}/>}/>
       <StatCard label="Open inquiries" value={session?.serverUserId?(serverInquiries===null?'…':serverInquiries==='unavailable'?'Unavailable':serverInquiries):demoOpenInquiries.length} hint={session?.serverUserId&&serverInquiries==='unavailable'?'The inquiry count could not be loaded':'Assigned to you'} tone="purple" icon={<Icon name="message" size={18}/>}/>
     </div>
@@ -54,13 +63,13 @@ function StaffDashboard({ activeBranch, setPage, state, session }) {
       <Card title="Needs attention" subtitle="Exceptions before routine work">
         <div className="alert-list">
           {overdueHmo.length>0&&<div className="alert warning"><span className="alert-icon"><Icon name="shield" size={18}/></span><div><b>{overdueHmo.length} HMO case{overdueHmo.length>1?'s':''} overdue</b><span>Follow-up threshold has been reached.</span></div><button onClick={()=>setPage('hmo')}>Review</button></div>}
-          {waiting.length>0&&<div className="alert info"><span className="alert-icon"><Icon name="queue" size={18}/></span><div><b>{waiting.length} patient{waiting.length>1?'s':''} waiting</b><span>Monitor queue age and dentist availability.</span></div><button onClick={()=>setPage('queue')}>Open queue</button></div>}
+          {waitingCount>0&&<div className="alert info"><span className="alert-icon"><Icon name="queue" size={18}/></span><div><b>{waitingCount} patient{waitingCount>1?'s':''} {serverQueue?'awaiting treatment':'waiting'}</b><span>{serverQueue?'Waiting, called or ready for the Dentist.':'Monitor queue age and dentist availability.'}</span></div><button onClick={()=>setPage('queue')}>Open queue</button></div>}
           {openInquiries.length>0&&<div className="alert neutral"><span className="alert-icon"><Icon name="message" size={18}/></span><div><b>{openInquiries.length} open inquir{openInquiries.length>1?'ies':'y'}</b><span>Waiting for a recorded response.</span></div><button onClick={()=>setPage('inquiries')}>Respond</button></div>}
-          {!overdueHmo.length&&!waiting.length&&!openInquiries.length&&inquiryCountKnown&&<div className="alert success"><span className="alert-icon"><Icon name="shield" size={18}/></span><div><b>Everything is on track</b><span>No urgent operational exceptions right now.</span></div></div>}
+          {!overdueHmo.length&&!waitingCount&&(!serverQueue||qCounts)&&!openInquiries.length&&inquiryCountKnown&&<div className="alert success"><span className="alert-icon"><Icon name="shield" size={18}/></span><div><b>Everything is on track</b><span>No urgent operational exceptions right now.</span></div></div>}
         </div>
       </Card>
     </div>
-    <Card title="Capacity snapshot" subtitle="Live view of available chair-side capacity" className="top-gap"><div className="capacity-row-grid">{state.branches.filter(b=>activeBranch==='All Branches'||b.name===activeBranch).map(b=>{const c=branchCapacity(b.name,state);return <div key={b.id} className="capacity-tile"><div className="capacity-tile-head"><div><b>{b.name}</b><small>{b.city}</small></div><span className={c.overloaded?'risk':'healthy'}>{c.overloaded?'Attention':'Healthy'}</span></div><div className="capacity-main"><strong>{c.workload}%</strong><span>workload</span></div><Progress value={c.workload} threshold={c.threshold}/><div className="capacity-meta"><span>{c.activeDentists} dentists</span><span>{c.waiting} waiting</span><span>~{c.estimate} min</span></div></div>})}</div></Card>
+    {serverQueue?<div className="top-gap"><QueueByBranch store={store} activeBranch={activeBranch} vis={qvis} title="Live queue" actions={<button className="text-link" onClick={()=>setPage('queue')}>Open queue</button>}/></div>:<Card title="Capacity snapshot" subtitle="Live view of available chair-side capacity" className="top-gap"><div className="capacity-row-grid">{state.branches.filter(b=>activeBranch==='All Branches'||b.name===activeBranch).map(b=>{const c=branchCapacity(b.name,state);return <div key={b.id} className="capacity-tile"><div className="capacity-tile-head"><div><b>{b.name}</b><small>{b.city}</small></div><span className={c.overloaded?'risk':'healthy'}>{c.overloaded?'Attention':'Healthy'}</span></div><div className="capacity-main"><strong>{c.workload}%</strong><span>workload</span></div><Progress value={c.workload} threshold={c.threshold}/><div className="capacity-meta"><span>{c.activeDentists} dentists</span><span>{c.waiting} waiting</span><span>~{c.estimate} min</span></div></div>})}</div></Card>}
   </>
 }
 
@@ -89,29 +98,32 @@ function DentistDashboard({ setPage, state, session }) {
   </>
 }
 
-function OwnerDashboard({ activeBranch, setPage, state, session }) {
+function OwnerDashboard({ activeBranch, setPage, state, session, store }) {
   const branchData=state.branches.filter(b=>activeBranch==='All Branches'||b.name===activeBranch).map(b=>branchCapacity(b.name,state))
+  const qvis=useQueueVisibility(store)
+  const serverQueue=qvis.mode!=='demo'
+  const qCounts=qvis.mode==='ready'?countQueue(state.queue,{branchId:state.branches.find(b=>b.name===activeBranch)?.id??null,date:clinicNow().date}):null
   const appointments=state.appointments.filter(a=>a.date===clinicDate()&&a.status!=='Cancelled'&&(activeBranch==='All Branches'||a.branch===activeBranch))
   const pendingHmo=liveRecords(state.hmo).filter(h=>['Pending','Escalated'].includes(h.status)&&(activeBranch==='All Branches'||h.branch===activeBranch))
   // D5: revenue from legacy demo invoices (pre-cutover appointments) is excluded from live KPIs.
   const revenue=liveRecords(state.invoices).filter(i=>i.status==='Paid'&&(activeBranch==='All Branches'||i.branch===activeBranch)).reduce((s,i)=>s+i.total,0)
-  const exceptions=[...branchData.filter(c=>c.overloaded).map(c=>({title:`${c.branch} capacity exception`,detail:`${c.workload}% workload • ~${c.estimate} min wait`})),...pendingHmo.filter(h=>pendingHours(h,state.clock)>=12).map(h=>({title:'HMO follow-up threshold reached',detail:`${patientName(h.patientId,state.patients)} • ${h.provider} • ${pendingHours(h,state.clock).toFixed(1)}h pending`}))]
+  const exceptions=[...(serverQueue?[]:branchData.filter(c=>c.overloaded)).map(c=>({title:`${c.branch} capacity exception`,detail:`${c.workload}% workload • ~${c.estimate} min wait`})),...pendingHmo.filter(h=>pendingHours(h,state.clock)>=12).map(h=>({title:'HMO follow-up threshold reached',detail:`${patientName(h.patientId,state.patients)} • ${h.provider} • ${pendingHours(h,state.clock).toFixed(1)}h pending`}))]
   const maxLoad=Math.max(100,...branchData.map(x=>x.workload))
   return <>
     <PageHeader kicker="Owner overview" title="Executive dashboard" text="A focused view of clinic performance, exceptions and branch health." aside={<span className="context-chip"><Icon name="building" size={14}/>{activeBranch}</span>}/>
     <div className="stats-grid">
       <StatCard label="Appointments today" value={appointments.length} hint="Across visible branches" icon={<Icon name="calendar" size={18}/>}/>
-      <StatCard label="Waiting patients" value={branchData.reduce((s,c)=>s+c.waiting,0)} hint="Live patient flow" tone="blue" icon={<Icon name="queue" size={18}/>}/>
+      <StatCard label={serverQueue?'Awaiting treatment':'Waiting patients'} value={serverQueue?(qCounts?qCounts.awaiting:qvis.mode==='loading'?'…':'Unavailable'):branchData.reduce((s,c)=>s+c.waiting,0)} hint={serverQueue?(qCounts?'Waiting + Called + Treatment Ready':qvis.message):'Live patient flow'} tone="blue" icon={<Icon name="queue" size={18}/>}/>
       <StatCard label="HMO pending" value={pendingHmo.length} hint={`${pendingHmo.filter(h=>pendingHours(h,state.clock)>=12).length} beyond threshold`} tone="amber" icon={<Icon name="shield" size={18}/>}/>
       <StatCard label="Paid revenue" value={peso.format(revenue)} hint="Recorded demo transactions" tone="purple" icon={<Icon name="wallet" size={18}/>}/>
     </div>
     <div className="owner-dashboard-grid">
-      <Card title="Branch workload" subtitle="Compare patient flow and staffing at a glance" actions={<button className="text-link" onClick={()=>setPage('capacity')}>Capacity details</button>}>
+      {serverQueue?<QueueByBranch store={store} activeBranch={activeBranch} vis={qvis} actions={<button className="text-link" onClick={()=>setPage('capacity')}>Branch details</button>}/>:<Card title="Branch workload" subtitle="Compare patient flow and staffing at a glance" actions={<button className="text-link" onClick={()=>setPage('capacity')}>Capacity details</button>}>
         <div className="branch-chart">{branchData.map(c=><div className="branch-chart-row" key={c.branch}><div className="branch-chart-label"><b>{c.branch}</b><span>{c.activeDentists} dentists • {c.waiting} waiting</span></div><div className="branch-chart-bar"><span style={{width:`${Math.min(100,(c.workload/maxLoad)*100)}%`}}/></div><strong>{c.workload}%</strong></div>)}</div>
         <div className="chart-caption"><span><i className="healthy"/>Healthy</span><span>Updated from live queue and staffing data</span></div>
-      </Card>
+      </Card>}
       <Card title="Priority exceptions" subtitle="Only the issues that may need a decision" actions={<button className="text-link" onClick={()=>setPage('analytics')}>Open analytics</button>}>
-        <div className="exception-list">{exceptions.length?exceptions.slice(0,5).map((x,i)=><div className="exception-row" key={i}><span><Icon name="activity" size={17}/></span><div><b>{x.title}</b><small>{x.detail}</small></div><Icon name="chevron" size={16}/></div>):<div className="executive-clear"><span><Icon name="shield" size={22}/></span><div><b>No critical exceptions</b><small>Visible branches are operating within configured thresholds.</small></div></div>}</div>
+        <div className="exception-list">{exceptions.length?exceptions.slice(0,5).map((x,i)=><div className="exception-row" key={i}><span><Icon name="activity" size={17}/></span><div><b>{x.title}</b><small>{x.detail}</small></div><Icon name="chevron" size={16}/></div>):<div className="executive-clear"><span><Icon name="shield" size={22}/></span><div><b>No critical exceptions</b><small>{serverQueue?'No capacity or waiting-time limits are configured, so none are evaluated.':'Visible branches are operating within configured thresholds.'}</small></div></div>}</div>
       </Card>
     </div>
     <div className="cards-3 top-gap">

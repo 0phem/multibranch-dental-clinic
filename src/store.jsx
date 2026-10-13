@@ -17,6 +17,7 @@ import { fetchReferenceData, deriveDentistServiceAssignments } from './reference
 import * as appointmentsApi from './appointments-api.js'
 import * as visitsApi from './visits-api.js'
 import * as queueApi from './queue-api.js'
+import { createLatestGate } from './queue-counts.js'
 import * as treatmentsApi from './treatments-api.js'
 import * as hmoApi from './hmo-api.js'
 import { buildServerProjection, classifyLegacy, reanchorLocalEvidence } from './appointment-projection.js'
@@ -86,6 +87,8 @@ export function ClinicProvider({ children, initialReferenceData, initialServerAp
   const [appointmentsStatus,setAppointmentsStatus]=useState(initialServerAppointments?'ready':'idle')
   const [appointmentsError,setAppointmentsError]=useState('')
   const [appointmentsTruncated,setAppointmentsTruncated]=useState(false)
+  // M9: which clinic day the last successful, complete-or-flagged queue response covered (memory only). Counts are shown only from it.
+  const [queueSnapshot,setQueueSnapshot]=useState(null)
   const [directoryPatients,setDirectoryPatients]=useState([])
   // M8 cutover: Visits (Patient arrival / Clinical Encounter) are server-authoritative. `serverVisitRows` holds the
   // latest GET /api/visits result in memory only — never persisted, never written by a local command. The old
@@ -337,6 +340,7 @@ export function ClinicProvider({ children, initialReferenceData, initialServerAp
   const rowsRef=useRef(serverAppointmentRows)
   const visitRowsRef=useRef(serverVisitRows)
   const queueRowsRef=useRef(serverQueueRows)
+  const refreshGate=useRef(createLatestGate()).current
   const myQueueRef=useRef(myQueue)
   const treatmentRowsRef=useRef(serverTreatmentRows)
   const myTreatmentRowsRef=useRef(myTreatmentRows)
@@ -348,6 +352,7 @@ export function ClinicProvider({ children, initialReferenceData, initialServerAp
   // Patient Visit API yet, D9); a Patient loads only their own current queue state and own completed Treatment subset.
   const refreshAppointments=async()=>{
     if(!sessionRef.current)return {ok:false,kind:'unauthenticated'}
+    const token=refreshGate.begin()
     setAppointmentsStatus(status=>status==='ready'?status:'loading')
     const today=clinicNow().date
     const role=sessionRef.current.role
@@ -364,10 +369,14 @@ export function ClinicProvider({ children, initialReferenceData, initialServerAp
       role==='patient'?hmoApi.loadMyHmoCases():none,
       ['staff','owner'].includes(role)?hmoApi.loadClaimDecisions(today):none,
     ])
+    // A newer refresh (or a sign-out / session change) superseded this one while it was in flight: apply nothing, so an older
+    // response can never overwrite newer rows, a newer failure, or another session's store.
+    if(!refreshGate.isCurrent(token))return {ok:true,superseded:true}
     const failed=[result,visits,queue,mine,treated,myTreated,hmoCases,myHmo,decisions].find(r=>!r.ok)
     if(failed){setAppointmentsStatus('error');setAppointmentsError(failed.message);return failed}
     applyServerRows(result.rows,directoryRef.current,visits.rows,queue.rows,mine.data??null,treated.rows,myTreated.rows,hmoCases.rows,myHmo.rows,decisions.rows)
     setAppointmentsTruncated(result.truncated||visits.truncated||treated.truncated)
+    setQueueSnapshot(operational?{date:today,truncated:!!queue.truncated}:null)
     setMyTreatmentsCursor(myTreated.nextCursor??null)
     setAppointmentsError('')
     setAppointmentsStatus('ready')
@@ -404,12 +413,14 @@ export function ClinicProvider({ children, initialReferenceData, initialServerAp
   }
   const appointmentFlow=createAppointmentFlow({getState:()=>stateRef.current,getSession:()=>sessionRef.current,getActions:()=>actionsRef.current,refresh:refreshAppointments,searchPatients:searchPatientDirectory,addDirectoryPatient})
 
+  useEffect(()=>{refreshGate.invalidate()},[session?.serverUserId,session?.role])
+
   // Load server appointments after sign-in (once reference data is ready), and again when the window regains focus.
   useEffect(()=>{
     if(initialServerAppointments||initialServerVisits||initialServerQueue||initialServerTreatments||initialServerHmo)return
     if(!session?.role){
       rowsRef.current=[];visitRowsRef.current=[];queueRowsRef.current=[];myQueueRef.current=null;directoryRef.current=[];treatmentRowsRef.current=[];myTreatmentRowsRef.current=[];hmoRowsRef.current=[];myHmoRowsRef.current=[];claimDecisionRowsRef.current=[]
-      setServerAppointmentRows([]);setServerVisitRows([]);setServerQueueRows([]);setMyQueue(null);setMyTreatmentsCursor(null);setServerTreatmentRows([]);setMyTreatmentRows([]);setServerHmoRows([]);setMyHmoRows([]);setClaimDecisionRows([]);setDirectoryPatients([]);setAppointmentsStatus('idle');setAppointmentsError('')
+      setServerAppointmentRows([]);setServerVisitRows([]);setServerQueueRows([]);setMyQueue(null);setMyTreatmentsCursor(null);setServerTreatmentRows([]);setMyTreatmentRows([]);setServerHmoRows([]);setMyHmoRows([]);setClaimDecisionRows([]);setDirectoryPatients([]);setQueueSnapshot(null);setAppointmentsStatus('idle');setAppointmentsError('')
       return
     }
     if(refDataStatus!=='ready')return
@@ -442,7 +453,7 @@ export function ClinicProvider({ children, initialReferenceData, initialServerAp
     actionsRef.current?.reconcileTreatmentHandoffs()
   },[appointmentsStatus,serverTreatmentRows,serverVisitRows,session?.role])
 
-  const value=useMemo(()=>({state,setters,actions,appointmentFlow,appointmentsStatus,appointmentsError,appointmentsTruncated,myTreatmentsCursor,loadOlderTreatments,directoryPatients,toast,log,workflow,toasts,session,setSession,adoptSession,persistenceErrors,refDataStatus,retryReferenceData}),[persons,services,branchServices,dentistServiceAssignments,branches,dentists,staff,patients,serverAppointmentRows,serverVisitRows,serverQueueRows,myQueue,serverTreatmentRows,myTreatmentRows,serverHmoRows,myHmoRows,claimDecisionRows,directoryPatients,appointmentsStatus,appointmentsError,appointmentsTruncated,treatments,invoices,inquiries,conversations,notifications,prescriptions,followups,users,automations,workflowLog,campaigns,loyalty,audit,toasts,bookingDrafts,session,clock,persistenceErrors,refDataStatus])
+  const value=useMemo(()=>({state,setters,actions,appointmentFlow,appointmentsStatus,appointmentsError,appointmentsTruncated,queueSnapshot,myTreatmentsCursor,loadOlderTreatments,directoryPatients,toast,log,workflow,toasts,session,setSession,adoptSession,persistenceErrors,refDataStatus,retryReferenceData}),[queueSnapshot,persons,services,branchServices,dentistServiceAssignments,branches,dentists,staff,patients,serverAppointmentRows,serverVisitRows,serverQueueRows,myQueue,serverTreatmentRows,myTreatmentRows,serverHmoRows,myHmoRows,claimDecisionRows,directoryPatients,appointmentsStatus,appointmentsError,appointmentsTruncated,treatments,invoices,inquiries,conversations,notifications,prescriptions,followups,users,automations,workflowLog,campaigns,loyalty,audit,toasts,bookingDrafts,session,clock,persistenceErrors,refDataStatus])
   return <ClinicContext.Provider value={value}>{children}</ClinicContext.Provider>
 }
 

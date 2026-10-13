@@ -23,6 +23,8 @@ class QueueController extends Controller
 
     public function __construct(private readonly QueueService $queue) {}
 
+    public const LIST_LIMIT = 500;
+
     /** One clinic day's queue (default today), role-scoped; positions are computed by the server. */
     public function index(Request $request)
     {
@@ -41,10 +43,15 @@ class QueueController extends Controller
             })
             ->when($validated['status'] ?? null, fn ($q, $status) => $q->where('status', $status))
             ->orderBy('dentist_queue_id')->orderBy('queue_number')
-            ->limit(500)->get();
+            ->limit(self::LIST_LIMIT + 1)->get();
+        // M9: the list is bounded, and it says so. One extra row is read only to know whether the day was cut off, so
+        // a client never presents a cut-off list (or a zero) as complete.
+        $truncated = $entries->count() > self::LIST_LIMIT;
+        $entries = $entries->take(self::LIST_LIMIT)->values();
         $this->queue->withPositions($entries);
 
-        return QueueEntryResource::collection($entries);
+        return QueueEntryResource::collection($entries)
+            ->additional(['meta' => ['limit' => self::LIST_LIMIT, 'returned' => $entries->count(), 'truncated' => $truncated]]);
     }
 
     public function show(QueueEntry $queueEntry): QueueEntryResource

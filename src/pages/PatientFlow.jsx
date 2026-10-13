@@ -9,6 +9,7 @@ import { bookableBranches } from './Scheduling.jsx'
 
 import { clinicDate } from '../clock.js'
 import { PatientQueuePage } from './PatientVisits.jsx'
+import { QueueByBranch, QueueStatusCounts, useQueueVisibility } from './QueueCounts.jsx'
 import { encounterContext, inScope, isActiveQueue, isTodayQueue, sessionForRole } from '../contracts.js'
 
 // M8 front desk. Arrival is server-authoritative: a scheduled Check-In or a Walk-In opens a server Visit (the scheduled
@@ -156,12 +157,15 @@ export function QueuePage({ role, activeBranch, store, setPage }) {
     if(reason?.trim())run(entry,'Queue priority updated.',key=>flow.queuePriority(entry,'Urgent',reason.trim(),key))
   }
   const operational=['staff','owner'].includes(role)
+  const vis=useQueueVisibility(store)
+  const demo=vis.mode==='demo'
   useVisibleRefresh(flow?.refresh,{active:role!=='patient'})
   if (role==='patient') return <PatientQueuePage store={store} setPage={setPage}/>
   return <>
     <PageHeader title={role==='dentist'?'My Patient Queue':'Patient Queue'} text="The clinic server keeps the queue: numbers, order and positions update for everyone. Priority and arrival order decide positions inside each Dentist’s queue." aside={<Button variant="ghost" onClick={()=>flow?.refresh()}>Refresh</Button>}/>
     <Card title={role==='dentist'?'My queue filters':'Queue filters'} className="filter-card"><div className="filter-row"><label>Branch <select value={activeBranch} disabled><option>{activeBranch}</option></select></label>{role!=='dentist'&&<label>Dentist <select value={dentistFilter} onChange={e=>setDentistFilter(e.target.value)}><option>All Dentists</option>{state.dentists.filter(d=>role==='owner'||d.branchIds.includes(session.branchId)).map(d=><option key={d.id} value={d.id}>{d.name}</option>)}</select></label>}<label>Status <select value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}><option>Active</option><option>All</option><option>Waiting</option><option>Called</option><option>Treatment Ready</option><option>Temporarily Away</option><option value="Served">Served (treatment started)</option></select></label></div></Card>
     <AppointmentsLoadNotice store={store}/>
+    {!demo&&<QueueStatusCounts store={store} activeBranch={role==='owner'?activeBranch:'All Branches'} vis={vis}/>}
     {role==='staff'&&<Notice tone="info">A patient in the queue has already checked in. Marking them as having left or cancelling their visit isn’t available yet — the clinic still needs to decide how an admitted visit is closed. A patient who never arrived is marked No-show from Appointments.</Notice>}
     <Card title="Live queue" subtitle="Priority and checked-in order determine positions inside each dentist queue." className="top-gap">
       <Table rows={visible} columns={[
@@ -170,7 +174,7 @@ export function QueuePage({ role, activeBranch, store, setPage }) {
         {key:'patient',label:'Patient',render:q=><div><b>{q.patientName||patientName(q.patientId,state.patients)}</b><small className="block-muted">{q.priority} priority{q.priorityReason?` (${q.priorityReason})`:''} • {q.appointmentCode||(q.walkIn?'Walk-in visit':'Scheduled visit')}</small></div>},
         {key:'branch',label:'Branch'},{key:'dentist',label:'Dentist',render:q=>dentistName(q.dentistId,state.dentists)},
         {key:'checkedIn',label:'Checked in',render:q=>displayTime(q.checkedIn)},
-        {key:'wait',label:'Est. wait',render:q=>`${queueWaitEstimate(q,state.queue,state.appointments,state.treatments,state.dentists)} min`},
+        ...(demo?[{key:'wait',label:'Est. wait (demo)',render:q=>`${queueWaitEstimate(q,state.queue,state.appointments,state.treatments,state.dentists)} min`}]:[]),
         {key:'status',label:'Status',render:q=><Status>{q.displayStatus||q.status}</Status>},
         {key:'actions',label:'Actions',render:q=><div className="row-actions">
           {q.status==='Waiting'&&(operational||role==='dentist')&&<Button size="sm" variant="soft" disabled={!!busy} onClick={()=>update(q,'call','Patient called.')}>Call patient</Button>}
@@ -190,12 +194,20 @@ export function QueuePage({ role, activeBranch, store, setPage }) {
 }
 
 export function CapacityPage({ activeBranch, store }) {
+  const vis=useQueueVisibility(store)
+  useVisibleRefresh(store.appointmentFlow?.refresh,{active:vis.mode!=='demo'})
+  // Clinic-server session: only factual queue counts. The workload %, thresholds, waiting-time estimates and cross-branch
+  // alternatives below are unapproved prototype estimators and stay in the labelled offline demo only.
+  if(vis.mode!=='demo')return <>
+    <PageHeader title="Live Queue by Branch" text="Counts of today’s queue entries by status, from the clinic server. The clinic has not approved waiting-time estimates, workload percentages or capacity limits, so none is shown."/>
+    <QueueByBranch store={store} activeBranch={activeBranch} vis={vis} title="Today’s queue"/>
+  </>
   const { state }=store
   const branches=state.branches.filter(b=>activeBranch==='All Branches'||b.name===activeBranch)
   const cards=branches.map(b=>branchCapacity(b.name,state))
   const alternatives=state.branches.filter(b=>b.status==='Open'&&(activeBranch==='All Branches'||b.name!==activeBranch)).map(b=>branchCapacity(b.name,state)).filter(c=>c.activeDentists>0&&!c.overloaded).sort((a,b)=>a.workload-b.workload)
   return <>
-    <PageHeader title="Waiting-Time & Cross-Branch Capacity" text="Aggregate flow monitoring remains separate from individual queue ordering. It combines live queue load, active dentist capacity, bookings, and configurable branch thresholds."/>
+    <PageHeader title="Waiting-Time & Cross-Branch Capacity (offline demo)" text="Offline demo estimates only, not clinic policy. Aggregate flow monitoring remains separate from individual queue ordering. It combines live queue load, active dentist capacity, bookings, and configurable branch thresholds."/>
     <div className="cards-3">{cards.map(c=><Card key={c.branch} title={c.branch} subtitle={`Threshold ${c.threshold}%`}><div className="capacity-number">{c.workload}% <span>workload</span></div><Progress value={c.workload} threshold={c.threshold}/><div className="metric-list"><Metric label="Active dentists" value={c.activeDentists}/><Metric label="Waiting" value={c.waiting}/><Metric label="Treatment-ready" value={c.ready}/><Metric label="Booked today" value={c.booked}/><Metric label="Estimated wait" value={`${c.estimate} min`}/></div>{c.overloaded?<Notice tone="warning" title="Capacity risk detected">Front desk and owner should be alerted and shown available capacity at another branch.</Notice>:<Notice tone="success">Branch is currently below its configured demo threshold.</Notice>}</Card>)}</div>
     <Card className="top-gap" title="Cross-branch alternatives" subtitle="Shown when a branch exceeds waiting-time or staffing thresholds">{alternatives.length?<div className="alternative-grid">{alternatives.map(c=><div className="alternative-card" key={c.branch}><b>{c.branch}</b><span>{c.workload}% load</span><small>{c.activeDentists} dentists • ~{c.estimate} min wait</small></div>)}</div>:<Notice tone="warning">No branch is currently below its capacity threshold.</Notice>}</Card>
   </>

@@ -1,5 +1,6 @@
 import * as api from './api-client.js'
 import { normalizeFailure } from './appointments-api.js'
+import { isTruncatedQueueResponse } from './queue-counts.js'
 
 // M9 queue client. Laravel/PostgreSQL is the ONLY queue authority: entries are created by the server with the M8
 // arrival, numbered and ordered by the server, and changed only by named commands (Idempotency-Key + expected_revision).
@@ -48,7 +49,11 @@ export function mapQueueEntry(row, patientIdFor = id => id) {
 export async function loadQueue(today) {
   const result = await api.listQueue({ date: today })
   if (!result.ok) return normalizeFailure(result)
-  return { ok: true, rows: result.data || [] }
+  const rows = result.data || []
+  // The server reports whether the bounded list was cut off (meta.truncated). An older server without that metadata is
+  // judged by the row cap: a response at the cap may be cut off and is flagged, never treated as complete.
+  const truncated = typeof result.meta?.truncated === 'boolean' ? result.meta.truncated : isTruncatedQueueResponse(rows)
+  return { ok: true, rows, truncated }
 }
 
 /** The signed-in Patient's own current queue state (or null). No other Patient's data and no wait estimate. */

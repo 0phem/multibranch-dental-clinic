@@ -220,7 +220,9 @@ class QueueTest extends TestCase
         $this->command($entry, 'call')->assertStatus(422)->assertJsonPath('code', 'not_today');
         $this->command($entry, 'priority', null, null, ['priority' => 'Urgent', 'reason' => 'x'])->assertStatus(422)->assertJsonPath('code', 'not_today');
         $this->getJson('/api/queue')->assertOk()->assertJsonCount(0, 'data');
-        $this->getJson('/api/queue?date=2026-09-28')->assertOk()->assertJsonCount(1, 'data');
+        $this->getJson('/api/queue?date=2026-09-28')->assertOk()->assertJsonCount(1, 'data')
+            // M9: the bounded list states whether it was cut off, so clients never treat a cut-off day as complete.
+            ->assertJsonPath('meta.limit', 500)->assertJsonPath('meta.returned', 1)->assertJsonPath('meta.truncated', false);
     }
 
     // ---- TREATMENT HANDOFF -----------------------------------------------------------------------------------------

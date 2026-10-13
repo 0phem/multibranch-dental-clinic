@@ -31,8 +31,10 @@ const GROUPS={
   owner:[['Overview',['dashboard','analytics']],['Operations',['branches','team','capacity','hmo']],['Administration',['users','pricing','automation','audit','engagement']]],
 }
 
-function navGroups(role){
-  const lookup=Object.fromEntries(NAV[role].map(([key,label])=>[key,label]))
+// In a clinic-server session the capacity page is the factual live-queue view (src/pages/QueueCounts.jsx); the
+// "Capacity"/"Workload" labels belong to the offline demo's estimators and are not shown for server sessions.
+function navGroups(role,serverSession=false){
+  const lookup=Object.fromEntries(NAV[role].map(([key,label])=>[key,serverSession&&key==='capacity'?'Live Queue by Branch':label]))
   return GROUPS[role].map(([title,keys])=>[title,keys.filter(k=>lookup[k]).map(k=>[k,lookup[k]])]).filter(([,items])=>items.length)
 }
 
@@ -132,7 +134,7 @@ export function Shell({ role, page, setPage, onLogout, activeBranch, setActiveBr
   const name=account?.name||session?.name||info.label
   const initials=name.split(' ').map(x=>x[0]).filter(Boolean).slice(0,2).join('')
   const unread=visibleNotifications(store.state,session).filter(n=>!n.read).length
-  const groups=navGroups(role).map(([title,items])=>[title,items.filter(([key])=>canAccessPage(store.state,session,key))]).filter(([,items])=>items.length)
+  const groups=navGroups(role,!!session?.serverUserId).map(([title,items])=>[title,items.filter(([key])=>canAccessPage(store.state,session,key))]).filter(([,items])=>items.length)
   // M17: in a clinic-server session the unread badge comes ONLY from the server (null = not known yet / unavailable: no badge, never a number).
   const [serverUnread,setServerUnread]=React.useState(null)
   React.useEffect(()=>{
