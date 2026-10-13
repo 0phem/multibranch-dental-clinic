@@ -50,16 +50,20 @@ class IdentityBridgeTest extends TestCase
 
     public function test_registration_links_user_person_and_patient_and_me_returns_the_public_patient(): void
     {
+        // Registration answers only "check your email" (anti-enumeration); the public patient appears once verified.
         $data = $this->register()->assertCreated()->json('data');
-        $this->assertNoInternalIds($data);
+        $this->assertSame(['email', 'verification_required', 'resend_available_at'], array_keys($data));
 
-        $user = User::where('public_id', $data['id'])->firstOrFail();
+        $user = User::where('email', 'jamie.cruz@example.com')->firstOrFail();
         $patient = Patient::where('person_id', $user->person_id)->firstOrFail();
         $this->assertSame($user->person_id, $patient->person_id, 'User and Patient share one Person');
-        $this->assertSame(['id' => $patient->public_id, 'code' => $patient->patient_code], $data['patient']);
         $this->assertSame(1, Patient::where('person_id', $user->person_id)->count());
-
         $this->getJson('/api/me')->assertUnauthorized();
+        $user->forceFill(['email_verified_at' => now()])->save();
+        $me = $this->postJson('/api/login', ['email' => $user->email, 'password' => 'Passw0rd!'])->assertOk()->json('data');
+        $this->assertNoInternalIds($me);
+        $this->assertSame($user->public_id, $me['id']);
+        $this->assertSame(['id' => $patient->public_id, 'code' => $patient->patient_code], $me['patient']);
     }
 
     public function test_login_resolves_the_correct_patient(): void
@@ -109,13 +113,13 @@ class IdentityBridgeTest extends TestCase
         Patient::create(['person_id' => $this->u['patientA']->person_id, 'patient_code' => 'PAT-0100', 'consent' => true]);
     }
 
-    public function test_duplicate_registration_is_rejected_without_creating_records(): void
+    public function test_duplicate_registration_creates_no_records_and_answers_like_a_new_one(): void
     {
-        $this->register()->assertCreated();
-        $this->postJson('/api/logout');
+        $first = $this->register()->assertCreated()->json('data');
         $before = [User::withTrashed()->count(), Person::count(), Patient::count()];
-        $this->register(['phone' => '+639179999999', 'first_name' => 'Other', 'date_of_birth' => '1990-01-01'])
-            ->assertStatus(422)->assertJsonValidationErrors('email');
+        $second = $this->register(['phone' => '+639179999999', 'first_name' => 'Other', 'date_of_birth' => '1990-01-01'])
+            ->assertCreated()->json('data');
+        $this->assertSame(array_keys($first), array_keys($second));
         $this->assertSame($before, [User::withTrashed()->count(), Person::count(), Patient::count()]);
     }
 

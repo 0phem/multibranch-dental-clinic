@@ -4,7 +4,6 @@ namespace App\Http\Requests\Auth;
 
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rules\Password;
-use Illuminate\Validation\Rule;
 use libphonenumber\PhoneNumberUtil;
 use libphonenumber\NumberParseException;
 use libphonenumber\PhoneNumberFormat;
@@ -33,7 +32,9 @@ class RegisterPatientRequest extends FormRequest
         return [
             'first_name' => ['required', 'string', 'max:100'],
             'last_name' => ['required', 'string', 'max:100'],
-            'email' => ['required', 'email:rfc', 'max:255', Rule::unique('users', 'email'), Rule::unique('persons', 'email')],
+            // No uniqueness rule: an already-registered address must get the same answer as a new one (anti-enumeration);
+            // RegisteredPatientController handles it under the registration lock.
+            'email' => ['required', 'email:rfc', 'max:255'],
             // Patient contact only; the browser submits normalized E.164 and the server validates it.
             'phone' => ['required', function (string $attribute, mixed $value, \Closure $fail): void {
                 if (! is_string($value) || ! preg_match('/^\+[1-9]\d{1,14}$/', $value)) {

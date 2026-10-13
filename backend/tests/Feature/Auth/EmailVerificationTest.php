@@ -2,7 +2,8 @@
 
 namespace Tests\Feature\Auth;
 
-use App\Mail\PatientEmailVerificationOtp;
+use App\Mail\OneTimeCodeMail;
+use App\Models\MailDispatch;
 use App\Models\EmailVerificationOtp;
 use App\Models\User;
 use Carbon\Carbon;
@@ -31,7 +32,7 @@ class EmailVerificationTest extends TestCase
         Mail::fake();
         $response = $this->postJson('/api/register', $this->payload($overrides))->assertCreated();
         $code = null;
-        Mail::assertSent(PatientEmailVerificationOtp::class, function (PatientEmailVerificationOtp $mail) use (&$code): bool {
+        Mail::assertSent(OneTimeCodeMail::class, function (OneTimeCodeMail $mail) use (&$code): bool {
             $code = $mail->code;
             return true;
         });
@@ -43,7 +44,7 @@ class EmailVerificationTest extends TestCase
     {
         [$data, $code, $user] = $this->register();
 
-        $this->assertSame('patient', $data['role']);
+        $this->assertSame('jamie@example.com', $data['email']);
         $this->assertTrue($data['verification_required']);
         $this->assertArrayNotHasKey('otp', $data);
         $otp = EmailVerificationOtp::firstOrFail();
@@ -56,7 +57,7 @@ class EmailVerificationTest extends TestCase
     public function test_registration_mail_goes_to_the_new_patient_email(): void
     {
         $this->register(['email' => 'patient.unique@example.test']);
-        Mail::assertSent(PatientEmailVerificationOtp::class, function (PatientEmailVerificationOtp $mail): bool {
+        Mail::assertSent(OneTimeCodeMail::class, function (OneTimeCodeMail $mail): bool {
             return $mail->hasTo('patient.unique@example.test');
         });
     }
@@ -92,13 +93,13 @@ class EmailVerificationTest extends TestCase
     public function test_resend_invalidates_previous_code_and_enforces_cooldown(): void
     {
         [$data, $oldCode, $user] = $this->register();
-        RateLimiter::clear('email-otp-resend:'.sha1($user->email.'|'.$this->app['request']->ip()));
+        RateLimiter::clear('otp-send:hour:'.sha1($user->email.'|'.$this->app['request']->ip()));
         $this->postJson('/api/register/resend', ['email' => $user->email])->assertStatus(429)->assertJsonPath('code', 'otp_resend_cooldown');
         Carbon::setTestNow(now()->addSeconds(61));
         Mail::fake();
         $this->postJson('/api/register/resend', ['email' => $user->email])->assertOk();
         $newCode = null;
-        Mail::assertSent(PatientEmailVerificationOtp::class, function (PatientEmailVerificationOtp $mail) use (&$newCode): bool {
+        Mail::assertSent(OneTimeCodeMail::class, function (OneTimeCodeMail $mail) use (&$newCode): bool {
             $newCode = $mail->code;
             return true;
         });
@@ -114,7 +115,7 @@ class EmailVerificationTest extends TestCase
     public function test_resend_rate_limit_blocks_excessive_requests(): void
     {
         [, , $user] = $this->register();
-        $key = 'email-otp-resend:'.sha1($user->email.'|'.$this->app['request']->ip());
+        $key = 'otp-send:hour:'.sha1($user->email.'|'.$this->app['request']->ip());
         RateLimiter::clear($key);
         Carbon::setTestNow(now()->addSeconds(61));
 
@@ -137,11 +138,14 @@ class EmailVerificationTest extends TestCase
         $this->postJson('/api/login', ['email' => $user->email, 'password' => 'Passw0rd!'])->assertOk();
     }
 
-    public function test_mail_failure_is_not_reported_as_successful_registration(): void
+    public function test_mail_failure_is_recorded_truthfully_and_never_claimed_as_sent(): void
     {
+        // The code email goes through the queue after commit, so the answer is "check your email" either way; the failure
+        // is recorded on the dispatch row (and the person can ask for a new code), never reported as sent.
         Mail::shouldReceive('to')->once()->andThrow(new RuntimeException('smtp unavailable'));
-        $this->postJson('/api/register', $this->payload(['email' => 'mail-failure@example.com']))
-            ->assertStatus(503)->assertJsonPath('code', 'email_delivery_failed');
+        $this->postJson('/api/register', $this->payload(['email' => 'mail-failure@example.com']))->assertCreated();
         $this->assertNull(User::where('email', 'mail-failure@example.com')->first()->email_verified_at);
+        $dispatch = MailDispatch::where('purpose', 'patient_email_verification')->sole();
+        $this->assertSame(['failed', 'not_retryable', false], [$dispatch->status, $dispatch->failure_reason, $dispatch->retryable]);
     }
 }

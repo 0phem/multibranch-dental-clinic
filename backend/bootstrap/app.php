@@ -34,7 +34,11 @@ return Application::configure(basePath: dirname(__DIR__))
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->render(function (\Throwable $exception, Request $request) {
-            if (! $request->is('api/login', 'api/logout', 'api/me', 'api/register', 'api/register/*', 'api/users', 'api/users/*')) return null;
+            // M1: production refuses to "send" account email (codes, security notices) to a log-only mailer; nothing was committed.
+            if ($exception instanceof \App\Exceptions\MailTransportUnavailable) {
+                return response()->json(['message' => 'We could not send the email. Please try again later.', 'code' => 'email_delivery_failed'], 503);
+            }
+            if (! $request->is('api/login', 'api/logout', 'api/me', 'api/register', 'api/register/*', 'api/password/*', 'api/account/*', 'api/users', 'api/users/*')) return null;
             if ($exception instanceof \Illuminate\Database\UniqueConstraintViolationException) {
                 return response()->json(['message' => 'This account information is already in use.', 'errors' => ['email' => ['This account information is already in use.']]], 422);
             }

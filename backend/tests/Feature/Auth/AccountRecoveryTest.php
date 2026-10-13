@@ -1,0 +1,351 @@
+<?php
+
+namespace Tests\Feature\Auth;
+
+use App\Enums\Role;
+use App\Mail\OneTimeCodeMail;
+use App\Mail\SecurityNoticeMail;
+use App\Models\AuditLog;
+use App\Models\EmailVerificationOtp;
+use App\Models\MailDispatch;
+use App\Models\Person;
+use App\Models\User;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\RateLimiter;
+use Laravel\Sanctum\Sanctum;
+use Tests\TestCase;
+
+/** M1 Priority 1: registration anti-enumeration, send caps, queued once-only codes, password reset and email change. */
+class AccountRecoveryTest extends TestCase
+{
+    use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        Mail::fake();
+    }
+
+    private function payload(array $overrides = []): array
+    {
+        return array_merge([
+            'first_name' => 'Jamie', 'last_name' => 'Cruz', 'email' => 'jamie@example.com', 'phone' => '+14155550123',
+            'date_of_birth' => '1995-04-12', 'password' => 'Passw0rd!', 'password_confirmation' => 'Passw0rd!',
+        ], $overrides);
+    }
+
+    private function account(Role $role = Role::Patient, array $attributes = []): User
+    {
+        $user = User::factory()->role($role)->create($attributes + ['password' => Hash::make('Passw0rd!')]);
+
+        return $user->fresh();
+    }
+
+    /** The code of the newest OneTimeCodeMail sent to $to (Mail::fake keeps it; the database never does). */
+    private function codeSentTo(string $to): string
+    {
+        return Mail::sent(OneTimeCodeMail::class, fn ($m) => $m->hasTo($to))->last()->code;
+    }
+
+    private function clearLimits(string $email): void
+    {
+        RateLimiter::clear('otp-send:day:'.sha1($email));
+        RateLimiter::clear('otp-send:hour:'.sha1($email.'|127.0.0.1'));
+    }
+
+    // ---- registration enumeration ---------------------------------------------------------------------------
+
+    public function test_an_existing_email_gets_the_identical_answer_and_its_owner_gets_a_notice_instead(): void
+    {
+        $existing = $this->account();
+        $new = $this->postJson('/api/register', $this->payload(['email' => 'brand.new@example.com', 'phone' => '+639171234567']))->assertCreated();
+        $dup = $this->postJson('/api/register', $this->payload(['email' => strtoupper($existing->email), 'password' => 'Other1234', 'password_confirmation' => 'Other1234']))->assertCreated();
+
+        $shape = fn ($r) => [$r->status(), array_keys($r->json()), array_keys($r->json('data')), $r->json('data.verification_required')];
+        $this->assertSame($shape($new), $shape($dup));
+        $this->assertSame(1, User::where('email', $existing->email)->count(), 'no second account');
+        $this->assertTrue(Hash::check('Passw0rd!', $existing->fresh()->password), 'the submitted password is discarded');
+        Mail::assertSent(SecurityNoticeMail::class, fn ($m) => $m->hasTo($existing->email) && $m->kind === 'registration_attempt');
+        Mail::assertNotSent(OneTimeCodeMail::class, fn ($m) => $m->hasTo($existing->email));
+        $audit = AuditLog::where('action', 'account.registration_attempt_existing')->sole();
+        $this->assertSame(['has_usable_account' => true], $audit->payload);
+        $this->assertStringNotContainsString($existing->email, json_encode($audit->payload));
+    }
+
+    public function test_an_email_on_file_without_a_usable_account_gets_the_contact_the_clinic_notice(): void
+    {
+        Person::create(['first_name' => 'Walk', 'last_name' => 'In', 'email' => 'walkin@example.com', 'phone' => '+639170000001']);
+        $suspended = $this->account(Role::Patient, ['account_status' => 'Suspended']);
+        foreach (['walkin@example.com', $suspended->email] as $email) {
+            $this->postJson('/api/register', $this->payload(['email' => $email]))->assertCreated();
+            Mail::assertSent(SecurityNoticeMail::class, fn ($m) => $m->hasTo($email) && $m->kind === 'registration_attempt_record');
+        }
+        $this->assertSame(0, User::where('email', 'walkin@example.com')->count());
+    }
+
+    // ---- caps -------------------------------------------------------------------------------------------------
+
+    public function test_daily_cap_of_ten_sends_per_email_across_purposes_and_addresses(): void
+    {
+        $user = $this->account();
+        config(['clinic.otp_hourly_per_email_ip' => 100]);
+        for ($i = 0; $i < 10; $i++) {
+            $this->travel(61)->seconds();
+            $this->withServerVariables(['REMOTE_ADDR' => "10.0.0.$i"])->postJson('/api/password/forgot', ['email' => $user->email])->assertOk();
+        }
+        $this->travel(61)->seconds();
+        $this->withServerVariables(['REMOTE_ADDR' => '10.0.0.99'])->postJson('/api/password/forgot', ['email' => $user->email])
+            ->assertStatus(429)->assertJsonPath('code', 'otp_rate_limited');
+        $this->withServerVariables(['REMOTE_ADDR' => '10.0.0.98'])->postJson('/api/register', $this->payload(['email' => $user->email]))->assertStatus(429);
+        // An address with no account is limited the same way, so the limit reveals nothing either.
+        for ($i = 0; $i < 10; $i++) $this->postJson('/api/password/forgot', ['email' => "nobody$i@example.com"]);
+        $this->assertSame(10, EmailVerificationOtp::where('purpose', 'password_reset')->count());
+        $this->travel(1)->days();
+        $this->postJson('/api/password/forgot', ['email' => $user->email])->assertOk();
+    }
+
+    public function test_hourly_cap_per_email_and_ip(): void
+    {
+        $user = $this->account();
+        for ($i = 0; $i < 5; $i++) {
+            $this->travel(61)->seconds();
+            $this->postJson('/api/password/forgot', ['email' => $user->email])->assertOk();
+        }
+        $this->postJson('/api/password/forgot', ['email' => $user->email])->assertStatus(429);
+        $this->withServerVariables(['REMOTE_ADDR' => '10.9.9.9'])->postJson('/api/password/forgot', ['email' => $user->email])->assertOk();
+    }
+
+    // ---- queued, once, after commit -----------------------------------------------------------------------------
+
+    public function test_codes_are_queued_encrypted_after_commit_and_sent_once(): void
+    {
+        config(['queue.default' => 'database']);
+        $this->postJson('/api/register', $this->payload())->assertCreated();
+        Mail::assertNothingSent();
+        $job = DB::table('jobs')->where('queue', 'mail')->sole();
+        $otp = EmailVerificationOtp::sole();
+        $this->assertStringNotContainsString('jamie@example.com', $job->payload, 'the queued payload is encrypted');
+        $dispatch = MailDispatch::where('purpose', 'patient_email_verification')->sole();
+        $this->assertSame(['pending', false, 1], [$dispatch->status, $dispatch->retryable, $dispatch->max_attempts]);
+
+        $this->artisan('queue:work', ['connection' => 'database', '--queue' => 'mail', '--once' => true, '--stop-when-empty' => true]);
+        Mail::assertSent(OneTimeCodeMail::class, fn ($m) => $m->hasTo('jamie@example.com') && Hash::check($m->code, $otp->digest));
+        $this->assertSame('logged_only', $dispatch->fresh()->status);
+        $this->assertSame(0, DB::table('jobs')->count());
+        $this->assertSame(0, DB::table('failed_jobs')->count());
+        $this->assertSame([], app(\App\Services\Mail\MailOutbox::class)->processDue(), 'the sweeper never retries a code');
+    }
+
+    public function test_a_failed_send_is_recorded_once_and_never_copied_to_failed_jobs(): void
+    {
+        config(['queue.default' => 'database']);
+        $this->postJson('/api/register', $this->payload())->assertCreated();
+        Mail::shouldReceive('to')->andThrow(new \RuntimeException('smtp down'));
+        $this->artisan('queue:work', ['connection' => 'database', '--queue' => 'mail', '--once' => true, '--stop-when-empty' => true]);
+        $dispatch = MailDispatch::sole();
+        $this->assertSame(['failed', 1, 'not_retryable'], [$dispatch->status, $dispatch->attempts, $dispatch->failure_reason]);
+        $this->assertSame(0, DB::table('failed_jobs')->count());
+        $this->assertSame(0, DB::table('jobs')->count());
+    }
+
+    public function test_a_code_replaced_before_its_job_ran_is_not_sent(): void
+    {
+        config(['queue.default' => 'database']);
+        $this->postJson('/api/register', $this->payload())->assertCreated();
+        $this->travel(61)->seconds();
+        $this->postJson('/api/register/resend', ['email' => 'jamie@example.com'])->assertOk();
+        $this->artisan('queue:work', ['connection' => 'database', '--queue' => 'mail', '--stop-when-empty' => true]);
+        $this->assertSame(['superseded', 'logged_only'], MailDispatch::orderBy('id')->pluck('status')->all());
+        Mail::assertSent(OneTimeCodeMail::class, 1);
+    }
+
+    public function test_a_rolled_back_registration_queues_nothing(): void
+    {
+        config(['queue.default' => 'database']);
+        $this->postJson('/api/register', $this->payload())->assertCreated();
+        // A second person whose phone matches is refused inside the transaction: no account, no intent, no job.
+        $this->postJson('/api/register', $this->payload(['email' => 'other@example.com']))->assertStatus(422);
+        $this->assertSame(1, MailDispatch::count());
+        $this->assertSame(1, DB::table('jobs')->count());
+    }
+
+    public function test_production_without_a_real_transport_refuses_before_writing_anything(): void
+    {
+        $this->withoutMiddleware(\Illuminate\Foundation\Http\Middleware\ValidateCsrfToken::class); // CSRF is only skipped automatically under 'testing'
+        $this->app->instance('env', 'production');
+        config(['mail.default' => 'log']);
+        try {
+            $this->postJson('/api/register', $this->payload())->assertStatus(503)->assertJsonPath('code', 'email_delivery_failed');
+        } finally {
+            $this->app->instance('env', 'testing');
+        }
+        $this->assertSame([0, 0, 0], [User::count(), Person::count(), MailDispatch::count()]);
+    }
+
+    // ---- password reset ---------------------------------------------------------------------------------------
+
+    public function test_forgot_gives_one_answer_for_known_and_unknown_emails(): void
+    {
+        $user = $this->account();
+        $known = $this->postJson('/api/password/forgot', ['email' => $user->email])->assertOk();
+        $unknown = $this->postJson('/api/password/forgot', ['email' => 'nobody@example.com'])->assertOk();
+        $this->assertSame($known->json('message'), $unknown->json('message'));
+        $this->assertSame(array_keys($known->json('data')), array_keys($unknown->json('data')));
+        Mail::assertSent(OneTimeCodeMail::class, 1);
+        Mail::assertSent(OneTimeCodeMail::class, fn ($m) => $m->hasTo($user->email) && $m->purpose === 'password_reset');
+    }
+
+    public function test_reset_with_the_code_changes_the_password_signs_out_and_sends_a_notice(): void
+    {
+        $user = $this->account();
+        DB::table('sessions')->insert(['id' => 'old-session', 'user_id' => $user->id, 'payload' => '', 'last_activity' => time()]);
+        $version = $user->auth_version;
+        $this->postJson('/api/password/forgot', ['email' => $user->email])->assertOk();
+        $code = $this->codeSentTo($user->email);
+
+        $this->postJson('/api/password/reset', ['email' => $user->email, 'otp' => $code, 'password' => 'NewPassw0rd', 'password_confirmation' => 'NewPassw0rd'])->assertOk();
+        $fresh = $user->fresh();
+        $this->assertTrue(Hash::check('NewPassw0rd', $fresh->password));
+        $this->assertGreaterThan($version, $fresh->auth_version);
+        $this->assertSame(0, DB::table('sessions')->where('user_id', $user->id)->count());
+        Mail::assertSent(SecurityNoticeMail::class, fn ($m) => $m->hasTo($user->email) && $m->kind === 'password_changed');
+        $this->postJson('/api/password/reset', ['email' => $user->email, 'otp' => $code, 'password' => 'Again1234x', 'password_confirmation' => 'Again1234x'])
+            ->assertStatus(422)->assertJsonPath('code', 'otp_expired'); // single use
+        $this->postJson('/api/login', ['email' => $user->email, 'password' => 'NewPassw0rd'])->assertOk();
+        $this->assertSame(['auth.password_reset_requested', 'auth.password_reset_completed'],
+            AuditLog::whereIn('action', ['auth.password_reset_requested', 'auth.password_reset_completed'])->orderBy('id')->pluck('action')->all());
+        $this->assertStringNotContainsString($code, AuditLog::all()->toJson());
+    }
+
+    public function test_reset_rejects_wrong_expired_and_exhausted_codes_and_unknown_accounts(): void
+    {
+        $user = $this->account();
+        $this->postJson('/api/password/forgot', ['email' => $user->email]);
+        $code = $this->codeSentTo($user->email);
+        $wrong = $code === '000000' ? '111111' : '000000';
+        $body = fn ($otp, $email = null) => ['email' => $email ?? $user->email, 'otp' => $otp, 'password' => 'NewPassw0rd', 'password_confirmation' => 'NewPassw0rd'];
+        $this->postJson('/api/password/reset', $body($code, 'nobody@example.com'))->assertStatus(422)->assertJsonPath('code', 'invalid_otp');
+        for ($i = 0; $i < 4; $i++) $this->postJson('/api/password/reset', $body($wrong))->assertStatus(422)->assertJsonPath('code', 'invalid_otp');
+        $this->postJson('/api/password/reset', $body($wrong))->assertStatus(422)->assertJsonPath('code', 'otp_attempt_limit');
+        $this->postJson('/api/password/reset', $body($code))->assertStatus(422);
+        $this->assertTrue(Hash::check('Passw0rd!', $user->fresh()->password));
+
+        $this->travel(61)->seconds();
+        $this->postJson('/api/password/forgot', ['email' => $user->email]);
+        $code = $this->codeSentTo($user->email);
+        $this->travel(11)->minutes();
+        $this->postJson('/api/password/reset', $body($code))->assertStatus(422)->assertJsonPath('code', 'otp_expired');
+    }
+
+    public function test_a_new_code_invalidates_the_previous_one(): void
+    {
+        $user = $this->account();
+        $this->postJson('/api/password/forgot', ['email' => $user->email]);
+        $first = $this->codeSentTo($user->email);
+        $this->postJson('/api/password/forgot', ['email' => $user->email])->assertOk(); // inside the 60 s wait: no new code
+        $this->assertSame(1, EmailVerificationOtp::count());
+        $this->travel(61)->seconds();
+        $this->postJson('/api/password/forgot', ['email' => $user->email]);
+        $second = $this->codeSentTo($user->email);
+        if ($first !== $second) {
+            $this->postJson('/api/password/reset', ['email' => $user->email, 'otp' => $first, 'password' => 'NewPassw0rd', 'password_confirmation' => 'NewPassw0rd'])->assertStatus(422);
+        }
+        $this->postJson('/api/password/reset', ['email' => $user->email, 'otp' => $second, 'password' => 'NewPassw0rd', 'password_confirmation' => 'NewPassw0rd'])->assertOk();
+    }
+
+    public function test_employees_can_reset_but_invited_and_suspended_accounts_get_no_code(): void
+    {
+        $staff = $this->account(Role::Staff);
+        $invited = $this->account(Role::Dentist, ['account_status' => 'Invited']);
+        $suspended = $this->account(Role::Patient, ['account_status' => 'Suspended']);
+        foreach ([$staff, $invited, $suspended] as $user) $this->postJson('/api/password/forgot', ['email' => $user->email])->assertOk();
+        Mail::assertSent(OneTimeCodeMail::class, 1);
+        $this->postJson('/api/password/reset', ['email' => $staff->email, 'otp' => $this->codeSentTo($staff->email), 'password' => 'NewPassw0rd', 'password_confirmation' => 'NewPassw0rd'])->assertOk();
+        $this->postJson('/api/login', ['email' => $staff->email, 'password' => 'NewPassw0rd'])->assertOk();
+    }
+
+    public function test_reset_verifies_an_unverified_patient_because_the_code_proves_the_inbox(): void
+    {
+        $user = $this->account(Role::Patient, ['email_verified_at' => null]);
+        $this->postJson('/api/password/forgot', ['email' => $user->email]);
+        $this->postJson('/api/password/reset', ['email' => $user->email, 'otp' => $this->codeSentTo($user->email), 'password' => 'NewPassw0rd', 'password_confirmation' => 'NewPassw0rd'])->assertOk();
+        $this->assertNotNull($user->fresh()->email_verified_at);
+    }
+
+    // ---- email change -----------------------------------------------------------------------------------------
+
+    public function test_email_change_needs_the_password_then_a_code_sent_to_the_new_address(): void
+    {
+        $user = $this->account();
+        $old = $user->email;
+        Sanctum::actingAs($user);
+        $this->postJson('/api/account/email', ['new_email' => 'moved@example.com', 'current_password' => 'wrong'])->assertStatus(422)->assertJsonPath('code', 'invalid_password');
+        $this->postJson('/api/account/email', ['new_email' => $old, 'current_password' => 'Passw0rd!'])->assertStatus(422)->assertJsonPath('code', 'same_email');
+        Mail::assertNothingSent();
+
+        $this->postJson('/api/account/email', ['new_email' => 'Moved@Example.com', 'current_password' => 'Passw0rd!'])->assertOk();
+        $code = $this->codeSentTo('moved@example.com');
+        Mail::assertNotSent(OneTimeCodeMail::class, fn ($m) => $m->hasTo($old));
+        $this->assertSame($old, $user->fresh()->email, 'nothing changes before the code is confirmed');
+
+        $this->postJson('/api/account/email/confirm', ['otp' => $code])->assertOk()->assertJsonPath('data.email', 'moved@example.com');
+        $fresh = $user->fresh();
+        $this->assertSame(['moved@example.com', 'moved@example.com'], [$fresh->email, $fresh->person->email]);
+        $this->assertNotNull($fresh->email_verified_at);
+        $this->assertGreaterThan($user->auth_version, $fresh->auth_version, 'every session is signed out');
+        Mail::assertSent(SecurityNoticeMail::class, fn ($m) => $m->hasTo($old) && $m->kind === 'email_changed' && ! str_contains($m->render(), 'moved@example.com'));
+        $this->assertSame(['account.email_change_requested', 'account.email_changed'], AuditLog::whereIn('action', ['account.email_change_requested', 'account.email_changed'])->orderBy('id')->pluck('action')->all());
+    }
+
+    public function test_an_address_in_use_gets_the_same_answer_but_no_code(): void
+    {
+        $user = $this->account();
+        $other = $this->account();
+        Sanctum::actingAs($user);
+        $taken = $this->postJson('/api/account/email', ['new_email' => $other->email, 'current_password' => 'Passw0rd!'])->assertOk();
+        $this->travel(61)->seconds();
+        $free = $this->postJson('/api/account/email', ['new_email' => 'free@example.com', 'current_password' => 'Passw0rd!'])->assertOk();
+        $this->assertSame($taken->json('message'), $free->json('message'));
+        Mail::assertNotSent(OneTimeCodeMail::class, fn ($m) => $m->hasTo($other->email));
+        Mail::assertSent(OneTimeCodeMail::class, 1);
+        $this->assertSame(1, EmailVerificationOtp::where('purpose', 'email_change')->count());
+    }
+
+    public function test_an_email_change_code_cannot_reset_a_password_or_verify_registration(): void
+    {
+        $user = $this->account();
+        Sanctum::actingAs($user);
+        $this->postJson('/api/account/email', ['new_email' => 'moved@example.com', 'current_password' => 'Passw0rd!'])->assertOk();
+        $code = $this->codeSentTo('moved@example.com');
+        $this->postJson('/api/password/reset', ['email' => $user->email, 'otp' => $code, 'password' => 'NewPassw0rd', 'password_confirmation' => 'NewPassw0rd'])->assertStatus(422);
+        $this->assertTrue(Hash::check('Passw0rd!', $user->fresh()->password));
+    }
+
+    // ---- dev preview ------------------------------------------------------------------------------------------
+
+    public function test_every_account_email_has_a_text_part_and_stays_small(): void
+    {
+        $mails = [
+            new OneTimeCodeMail('482913', 'email_verification', 'Maria'), new OneTimeCodeMail('482913', 'password_reset'), new OneTimeCodeMail('482913', 'email_change'),
+            new SecurityNoticeMail('registration_attempt'), new SecurityNoticeMail('registration_attempt_record'),
+            new SecurityNoticeMail('password_changed', 'Maria', 'October 13, 2026 2:05 PM'), new SecurityNoticeMail('email_changed', null, null, 'mo•••@example.com'),
+        ];
+        foreach ($mails as $mail) {
+            $html = $mail->render();
+            $this->assertLessThan(100 * 1024, strlen($html));
+            $this->assertStringContainsString('width="600"', $html);
+            $this->assertStringNotContainsString('Quezon City', $html, 'no invented branch list');
+            $this->assertNotNull($mail->content()->text);
+        }
+        $this->assertStringContainsString('482&nbsp;913', $mails[0]->render());
+        $this->assertStringNotContainsString('482913', $mails[0]->envelope()->subject, 'the code is never in the subject line');
+    }
+
+    public function test_the_preview_route_is_not_available_outside_local(): void
+    {
+        $this->get('/dev/mail')->assertNotFound(); // routes are registered only when APP_ENV=local
+    }
+}

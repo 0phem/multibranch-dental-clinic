@@ -34,17 +34,15 @@ class RegistrationTest extends TestCase
     {
         $response = $this->postJson('/api/register', $this->validPayload());
 
+        // The answer is only "check your email" (the same for an already-registered address); no account data is returned.
         $response->assertCreated();
-        $response->assertJsonPath('data.role', 'patient');
         $response->assertJsonPath('data.email', 'maria.santos@example.com');
-        $response->assertJsonPath('data.first_name', 'Maria');
-        $response->assertJsonPath('data.last_name', 'Santos');
-        $response->assertJsonPath('data.phone', '+639171234567');
-        $response->assertJsonPath('data.date_of_birth', '1995-05-20');
+        $response->assertJsonPath('data.verification_required', true);
+        $response->assertJsonMissingPath('data.role');
         $response->assertJsonMissingPath('data.password');
-        $response->assertJsonMissingPath('data.middle_name');
 
         $person = Person::where('email', 'maria.santos@example.com')->firstOrFail();
+        $this->assertSame(['Maria', 'Santos', '+639171234567', '1995-05-20'], [$person->first_name, $person->last_name, $person->phone, $person->date_of_birth->toDateString()]);
         $patient = Patient::where('person_id', $person->id)->firstOrFail();
         $user = User::where('person_id', $person->id)->firstOrFail();
 
@@ -71,7 +69,7 @@ class RegistrationTest extends TestCase
         $this->assertTrue(Hash::check('Passw0rd!', $user->password));
     }
 
-    public function test_registration_rejects_duplicate_email(): void
+    public function test_duplicate_email_creates_nothing_and_keeps_the_existing_password(): void
     {
         $this->postJson('/api/register', $this->validPayload())->assertCreated();
 
@@ -80,11 +78,12 @@ class RegistrationTest extends TestCase
             'first_name' => 'Different',
             'last_name' => 'Person',
             'date_of_birth' => '1990-01-01',
+            'password' => 'Other1234', 'password_confirmation' => 'Other1234',
         ]));
 
-        $response->assertStatus(422);
-        $response->assertJsonValidationErrors('email');
+        $response->assertCreated(); // the same answer as a new address (anti-enumeration)
         $this->assertSame(1, User::count());
+        $this->assertTrue(Hash::check('Passw0rd!', User::sole()->password));
     }
 
     public static function invalidPhoneProvider(): array
@@ -101,8 +100,8 @@ class RegistrationTest extends TestCase
 
     public function test_registration_accepts_a_valid_international_number_outside_the_old_six_country_list(): void
     {
-        $this->postJson('/api/register', $this->validPayload(['phone' => '+4915123456789']))
-            ->assertCreated()->assertJsonPath('data.phone', '+4915123456789');
+        $this->postJson('/api/register', $this->validPayload(['phone' => '+4915123456789']))->assertCreated();
+        $this->assertDatabaseHas('persons', ['email' => 'maria.santos@example.com', 'phone' => '+4915123456789']);
     }
 
     public function test_date_of_birth_is_required_and_cannot_be_future_or_invalid(): void
@@ -118,8 +117,7 @@ class RegistrationTest extends TestCase
             }
             $this->assertSame(0, User::count());
 
-            $this->postJson('/api/register', $this->validPayload(['date_of_birth' => ClinicClock::today()]))
-                ->assertCreated()->assertJsonPath('data.date_of_birth', '2026-10-04');
+            $this->postJson('/api/register', $this->validPayload(['date_of_birth' => ClinicClock::today()]))->assertCreated();
             $this->assertDatabaseHas('persons', [
                 'email' => 'maria.santos@example.com', 'date_of_birth' => '2026-10-04',
             ]);

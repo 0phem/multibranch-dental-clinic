@@ -92,6 +92,27 @@ class MailDispatcher
         return ['status' => $result['status'], 'mailer' => $result['mailer'], 'transport_kind' => $result['transport_kind'], 'message' => self::describe($result['status'], $result['transport_kind'])];
     }
 
+    /**
+     * Queues a message that must be sent exactly once (a one-time code or an account security notice). Call it INSIDE the
+     * transaction that issues the code: the intent row rolls back with it, and the encrypted job is dispatched only after
+     * commit. The response to the person therefore never claims the email was sent; the dispatch row records the outcome.
+     */
+    public function queueOnce(string $to, Mailable $mail, string $purpose, ?User $recipient = null, ?int $otpId = null): MailDispatch
+    {
+        if (app()->environment('production') && $this->transportKind() !== 'real') {
+            // In production a code that is only written to a local log would leave the person waiting for an email that never comes.
+            throw new \App\Exceptions\MailTransportUnavailable('Account email requires a real mail transport.');
+        }
+        $dispatch = MailDispatch::create([
+            'purpose' => $purpose, 'dedupe_key' => $purpose.':'.\Illuminate\Support\Str::ulid(),
+            'subject_type' => $recipient ? 'user' : null, 'subject_public_id' => $recipient?->public_id,
+            'recipient_user_id' => $recipient?->id, 'retryable' => false, 'max_attempts' => 1, 'status' => 'pending',
+        ]);
+        \App\Jobs\SendOnceMail::dispatch($dispatch->id, $to, $mail, $otpId);
+
+        return $dispatch;
+    }
+
     /** Appends the attempt row, updates the intent and writes the audit evidence (purpose, outcome, mailer — nothing else). */
     public function record(MailDispatch $dispatch, array $result, \DateTimeInterface $started, ?User $actor, mixed $target, bool $final, ?string $reason = null, ?\DateTimeInterface $nextAt = null): void
     {

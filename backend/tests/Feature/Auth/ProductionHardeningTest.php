@@ -4,7 +4,6 @@ namespace Tests\Feature\Auth;
 
 use App\Enums\Role;
 use App\Models\{User, Person, Patient, EmailVerificationOtp, AuditLog};
-use App\Services\Auth\OtpDelivery;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\{Auth, Hash, Mail, Log};
 use Laravel\Sanctum\Sanctum;
@@ -183,7 +182,7 @@ class ProductionHardeningTest extends TestCase
     {
         Mail::fake();
         $this->postJson('/api/register',$this->payload())->assertCreated();
-        $code=Mail::sent(\App\Mail\PatientEmailVerificationOtp::class)->first()->code;
+        $code=Mail::sent(\App\Mail\OneTimeCodeMail::class)->first()->code;
         $this->postJson('/api/register/verify',['email'=>'review@example.test','otp'=>$code])->assertOk();
         $this->postJson('/api/logout')->assertNoContent();
         $audit=AuditLog::all()->toJson();
@@ -197,10 +196,10 @@ class ProductionHardeningTest extends TestCase
     {
         Mail::shouldReceive('to')->once()->andThrow(new \RuntimeException('SECRET OTP 123456 SMTP PASSWORD hidden'));
         Log::spy();
-        $response=$this->postJson('/api/register',$this->payload())->assertStatus(503);
+        $response=$this->postJson('/api/register',$this->payload())->assertCreated();
         $this->assertStringNotContainsString('SECRET',$response->getContent());
-        Log::shouldHaveReceived('warning')->with('Patient verification email delivery failed.')->once();
-        // M18's dispatcher also records the failure, with the exception class only (never its message).
+        $this->assertStringNotContainsString('SECRET',\App\Models\MailDispatchAttempt::all()->toJson());
+        // M18's dispatcher records the failure, with the exception class only (never its message).
         Log::shouldHaveReceived('warning')->with('Mail dispatch failed.', ['purpose' => 'patient_email_verification', 'exception' => \RuntimeException::class])->once();
         Log::shouldNotHaveReceived('error');
     }
@@ -211,8 +210,8 @@ class ProductionHardeningTest extends TestCase
         $this->app->instance('env','production');
         config(['mail.default'=>'failover','mail.mailers.failover'=>['transport'=>'failover','mailers'=>['smtp','log']]]);
         Mail::fake();
-        try { app(OtpDelivery::class)->send($user,'123456'); $this->fail('Unsafe transport accepted'); }
-        catch (\RuntimeException $e) { $this->assertSame('Verification requires a delivery transport.',$e->getMessage()); }
+        try { app(\App\Services\Mail\MailDispatcher::class)->queueOnce($user->email,new \App\Mail\OneTimeCodeMail('123456','email_verification'),'patient_email_verification',$user); $this->fail('Unsafe transport accepted'); }
+        catch (\App\Exceptions\MailTransportUnavailable $e) { $this->assertSame('Account email requires a real mail transport.',$e->getMessage()); }
         finally { $this->app->instance('env','testing'); }
         Mail::assertNothingSent();
     }

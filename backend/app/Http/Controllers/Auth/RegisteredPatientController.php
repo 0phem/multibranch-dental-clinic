@@ -5,8 +5,10 @@ namespace App\Http\Controllers\Auth;
 use App\Enums\Role;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\RegisterPatientRequest;
+use App\Mail\SecurityNoticeMail;
 use App\Models\EmailVerificationOtp;
-use App\Http\Resources\UserResource;
+use App\Services\Auth\OneTimeCodes;
+use App\Services\Auth\OtpThrottle;
 use App\Models\Patient;
 use App\Models\Person;
 use App\Models\User;
@@ -14,7 +16,6 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
-use Throwable;
 
 // Public registration is Patient-only (see AGENTS.md canonical identity model). Every write here comes from
 // $request->validated() — never raw request input — so a reserved field slipping past the FormRequest's
@@ -24,13 +25,17 @@ class RegisteredPatientController extends Controller
     public function store(RegisterPatientRequest $request)
     {
         $data = $request->validated();
+        // Counted before any lookup, so the limit behaves the same for new and already-registered addresses.
+        if ($wait = app(OtpThrottle::class)->hit($data['email'], (string) $request->ip())) return OtpThrottle::limited($wait);
 
-        [$user, $code] = DB::transaction(function () use ($data) {
+        DB::transaction(function () use ($data) {
             // Same allocation lock as the existing walk-in path; duplicate checks
             // run after it so concurrent public registrations cannot pass together.
             DB::statement('LOCK TABLE patients IN SHARE ROW EXCLUSIVE MODE');
-            if (User::withTrashed()->where('email', $data['email'])->exists() || Person::where('email', $data['email'])->exists()) {
-                throw ValidationException::withMessages(['email' => 'This email address is already registered.']);
+            $existing = User::withTrashed()->where('email', $data['email'])->first();
+            if ($existing || Person::where('email', $data['email'])->exists()) {
+                $this->noticeExistingAddress($data, $existing);
+                return;
             }
             $this->guardAgainstDuplicatePerson($data);
             $person = Person::create([
@@ -55,32 +60,34 @@ class RegisteredPatientController extends Controller
                 'account_status' => 'Active',
             ]);
             app(\App\Services\Audit\AuditService::class)->recordAuth('account.registered', $user);
-            $code = (string) random_int(100000, 999999);
-            EmailVerificationOtp::create([
-                'user_id' => $user->id, 'digest' => Hash::make($code), 'attempts' => 0,
-                'expires_at' => now()->addMinutes(10), 'sent_at' => now(),
-            ]);
-            return [$user, $code];
+            app(OneTimeCodes::class)->issue($user->setRelation('person', $person), EmailVerificationOtp::REGISTRATION, $user->email);
         });
 
-        try {
-            app(\App\Services\Auth\OtpDelivery::class)->send($user, $code);
-        } catch (Throwable $exception) {
-            // Transport exceptions may contain message contents or SMTP credentials.
-            \Illuminate\Support\Facades\Log::warning('Patient verification email delivery failed.');
+        // Decision 7 (anti-enumeration): a new address and an already-registered one get this identical answer. The code
+        // email (or, for an existing address, a notice to its owner) is sent by the queue after commit; nothing here claims
+        // it was delivered.
+        return response()->json(['data' => [
+            'email' => $data['email'],
+            'verification_required' => true,
+            'resend_available_at' => now()->addSeconds((int) config('clinic.otp_resend_cooldown_seconds', 60))->toISOString(),
+        ]], 201);
+    }
 
-            return response()->json([
-                'message' => 'We could not send the verification email. Please try again.',
-                'code' => 'email_delivery_failed',
-            ], 503);
-        }
-
-        return response()->json([
-            'data' => array_merge((new UserResource($user->load(['person', 'patient'])))->resolve(), [
-                'verification_required' => true,
-                'resend_available_at' => now()->addSeconds(60)->toISOString(),
-            ]),
-        ], 201);
+    /**
+     * The address already belongs to an account or a clinic record. Nothing is created or changed, the submitted password is
+     * discarded, and the address owner is told someone tried (sign in / reset, or contact the clinic). The same hashing work
+     * as a new registration is done so response time does not reveal which branch ran.
+     */
+    private function noticeExistingAddress(array $data, ?User $existing): void
+    {
+        Hash::make($data['password']);
+        Hash::make(Str::random(6));
+        $usable = $existing && ! $existing->trashed() && $existing->account_status === 'Active';
+        $kind = $usable ? 'registration_attempt' : 'registration_attempt_record';
+        $name = $existing?->person?->first_name ?? Person::where('email', $data['email'])->value('first_name');
+        app(\App\Services\Mail\MailDispatcher::class)->queueOnce($data['email'], new SecurityNoticeMail($kind, $name), 'registration_attempt_notice', $usable ? $existing : null);
+        app(\App\Services\Audit\AuditService::class)->record(['action' => 'account.registration_attempt_existing', 'category' => 'security', 'severity' => 'warning',
+            'actor' => null, 'target' => $usable ? $existing : null, 'payload' => ['has_usable_account' => $usable]]);
     }
 
     // Mirrors the frontend's possibleDuplicatePerson signal: a matching phone, or a matching first/last name

@@ -7,15 +7,16 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\UserResource;
 use App\Models\EmailVerificationOtp;
 use App\Models\User;
+use App\Services\Auth\OneTimeCodes;
+use App\Services\Auth\OtpThrottle;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\RateLimiter;
-use Throwable;
 
 class EmailVerificationController extends Controller
 {
+    public function __construct(private readonly OneTimeCodes $codes) {}
+
     public function verify(Request $request)
     {
         $data = $request->validate([
@@ -30,36 +31,18 @@ class EmailVerificationController extends Controller
                 ->where('role', Role::Patient->value)
                 ->lockForUpdate()
                 ->first();
-            if (! $user || $user->account_status !== 'Active') return ['failure' => ['invalid_otp', 'That verification code is not valid.']];
+            if (! $user || $user->account_status !== 'Active') return ['failure' => ['invalid_otp', 'That code is not valid.']];
             if ($user->email_verified_at) return ['failure' => ['already_verified', 'This email address is already verified.']];
 
-            $otp = EmailVerificationOtp::where('user_id', $user->id)
-                ->whereNull('consumed_at')
-                ->latest('id')
-                ->lockForUpdate()
-                ->first();
-            if (! $otp || $otp->expires_at->isPast()) return ['failure' => ['otp_expired', 'That code has expired. Request a new code.']];
-            if ($otp->attempts >= 5) return ['failure' => ['otp_attempt_limit', 'Too many incorrect attempts. Request a new code.']];
+            $check = $this->codes->check($user, EmailVerificationOtp::REGISTRATION, $data['otp']);
+            if (isset($check['failure'])) return $check;
 
-            if (! Hash::check($data['otp'], $otp->digest)) {
-                $otp->attempts++;
-                if ($otp->attempts >= 5) {
-                    $otp->consumed_at = now();
-                    $otp->save();
-                    return ['failure' => ['otp_attempt_limit', 'Too many incorrect attempts. Request a new code.']];
-                }
-                $otp->save();
-                return ['failure' => ['invalid_otp', 'That verification code is not valid.']];
-            }
-
-            $now = now();
-            $user->forceFill(['email_verified_at' => $now])->save();
-            $otp->forceFill(['consumed_at' => $now])->save();
+            $user->forceFill(['email_verified_at' => now()])->save();
             app(\App\Services\Audit\AuditService::class)->recordAuth('account.email_verified', $user);
             return ['user' => $user];
         });
 
-        if (isset($result['failure'])) return $this->failure(...$result['failure']);
+        if (isset($result['failure'])) return OneTimeCodes::failure(...$result['failure']);
         $user = $result['user'];
         Auth::guard('web')->login($user);
         $request->session()->regenerate();
@@ -72,16 +55,7 @@ class EmailVerificationController extends Controller
     {
         $data = $request->validate(['email' => ['required', 'email:rfc', 'max:255']]);
         $email = strtolower(trim($data['email']));
-        $key = 'email-otp-resend:'.sha1($email.'|'.$request->ip());
-
-        if (RateLimiter::tooManyAttempts($key, 5)) {
-            return response()->json([
-                'message' => 'Too many resend requests. Please try again later.',
-                'code' => 'otp_rate_limited',
-                'retry_after' => RateLimiter::availableIn($key),
-            ], 429);
-        }
-        RateLimiter::hit($key, 3600);
+        if ($wait = app(OtpThrottle::class)->hit($email, (string) $request->ip())) return OtpThrottle::limited($wait);
 
         $result = DB::transaction(function () use ($email) {
             // The user row is the per-account mutex: concurrent resends cannot both observe the same
@@ -92,22 +66,9 @@ class EmailVerificationController extends Controller
                 ->first();
             if (! $user || $user->account_status !== 'Active' || $user->email_verified_at) return ['generic' => true];
 
-            $latest = EmailVerificationOtp::where('user_id', $user->id)->latest('id')->lockForUpdate()->first();
-            if ($latest && $latest->sent_at->gt(now()->subSeconds(60))) {
-                return ['cooldown' => max(1, (int) ceil(now()->diffInSeconds($latest->sent_at->copy()->addSeconds(60))))];
-            }
-
-            $code = (string) random_int(100000, 999999);
-            $now = now();
-            EmailVerificationOtp::where('user_id', $user->id)->whereNull('consumed_at')->update(['consumed_at' => $now]);
-            EmailVerificationOtp::create([
-                'user_id' => $user->id,
-                'digest' => Hash::make($code),
-                'attempts' => 0,
-                'expires_at' => $now->copy()->addMinutes(10),
-                'sent_at' => $now,
-            ]);
-            return ['user' => $user, 'code' => $code, 'sent_at' => $now];
+            if ($wait = $this->codes->cooldown($user, EmailVerificationOtp::REGISTRATION)) return ['cooldown' => $wait];
+            $otp = $this->codes->issue($user->load('person'), EmailVerificationOtp::REGISTRATION, $user->email);
+            return ['user' => $user, 'sent_at' => $otp->sent_at];
         });
 
         if (! empty($result['generic'])) {
@@ -121,23 +82,10 @@ class EmailVerificationController extends Controller
             ], 429);
         }
 
-        try {
-            app(\App\Services\Auth\OtpDelivery::class)->send($result['user'], $result['code']);
-        } catch (Throwable $exception) {
-            \Illuminate\Support\Facades\Log::warning('Patient verification email delivery failed.');
-
-            return response()->json(['message' => 'We could not send the verification email. Please try again.', 'code' => 'email_delivery_failed'], 503);
-        }
-
         return response()->json(['data' => [
             'email' => $result['user']->email,
             'verification_required' => true,
-            'resend_available_at' => $result['sent_at']->copy()->addSeconds(60)->toISOString(),
+            'resend_available_at' => $result['sent_at']->copy()->addSeconds((int) config('clinic.otp_resend_cooldown_seconds', 60))->toISOString(),
         ]]);
-    }
-
-    private function failure(string $code, string $message)
-    {
-        return response()->json(['message' => $message, 'errors' => ['otp' => [$message]], 'code' => $code], 422);
     }
 }

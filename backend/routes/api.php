@@ -42,6 +42,9 @@ Route::post('/invitations/accept', [\App\Http\Controllers\EmployeeInvitationCont
 Route::post('/register/verify', [EmailVerificationController::class, 'verify'])->middleware('throttle:m1-otp');
 Route::post('/register/resend', [EmailVerificationController::class, 'resend'])->middleware('throttle:m1-otp');
 Route::post('/login', [AuthenticatedSessionController::class, 'store'])->middleware('throttle:m1-login');
+// M1 password reset by emailed one-time code (every role; same answer whether or not the email has an account).
+Route::post('/password/forgot', [\App\Http\Controllers\Auth\PasswordResetController::class, 'forgot'])->middleware('throttle:m1-otp');
+Route::post('/password/reset', [\App\Http\Controllers\Auth\PasswordResetController::class, 'reset'])->middleware('throttle:m1-otp');
 
 // Public Payment Gateway Webhook (PayMongo HMAC-SHA256 signature verified)
 Route::post('/webhooks/paymongo', [PayMongoController::class, 'webhook']);
@@ -49,6 +52,9 @@ Route::post('/webhooks/paymongo', [PayMongoController::class, 'webhook']);
 Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureAccountAccess::class])->group(function () {
     Route::post('/logout', [AuthenticatedSessionController::class, 'destroy']);
     Route::get('/me', [CurrentUserController::class, 'show']);
+    // M1 self-service sign-in email change: current password, then a one-time code sent to the new address.
+    Route::post('/account/email', [\App\Http\Controllers\Auth\EmailChangeController::class, 'request'])->middleware('throttle:m1-otp');
+    Route::post('/account/email/confirm', [\App\Http\Controllers\Auth\EmailChangeController::class, 'confirm'])->middleware('throttle:m1-otp');
 
     // M11 server-authoritative billing. Legacy browser invoices remain read-only presentation data.
     Route::prefix('invoices')->group(function () {
