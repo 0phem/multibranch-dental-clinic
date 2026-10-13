@@ -17,12 +17,13 @@ class EmployeeInvitationMail extends Mailable
 
     public function envelope(): Envelope
     {
-        return new Envelope(subject: 'Your invitation to Dr. Dana E. Roxas Dental Clinic');
+        return new Envelope(subject: 'Your invitation to '.(config('mail.from.name') ?: config('app.name')));
     }
 
     public function content(): Content
     {
-        return new Content(view: 'emails.employee-invitation', with: [
+        return new Content(view: 'emails.employee-invitation', text: 'emails.employee-invitation-text', with: [
+            'subjectLine' => $this->envelope()->subject, 'clinic' => config('mail.from.name') ?: config('app.name'),
             'name' => $this->invitee->person?->first_name ?: 'there',
             'role' => $this->invitee->role->value === 'dentist' ? 'Dentist' : 'Staff',
         ]);

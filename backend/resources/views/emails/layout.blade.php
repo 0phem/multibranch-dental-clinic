@@ -1,141 +1,54 @@
+{{--
+    Shared base for every clinic email (M18). 600px table layout with inline styles so it renders the same in Gmail,
+    Outlook and phone mail apps; the <style> block only adds dark-mode/mobile touches and keeps the older appointment and
+    receipt templates (card / detail-row / btn classes) working until they are redesigned. Every email also has a plain-text
+    part (layout-text.blade.php). Nothing here may show an address, phone number or branch the clinic has not configured.
+    Variables: $subject, $preheader (inbox preview line), $reason (why the person received it, footer).
+--}}
+@php($clinic = config('mail.from.name') ?: config('app.name'))
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ $subject ?? 'Dr. Dana E. Roxas Dental Clinic' }}</title>
-    <style>
-        body {
-            margin: 0;
-            padding: 0;
-            background-color: #f1f5f9;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-            color: #0f172a;
-            line-height: 1.6;
-            -webkit-font-smoothing: antialiased;
-        }
-        .wrapper {
-            width: 100%;
-            background-color: #f1f5f9;
-            padding: 32px 16px;
-            box-sizing: border-box;
-        }
-        .container {
-            max-width: 600px;
-            margin: 0 auto;
-            background-color: #ffffff;
-            border-radius: 12px;
-            border: 1px solid #e2e8f0;
-            overflow: hidden;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
-        }
-        .header {
-            background-color: #0f172a;
-            color: #ffffff;
-            padding: 24px 32px;
-            text-align: center;
-        }
-        .header h1 {
-            margin: 0;
-            font-size: 20px;
-            font-weight: 700;
-            letter-spacing: -0.025em;
-        }
-        .header p {
-            margin: 4px 0 0;
-            font-size: 13px;
-            color: #94a3b8;
-        }
-        .content {
-            padding: 32px;
-        }
-        .content h2 {
-            margin-top: 0;
-            font-size: 18px;
-            font-weight: 600;
-            color: #0f172a;
-        }
-        .card {
-            background-color: #f8fafc;
-            border: 1px solid #e2e8f0;
-            border-radius: 8px;
-            padding: 16px 20px;
-            margin: 20px 0;
-        }
-        .detail-row {
-            display: flex;
-            justify-content: space-between;
-            padding: 8px 0;
-            border-bottom: 1px solid #e2e8f0;
-            font-size: 14px;
-        }
-        .detail-row:last-child {
-            border-bottom: none;
-        }
-        .detail-label {
-            color: #64748b;
-            font-weight: 500;
-        }
-        .detail-value {
-            color: #0f172a;
-            font-weight: 600;
-            text-align: right;
-        }
-        .btn {
-            display: inline-block;
-            background-color: #0284c7;
-            color: #ffffff !important;
-            padding: 12px 24px;
-            text-decoration: none;
-            border-radius: 6px;
-            font-weight: 600;
-            font-size: 14px;
-            margin: 20px 0 8px;
-            text-align: center;
-        }
-        .otp-code {
-            font-size: 32px;
-            font-weight: 800;
-            letter-spacing: 0.25em;
-            color: #0284c7;
-            text-align: center;
-            background-color: #f0f9ff;
-            border: 1px dashed #7dd3fc;
-            border-radius: 8px;
-            padding: 16px;
-            margin: 24px 0;
-        }
-        .footer {
-            background-color: #f8fafc;
-            border-top: 1px solid #e2e8f0;
-            padding: 20px 32px;
-            font-size: 12px;
-            color: #64748b;
-            text-align: center;
-            line-height: 1.5;
-        }
-        .footer p {
-            margin: 4px 0;
-        }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="x-apple-disable-message-reformatting">
+<meta name="color-scheme" content="light">
+<title>{{ $subject ?? $clinic }}</title>
+<style>
+    @media only screen and (max-width: 620px) { .shell { width: 100% !important; } .pad { padding-left: 20px !important; padding-right: 20px !important; } .code { font-size: 30px !important; letter-spacing: 8px !important; } }
+    .card { background-color: #f6f9fc; border: 1px solid #dde6f0; border-radius: 8px; padding: 12px 18px; margin: 20px 0; }
+    .detail-row { padding: 8px 0; border-bottom: 1px solid #dde6f0; font-size: 14px; }
+    .detail-row:last-child { border-bottom: none; }
+    .detail-label { color: #5b6b7f; display: inline-block; min-width: 45%; }
+    .detail-value { color: #182b41; font-weight: 600; }
+    .btn { display: inline-block; background-color: #1865ac; color: #ffffff !important; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 15px; }
+    .otp-code { font-size: 32px; font-weight: 700; letter-spacing: 8px; color: #124b80; text-align: center; }
+</style>
 </head>
-<body>
-    <div class="wrapper">
-        <div class="container">
-            <div class="header">
-                <h1>Dr. Dana E. Roxas Dental Clinic</h1>
-                <p>Multi-Branch Dental Excellence & Integrated Patient Care</p>
-            </div>
-            <div class="content">
-                @yield('content')
-            </div>
-            <div class="footer">
-                <p><strong>Dr. Dana E. Roxas Dental Clinic</strong> • Automated Clinic Notifications</p>
-                <p>Branches: Quezon City • Makati • Pasig • Alabang</p>
-                <p>This is a system-generated transmission. Please contact your treating clinic branch directly for scheduling inquiries.</p>
-                <p style="margin-top: 8px; color: #94a3b8;">© {{ date('Y') }} Dr. Dana E. Roxas Dental Clinic. All rights reserved.</p>
-            </div>
-        </div>
-    </div>
+<body style="margin:0; padding:0; background-color:#eef3f8; -webkit-text-size-adjust:100%;">
+@if (! empty($preheader))
+<div style="display:none; max-height:0; overflow:hidden; mso-hide:all; font-size:1px; line-height:1px; color:#eef3f8;">{{ $preheader }}&#8202;&#847;&#8202;&#847;&#8202;&#847;&#8202;&#847;&#8202;&#847;</div>
+@endif
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#eef3f8;">
+<tr><td align="center" style="padding:28px 12px;">
+    <table role="presentation" class="shell" width="600" cellpadding="0" cellspacing="0" border="0" style="width:600px; max-width:600px; background-color:#ffffff; border:1px solid #dde6f0; border-radius:12px; overflow:hidden;">
+        <tr><td class="pad" style="background-color:#1865ac; padding:22px 32px; font-family:Arial, Helvetica, sans-serif;">
+            <div style="font-size:19px; line-height:24px; font-weight:700; color:#ffffff;">{{ $clinic }}</div>
+        </td></tr>
+        <tr><td class="pad" style="padding:32px 32px 8px; font-family:Arial, Helvetica, sans-serif; font-size:15px; line-height:24px; color:#354960;">
+            @yield('content')
+        </td></tr>
+        <tr><td class="pad" style="padding:8px 32px 28px; font-family:Arial, Helvetica, sans-serif; font-size:14px; line-height:22px; color:#354960;">
+            <p style="margin:16px 0 0;">{{ $clinic }}</p>
+        </td></tr>
+        <tr><td class="pad" style="background-color:#f6f9fc; border-top:1px solid #dde6f0; padding:18px 32px; font-family:Arial, Helvetica, sans-serif; font-size:12px; line-height:18px; color:#5b6b7f;">
+            @if (! empty($reason))<p style="margin:0 0 6px;">{{ $reason }}</p>@endif
+            <p style="margin:0 0 6px;">This is an automated message from {{ $clinic }}. Clinic staff will never ask you for your password or a one-time code.</p>
+            @if (config('clinic.support_email'))<p style="margin:0 0 6px;">Questions? Contact <a href="mailto:{{ config('clinic.support_email') }}" style="color:#1865ac;">{{ config('clinic.support_email') }}</a>.</p>@endif
+            <p style="margin:0; color:#8796a8;">&copy; {{ now()->year }} {{ $clinic }}</p>
+        </td></tr>
+    </table>
+</td></tr>
+</table>
 </body>
 </html>

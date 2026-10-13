@@ -31,3 +31,14 @@ Artisan::command('mail:process-due {--limit=50}', function () {
 })->purpose('Send due M18 emails and retry failed ones within their limit');
 
 \Illuminate\Support\Facades\Schedule::command('mail:process-due')->everyMinute()->withoutOverlapping();
+
+// M18: send one diagnostic email through the real configured transport and print the recorded outcome. Used by the
+// pre-defense checklist. "accepted by the mail service" means the SMTP server accepted it; only the inbox proves delivery.
+Artisan::command('mail:send-test {email}', function (string $email) {
+    $result = app(\App\Services\Mail\MailDispatcher::class)->send($email, new \App\Mail\ClinicTestMail(), 'mail_diagnostic');
+    $dispatch = \App\Models\MailDispatch::where('purpose', 'mail_diagnostic')->latest('id')->first();
+    $this->line("mailer={$result['mailer']} transport={$result['transport_kind']} status={$result['status']} dispatch={$dispatch?->public_id}");
+    $this->line($result['message']);
+
+    return $result['status'] === 'failed' ? 1 : 0;
+})->purpose('Send one diagnostic email and print the recorded M18 outcome');
