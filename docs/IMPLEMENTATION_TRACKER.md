@@ -9,7 +9,20 @@ Started 2026-10-13. Keep current as slices land. Planning numbers follow `MODULE
 
 **Completion criteria** (all required for `Done`): validated inputs and authoritative server persistence; explicit transitions and actors; enforced role and branch permissions; loading/empty/failure/retry/success states; source-linked history and audit evidence; tests for access, transitions and failures; browser verification of the real workflow.
 
-**Environment fact (2026-10-13).** The local clinic database `dental_clinic` is migrated only through `2026_10_08_000100`. Later migrations (auth_version, branch public ids, patient record fields, document integrity, audit append-only, M11 payment integrity, inquiries, messaging, feedback) are not applied there, so any live check that writes those columns or tables is **blocked** until the Owner/team applies them. Automated backend tests use `dental_clinic_test`.
+**Environment fact (updated 2026-10-13).** The local clinic database `dental_clinic` is migrated through `2026_10_20_000100_m17_routing_and_encryption` (each step after a restore-checked backup, approved by the team: see `docs/CLINIC_DB_PENDING_MIGRATIONS.md`). Automated backend tests use `dental_clinic_test`.
+
+**Open policy items for the clinic (recorded, nothing built).**
+- **Staff-initiated conversations.** Today only a Patient can start one.
+- **Staff email alerts** for new Patient messages. Today only offline Patients get a content-free alert.
+- **Reopening a closed conversation** (unresolved policy 8).
+- **Message retention period** under RA 10173 (Data Privacy Act). No automatic deletion exists.
+- **The duplicate-phone message at registration.** It still says a matching record may exist, which reveals that a phone number is on file.
+
+**Known build-time items.**
+- `npm audit` reports one high-severity advisory in `source-map-js` (GHSA-68fv-2mgg-jv7q, event-loop denial of service via crafted source maps).
+  - It is a build-time dependency of the Vite toolchain, already in the lock file before Phase 2, and not shipped to browsers.
+  - Left unchanged by decision (2026-10-13).
+  - Revisit with the next toolchain update.
 
 ## Summary
 
@@ -105,7 +118,15 @@ Started 2026-10-13. Keep current as slices land. Planning numbers follow `MODULE
 - Manual external inquiries (migration not applied to the clinic database). **Policy**: routing, Owner access, official platform access.
 
 ### M17 Patient Messaging — Partial
-- Participant-scoped conversations (migration not applied to the clinic database). **Policy**: creation/routing, reopening (unresolved policy 8).
+- Participant-scoped conversations. **Policy**: reopening (unresolved policy 8).
+- **Priority 2 (2026-10-13, uncommitted for review)** — see `docs/M17_REALTIME_MESSAGING.md`:
+  - Front-desk routing (decision 3): Patient-started conversations, default branch from the latest visit or appointment, every in-scope Staff member sees and replies, first Staff reply is the participant of record, Dentists only when Staff add them. Owner refused (decision 4).
+  - Reverb private channels with signal-only events and a polling fallback.
+  - Message text encrypted at rest (decision 5) with a resumable conversion command, key rotation and a rehearsed rollback.
+  - Content-free offline email alert (one per conversation per 15 min).
+  - Rebuilt chat screens with per-conversation drafts.
+  - Migration `2026_10_20_000100_m17_routing_and_encryption` is **pending for `dental_clinic` (awaiting approval)**.
+  - **Open:** Staff-initiated conversations (no rule), Staff email alerts, conversation reopening (policy 8), message retention (RA 10173).
 
 ### M18 Notifications — Partial
 - **New 2026-10-13**: `App\Services\Mail\MailDispatcher` — every email (Patient verification code, appointment confirmation, payment receipt, Owner diagnostic, employee invitation) goes through one dispatcher that reports `logged_only` / `transport_accepted` / `failed` truthfully and records `mail.dispatched` audit evidence (purpose, outcome, mailer; never the address or content). The Owner diagnostic no longer claims success or "Operational (Verified)" (TD-25 wording).

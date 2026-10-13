@@ -41,6 +41,12 @@ Names, branch labels, staffing, fees and records in seeds are illustrative, not 
 
 The application has no in-app demo reset. To start a local development workspace over, clear this site's browser storage (the `dentalops-v4-*` keys) in the browser's developer tools. Saved historical dates do not advance on reload; pristine seeds use the current Manila clinic date. Unreadable saved data is preserved and requires recovery rather than silent replacement.
 
+## Encryption key
+
+`APP_KEY` in `backend/.env` encrypts Patient messages at rest. **If it is lost, the messages cannot be read.** Back it up in a
+password manager. Rotating it requires `php artisan messages:encrypt-bodies --rotate` and signs everyone out. See
+`backend/README.md` ("Encryption key") and `docs/M17_REALTIME_MESSAGING.md`.
+
 ## Documentation
 
 - [Documentation Reconciliation](DOCUMENTATION_RECONCILIATION.md): source hierarchy, conflicts, policies and Phase 4 inputs.

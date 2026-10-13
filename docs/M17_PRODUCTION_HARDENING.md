@@ -1,5 +1,7 @@
 # M17 — Unified Patient Messaging: production hardening
 
+> **2026-10-13:** creation/routing, realtime, encryption at rest and the offline alert are now specified in `docs/M17_REALTIME_MESSAGING.md` (Phase 2 decisions 3–5). Statements below that there is no creation route or live connection are historical.
+
 Branch `feature/m17-patient-messaging-production-hardening`, from `7364dd1` (M16 checkpoint). Uncommitted. **Verdict B.**
 
 ## 1. Starting git state
