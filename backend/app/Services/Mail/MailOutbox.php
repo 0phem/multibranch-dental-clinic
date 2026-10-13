@@ -30,7 +30,7 @@ use Illuminate\Support\Facades\DB;
  */
 class MailOutbox
 {
-    public const PURPOSES = ['appointment_confirmation', 'appointment_rescheduled', 'appointment_cancelled', 'payment_receipt'];
+    public const PURPOSES = ['appointment_confirmation', 'appointment_rescheduled', 'appointment_cancelled', 'payment_receipt', 'message_alert'];
 
     public function __construct(private readonly MailDispatcher $dispatcher) {}
 
@@ -139,6 +139,17 @@ class MailOutbox
                 : new AppointmentChangedMail($appointment, $dispatch->purpose === 'appointment_cancelled' ? 'cancelled' : 'rescheduled');
 
             return [$mail, $appointment, false, $appointment->patient?->user?->email];
+        }
+        if ($dispatch->subject_type === 'conversation') {
+            // M17 offline alert (no message text). subject_revision is the internal id of the message that triggered it: if the Patient
+            // has read up to it (or past it) by the time the worker runs, the alert is no longer needed.
+            $conversation = \App\Models\Conversation::where('public_id', $dispatch->subject_public_id)->first();
+            $recipient = $dispatch->recipient;
+            if (! $conversation || ! $recipient) return [null, null, true, null];
+            $read = \App\Models\ConversationParticipant::where('conversation_id', $conversation->id)->where('user_id', $recipient->id)->value('last_read_message_id');
+            if ($read !== null && $dispatch->subject_revision !== null && $read >= $dispatch->subject_revision) return [null, $conversation, true, null];
+
+            return [new \App\Mail\MessageAlertMail($recipient->person?->first_name), $conversation, false, $recipient->account_status === 'Active' ? $recipient->email : null];
         }
         if ($dispatch->subject_type === 'receipt') {
             $receipt = Receipt::where('public_id', $dispatch->subject_public_id)->with('invoice.patient.person')->first();

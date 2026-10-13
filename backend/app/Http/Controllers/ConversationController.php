@@ -5,17 +5,21 @@ namespace App\Http\Controllers;
 use App\Http\Controllers\Concerns\ReadsIdempotencyKey;
 use App\Http\Requests\Messaging\CloseConversationRequest;
 use App\Http\Requests\Messaging\SendMessageRequest;
+use App\Http\Requests\Messaging\StartConversationRequest;
 use App\Http\Resources\ConversationResource;
 use App\Http\Resources\MessageResource;
+use App\Models\Branch;
 use App\Models\Conversation;
 use App\Models\ConversationMessage;
 use App\Services\Messaging\MessagingService;
+use App\Services\Messaging\Presence;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 // M17 API (route middleware role:patient,staff,dentist; Owner and guests have none). Authorization is Conversation::visibleTo applied
-// BEFORE any cursor or filter; there is no conversation-creation, edit-message or delete-message route.
+// BEFORE any cursor or filter. A Patient may start a front-desk conversation (decision 3); Staff may add a Dentist. There is no
+// edit-message or delete-message route, and Staff cannot start conversations (no approved rule for it).
 class ConversationController extends Controller
 {
     use ReadsIdempotencyKey;
@@ -24,9 +28,65 @@ class ConversationController extends Controller
 
     public function __construct(private readonly MessagingService $messaging) {}
 
+    /** Branches a Patient can write to, and the suggested one: the branch of their latest visit or appointment, else their preferred branch. */
+    public function startOptions(Request $request): JsonResponse
+    {
+        $patient = $request->user()->patient;
+        abort_unless($patient, 403);
+        Presence::touch($request->user());
+        $branches = Branch::where('status', 'Open')->orderBy('name')->get();
+        $latestVisit = DB::table('visits')->where('patient_id', $patient->id)->orderByDesc('arrived_at')->first(['branch_id', 'arrived_at']);
+        $latestAppointment = DB::table('appointments')->where('patient_id', $patient->id)->where('status', '<>', 'Cancelled')->orderByDesc('starts_at')->first(['branch_id', 'starts_at']);
+        $latest = collect([[$latestVisit?->branch_id, $latestVisit?->arrived_at], [$latestAppointment?->branch_id, $latestAppointment?->starts_at]])
+            ->filter(fn ($row) => $row[0] !== null)->sortByDesc(fn ($row) => \Carbon\CarbonImmutable::parse($row[1])->getTimestamp())->first();
+        $defaultId = $latest[0] ?? $patient->preferred_branch_id;
+        $default = $branches->firstWhere('id', $defaultId);
+
+        return response()->json(['data' => [
+            'branches' => $branches->map(fn (Branch $b) => ['id' => strtolower($b->public_id), 'name' => $b->name])->values(),
+            'default_branch_id' => $default ? strtolower($default->public_id) : null,
+            'default_reason' => $default ? ($latest ? 'latest_visit_or_appointment' : 'preferred_branch') : null,
+        ]]);
+    }
+
+    /** A Patient writes to a branch front desk. Their open conversation at that branch is reused; otherwise a new one starts. */
+    public function start(StartConversationRequest $request): JsonResponse
+    {
+        $branch = Branch::whereRaw('lower(public_id) = ?', [strtolower($request->validated('branch_id'))])->where('status', 'Open')->first();
+        if (! $branch) throw \Illuminate\Validation\ValidationException::withMessages(['branch_id' => 'Choose one of the clinic’s branches.']);
+        Presence::touch($request->user());
+
+        return $this->messaging->start($request->user(), $branch, $request->validated('body'), $this->idempotencyKey($request, true));
+    }
+
+    /** Heartbeat from a visible signed-in tab: the person is in the app, so no email alert is needed. */
+    public function presence(Request $request): JsonResponse
+    {
+        Presence::touch($request->user());
+
+        return response()->json(['data' => ['online' => true]]);
+    }
+
+    public function dentistOptions(Request $request, Conversation $conversation): JsonResponse
+    {
+        abort_unless($request->user()->role === \App\Enums\Role::Staff && $conversation->accessibleTo($request->user()), 403);
+
+        return response()->json(['data' => $this->messaging->dentistOptions($conversation)]);
+    }
+
+    public function addParticipant(Request $request, Conversation $conversation): JsonResponse
+    {
+        abort_unless($conversation->accessibleTo($request->user()), 403);
+        $v = $request->validate(['dentist_id' => ['required', 'string', 'size:26'], ...array_fill_keys(['user_id', 'role', 'patient_id', 'branch_id'], ['prohibited'])]);
+        $added = $this->messaging->addDentist($request->user(), $conversation, $v['dentist_id']);
+
+        return response()->json(['data' => ['id' => $conversation->public_id, 'added' => $added]], $added ? 201 : 200);
+    }
+
     /** The viewer's conversations, newest-created first (keyset by id), with an unread count and no message text. */
     public function index(Request $request): JsonResponse
     {
+        Presence::touch($request->user());
         $v = $request->validate(['per_page' => ['nullable', 'integer', 'min:1', 'max:'.self::MAX_PER_PAGE], 'cursor' => ['nullable', 'string', 'size:26'], 'status' => ['nullable', 'string', 'in:Open,Closed']]);
         $per = (int) ($v['per_page'] ?? 50);
         $user = $request->user();
@@ -37,10 +97,21 @@ class ConversationController extends Controller
         if (! empty($v['cursor'])) {
             $query->where('id', '<', Conversation::visibleTo($user)->select('id')->where('public_id', strtolower($v['cursor']))->limit(1));
         }
-        $rows = $query->with(['patient.person', 'branch', 'participants.user.person'])->orderByDesc('id')->limit($per + 1)->get();
+        $rows = $query->with(['patient.person', 'branch', 'participants.user.person', 'assignee.person'])->orderByDesc('id')->limit($per + 1)->get();
         $page = $rows->take($per)->values();
 
-        return response()->json(['data' => ConversationResource::collection($page)->resolve($request), 'meta' => ['per_page' => $per, 'next_cursor' => $rows->count() > $per ? $page->last()->public_id : null]]);
+        return response()->json(['data' => ConversationResource::collection($page)->resolve($request), 'meta' => ['per_page' => $per, 'next_cursor' => $rows->count() > $per ? $page->last()->public_id : null, 'channels' => $this->inboxChannels($user)]]);
+    }
+
+    /** Realtime inbox channels this account may subscribe to (the same rules as routes/channels.php): branch inboxes for Staff, own channel otherwise. */
+    private function inboxChannels($user): array
+    {
+        if ($user->role === \App\Enums\Role::Staff) {
+            return Branch::whereIn('id', \App\Models\UserBranchScope::where('user_id', $user->id)->select('branch_id'))->pluck('public_id')
+                ->map(fn ($id) => 'branch-inbox.'.strtolower($id))->values()->all();
+        }
+
+        return ['user.'.strtolower((string) $user->public_id)];
     }
 
     /** Authoritative in-application counts for the viewer (a genuine zero is a zero; the client must treat a failure as unavailable). */
@@ -54,7 +125,7 @@ class ConversationController extends Controller
     public function show(Request $request, Conversation $conversation): ConversationResource
     {
         abort_unless($conversation->accessibleTo($request->user()), 403);
-        $conversation = $this->summaries($request->user())->with(['patient.person', 'branch', 'participants.user.person'])->findOrFail($conversation->id);
+        $conversation = $this->summaries($request->user())->with(['patient.person', 'branch', 'participants.user.person', 'assignee.person'])->findOrFail($conversation->id);
 
         return new ConversationResource($conversation);
     }
@@ -63,8 +134,19 @@ class ConversationController extends Controller
     public function messages(Request $request, Conversation $conversation): JsonResponse
     {
         abort_unless($conversation->accessibleTo($request->user()), 403);
-        $v = $request->validate(['per_page' => ['nullable', 'integer', 'min:1', 'max:'.self::MAX_PER_PAGE], 'cursor' => ['nullable', 'string', 'size:26']]);
+        Presence::touch($request->user());
+        $v = $request->validate(['per_page' => ['nullable', 'integer', 'min:1', 'max:'.self::MAX_PER_PAGE], 'cursor' => ['nullable', 'string', 'size:26'], 'after' => ['nullable', 'string', 'size:26', 'prohibits:cursor']]);
         $per = (int) ($v['per_page'] ?? 30);
+        if (! empty($v['after'])) {
+            // Realtime and polling sync: messages NEWER than `after` (a message of THIS conversation), oldest first. This is the one read
+            // path used both after a socket signal and by the polling fallback, so both show the same projection.
+            $after = ConversationMessage::where('conversation_id', $conversation->id)->where('public_id', strtolower($v['after']))->value('id');
+            if ($after === null) throw \Illuminate\Validation\ValidationException::withMessages(['after' => 'Choose a message from this conversation.']);
+            $rows = ConversationMessage::where('conversation_id', $conversation->id)->where('id', '>', $after)->with('sender.person')->orderBy('id')->limit($per + 1)->get();
+            $page = $rows->take($per)->values();
+
+            return response()->json(['data' => MessageResource::collection($page)->resolve($request), 'meta' => ['per_page' => $per, 'order' => 'oldest_first', 'more' => $rows->count() > $per]]);
+        }
         $query = ConversationMessage::where('conversation_id', $conversation->id);
         if (! empty($v['cursor'])) {
             // The cursor is looked up inside THIS conversation only: a message from elsewhere reveals nothing.

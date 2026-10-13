@@ -16,12 +16,13 @@ class MessageResource extends JsonResource
         $viewer = $this->additional['viewer'] ?? $request->user()?->id;
         $role = $m->sender->role->value;
 
-        return [
+        // `without_body`: the copy kept in an idempotency record must not hold the text (encryption at rest); the service re-attaches it.
+        return array_filter([
             'id' => $m->public_id,
-            'body' => $m->body,
+            'body' => ($this->additional['without_body'] ?? false) ? null : $m->body,
             'sender' => ['name' => $m->sender->person?->fullName(), 'role' => ucfirst($role)],
             'mine' => $m->sender_user_id === $viewer,
             'sent_at' => ClinicClock::local($m->created_at)->toIso8601String(),
-        ];
+        ], fn ($value, $key) => $key !== 'body' || $value !== null, ARRAY_FILTER_USE_BOTH);
     }
 }

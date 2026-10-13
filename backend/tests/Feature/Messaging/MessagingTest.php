@@ -56,6 +56,12 @@ class MessagingTest extends TestCase
         return $c;
     }
 
+    /** Message text is encrypted at rest (decision 5), so a test finds a message by its DECRYPTED text, never with a SQL where. */
+    private function messageWithText(string $text): ConversationMessage
+    {
+        return ConversationMessage::all()->first(fn ($m) => $m->body === $text);
+    }
+
     private function newest(Conversation $c): string
     {
         return ConversationMessage::where('conversation_id', $c->id)->orderByDesc('id')->value('public_id');
@@ -83,8 +89,9 @@ class MessagingTest extends TestCase
         foreach ($routes as [$verb, $url]) {
             ($verb === 'getJson' ? $this->getJson($url) : $this->postJson($url, ['body' => 'x', 'expected_revision' => 1], ['Idempotency-Key' => $this->key()]))->assertForbidden();
         }
-        // Wrong Patient, non-participant Staff of the same branch, Staff of another branch, a non-participant Dentist.
-        foreach (['patientB', 'staffBoth', 'staffB2', 'staffNone', 'dentist1', 'dentist2'] as $who) {
+        // Wrong Patient, Staff of another branch, Staff with no branch scope, a non-participant Dentist. (Decision 3: every Staff member
+        // whose scope covers the branch — staffBoth here — is the branch front desk and may read and reply; see MessagingRoutingTest.)
+        foreach (['patientB', 'staffB2', 'staffNone', 'dentist1', 'dentist2'] as $who) {
             $this->actingAsUser($who);
             $this->getJson("/api/conversations/{$c->public_id}")->assertForbidden();
             $this->getJson("/api/conversations/{$c->public_id}/messages")->assertForbidden();
@@ -162,7 +169,7 @@ class MessagingTest extends TestCase
         $this->send($c, 'patientA', $xss)->assertCreated();
         $this->send($c, 'patientA', str_repeat('y', 2000))->assertCreated();            // exactly at the bound
         $this->send($c, 'patientA', 'José Núñez 李小龍 👍')->assertCreated();
-        $stored = ConversationMessage::orderBy('id')->pluck('body')->all();
+        $stored = ConversationMessage::orderBy('id')->get()->pluck('body')->all();
         $this->assertSame($xss, $stored[0], 'stored and returned verbatim as data');
         $this->actingAsUser('staffB1');
         $this->assertSame('José Núñez 李小龍 👍', $this->getJson("/api/conversations/{$c->public_id}/messages")->json('data.0.body'));
@@ -230,7 +237,7 @@ class MessagingTest extends TestCase
             $this->send($c, $n % 2 ? 'patientA' : 'staffB1', "m{$n}");
         }
         $this->send($elsewhere, 'staffB1', 'other conversation');
-        $foreign = ConversationMessage::where('body', 'other conversation')->value('public_id');
+        $foreign = $this->messageWithText('other conversation')->public_id;
         $this->actingAsUser('patientA');
         $one = $this->getJson("/api/conversations/{$c->public_id}/messages?per_page=3")->assertOk();
         $two = $this->getJson("/api/conversations/{$c->public_id}/messages?per_page=3&cursor=".$one->json('meta.next_cursor'))->assertOk();
@@ -269,8 +276,10 @@ class MessagingTest extends TestCase
             $this->getJson('/api/conversations?'.$bad)->assertStatus(422);
         }
         $row = $this->getJson('/api/conversations?per_page=1')->json('data.0');
-        $this->assertSame(['id', 'context', 'status', 'revision', 'patient', 'branch', 'participants', 'unread', 'last_message_at', 'closed_at'], array_keys($row));
-        $this->assertSame([['name' => $this->u['staffB1']->person->fullName(), 'role' => 'Staff']], $row['participants']);
+        $this->assertSame(['id', 'context', 'status', 'revision', 'patient', 'branch', 'participants', 'assigned', 'unread', 'last_message_at', 'closed_at'], array_keys($row));
+        // Decision 3: a Patient sees the participant of record (the first Staff member to reply) and Dentists — nobody has replied yet.
+        $this->assertSame([], $row['participants']);
+        $this->assertNull($row['assigned']);
     }
 
     // ---- lifecycle, immutability, retention ------------------------------------------------------------------------------
@@ -328,17 +337,20 @@ class MessagingTest extends TestCase
 
     // ---- boundaries -----------------------------------------------------------------------------------------------------
 
-    public function test_no_creation_route_no_delivery_claims_no_notifications_no_ai_and_no_audit_transcript(): void
+    public function test_staff_cannot_start_no_delivery_claims_no_notifications_no_ai_and_no_audit_transcript(): void
     {
         $c = $this->conversation();
         $audit = AuditLog::count();
         $this->actingAsUser('staffB1');
-        $this->postJson('/api/conversations', ['patient_id' => 'x', 'context' => 'new'], ['Idempotency-Key' => $this->key()])->assertStatus(405);
+        $this->postJson('/api/conversations', ['patient_id' => 'x', 'context' => 'new'], ['Idempotency-Key' => $this->key()])->assertForbidden(); // Staff cannot start one
+        \App\Services\Messaging\Presence::touch($this->u['patientA']); // the Patient is in the app, so no offline email alert is due
         $this->deleteJson("/api/conversations/{$c->public_id}/messages/x")->assertNotFound();
         $this->patchJson("/api/conversations/{$c->public_id}/messages/x", ['body' => 'x'])->assertNotFound();
         $this->send($c, 'staffB1', 'Hello');
         $this->send($c, 'patientA', 'Hi');
-        $this->assertSame($audit, AuditLog::count(), 'M22 is not a conversation transcript: no audit rows');
+        // M22 is not a conversation transcript: sends add no audit rows; only the structural assignment (first Staff reply) is recorded.
+        $this->assertSame(['conversation.assigned'], AuditLog::orderBy('id')->skip($audit)->take(10)->pluck('action')->all());
+        $this->assertStringNotContainsString('Hello', AuditLog::all()->toJson());
         Mail::assertNothingSent();
         Notification::assertNothingSent();
         Http::assertNothingSent();
@@ -480,9 +492,9 @@ class MessagingTest extends TestCase
         $this->send($c, 'patientA', 'a1');
         $this->send($c, 'patientA', 'a2');
         $this->send($other, 'patientB', 'b1');
-        $a1 = ConversationMessage::where('body', 'a1')->value('id');
-        $a2 = ConversationMessage::where('body', 'a2')->value('id');
-        $b1 = ConversationMessage::where('body', 'b1')->value('id');
+        $a1 = $this->messageWithText('a1')->id;
+        $a2 = $this->messageWithText('a2')->id;
+        $b1 = $this->messageWithText('b1')->id;
         $row = fn () => DB::table('conversation_participants')->where('conversation_id', $c->id)->where('user_id', $this->u['staffB1']->id);
         $attempts = [
             'marker in another conversation' => fn () => $row()->update(['last_read_message_id' => $b1]),

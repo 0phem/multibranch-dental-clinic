@@ -231,16 +231,22 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureAccountAccess::cla
         Route::post('/', [FeedbackController::class, 'store'])->middleware(['role:patient', 'throttle:m26-submit']);
     });
 
-    // M17 Unified Patient Messaging: in-app human conversations between an identified Patient and explicit clinic participants. Patient,
-    // Staff and Dentist only (Owner has none); no create/edit/delete route; sending is rate-limited per account (a technical bound).
+    // M17 Unified Patient Messaging: in-app human conversations between an identified Patient and the clinic. Patient, Staff and Dentist
+    // only (Owner has none). A Patient starts a front-desk conversation; branch Staff reply and may add a Dentist; no edit/delete route;
+    // sending and starting are rate-limited per account (technical bounds). Realtime channels: routes/channels.php.
     Route::prefix('conversations')->middleware('role:patient,staff,dentist')->group(function () {
         Route::get('/', [ConversationController::class, 'index']);
+        Route::post('/', [ConversationController::class, 'start'])->middleware(['role:patient', 'throttle:m17-start', 'throttle:m17-send']);
+        Route::get('/start-options', [ConversationController::class, 'startOptions'])->middleware('role:patient');
+        Route::post('/presence', [ConversationController::class, 'presence']);
         Route::get('/summary', [ConversationController::class, 'summary']);
         Route::get('/{conversation}', [ConversationController::class, 'show']);
         Route::get('/{conversation}/messages', [ConversationController::class, 'messages']);
         Route::post('/{conversation}/messages', [ConversationController::class, 'send'])->middleware('throttle:m17-send');
         Route::post('/{conversation}/read', [ConversationController::class, 'read']);
         Route::post('/{conversation}/close', [ConversationController::class, 'close']);
+        Route::get('/{conversation}/dentist-options', [ConversationController::class, 'dentistOptions'])->middleware('role:staff');
+        Route::post('/{conversation}/participants', [ConversationController::class, 'addParticipant'])->middleware('role:staff');
     });
 
     // M16 Social Media & External Inquiry Management: manually captured pre-booking inquiries, Staff only (assigned Staff in an

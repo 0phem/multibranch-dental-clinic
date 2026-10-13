@@ -12,6 +12,8 @@ return Application::configure(basePath: dirname(__DIR__))
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
     )
+    // M17 realtime: private-channel authorization at /api/broadcasting/auth behind the same session checks as the API.
+    ->withBroadcasting(__DIR__.'/../routes/channels.php', ['prefix' => 'api', 'middleware' => ['api', 'auth:sanctum', \App\Http\Middleware\EnsureAccountAccess::class]])
     ->withMiddleware(function (Middleware $middleware): void {
         // SPA session-cookie authentication for the future Vite frontend (Backend Foundation 1B), per
         // Laravel Sanctum's supported first-party-SPA approach — not a custom/invented token format.

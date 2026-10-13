@@ -9,9 +9,12 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-// M17 conversation (see the create_messaging_tables migration). Access = EXPLICIT PARTICIPANT AND a role-specific link, exactly the
-// prototype's rule: the Patient's own account for the conversation's Patient; Staff with authorization for the conversation's branch;
-// a Dentist assigned to that branch. Owner (and every other role) has none. Roles alone never grant a conversation.
+// M17 conversation. Access (Phase 2 decision 3 — front-desk routing):
+//   Patient  — their own conversation (participant + the conversation's Patient is their own record);
+//   Staff    — EVERY conversation of a branch in their authorization scope (the branch front desk); replying or reading adds them as a
+//              participant row (read state), and the first Staff reply becomes the participant of record (`assigned_user_id`);
+//   Dentist  — only when Staff added them as a participant AND they are assigned to the conversation's branch;
+//   Owner    — none (decision 4), as every other role. Roles alone never grant a conversation.
 class Conversation extends Model
 {
     use HasUlids;
@@ -45,6 +48,11 @@ class Conversation extends Model
         return $this->belongsTo(Branch::class);
     }
 
+    public function assignee(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'assigned_user_id');
+    }
+
     public function participants(): HasMany
     {
         return $this->hasMany(ConversationParticipant::class);
@@ -61,7 +69,7 @@ class Conversation extends Model
 
         return match ($user->role) {
             Role::Patient => $participant($query->where('patient_id', $user->patient?->id ?? 0)),
-            Role::Staff => $participant($query->whereIn('branch_id', UserBranchScope::select('branch_id')->where('user_id', $user->id))),
+            Role::Staff => $query->whereIn('branch_id', UserBranchScope::select('branch_id')->where('user_id', $user->id)),
             Role::Dentist => $participant($query->whereIn('branch_id', DentistProfile::where('person_id', $user->person_id)->join('dentist_branches', 'dentist_branches.dentist_profile_id', '=', 'dentist_profiles.id')->select('dentist_branches.branch_id'))),
             default => $query->whereRaw('false'),
         };

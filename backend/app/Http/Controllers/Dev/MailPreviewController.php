@@ -34,6 +34,7 @@ class MailPreviewController extends Controller
             'password-changed' => fn () => new SecurityNoticeMail('password_changed', 'Maria', $when),
             'email-changed' => fn () => new SecurityNoticeMail('email_changed', 'Maria', $when, SecurityNoticeMail::mask('maria.new@example.test')),
             'employee-invitation' => fn () => new EmployeeInvitationMail($invitee, rtrim((string) config('app.frontend_url'), '/').'/#accept-invitation?email=new.staff%40example.test&token=SAMPLE-TOKEN', 72),
+            'message-alert' => fn () => new \App\Mail\MessageAlertMail('Maria'),
             'smtp-test' => fn () => new ClinicTestMail(),
         ];
     }

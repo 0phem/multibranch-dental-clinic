@@ -144,25 +144,43 @@ exactly as it will for the real Vite app later.
 
 ### Demo/dev seed accounts
 
-`php artisan db:seed` runs `DemoAccountsSeeder`, which refuses to run when `APP_ENV=production`. It creates one
-account per role:
+`php artisan db:seed` runs `DemoAccountsSeeder` and `DemoStaffProfileSeeder`, which refuse to run when `APP_ENV=production`.
+They create one account per role, plus a second Staff branch for the cross-branch messaging demo:
 
-| Role | Email | Title |
-| --- | --- | --- |
-| Patient | `patient@example.test` | — |
-| Staff | `staff.reception@example.test` | Receptionist |
-| Staff | `staff.assistant@example.test` | Dental Assistant |
-| Dentist | `dentist@example.test` | — |
-| Owner | `owner@example.test` | — |
+| Role | Email | Title | Branch (profile and access) |
+| --- | --- | --- | --- |
+| Patient | `patient@example.test` | — | — |
+| Staff | `staff.reception@example.test` | Receptionist | Branch A |
+| Staff | `staff.assistant@example.test` | Dental Assistant | Branch A |
+| Staff | `staff.branchb@example.test` | Receptionist | Branch B |
+| Dentist | `dentist@example.test` | — | — |
+| Owner | `owner@example.test` | — | — |
+
+On an existing local database, add only the Staff profiles and the Branch B account with
+`php artisan db:seed --class=DemoStaffProfileSeeder` (idempotent).
 
 Password for all demo accounts: the value of `DEMO_ACCOUNT_PASSWORD` in your `.env` if set, otherwise the
 local-dev-only fallback `DemoPass123`. This is not a secret worth protecting (it only ever unlocks a throwaway
 local database) but is not hardcoded as plaintext in any tracked file beyond this placeholder documentation.
 
+## Encryption key (`APP_KEY`)
+
+`APP_KEY` encrypts Patient message text at rest (M17), queued email jobs that carry one-time codes, and session cookies.
+
+- **Losing it makes every stored message unreadable.** There is no recovery. Back it up in the clinic's password manager as soon as
+  it is generated, and keep the backup outside the server.
+- **Never commit it** and never reuse the development key in production.
+- **Rotating it** (for example after a suspected leak):
+  1. Move the current key to `APP_PREVIOUS_KEYS` and set a new `APP_KEY`.
+  2. Restart the API, the queue worker and Reverb.
+  3. Run `php artisan messages:encrypt-bodies --rotate`. If it stops, resume with `--from-id=<last id>`.
+  4. Then remove the old key.
+
+  Rotation signs everyone out. Plan it outside clinic hours. Details: `docs/M17_REALTIME_MESSAGING.md`.
+
 ## Known limitations (this checkpoint only)
 
 - No appointments, treatment, queue, HMO, billing, or loyalty tables or endpoints exist yet.
-- No password reset / email verification flow.
 - No profile-editing endpoints.
 - No rate limiting has been added beyond Laravel's defaults.
 - Staff `title` is a free-text display field with no catalog/validation of allowed values yet.

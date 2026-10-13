@@ -51,6 +51,12 @@ class AppServiceProvider extends ServiceProvider
             ];
         });
         // M26: per ACCOUNT submission bound (storage amplification). A technical safeguard, not a clinic feedback-frequency policy.
+        \Illuminate\Support\Facades\RateLimiter::for('m17-start', function ($request) {
+            $who = 'user:'.($request->user()?->getAuthIdentifier() ?? 'anon:'.$request->ip());
+
+            return \Illuminate\Cache\RateLimiting\Limit::perHour((int) config('messaging.start_per_hour', 5))->by($who.':start')
+                ->response(fn ($request, array $headers) => response()->json(['message' => 'You have started several conversations recently. Please continue in an existing one or try again later.', 'code' => 'messages_rate_limited', 'retry_after' => (int) ($headers['Retry-After'] ?? 3600)], 429, $headers));
+        });
         \Illuminate\Support\Facades\RateLimiter::for('m26-submit', function ($request) {
             $who = 'user:'.($request->user()?->getAuthIdentifier() ?? 'anon:'.$request->ip());
             $respond = fn ($request, array $headers) => response()->json(['message' => 'You are submitting feedback very quickly. Please wait a moment and try again.', 'code' => 'feedback_rate_limited', 'retry_after' => (int) ($headers['Retry-After'] ?? 60)], 429, $headers);

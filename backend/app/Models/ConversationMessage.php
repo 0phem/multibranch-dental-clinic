@@ -2,11 +2,15 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Facades\Crypt;
 
 // Immutable (database trigger): a sent message is never edited or deleted. The sender is the authenticated account, never client input.
+// Encrypted at rest (Phase 2 decision 5): `body` reads and writes the text, but only `body_encrypted` (Laravel encrypter, APP_KEY with
+// APP_PREVIOUS_KEYS for rotation) is stored. A row written before encryption keeps its plain `body` until messages:encrypt-bodies runs.
 class ConversationMessage extends Model
 {
     use HasUlids;
@@ -17,9 +21,19 @@ class ConversationMessage extends Model
 
     protected $guarded = ['id', 'public_id'];
 
+    protected $hidden = ['body_encrypted'];
+
     protected function casts(): array
     {
         return ['created_at' => 'immutable_datetime'];
+    }
+
+    protected function body(): Attribute
+    {
+        return Attribute::make(
+            get: fn (?string $value, array $attributes) => isset($attributes['body_encrypted']) ? Crypt::decryptString($attributes['body_encrypted']) : $value,
+            set: fn (string $value) => ['body' => null, 'body_encrypted' => Crypt::encryptString($value)],
+        );
     }
 
     public function uniqueIds(): array
