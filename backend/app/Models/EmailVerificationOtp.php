@@ -7,7 +7,11 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class EmailVerificationOtp extends Model
 {
-    protected $fillable = ['user_id', 'digest', 'attempts', 'expires_at', 'sent_at', 'consumed_at'];
+    public const REGISTRATION = 'email_verification';
+    public const PASSWORD_RESET = 'password_reset';
+    public const EMAIL_CHANGE = 'email_change';
+
+    protected $fillable = ['user_id', 'purpose', 'new_email', 'digest', 'attempts', 'expires_at', 'sent_at', 'consumed_at'];
 
     protected function casts(): array
     {
