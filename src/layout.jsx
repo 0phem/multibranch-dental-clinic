@@ -15,7 +15,7 @@ import { Brand } from './Brand.jsx'
 const useLayoutEffectSafe=typeof window==='undefined'?React.useEffect:React.useLayoutEffect
 
 const NAV_ICONS={
-  dashboard:'home',book:'plusCalendar',appointments:'calendar',schedule:'calendar',checkin:'checkin',queue:'queue',capacity:'activity',
+  dashboard:'home',book:'plusCalendar',appointments:'calendar',calendar:'calendar',schedule:'calendar',checkin:'checkin',queue:'queue',capacity:'activity',
   patients:'users',treatment:'tooth',billing:'receipt',hmo:'shield',inquiries:'message',messages:'message',prescriptions:'pill',followups:'followup',
   branches:'building',team:'users',analytics:'chart',users:'shield',pricing:'receipt',automation:'settings',engagement:'sparkles',loyalty:'gift',me:'user',feedback:'message'
 }
@@ -26,7 +26,7 @@ const GROUPS={
   // Loyalty remain fully reachable pages (see `pages` in safeguards.js and Me's secondary links) — they are just
   // not primary navigation destinations.
   patient:[['Overview',['dashboard']],['Booking',['book','appointments']],['Communication',['messages']],['Account',['billing','feedback','me']]],
-  staff:[['Today',['dashboard','appointments','checkin','queue','capacity']],['Patients & finance',['patients','billing','hmo']],['Communication',['inquiries','messages','followups','engagement']]],
+  staff:[['Today',['dashboard','appointments','calendar','checkin','queue','capacity']],['Patients & finance',['patients','billing','hmo']],['Communication',['inquiries','messages','followups','engagement']]],
   dentist:[['Today',['dashboard','schedule','queue']],['Clinical',['patients','treatment','prescriptions','followups']],['Communication',['messages']]],
   owner:[['Overview',['dashboard','analytics']],['Operations',['branches','team','capacity','hmo']],['Administration',['users','pricing','automation','audit','engagement']]],
 }
@@ -35,7 +35,7 @@ const GROUPS={
 // "Capacity"/"Workload" labels belong to the offline demo's estimators and are not shown for server sessions.
 function navGroups(role,serverSession=false){
   const lookup=Object.fromEntries(NAV[role].map(([key,label])=>[key,serverSession&&key==='capacity'?'Live Queue by Branch':label]))
-  return GROUPS[role].map(([title,keys])=>[title,keys.filter(k=>lookup[k]).map(k=>[k,lookup[k]])]).filter(([,items])=>items.length)
+  return GROUPS[role].map(([title,keys])=>[title,keys.filter(k=>lookup[k]&&(k!=='calendar'||serverSession)).map(k=>[k,lookup[k]])]).filter(([,items])=>items.length)
 }
 
 // Authoritative clinic identity is the text "Dr. Dana E. Roxas" / "Dental Clinic", set beside the official compact

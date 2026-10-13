@@ -47,7 +47,7 @@ export const NAV = {
     ['hmo','HMO Coverage'], ['messages','Messages'], ['billing','Receipts & Payments'], ['prescriptions','Prescriptions'], ['followups','Follow-Up Care'], ['loyalty','Referral & Loyalty'], ['feedback','Share Feedback'], ['me','Me']
   ],
   staff: [
-    ['dashboard','Operations'], ['appointments','Appointments'], ['checkin','Check-In'], ['queue','Live Queue'], ['capacity','Capacity'],
+    ['dashboard','Operations'], ['appointments','Appointments'], ['calendar','Appointment Calendar'], ['checkin','Check-In'], ['queue','Live Queue'], ['capacity','Capacity'],
     ['patients','Patient Records'], ['billing','Billing & Payments'], ['hmo','HMO Management'], ['inquiries','Social Inquiries'], ['messages','Messages'], ['followups','Follow-Up Tasks'], ['engagement','Engagement']
   ],
   dentist: [

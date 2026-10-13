@@ -16,6 +16,7 @@ import * as api from './api-client.js'
 const DashboardPage=lazy(()=>import('./pages/Dashboards.jsx').then(m=>({default:m.DashboardPage})))
 const AppointmentsPage=lazy(()=>import('./pages/Scheduling.jsx').then(m=>({default:m.AppointmentsPage})))
 const BookingPage=lazy(()=>import('./pages/Scheduling.jsx').then(m=>({default:m.BookingPage})))
+const StaffDayCalendar=lazy(()=>import('./pages/StaffDayCalendar.jsx').then(m=>({default:m.StaffDayCalendar})))
 const SchedulePage=lazy(()=>import('./pages/Scheduling.jsx').then(m=>({default:m.SchedulePage})))
 const CheckInPage=lazy(()=>import('./pages/PatientFlow.jsx').then(m=>({default:m.CheckInPage})))
 const QueuePage=lazy(()=>import('./pages/PatientFlow.jsx').then(m=>({default:m.QueuePage})))
@@ -254,6 +255,7 @@ function AppBody() {
     case 'book': content=<BookingPage role={role} store={store} setPage={setPage} context={context}/>; break
     case 'appointments': content=<AppointmentsPage role={role} store={store} setPage={setPage} context={context}/>; break
     case 'schedule': content=<SchedulePage store={store}/>; break
+    case 'calendar': content=<StaffDayCalendar store={store}/>; break
     case 'checkin': content=<CheckInPage store={store}/>; break
     case 'queue': content=<QueuePage {...props}/>; break
     case 'capacity': content=<CapacityPage {...props}/>; break
