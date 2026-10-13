@@ -377,7 +377,8 @@ class AccountRecoveryTest extends TestCase
             $this->assertStringNotContainsString('Quezon City', $html, 'no invented branch list');
             $this->assertNotNull($mail->content()->text);
         }
-        $this->assertStringContainsString('482&nbsp;913', $mails[0]->render());
+        // One unbroken string (spacing is CSS letter-spacing), so copying the code gives exactly the six digits.
+        $this->assertStringContainsString('>482913</div>', $mails[0]->render());
         $this->assertStringNotContainsString('482913', $mails[0]->envelope()->subject, 'the code is never in the subject line');
     }
 

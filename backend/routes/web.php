@@ -11,4 +11,5 @@ Route::get('/', function () {
 if (app()->environment('local')) {
     Route::get('/dev/mail', [\App\Http\Controllers\Dev\MailPreviewController::class, 'index']);
     Route::get('/dev/mail/{template}', [\App\Http\Controllers\Dev\MailPreviewController::class, 'show']);
+    Route::get('/dev/mail/pdf/{document}', [\App\Http\Controllers\Dev\MailPreviewController::class, 'pdf']);
 }

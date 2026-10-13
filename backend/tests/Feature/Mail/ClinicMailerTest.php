@@ -178,7 +178,8 @@ class ClinicMailerTest extends TestCase
 
         $this->assertStringContainsString('RCT-2026-000888', $rendered);
         $this->assertStringContainsString('INV-2026-000888', $rendered);
-        $this->assertStringContainsString('PayMongo (GCASH)', $rendered);
+        $this->assertStringContainsString('GCash', $rendered); // the method in plain words
+        $this->assertStringNotContainsString('PayMongo (GCASH)', $rendered);
         $this->assertStringContainsString('2,000.00', $rendered);
         $this->assertStringContainsString('Dr. Dana E. Roxas Dental Clinic', $rendered);
     }

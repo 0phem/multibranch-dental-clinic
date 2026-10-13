@@ -36,7 +36,7 @@ class AppointmentEmailTest extends TestCase
         Mail::assertSent(AppointmentConfirmationMail::class, function (AppointmentConfirmationMail $mail) use ($appointment) {
             $html = $mail->render();
             return $mail->hasTo($this->u['patientA']->email) && $mail->appointment->is($appointment)
-                && str_contains($html, 'September 30, 2026') && str_contains($html, '02:00 PM')
+                && str_contains($html, 'September 30, 2026') && str_contains($html, '2:00 PM')
                 && ! str_contains($html, 'arrive 10') ; // no unapproved arrival-time instruction
         });
         $evidence = AuditLog::where('action', 'mail.dispatched')->where('auditable_public_id', $appointment->public_id)->firstOrFail();
@@ -51,7 +51,7 @@ class AppointmentEmailTest extends TestCase
         $this->postJson("/api/appointments/{$appointment->public_id}/reschedule", ['expected_revision' => 1, 'date' => '2026-10-01', 'start_time' => '10:00'], ['Idempotency-Key' => 'r-1'])->assertOk();
         // an idempotent replay returns the stored result and sends nothing again
         $this->postJson("/api/appointments/{$appointment->public_id}/reschedule", ['expected_revision' => 1, 'date' => '2026-10-01', 'start_time' => '10:00'], ['Idempotency-Key' => 'r-1'])->assertOk();
-        Mail::assertSent(AppointmentChangedMail::class, fn ($m) => $m->change === 'rescheduled' && str_contains($m->render(), 'October 01, 2026') && str_contains($m->render(), '10:00 AM'));
+        Mail::assertSent(AppointmentChangedMail::class, fn ($m) => $m->change === 'rescheduled' && str_contains($m->render(), 'October 1, 2026') && str_contains($m->render(), '10:00 AM'));
         Mail::assertSent(AppointmentChangedMail::class, 1);
 
         $this->postJson("/api/appointments/{$appointment->public_id}/cancel", ['expected_revision' => 2])->assertOk();
