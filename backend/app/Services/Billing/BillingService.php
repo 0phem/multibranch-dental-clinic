@@ -128,13 +128,12 @@ final class BillingService {
         // Inside the transaction: a payment recorded by Staff and its audit event commit or roll back together. (The provider
         // path never undoes captured funds: the webhook handler stores the provider event first and reconciles from it.)
         $this->audit($actor, 'billing.payment_recorded', $i, ['invoice_number' => $i->invoice_number, 'receipt_number' => $receipt->receipt_number, 'amount' => $balance, 'method' => $method]);
+        // M18: the courtesy receipt email is a durable intent written in this same transaction (so it exists only if the
+        // payment does); the worker sends it after commit and retries within its limit. It never undoes the payment.
         try {
-            $patientEmail = $i->patient?->user?->email ?? $i->patient?->person?->email;
-            if ($patientEmail) {
-                app(\App\Services\Mail\MailDispatcher::class)->send($patientEmail, new \App\Mail\PaymentReceiptMail($i, $receipt), 'payment_receipt', $actor, $i);
-            }
+            app(\App\Services\Mail\MailOutbox::class)->queue('payment_receipt', "payment_receipt:{$receipt->public_id}", $receipt, null, $i->patient?->user, $actor);
         } catch (\Throwable $e) {
-            report($e); // the receipt e-mail is a courtesy copy: a mail failure is logged, never silent, and never undoes the payment
+            report($e); // the intent is written inside a savepoint, so a failure here is reported and the payment still commits
         }
     }
 

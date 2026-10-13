@@ -168,26 +168,19 @@ final class AppointmentService
     }
 
     /**
-     * M18 / PI-29: tell the Patient by email that their appointment was booked or changed. Runs only AFTER the command's
-     * transaction commits (a rolled-back command sends nothing), through the dispatcher that records the real outcome
-     * (logged locally / accepted by transport / failed). A mail problem never undoes or fails the appointment command.
-     * An idempotent replay returns the stored response and never re-enters here, so it sends nothing twice.
+     * M18 / PI-29: tell the Patient by email that their appointment was booked or changed. Called INSIDE the command's
+     * transaction: it writes one durable send intent (unique per appointment revision), so a rolled-back or refused command
+     * leaves none and an idempotent replay never re-enters here. The worker sends after commit, records every attempt and
+     * retries within its limit; a mail problem never undoes or fails the appointment command.
      */
     private function notifyPatient(Appointment $appointment, User $actor, string $purpose): void
     {
-        \Illuminate\Support\Facades\DB::afterCommit(function () use ($appointment, $actor, $purpose) {
-            try {
-                $appointment->loadMissing(['patient.person', 'patient.user', 'branch', 'service', 'dentist.person']);
-                $email = $appointment->patient?->user?->email;
-                if (! $email) return;
-                $mail = $purpose === 'appointment_confirmation'
-                    ? new \App\Mail\AppointmentConfirmationMail($appointment)
-                    : new \App\Mail\AppointmentChangedMail($appointment, $purpose === 'appointment_cancelled' ? 'cancelled' : 'rescheduled');
-                app(\App\Services\Mail\MailDispatcher::class)->send($email, $mail, $purpose, $actor, $appointment);
-            } catch (\Throwable $e) {
-                \Illuminate\Support\Facades\Log::warning('Appointment email could not be prepared.', ['purpose' => $purpose, 'exception' => $e::class]);
-            }
-        });
+        try {
+            app(\App\Services\Mail\MailOutbox::class)->queue($purpose, "$purpose:{$appointment->public_id}:r{$appointment->revision}",
+                $appointment, $appointment->revision, $appointment->patient?->user, $actor);
+        } catch (\Throwable $e) {
+            report($e); // written inside a savepoint: a failure is reported and the appointment change still commits
+        }
     }
 
     /**

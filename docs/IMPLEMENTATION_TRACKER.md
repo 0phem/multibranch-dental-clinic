@@ -15,7 +15,7 @@ Started 2026-10-13. Keep current as slices land. Planning numbers follow `MODULE
 
 | No. | Module | Status | Next slice | Main blocker |
 | --- | --- | --- | --- | --- |
-| M1 | User Management | Partial | Live invite/accept verification after the clinic database is migrated | Implementation; PI-01 (additional Owners), PI-02 rest, PI-03/04 |
+| M1 | User Management | Partial (isolated end-to-end verified) | Live invite/accept on the clinic database after its migrations | Implementation; PI-01 (additional Owners), PI-02 rest, PI-03/04 |
 | M2 | Branch Management | Partial | Dated operating calendar and closures | Policy: actual days/hours, closure effects on bookings |
 | M3 | Work Schedules | Not started (flat shift fields only) | Dated roster model | Policy: actual shifts, PI-05/06 scope of change |
 | M4 | Patient Records | Partial | Re-verify server record fields live after migrations | Live DB migrations pending |
@@ -32,7 +32,7 @@ Started 2026-10-13. Keep current as slices land. Planning numbers follow `MODULE
 | M15 | Leave Management | Not started | — | Policy: leave types, coverage rules |
 | M16 | Patient Inquiries | Partial | — | Policy: routing, Owner access |
 | M17 | Patient Messaging | Partial | — | Policy: conversation creation/routing |
-| M18 | Notifications | Partial (email dispatch foundation; booked/changed emails) | Durable send records + worker (TD-24); reminders after PI-31 timing | Policy: reminder timing/sender (PI-31), channels, templates |
+| M18 | Notifications | Partial (durable email intents, worker, bounded retry) | Real transport + delivery evidence; reminders after PI-31 timing | Policy: reminder timing/sender (PI-31), channels, templates |
 | M19 | Prescriptions | Browser-local | Server prescription record | Policy: print fields, corrections |
 | M20 | Patient Follow-Up | Browser-local | Server follow-up obligation | Policy: intervals, DQ-72 |
 | M21 | Reports and Analytics | Partial | — | Policy: DQ-113 revenue basis |
@@ -52,7 +52,8 @@ Started 2026-10-13. Keep current as slices land. Planning numbers follow `MODULE
 - **Gaps (implementation)**: no password recovery; employee profile edits after invitation use the existing Owner profile update only.
 - **Open decisions (policy)**: PI-01 additional Owner accounts; PI-02 invitation expiry/resend/recovery/identity confirmation (engineering default 72 h, configurable `EMPLOYEE_INVITATION_EXPIRE_HOURS`); PI-03 who suspends/restores; PI-04 day-to-day account help.
 - **Evidence (2026-10-13)**: full backend suite 724/724 on `dental_clinic_test` (includes `EmployeeInvitationTest` 13 tests), then Queue/Visits/Analytics/Identity/Mail 105/105 after the last backend edits; frontend `tests/m1-employee-invitations.test.js` (8) and `tests/m1-employee-identity.test.js` (5); fixture browser QA `scripts/m1-invitations-browser-qa.mjs` 113 checks (invite, resend, cancel, branch access at five widths; accept page at five widths; new Staff/Dentist workspace at 375/1440). Live read-only: Owner invitation list 200 (empty), Staff 403; `/api/me` returns the right `employee` block for the seeded Staff and Dentist and none for the Owner.
-- **Limitations**: live invite/accept not run — it would write to the clinic database, and acceptance updates `users.auth_version`, a column not migrated there.
+- **Isolated integration (2026-10-13)**: on a separate, freshly migrated and seeded database with a real API and browser, the Owner invited a Staff member, the link was read from the local mail log, the person set a password (second use refused), signed in to their own Branch A workspace, had no branch access until the Owner granted it, then saw it take effect (`scripts/m1-m18-isolated-integration.mjs`, 16 checks).
+- **Limitations**: live invite/accept on the clinic database not run — it would write clinic records and needs the pending migrations (`docs/CLINIC_DB_PENDING_MIGRATIONS.md`).
 - **Acceptance for next slice**: with the clinic database migrated (team decision), invite a Staff member, read the link from the local mail log, accept it, sign in, grant branch access, and see that branch's records — all in the live app.
 
 ### M2 Branch Management — Partial
@@ -108,7 +109,9 @@ Started 2026-10-13. Keep current as slices land. Planning numbers follow `MODULE
 ### M18 Notifications — Partial
 - **New 2026-10-13**: `App\Services\Mail\MailDispatcher` — every email (Patient verification code, appointment confirmation, payment receipt, Owner diagnostic, employee invitation) goes through one dispatcher that reports `logged_only` / `transport_accepted` / `failed` truthfully and records `mail.dispatched` audit evidence (purpose, outcome, mailer; never the address or content). The Owner diagnostic no longer claims success or "Operational (Verified)" (TD-25 wording).
 - **Appointment change emails (2026-10-13, PI-29 "booked or changed")**: booking, reschedule and cancel now email the Patient after the command commits (a refused or rolled-back command sends nothing; an idempotent replay sends nothing twice; a mail failure never fails the command). Fixed: the booking confirmation showed the time the email was rendered instead of the appointment time, and carried an unapproved "arrive 10–15 minutes early" instruction (earliest Check-In is an unresolved policy) — removed.
-- **Still browser-local**: in-app notifications. **Gaps (implementation)**: no durable notification/dispatch records or retry worker (TD-24); no provider delivery receipts. **Policy**: channels, reminder timing, templates, retry limits.
+- **Durable dispatch and controlled retry (2026-10-13)**: `mail_dispatches` (intent) and append-only `mail_dispatch_attempts`; appointment and receipt emails are intents written in the domain transaction, sent by `SendMailDispatch` on the `mail` queue with atomic claims, bounded retries (4 attempts: 60 s / 5 min / 15 min), stale-claim recovery and `mail:process-due` (scheduled every minute). Secret-bearing mail (verification code, invitation link) is sent once and recorded, never stored or retried. Runbook: `docs/M18_EMAIL_DISPATCH.md`. TD-24 (worker) is addressed in code; a worker must be run in each environment.
+- **Evidence (2026-10-13)**: full backend suite 734/734 on `dental_clinic_test` (`MailOutboxTest` 10 tests incl. a real `queue:work` run); isolated integration `scripts/m1-m18-isolated-integration.mjs` 16/16 on `dental_clinic_isolated` (real API, browser and worker).
+- **Still browser-local**: in-app notifications. **Gaps**: no provider delivery receipts (`delivery_confirmed_at` never set); real inbox delivery unverified (mailer is `log`); migration not applied to the clinic database.
 
 ### M19 Prescriptions — Browser-local
 - Server stores only `prescription_required`. **Next**: server prescription draft/authorization record. **Policy**: print fields, corrections/reissue (unresolved policy 7).

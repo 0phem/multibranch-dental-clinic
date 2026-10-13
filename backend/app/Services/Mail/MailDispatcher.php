@@ -2,6 +2,8 @@
 
 namespace App\Services\Mail;
 
+use App\Models\MailDispatch;
+use App\Models\MailDispatchAttempt;
 use App\Models\User;
 use App\Services\Audit\AuditService;
 use Illuminate\Contracts\Mail\Mailable;
@@ -45,32 +47,74 @@ class MailDispatcher
     }
 
     /**
-     * @return array{status:string, mailer:string, transport_kind:string, message:string}
+     * One transport attempt, no bookkeeping. Returns the truthful outcome and, on failure, the exception CLASS only
+     * (transport messages can contain message content such as a one-time code, or SMTP credentials).
+     *
+     * @return array{status:string, mailer:string, transport_kind:string, error_class:?string}
      */
-    public function send(string $to, Mailable $mail, string $purpose, ?User $actor = null, mixed $target = null): array
+    public function attempt(string $to, Mailable $mail, string $purpose): array
     {
         $mailer = (string) config('mail.default');
         $kind = $this->transportKind();
         try {
             Mail::to($to)->send($mail);
-            $status = $kind === 'real' ? 'transport_accepted' : ($kind === 'local' ? 'logged_only' : 'transport_accepted');
+            $status = $kind === 'local' ? 'logged_only' : 'transport_accepted';
+            $error = null;
         } catch (\Throwable $e) {
-            // Transport exceptions can contain message content (for example a one-time code) or SMTP credentials, so only
-            // the exception class is logged.
             \Illuminate\Support\Facades\Log::warning('Mail dispatch failed.', ['purpose' => $purpose, 'exception' => $e::class]);
             $status = 'failed';
+            $error = $e::class;
         }
-        $result = ['status' => $status, 'mailer' => $mailer, 'transport_kind' => $kind, 'message' => self::describe($status, $kind)];
+
+        return ['status' => $status, 'mailer' => $mailer, 'transport_kind' => $kind, 'error_class' => $error];
+    }
+
+    /**
+     * Immediate, single-attempt send for messages that carry a one-time secret (verification code, invitation link) or are
+     * diagnostics: they are never stored or retried — the person asks again instead. The intent and attempt are still
+     * recorded durably (without the address, link or code).
+     *
+     * @return array{status:string, mailer:string, transport_kind:string, message:string}
+     */
+    public function send(string $to, Mailable $mail, string $purpose, ?User $actor = null, mixed $target = null): array
+    {
+        $dispatch = MailDispatch::create([
+            'purpose' => $purpose, 'dedupe_key' => $purpose.':'.\Illuminate\Support\Str::ulid(),
+            'subject_type' => $target instanceof \Illuminate\Database\Eloquent\Model ? strtolower(class_basename($target)) : null,
+            'subject_public_id' => $target instanceof \Illuminate\Database\Eloquent\Model ? ($target->public_id ?? null) : null,
+            'recipient_user_id' => null, 'created_by_user_id' => $actor?->id, 'retryable' => false, 'max_attempts' => 1,
+            'status' => 'processing', 'locked_at' => now(),
+        ]);
+        $started = now();
+        $result = $this->attempt($to, $mail, $purpose);
+        $this->record($dispatch, $result, $started, $actor, $target, final: true, reason: $result['status'] === 'failed' ? 'not_retryable' : null);
+
+        return ['status' => $result['status'], 'mailer' => $result['mailer'], 'transport_kind' => $result['transport_kind'], 'message' => self::describe($result['status'], $result['transport_kind'])];
+    }
+
+    /** Appends the attempt row, updates the intent and writes the audit evidence (purpose, outcome, mailer — nothing else). */
+    public function record(MailDispatch $dispatch, array $result, \DateTimeInterface $started, ?User $actor, mixed $target, bool $final, ?string $reason = null, ?\DateTimeInterface $nextAt = null): void
+    {
+        $attemptNo = $dispatch->attempts + 1;
+        MailDispatchAttempt::create([
+            'mail_dispatch_id' => $dispatch->id, 'attempt_no' => $attemptNo, 'outcome' => $result['status'],
+            'mailer' => $result['mailer'], 'transport_kind' => $result['transport_kind'], 'error_class' => $result['error_class'] ?? null,
+            'started_at' => $started, 'finished_at' => now(),
+        ]);
+        $status = $result['status'] === 'failed' ? ($final ? 'failed' : 'retry_scheduled') : $result['status'];
+        $dispatch->forceFill([
+            'attempts' => $attemptNo, 'status' => $status, 'locked_at' => null, 'mailer' => $result['mailer'], 'transport_kind' => $result['transport_kind'],
+            'next_attempt_at' => $status === 'retry_scheduled' ? $nextAt : null, 'failure_reason' => $status === 'failed' ? $reason : null,
+            'completed_at' => in_array($status, MailDispatch::TERMINAL, true) ? now() : null,
+        ])->save();
         try {
-            $payload = ['purpose' => $purpose, 'status' => $status, 'mailer' => $mailer, 'transport_kind' => $kind];
+            $payload = ['purpose' => $dispatch->purpose, 'status' => $result['status'], 'mailer' => $result['mailer'], 'transport_kind' => $result['transport_kind']];
             $actor
                 ? $this->audit->recordAdministrative('mail.dispatched', $actor, $target, $payload)
-                : $this->audit->record(['action' => 'mail.dispatched', 'category' => 'administrative', 'severity' => $status === 'failed' ? 'warning' : 'info', 'actor' => null, 'target' => $target, 'payload' => $payload]);
+                : $this->audit->record(['action' => 'mail.dispatched', 'category' => 'administrative', 'severity' => $result['status'] === 'failed' ? 'warning' : 'info', 'actor' => null, 'target' => $target, 'payload' => $payload]);
         } catch (\Throwable $e) {
             report($e); // evidence failure is reported, never hidden, and never changes the send result
         }
-
-        return $result;
     }
 
     public static function describe(string $status, string $kind): string
