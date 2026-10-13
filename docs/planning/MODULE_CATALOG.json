@@ -1,0 +1,1787 @@
+[
+  {
+    "id": 1,
+    "title": "User Management",
+    "owner": "Licanda, Celin",
+    "record": "Person, employee profile, User, invitation and access history",
+    "authority": "Owner approves employee provisioning; Patient registration and existing account permissions remain governed by current contracts",
+    "inputs": [
+      "Identity and contact details",
+      "Requested account role, employee duties and branch eligibility",
+      "Owner approval for an employee",
+      "Invitation, activation or account-access request"
+    ],
+    "steps": [
+      "Resolve identity and check duplicate account constraints",
+      "Validate Owner approval for employee provisioning",
+      "Link the Person, employee profile and approved access scope",
+      "Issue the configured invitation and verification challenge",
+      "Validate activation or authentication proof",
+      "Create or revoke authorized sessions",
+      "Apply permitted profile, credential and account changes",
+      "Preserve account, profile and access history"
+    ],
+    "outputs": [
+      "Authorized account and linked personnel profile",
+      "Invitation, verification and access status",
+      "Profile and access-change history"
+    ],
+    "boundary": "M1 owns account and personnel reference data, authentication and security. M3 owns dated work schedules; M15 owns leave decisions. Titles and branch employment never grant permissions automatically.",
+    "gate": "Confirm invitation expiry, identity activation/recovery, credential verification and role-change authority. Preserve Patient-only self-registration; no fifth role.",
+    "test": "An employee cannot activate a privileged account without Owner approval; another branch cannot gain access through a profile change.",
+    "evidence": "Reported backend account/security foundation. Complete employee invitation and activation remain unfinished.",
+    "flow": "Resolve identity and check duplicate account constraints -> Validate Owner approval for employee provisioning -> Link the Person, employee profile and approved access scope -> Issue the configured invitation and verification challenge -> Validate activation or authentication proof -> Create or revoke authorized sessions -> Apply permitted profile, credential and account changes -> Preserve account, profile and access history",
+    "updated": "October 12, 2026",
+    "version": "5.0",
+    "automation": [
+      "Validate access, stable references and allowed state changes.",
+      "Commit domain changes atomically where required and protect retries.",
+      "Request purpose-limited notifications after committed outcomes."
+    ],
+    "checks": [
+      "An employee cannot activate a privileged account without Owner approval; another branch cannot gain access through a profile change.",
+      "Reject unauthorized access and preserve attributed history."
+    ],
+    "dependencies": [
+      "M18 Notifications",
+      "M22 Audit Logs"
+    ],
+    "basis": "Original Q3/Q4/Q27; follow-up PI-01 Owner approval and PI-02 email invitation. Personnel consolidation is the agreed project scope.",
+    "metrics": [
+      [
+        "Invitation outcomes",
+        "Count issued, activated, expired and failed invitations separately."
+      ],
+      [
+        "Account integrity",
+        "Track duplicate identity refusals and unauthorized access changes."
+      ],
+      [
+        "Activation time",
+        "Measure invitation-to-activation elapsed time from recorded events."
+      ]
+    ],
+    "summary": "Account request -> Owner employee approval -> linked identity/profile -> invitation -> activation/verification -> session lifecycle -> permitted account/profile changes -> preserved history.",
+    "stakeholders": {
+      "internal": "Owner and authorized employee account maintainers",
+      "external": "Patient registering; employee receiving an invitation"
+    }
+  },
+  {
+    "id": 2,
+    "title": "Branch Management",
+    "owner": "Licanda, Celin",
+    "record": "Branch profile and operating calendar",
+    "authority": "Owner manages branch information and closures",
+    "inputs": [
+      "Branch identity and contact information",
+      "Approved operating days and hours",
+      "Owner closure decision",
+      "Existing bookings affected by a change"
+    ],
+    "steps": [
+      "Identify the branch and validate Owner authority",
+      "Validate contact and operating information",
+      "Record approved normal hours",
+      "Record dated closures or exceptions",
+      "Find existing bookings affected by a change",
+      "Require the approved handling decision",
+      "Publish the effective operating calendar",
+      "Retain change history and notify affected workflows"
+    ],
+    "outputs": [
+      "Current branch profile",
+      "Effective branch availability",
+      "Affected-booking worklist and change history"
+    ],
+    "boundary": "M2 owns branch identity, normal hours and dated closures. M3 owns employee availability; M6 owns changes to bookings. A closure identifies affected bookings without silently cancelling them.",
+    "gate": "Exact hours and existing-booking consequences remain open. Do not fabricate coordinates or automatic cancellations.",
+    "test": "A closure identifies affected appointments and does not silently cancel them.",
+    "evidence": "Reported branch backend foundation. Complete hours/closure workflow is not established.",
+    "flow": "Identify the branch and validate Owner authority -> Validate contact and operating information -> Record approved normal hours -> Record dated closures or exceptions -> Find existing bookings affected by a change -> Require the approved handling decision -> Publish the effective operating calendar -> Retain change history and notify affected workflows",
+    "updated": "October 12, 2026",
+    "version": "5.0",
+    "automation": [
+      "Validate access, stable references and allowed state changes.",
+      "Commit domain changes atomically where required and protect retries.",
+      "Request purpose-limited notifications after committed outcomes."
+    ],
+    "checks": [
+      "A closure identifies affected appointments and does not silently cancel them.",
+      "Reject unauthorized access and preserve attributed history."
+    ],
+    "dependencies": [
+      "M1 User Management",
+      "M6 Appointment Management",
+      "M18 Notifications",
+      "M22 Audit Logs"
+    ],
+    "basis": "Original Q2/Q18; PI-14 same hours across branches and PI-15 Owner-controlled closures.",
+    "metrics": [
+      [
+        "Booking impact",
+        "Count bookings affected by closures and unresolved handling decisions."
+      ],
+      [
+        "Calendar validity",
+        "Track rejected invalid hours and conflicting branch exceptions."
+      ],
+      [
+        "Change history",
+        "Measure attributed publication and effective-date completeness."
+      ]
+    ],
+    "summary": "Identify the branch and validate Owner authority -> Validate contact and operating information -> Record approved normal hours -> Record dated closures or exceptions -> Find existing bookings affected by a change -> Require the approved handling decision -> Publish the effective operating calendar -> Retain change history and notify affected workflows",
+    "stakeholders": {
+      "internal": "Owner",
+      "external": "Patient affected by branch availability"
+    }
+  },
+  {
+    "id": 3,
+    "title": "Work Schedules",
+    "owner": "Licanda, Celin",
+    "record": "Dated Staff/Dentist roster, branch assignment, availability exception and schedule revision",
+    "authority": "Owner controls published schedules under approved clinic rules; accepted M15 decisions propose changes through the schedule service",
+    "inputs": [
+      "Eligible employee profiles and verified duties from M1",
+      "Branch operating calendar from M2",
+      "Owner-defined dated shifts and availability",
+      "Existing appointments and accepted coverage decisions"
+    ],
+    "steps": [
+      "Resolve employee eligibility and schedule publication authority",
+      "Create the dated branch and duty assignment",
+      "Validate branch hours and cross-branch shift overlap",
+      "Record approved availability exceptions",
+      "Identify affected appointments and coverage requirements",
+      "Apply the approved booking-impact handling decision",
+      "Publish the effective roster revision",
+      "Preserve schedule history and request approved notifications"
+    ],
+    "outputs": [
+      "Published Staff and Dentist roster",
+      "Bookable Dentist availability and duty coverage",
+      "Affected-booking worklist and schedule history"
+    ],
+    "boundary": "M3 owns the effective roster for both Staff and Dentists. M15 owns requests and coverage consent; M6 owns bookings. An assigned shift does not confer clinical or financial access.",
+    "gate": "Confirm actual shifts, Staff scheduling authority, duty/service eligibility, work-hour constraints and booking-impact rules. No fixed minimum Dentist count is approved.",
+    "test": "Concurrent schedule changes cannot publish overlapping branch shifts or silently move a booked patient.",
+    "evidence": "Reported personnel/availability foundation exists under historical M3. Complete dated Staff/Dentist roster and automated leave integration require implementation.",
+    "flow": "Resolve employee eligibility and schedule publication authority -> Create the dated branch and duty assignment -> Validate branch hours and cross-branch shift overlap -> Record approved availability exceptions -> Identify affected appointments and coverage requirements -> Apply the approved booking-impact handling decision -> Publish the effective roster revision -> Preserve schedule history and request approved notifications",
+    "updated": "October 12, 2026",
+    "version": "5.0",
+    "automation": [
+      "Validate access, stable references and allowed state changes.",
+      "Commit domain changes atomically where required and protect retries.",
+      "Request purpose-limited notifications after committed outcomes."
+    ],
+    "checks": [
+      "Concurrent schedule changes cannot publish overlapping branch shifts or silently move a booked patient.",
+      "Changing a Staff title does not grant billing or reception permissions.",
+      "Reject unauthorized access and preserve attributed history."
+    ],
+    "dependencies": [
+      "M1 User Management",
+      "M2 Branch Management",
+      "M6 Appointment Management",
+      "M15 Leave Management",
+      "M18 Notifications",
+      "M22 Audit Logs"
+    ],
+    "basis": "PI-05 variable branch assignments, PI-06 Owner-decided Dentist schedules, PI-08 no fixed Dentist minimum; Staff coverage is the user-approved October 12 scope.",
+    "metrics": [
+      [
+        "Roster conflicts",
+        "Count overlapping branch or duty assignments rejected."
+      ],
+      [
+        "Coverage visibility",
+        "Count recorded uncovered duties without inventing staffing thresholds."
+      ],
+      [
+        "Publication history",
+        "Track effective roster revisions and affected-booking handling."
+      ]
+    ],
+    "summary": "Owner dated roster -> employee/duty eligibility -> branch and overlap checks -> availability exception -> affected-booking review -> handling decision -> published schedule -> attributed history.",
+    "stakeholders": {
+      "internal": "Owner; Staff and Dentists as roster participants",
+      "external": "Patient affected by schedule changes"
+    }
+  },
+  {
+    "id": 4,
+    "title": "Patient Records",
+    "owner": "Ecal, Richmon",
+    "record": "Person/Patient identity, health history and correction history",
+    "authority": "Patient and Staff maintain permitted identity fields; Dentist owns clinical review",
+    "inputs": [
+      "Patient identity and contact details",
+      "Reported medical history and allergies",
+      "Authorized correction request",
+      "Linked Visit, document and clinical references"
+    ],
+    "steps": [
+      "Find or register the exact Patient identity",
+      "Check duplicate identity signals without automatic merging",
+      "Validate permitted demographic changes",
+      "Record health-history provenance",
+      "Route clinical review to the Dentist",
+      "Link clinical and operational records by stable reference",
+      "Apply authorized corrections while preserving history",
+      "Present the permitted longitudinal record"
+    ],
+    "outputs": [
+      "Current Patient profile",
+      "Attributed medical-history record",
+      "Scoped Patient timeline and correction history"
+    ],
+    "boundary": "M4 owns Patient identity, permitted general history and corrections. M10 owns dental findings; M5 performed care; M12 proposed care; M14 files. Archive/restore is entity-specific and name history remains append-oriented.",
+    "gate": "Duplicate merge, corrections, cross-branch access and retention remain entity-specific policy decisions.",
+    "test": "A current name correction does not rewrite the name snapshot on an earlier financial record.",
+    "evidence": "Reported identity/profile foundation. Full history, merge and restoration workflows remain incomplete.",
+    "flow": "Find or register the exact Patient identity -> Check duplicate identity signals without automatic merging -> Validate permitted demographic changes -> Record health-history provenance -> Route clinical review to the Dentist -> Link clinical and operational records by stable reference -> Apply authorized corrections while preserving history -> Present the permitted longitudinal record",
+    "updated": "October 12, 2026",
+    "version": "5.0",
+    "automation": [
+      "Validate access, stable references and allowed state changes.",
+      "Commit domain changes atomically where required and protect retries.",
+      "Request purpose-limited notifications after committed outcomes."
+    ],
+    "checks": [
+      "A current name correction does not rewrite the name snapshot on an earlier financial record.",
+      "Reject unauthorized access and preserve attributed history."
+    ],
+    "dependencies": [
+      "M1 User Management",
+      "M14 Document Management",
+      "M22 Audit Logs"
+    ],
+    "basis": "Original Q16/Q17/Q18/Q24; user requirement for archive/restore and preserved name history.",
+    "metrics": [
+      [
+        "Correction history",
+        "Track permitted corrections with preserved earlier values."
+      ],
+      [
+        "Identity exceptions",
+        "Count unresolved duplicate signals without automatic merging."
+      ],
+      [
+        "Record access",
+        "Measure authorized retrieval and refused cross-patient access."
+      ]
+    ],
+    "summary": "Find or register the exact Patient identity -> Check duplicate identity signals without automatic merging -> Validate permitted demographic changes -> Record health-history provenance -> Route clinical review to the Dentist -> Link clinical and operational records by stable reference -> Apply authorized corrections while preserving history -> Present the permitted longitudinal record",
+    "stakeholders": {
+      "internal": "Scoped Staff; clinical reviewer only where authorized; Owner limited identity access",
+      "external": "Patient supplying and viewing permitted own information"
+    }
+  },
+  {
+    "id": 5,
+    "title": "Treatment Management",
+    "owner": "Ecal, Richmon",
+    "record": "Visit-linked Treatment and immutable completed revisions",
+    "authority": "Responsible Dentist authors and completes treatment",
+    "inputs": [
+      "Authoritative Visit and assigned Dentist",
+      "Permitted Patient history and dental chart",
+      "Dentist assessment and performed procedures",
+      "Approved treatment-plan reference when applicable"
+    ],
+    "steps": [
+      "Resolve the Visit and responsible Dentist",
+      "Validate clinical access and current treatment state",
+      "Review permitted history and findings",
+      "Record assessment and procedures actually performed",
+      "Save attributed documentation revisions",
+      "Validate completion requirements",
+      "Complete Treatment and linked Visit/appointment atomically",
+      "Expose safe downstream billing, prescription and follow-up context"
+    ],
+    "outputs": [
+      "Completed or active Treatment record",
+      "Performed-procedure evidence",
+      "Authoritative completion and downstream references"
+    ],
+    "boundary": "M5 owns actual care and authoritative Treatment completion. M12 proposed work is not completed care; M11 charges only authoritative billable evidence. M24 lab acceptance and M25 handover do not independently complete Treatment.",
+    "gate": "Clinical amendments and aborted-treatment handling require approved contracts; a calendar Done action cannot complete care.",
+    "test": "A proposed procedure does not become a billable completed procedure until the Dentist records actual treatment.",
+    "evidence": "Reported server-authoritative Treatment foundation with responsible-Dentist authorization and immutable completion.",
+    "flow": "Resolve the Visit and responsible Dentist -> Validate clinical access and current treatment state -> Review permitted history and findings -> Record assessment and procedures actually performed -> Save attributed documentation revisions -> Validate completion requirements -> Complete Treatment and linked Visit/appointment atomically -> Expose safe downstream billing, prescription and follow-up context",
+    "updated": "October 12, 2026",
+    "version": "5.0",
+    "automation": [
+      "Validate access, stable references and allowed state changes.",
+      "Commit domain changes atomically where required and protect retries.",
+      "Request purpose-limited notifications after committed outcomes."
+    ],
+    "checks": [
+      "A proposed procedure does not become a billable completed procedure until the Dentist records actual treatment.",
+      "Reject unauthorized access and preserve attributed history."
+    ],
+    "dependencies": [
+      "M4 Patient Records",
+      "M8 Patient Visits",
+      "M10 Dental Charts",
+      "M12 Treatment Plans",
+      "M24 Lab Cases",
+      "M25 Patient Handovers"
+    ],
+    "basis": "Original Q15/Q27/Q29. Existing responsible-Dentist and completion contracts remain authoritative.",
+    "metrics": [
+      [
+        "Care evidence",
+        "Track documented performed procedures against completed Treatment."
+      ],
+      [
+        "Completion integrity",
+        "Count refused invalid or stale completion attempts."
+      ],
+      [
+        "Clinical history",
+        "Measure responsible-Dentist attribution and protected revisions."
+      ]
+    ],
+    "summary": "Resolve the Visit and responsible Dentist -> Validate clinical access and current treatment state -> Review permitted history and findings -> Record assessment and procedures actually performed -> Save attributed documentation revisions -> Validate completion requirements -> Complete Treatment and linked Visit/appointment atomically -> Expose safe downstream billing, prescription and follow-up context",
+    "stakeholders": {
+      "internal": "Responsible Dentist and permitted assisting Staff",
+      "external": "Patient receiving care"
+    }
+  },
+  {
+    "id": 6,
+    "title": "Appointment Management",
+    "owner": "Alejo, Hart Jaztin A.",
+    "record": "Appointment, revision and attendance-response history",
+    "authority": "Existing Patient, Staff and Owner booking permissions remain authoritative",
+    "inputs": [
+      "Authorized Patient and requested service",
+      "Branch calendar and employee availability from M2/M3",
+      "Requested time and current appointment revisions",
+      "Attendance response or approved schedule/handover change"
+    ],
+    "steps": [
+      "Resolve the actor, Patient and booking intent",
+      "Find eligible branch and Dentist availability",
+      "Validate time rules and all overlap constraints",
+      "Create the booking or authorized revision atomically",
+      "Project appointments into day/week/month views",
+      "Record an attributed attendance response against the current revision",
+      "Route change requests through existing booking commands",
+      "Record outcomes and request approved notifications"
+    ],
+    "outputs": [
+      "Authoritative appointment and calendar view",
+      "Conflict or valid-slot result",
+      "Attendance-response and booking history"
+    ],
+    "boundary": "M6 owns booking, calendar and attendance responses. M8 owns arrival; M5/M8 supply authoritative completion; M18 delivery. Leave, lab or handover events identify work for permitted booking commands rather than silently changing appointments.",
+    "gate": "Response options/deadlines, stale responses, no-show rules and cancellation consequences remain open.",
+    "test": "A cannot-attend response is visible to Staff without automatically cancelling the booking or creating arrival.",
+    "evidence": "Reported booking/conflict foundation. Calendar integration and attendance-response workflow require a scoped return pass.",
+    "flow": "Resolve the actor, Patient and booking intent -> Find eligible branch and Dentist availability -> Validate time rules and all overlap constraints -> Create the booking or authorized revision atomically -> Project appointments into day/week/month views -> Record an attributed attendance response against the current revision -> Route change requests through existing booking commands -> Record outcomes and request approved notifications",
+    "updated": "October 12, 2026",
+    "version": "5.0",
+    "automation": [
+      "Validate access, stable references and allowed state changes.",
+      "Commit domain changes atomically where required and protect retries.",
+      "Request purpose-limited notifications after committed outcomes."
+    ],
+    "checks": [
+      "A cannot-attend response is visible to Staff without automatically cancelling the booking or creating arrival.",
+      "Reject unauthorized access and preserve attributed history."
+    ],
+    "dependencies": [
+      "M1 User Management",
+      "M2 Branch Management",
+      "M3 Work Schedules",
+      "M13 Services and Pricing",
+      "M18 Notifications"
+    ],
+    "basis": "Original Q20/Q28/Q32; PI-29 booking/change updates; user day/week/month calendar and attendance-response requirements.",
+    "metrics": [
+      [
+        "Booking conflicts",
+        "Count conflict refusals and successful authorized revisions."
+      ],
+      [
+        "Response visibility",
+        "Track current and stale attendance responses separately."
+      ],
+      [
+        "Calendar completeness",
+        "Compare displayed bookings with the full authorized source window."
+      ]
+    ],
+    "summary": "Resolve the actor, Patient and booking intent -> Find eligible branch and Dentist availability -> Validate time rules and all overlap constraints -> Create the booking or authorized revision atomically -> Project appointments into day/week/month views -> Record an attributed attendance response against the current revision -> Route change requests through existing booking commands -> Record outcomes and request approved notifications",
+    "stakeholders": {
+      "internal": "Staff/Owner under current booking capabilities",
+      "external": "Patient booking or responding to an appointment"
+    }
+  },
+  {
+    "id": 7,
+    "title": "AI Chatbot",
+    "owner": "Delos Santos, Joevan",
+    "record": "Approved knowledge version and scoped assistance request",
+    "authority": "Authenticated Patient only; knowledge publication authority must be approved",
+    "inputs": [
+      "Authenticated Patient question",
+      "Approved clinic knowledge",
+      "Permitted Patient-safe context",
+      "Configured provider and privacy choices"
+    ],
+    "steps": [
+      "Authenticate and resolve the Patient context",
+      "Check clinic scope and sensitive-information boundaries",
+      "Retrieve approved knowledge and permitted context",
+      "Call the existing server adapter when configured",
+      "Check the response against supported knowledge and allowed actions",
+      "Return guidance with navigation or an honest fallback",
+      "Offer an authorized human-contact path",
+      "Record minimal operational evidence without unnecessary clinical content"
+    ],
+    "outputs": [
+      "Grounded informational answer or refusal",
+      "Relevant navigation/contact guidance",
+      "Minimal service and knowledge-version evidence"
+    ],
+    "boundary": "M7 is an informational Patient-only service with approved knowledge, privacy checks and fallback. Human conversations belong to M17. AI cannot diagnose, prescribe, approve leave, book or settle payments.",
+    "gate": "Live provider, privacy notice, knowledge publication and provider-data handling need confirmation.",
+    "test": "An unsupported price or medical request produces a safe fallback rather than invented advice.",
+    "evidence": "Reported constrained Patient-only server adapter and curated knowledge foundation; live provider use is unverified.",
+    "flow": "Authenticate and resolve the Patient context -> Check clinic scope and sensitive-information boundaries -> Retrieve approved knowledge and permitted context -> Call the existing server adapter when configured -> Check the response against supported knowledge and allowed actions -> Return guidance with navigation or an honest fallback -> Offer an authorized human-contact path -> Record minimal operational evidence without unnecessary clinical content",
+    "updated": "October 12, 2026",
+    "version": "5.0",
+    "automation": [
+      "Validate access, stable references and allowed state changes.",
+      "Commit domain changes atomically where required and protect retries.",
+      "Request purpose-limited notifications after committed outcomes."
+    ],
+    "checks": [
+      "An unsupported price or medical request produces a safe fallback rather than invented advice.",
+      "Reject unauthorized access and preserve attributed history."
+    ],
+    "dependencies": [
+      "M1 User Management",
+      "M2 Branch Management",
+      "M13 Services and Pricing"
+    ],
+    "basis": "User-requested informational AI integration; reported existing constrained server adapter. Knowledge/privacy configuration remains a project decision.",
+    "metrics": [
+      [
+        "Supported answers",
+        "Track supported knowledge responses and honest fallbacks."
+      ],
+      [
+        "Knowledge provenance",
+        "Measure recorded knowledge/provider version completeness."
+      ],
+      [
+        "Service performance",
+        "Measure response latency and provider failures without fake quality scores."
+      ]
+    ],
+    "summary": "Authenticate and resolve the Patient context -> Check clinic scope and sensitive-information boundaries -> Retrieve approved knowledge and permitted context -> Call the existing server adapter when configured -> Check the response against supported knowledge and allowed actions -> Return guidance with navigation or an honest fallback -> Offer an authorized human-contact path -> Record minimal operational evidence without unnecessary clinical content",
+    "stakeholders": {
+      "internal": "Clinic knowledge maintainer under approved publication policy",
+      "external": "Authenticated Patient; configured AI provider"
+    }
+  },
+  {
+    "id": 8,
+    "title": "Patient Visits",
+    "owner": "Alejo, Hart Jaztin A.",
+    "record": "Arrival evidence, authoritative Visit, assignment and encounter-state history",
+    "authority": "Branch-authorized Staff admit Patients and assign within approved permissions",
+    "inputs": [
+      "Exact Patient identity",
+      "Scheduled appointment or walk-in request",
+      "Actual arrival time and branch",
+      "Available eligible Dentist or unassigned Visit"
+    ],
+    "steps": [
+      "Identify the exact Patient and branch",
+      "Validate a scheduled appointment or walk-in context",
+      "Record actual physical arrival",
+      "Check active-Visit and admission constraints",
+      "Create the authoritative Visit",
+      "Assign an eligible Dentist through permitted commands or retain an unassigned Visit",
+      "Hand off the assigned Visit to M9 and track authorized encounter outcomes",
+      "Present scoped Visit status and preserve attributed history"
+    ],
+    "outputs": [
+      "Authoritative assigned or unassigned Visit",
+      "Queue and treatment handoff references",
+      "Arrival, assignment and encounter history"
+    ],
+    "boundary": "M8 owns admission and the Visit bridge, including scheduled and walk-in context. M9 waiting order and M5 clinical completion remain distinct. An attendance response is not arrival; Patient-only feedback may remain a supporting feature without new reviewer access.",
+    "gate": "Confirm late-arrival, reassignment, departure, aborted/end-of-day handling and Patient-visible history. Preserve current responsible-Dentist completion and private feedback restrictions.",
+    "test": "An unassigned arriving Patient has a Visit but no fabricated Dentist queue entry.",
+    "evidence": "Reported scheduled/walk-in Visit foundation. Assignment completeness and live integration require verification.",
+    "flow": "Identify the exact Patient and branch -> Validate a scheduled appointment or walk-in context -> Record actual physical arrival -> Check active-Visit and admission constraints -> Create the authoritative Visit -> Assign an eligible Dentist through permitted commands or retain an unassigned Visit -> Hand off the assigned Visit to M9 and track authorized encounter outcomes -> Present scoped Visit status and preserve attributed history",
+    "updated": "October 12, 2026",
+    "version": "5.0",
+    "automation": [
+      "Validate access, stable references and allowed state changes.",
+      "Commit domain changes atomically where required and protect retries.",
+      "Request purpose-limited notifications after committed outcomes."
+    ],
+    "checks": [
+      "An unassigned arriving Patient has a Visit but no fabricated Dentist queue entry.",
+      "Reject unauthorized access and preserve attributed history."
+    ],
+    "dependencies": [
+      "M4 Patient Records",
+      "M6 Appointment Management",
+      "M3 Work Schedules",
+      "M9 Patient Queue",
+      "M5 Treatment Management"
+    ],
+    "basis": "Original Q15/Q27; PI-13 available Dentist assignment and PI-21 case-by-case lateness. Visit expansion is the agreed module boundary.",
+    "metrics": [
+      [
+        "Unassigned Visits",
+        "Count actual arrivals awaiting permitted Dentist assignment."
+      ],
+      [
+        "Admission integrity",
+        "Track duplicate active-Visit refusals and admission exceptions."
+      ],
+      [
+        "Assignment time",
+        "Measure arrival-to-assignment time from authoritative timestamps."
+      ]
+    ],
+    "summary": "Actual arrival -> Patient and booking/walk-in validation -> admission checks -> Visit creation -> authorized assignment or unassigned state -> eligible queue handoff -> sourced encounter status -> history.",
+    "stakeholders": {
+      "internal": "Branch-authorized Staff and responsible Dentist under current commands",
+      "external": "Arriving Patient"
+    }
+  },
+  {
+    "id": 9,
+    "title": "Patient Queue",
+    "owner": "Alejo, Hart Jaztin A.",
+    "record": "QueueEntry, numbering and transition history",
+    "authority": "Scoped Staff/Owner operations and responsible-Dentist commands follow current contracts",
+    "inputs": [
+      "Assigned authoritative Visit",
+      "Branch, Dentist and clinic day",
+      "Current queue state",
+      "Authorized action or priority reason"
+    ],
+    "steps": [
+      "Accept an eligible assigned Visit",
+      "Allocate its queue number atomically",
+      "Compute ordering from authoritative records",
+      "Validate actor and allowed transition",
+      "Apply call, ready, away, return or serve outcome",
+      "Recompute visible positions",
+      "Publish scoped live waiting counts and Patient-safe status",
+      "Retain transition history and source freshness"
+    ],
+    "outputs": [
+      "Current ordered queue and factual waiting counts",
+      "Patient-safe own queue status",
+      "Attributed queue transition history"
+    ],
+    "boundary": "M9 owns live ordered waiting records and factual counts. M21 owns historical trends; M5 owns actual treatment completion. Predicted waits and numeric busy thresholds remain unapproved.",
+    "gate": "No guessed wait formula, fixed busy threshold or automatic cross-branch transfer is approved.",
+    "test": "Two concurrent operations cannot duplicate queue numbers; a Patient cannot read another Patient queue record.",
+    "evidence": "Reported server queue foundation. Live UI completeness and refresh behavior remain integration work.",
+    "flow": "Accept an eligible assigned Visit -> Allocate its queue number atomically -> Compute ordering from authoritative records -> Validate actor and allowed transition -> Apply call, ready, away, return or serve outcome -> Recompute visible positions -> Publish scoped live waiting counts and Patient-safe status -> Retain transition history and source freshness",
+    "updated": "October 12, 2026",
+    "version": "5.0",
+    "automation": [
+      "Validate access, stable references and allowed state changes.",
+      "Commit domain changes atomically where required and protect retries.",
+      "Request purpose-limited notifications after committed outcomes."
+    ],
+    "checks": [
+      "Two concurrent operations cannot duplicate queue numbers; a Patient cannot read another Patient queue record.",
+      "Reject unauthorized access and preserve attributed history."
+    ],
+    "dependencies": [
+      "M8 Patient Visits",
+      "M3 Work Schedules",
+      "M5 Treatment Management",
+      "M18 Notifications"
+    ],
+    "basis": "Original Q19/Q21/Q32; PI-24 many waiting and PI-25 front desk visibility; user live-waitlist requirement.",
+    "metrics": [
+      [
+        "Live waiting",
+        "Show factual current counts and ordered positions."
+      ],
+      [
+        "Transition integrity",
+        "Track refused duplicate numbers or invalid state changes."
+      ],
+      [
+        "Observed waiting",
+        "Measure elapsed waiting only where actual transition timestamps exist."
+      ]
+    ],
+    "summary": "Accept an eligible assigned Visit -> Allocate its queue number atomically -> Compute ordering from authoritative records -> Validate actor and allowed transition -> Apply call, ready, away, return or serve outcome -> Recompute visible positions -> Publish scoped live waiting counts and Patient-safe status -> Retain transition history and source freshness",
+    "stakeholders": {
+      "internal": "Scoped Staff, assigned Dentist and documented Owner exceptions",
+      "external": "Patient viewing permitted own queue status"
+    }
+  },
+  {
+    "id": 10,
+    "title": "Dental Charts",
+    "owner": "Ecal, Richmon",
+    "record": "Patient tooth/surface finding and chart revision",
+    "authority": "Dentist authors clinical findings; other access is purpose-scoped",
+    "inputs": [
+      "Patient and clinical Visit context",
+      "Dentition/tooth identification scheme",
+      "Dentist-recorded findings",
+      "Previous chart and performed-procedure references"
+    ],
+    "steps": [
+      "Resolve Patient and authorized clinical context",
+      "Load the permitted prior chart",
+      "Validate the selected tooth, surface or area",
+      "Record Dentist findings with date and provenance",
+      "Distinguish existing findings, planned care and completed care",
+      "Save a versioned chart change",
+      "Link related plans, treatment or images without duplicating their authority",
+      "Present the chart and chronological change history"
+    ],
+    "outputs": [
+      "Current dental chart",
+      "Attributed tooth/surface findings",
+      "Chart revision history and clinical links"
+    ],
+    "boundary": "M10 owns structured dental findings and chart revisions. M12 owns proposed procedures, M5 actual procedures and M14 supporting image files. Clinical notation and findings remain Dentist-authored.",
+    "gate": "New project scope: clinic must confirm notation, fields, charting permissions and correction rules before write commands.",
+    "test": "A planned restoration cannot be displayed as a completed procedure; another Patient chart is inaccessible.",
+    "evidence": "Proposed new domain. The former M10 flow/capacity prototype is not a dental-chart implementation.",
+    "flow": "Resolve Patient and authorized clinical context -> Load the permitted prior chart -> Validate the selected tooth, surface or area -> Record Dentist findings with date and provenance -> Distinguish existing findings, planned care and completed care -> Save a versioned chart change -> Link related plans, treatment or images without duplicating their authority -> Present the chart and chronological change history",
+    "updated": "October 12, 2026",
+    "version": "5.0",
+    "automation": [
+      "Validate access, stable references and allowed state changes.",
+      "Commit domain changes atomically where required and protect retries.",
+      "Request purpose-limited notifications after committed outcomes."
+    ],
+    "checks": [
+      "A planned restoration cannot be displayed as a completed procedure; another Patient chart is inaccessible.",
+      "Reject unauthorized access and preserve attributed history."
+    ],
+    "dependencies": [
+      "M4 Patient Records",
+      "M8 Patient Visits",
+      "M14 Document Management"
+    ],
+    "basis": "Project-approved charting scope; Q17 confirms digital history but does not specify notation or chart fields. Obtain the actual chart before new clinical writes.",
+    "metrics": [
+      [
+        "Finding provenance",
+        "Measure Dentist, tooth/surface and revision completeness."
+      ],
+      [
+        "Revision integrity",
+        "Track attributed amendments with preserved earlier findings."
+      ],
+      [
+        "Chart retrieval",
+        "Measure permitted chart retrieval and refused cross-patient access."
+      ]
+    ],
+    "summary": "Resolve Patient and authorized clinical context -> Load the permitted prior chart -> Validate the selected tooth, surface or area -> Record Dentist findings with date and provenance -> Distinguish existing findings, planned care and completed care -> Save a versioned chart change -> Link related plans, treatment or images without duplicating their authority -> Present the chart and chronological change history",
+    "stakeholders": {
+      "internal": "Responsible authorized Dentist",
+      "external": "Patient whose dental findings are recorded"
+    }
+  },
+  {
+    "id": 11,
+    "title": "Billing Management",
+    "owner": "Delos Santos, Joevan",
+    "record": "Invoice, immutable charge evidence, balance and authorized correction history",
+    "authority": "Existing authorized financial actors issue invoices; exact monetary and legacy financial safeguards remain authoritative",
+    "inputs": [
+      "Authoritative completed billable procedures",
+      "Effective price versions and existing financial holds",
+      "Verified Patient/payer identity",
+      "Verified settlement references from M23 or approved correction commands"
+    ],
+    "steps": [
+      "Resolve the authorized Patient and billable care context",
+      "Validate completed procedures and all existing financial holds",
+      "Resolve exact approved price versions",
+      "Calculate and preserve charge evidence without float arithmetic",
+      "Issue the invoice through the permitted command",
+      "Link verified payment evidence from M23 atomically",
+      "Derive balance and financial status from authoritative records",
+      "Present invoice history and preserve authorized correction evidence"
+    ],
+    "outputs": [
+      "Authoritative invoice and charge snapshot",
+      "Balance and financial status",
+      "Source-linked billing and correction history"
+    ],
+    "boundary": "M11 owns what is owed. M23 owns collection attempts, verified settlements and payment receipts. The split is planning metadata; current composite billing/payment implementation and legacy HMO gates are not migrated or bypassed.",
+    "gate": "Confirm adjustments, discounts, tax fields, partial-payment/refund policy and billing/payments separation before new financial behavior. Current holds remain enforced.",
+    "test": "A price update or proposed procedure cannot rewrite issued charge evidence; a browser payment redirect cannot change invoice settlement.",
+    "evidence": "Reported historical M11 billing/payment foundation, immutable charges and financial safeguards. The proposed separate billing/payment ownership requires source reconciliation.",
+    "flow": "Resolve the authorized Patient and billable care context -> Validate completed procedures and all existing financial holds -> Resolve exact approved price versions -> Calculate and preserve charge evidence without float arithmetic -> Issue the invoice through the permitted command -> Link verified payment evidence from M23 atomically -> Derive balance and financial status from authoritative records -> Present invoice history and preserve authorized correction evidence",
+    "updated": "October 12, 2026",
+    "version": "5.0",
+    "automation": [
+      "Validate access, stable references and allowed state changes.",
+      "Commit domain changes atomically where required and protect retries.",
+      "Request purpose-limited notifications after committed outcomes."
+    ],
+    "checks": [
+      "A price update or proposed procedure cannot rewrite issued charge evidence; a browser payment redirect cannot change invoice settlement.",
+      "Duplicate verified webhooks create one settlement; mismatched capture is preserved for reconciliation, not silently marked Paid.",
+      "Reject unauthorized access and preserve attributed history."
+    ],
+    "dependencies": [
+      "M5 Treatment Management",
+      "M13 Services and Pricing",
+      "M23 Payment Management",
+      "M22 Audit Logs"
+    ],
+    "basis": "Original Q15/Q18/Q27; user-requested Billing/Payments separation. Example interview fees are not approved catalog values.",
+    "metrics": [
+      [
+        "Charge provenance",
+        "Measure completed-procedure and effective-price linkage."
+      ],
+      [
+        "Financial exceptions",
+        "Count blocked issues and unresolved financial holds."
+      ],
+      [
+        "Balance consistency",
+        "Compare balances with verified charge and settlement evidence."
+      ]
+    ],
+    "summary": "Completed billable care -> financial hold and price checks -> exact charge snapshot -> issued invoice -> verified M23 settlement linkage -> derived balance/status -> authorized correction evidence -> billing history.",
+    "stakeholders": {
+      "internal": "Authorized clinic financial actors under existing contracts",
+      "external": "Patient or authorized payer"
+    }
+  },
+  {
+    "id": 12,
+    "title": "Treatment Plans",
+    "owner": "Alejo, Hart Jaztin A.",
+    "record": "Versioned proposed plan, phases, estimates and Patient decision",
+    "authority": "Dentist proposes clinical care; authorized Staff coordinate bookings",
+    "inputs": [
+      "Patient, Dentist findings and chart",
+      "Proposed procedures and priority",
+      "M13 prices for clearly labelled estimates",
+      "Patient decision and planned appointment references"
+    ],
+    "steps": [
+      "Resolve authorized Patient and Dentist context",
+      "Create the proposed plan from Dentist-selected procedures",
+      "Organize clinically chosen phases or visit sequence",
+      "Calculate a labelled estimate from approved price data",
+      "Present the plan and record the attributed Patient decision",
+      "Link accepted work to permitted M6 appointment commands",
+      "Track actual progress from M5 completion evidence",
+      "Version revisions and preserve earlier plan decisions"
+    ],
+    "outputs": [
+      "Proposed or accepted treatment plan",
+      "Versioned estimate and decision history",
+      "Planned-visit links and actual progress"
+    ],
+    "boundary": "M12 owns proposed care, phased estimates and attributed Patient decisions; M5 owns performed care and M11 issued charges. Plan acceptance is not clinical consent, completed care or payment. Legacy HMO M12 records retain their old identity.",
+    "gate": "New domain: plan decision states, estimate validity and multi-visit clinic workflow need confirmation.",
+    "test": "Accepting a treatment plan creates no completed treatment, invoice payment or clinical consent automatically.",
+    "evidence": "Proposed new domain. Legacy HMO M12 records and the superseded attendance proposal are not treatment-plan records.",
+    "flow": "Resolve authorized Patient and Dentist context -> Create the proposed plan from Dentist-selected procedures -> Organize clinically chosen phases or visit sequence -> Calculate a labelled estimate from approved price data -> Present the plan and record the attributed Patient decision -> Link accepted work to permitted M6 appointment commands -> Track actual progress from M5 completion evidence -> Version revisions and preserve earlier plan decisions",
+    "updated": "October 12, 2026",
+    "version": "5.0",
+    "automation": [
+      "Validate access, stable references and allowed state changes.",
+      "Commit domain changes atomically where required and protect retries.",
+      "Request purpose-limited notifications after committed outcomes."
+    ],
+    "checks": [
+      "Accepting a treatment plan creates no completed treatment, invoice payment or clinical consent automatically.",
+      "Reject unauthorized access and preserve attributed history."
+    ],
+    "dependencies": [
+      "M4 Patient Records",
+      "M10 Dental Charts",
+      "M13 Services and Pricing",
+      "M6 Appointment Management",
+      "M5 Treatment Management"
+    ],
+    "basis": "Agreed project treatment-planning scope; clinic fields, decision states and multi-visit workflow still need the actual plan format.",
+    "metrics": [
+      [
+        "Decision history",
+        "Count plans with recorded patient decisions and current versions."
+      ],
+      [
+        "Unscheduled care",
+        "Track accepted planned work with no linked permitted booking."
+      ],
+      [
+        "Actual progress",
+        "Derive progress from performed-care evidence, not estimated elapsed time."
+      ]
+    ],
+    "summary": "Resolve authorized Patient and Dentist context -> Create the proposed plan from Dentist-selected procedures -> Organize clinically chosen phases or visit sequence -> Calculate a labelled estimate from approved price data -> Present the plan and record the attributed Patient decision -> Link accepted work to permitted M6 appointment commands -> Track actual progress from M5 completion evidence -> Version revisions and preserve earlier plan decisions",
+    "stakeholders": {
+      "internal": "Dentist proposing care and Staff coordinating permitted bookings",
+      "external": "Patient making a plan decision"
+    }
+  },
+  {
+    "id": 13,
+    "title": "Services and Pricing",
+    "owner": "Licanda, Celin",
+    "record": "Service/procedure definition, branch offering and effective price version",
+    "authority": "Owner-authorized catalog and price changes",
+    "inputs": [
+      "Service or procedure definition",
+      "Clinic-approved scheduling duration",
+      "Branch offering decision",
+      "Approved price and effective date"
+    ],
+    "steps": [
+      "Validate catalog change authority",
+      "Define bookable service or clinical procedure references",
+      "Record approved duration and eligibility dependencies",
+      "Assign offerings to branches",
+      "Create exact effective-dated price versions",
+      "Validate activation, retirement and existing references",
+      "Publish current catalog and price resolution",
+      "Retain historical prices for earlier financial evidence"
+    ],
+    "outputs": [
+      "Authoritative service catalog",
+      "Branch offerings and price resolver",
+      "Versioned price and catalog history"
+    ],
+    "boundary": "M13 owns services, branch offerings and effective fee versions. M3 supplies eligibility/availability; M5 records actual work; M11 preserves invoice price snapshots.",
+    "gate": "Duration, free-service, discounts and tax policy require approval. Interview example fees are not authoritative prices.",
+    "test": "A later price change does not alter an already issued invoice snapshot.",
+    "evidence": "Reported catalog and effective-price backend foundation; clinic-approved values still require source verification.",
+    "flow": "Validate catalog change authority -> Define bookable service or clinical procedure references -> Record approved duration and eligibility dependencies -> Assign offerings to branches -> Create exact effective-dated price versions -> Validate activation, retirement and existing references -> Publish current catalog and price resolution -> Retain historical prices for earlier financial evidence",
+    "updated": "October 12, 2026",
+    "version": "5.0",
+    "automation": [
+      "Validate access, stable references and allowed state changes.",
+      "Commit domain changes atomically where required and protect retries.",
+      "Request purpose-limited notifications after committed outcomes."
+    ],
+    "checks": [
+      "A later price change does not alter an already issued invoice snapshot.",
+      "Reject unauthorized access and preserve attributed history."
+    ],
+    "dependencies": [
+      "M1 User Management",
+      "M2 Branch Management",
+      "M11 Billing Management",
+      "M6 Appointment Management"
+    ],
+    "basis": "Original Q1/Q12. Actual approved services, durations and prices are still required.",
+    "metrics": [
+      [
+        "Price validity",
+        "Track missing effective fees and rejected invalid price definitions."
+      ],
+      [
+        "Catalog consistency",
+        "Measure branch/service eligibility reference completeness."
+      ],
+      [
+        "Snapshot protection",
+        "Verify issued invoice price snapshots survive later fee changes."
+      ]
+    ],
+    "summary": "Validate catalog change authority -> Define bookable service or clinical procedure references -> Record approved duration and eligibility dependencies -> Assign offerings to branches -> Create exact effective-dated price versions -> Validate activation, retirement and existing references -> Publish current catalog and price resolution -> Retain historical prices for earlier financial evidence",
+    "stakeholders": {
+      "internal": "Owner-authorized catalog maintainer",
+      "external": "Patient using approved published service information"
+    }
+  },
+  {
+    "id": 14,
+    "title": "Document Management",
+    "owner": "Millar, John Yzhekiel",
+    "record": "Private original file, metadata and extraction draft",
+    "authority": "Patient/Staff/Dentist access follows entity and purpose authorization",
+    "inputs": [
+      "Patient/workflow reference and file",
+      "Declared purpose and actual file content",
+      "Actor and access scope",
+      "Optional approved text-extraction request"
+    ],
+    "steps": [
+      "Validate uploader, Patient and workflow purpose",
+      "Inspect actual file type, size and permitted content",
+      "Store the original privately with integrity metadata",
+      "Link the exact Patient and workflow reference",
+      "Enforce scoped retrieval and download",
+      "Extract native text or approved OCR as a draft",
+      "Record extraction provenance and human review reference",
+      "Preserve versions and archive links under approved retention rules"
+    ],
+    "outputs": [
+      "Private linked document and integrity metadata",
+      "Authorized file access",
+      "Attributed extraction draft and version history"
+    ],
+    "boundary": "M14 owns protected file lifecycle, versions, retrieval and reviewed extraction drafts, including clinical image files. Consent evidence links to the relevant care record; images, upload buttons and OCR are supporting capabilities. OCR never authorizes care or prescriptions.",
+    "gate": "File limits, malware handling, retention and permitted extraction providers need configuration; e-signature validity is not claimed.",
+    "test": "Renaming an executable as a PDF does not bypass validation; a different Patient cannot download the file.",
+    "evidence": "Reported private-storage and extraction foundation. New separation from consent needs compatibility review.",
+    "flow": "Validate uploader, Patient and workflow purpose -> Inspect actual file type, size and permitted content -> Store the original privately with integrity metadata -> Link the exact Patient and workflow reference -> Enforce scoped retrieval and download -> Extract native text or approved OCR as a draft -> Record extraction provenance and human review reference -> Preserve versions and archive links under approved retention rules",
+    "updated": "October 12, 2026",
+    "version": "5.0",
+    "automation": [
+      "Validate access, stable references and allowed state changes.",
+      "Commit domain changes atomically where required and protect retries.",
+      "Request purpose-limited notifications after committed outcomes."
+    ],
+    "checks": [
+      "Renaming an executable as a PDF does not bypass validation; a different Patient cannot download the file.",
+      "Reject unauthorized access and preserve attributed history."
+    ],
+    "dependencies": [
+      "M4 Patient Records",
+      "M5 Treatment Management",
+      "M19 Prescriptions",
+      "M24 Lab Cases",
+      "M25 Patient Handovers",
+      "M22 Audit Logs"
+    ],
+    "basis": "Original Q16/Q17 digital forms/records; existing reported private-storage foundation. Full file permissions, retention and extraction policy remain to be finalized.",
+    "metrics": [
+      [
+        "File validation",
+        "Count rejected content/type/size mismatches without fake scan claims."
+      ],
+      [
+        "Review backlog",
+        "Count extraction drafts awaiting authorized human review."
+      ],
+      [
+        "File integrity",
+        "Track protected original/version links and failed permitted retrieval."
+      ]
+    ],
+    "summary": "Validate uploader, Patient and workflow purpose -> Inspect actual file type, size and permitted content -> Store the original privately with integrity metadata -> Link the exact Patient and workflow reference -> Enforce scoped retrieval and download -> Extract native text or approved OCR as a draft -> Record extraction provenance and human review reference -> Preserve versions and archive links under approved retention rules",
+    "stakeholders": {
+      "internal": "Purpose-scoped Staff and responsible Dentist; no generic Owner file access",
+      "external": "Patient uploader; approved extraction provider if configured"
+    }
+  },
+  {
+    "id": 15,
+    "title": "Leave Management",
+    "owner": "Licanda, Celin",
+    "record": "LeaveRequest, shift-specific CoverageOffer, explicit acceptance and decision history",
+    "authority": "Staff/Dentist requests and substitute consent are individual; automated decisions execute clinic-approved standing rules without a separate per-request Owner approval step",
+    "inputs": [
+      "Employee, requested dates/hours and affected duties",
+      "Authoritative Staff/Dentist roster and branch eligibility",
+      "Configured clinic leave, coverage and work-hour rules",
+      "Shift-specific substitute confirmation and affected-booking handling"
+    ],
+    "steps": [
+      "Validate requester, leave period, roster and configured policy",
+      "Identify every affected shift, duty and booking",
+      "Show only eligible available replacements and uncovered periods",
+      "Record the selected substitute and send a coverage invitation",
+      "Record explicit acceptance or decline of the exact shifts/overtime",
+      "Recheck all accepted coverage, conflicts and policy versions atomically",
+      "Approve automatically only when required coverage and all rules pass, then publish the roster change",
+      "Record outcomes, unresolved coverage and notifications with decision evidence"
+    ],
+    "outputs": [
+      "Pending, approved or not-approved leave decision with reasons",
+      "Confirmed coverage and published roster reference",
+      "Coverage invitations, acceptance and decision history"
+    ],
+    "boundary": "M15 owns requests, invitations, voluntary overtime acceptance and rule-based decisions. M3 owns the roster; M6/M25 own booking and care-responsibility changes. Eligibility is not consent; no silent overtime assignment or new generic automation engine.",
+    "gate": "Confirm permitted leave types, exact duties/service eligibility, branch scope, work-hour/rest rules, coverage deadlines, partial coverage, cancellation/withdrawal, privacy and booking-impact handling. Until required policy is configured, automatic approval remains unavailable.",
+    "test": "An acceptance racing with another shift/request cannot double-book a substitute; incomplete, stale or unconfirmed coverage cannot approve leave.",
+    "evidence": "New module scope. Earlier handoff recorded the optional coverage-first concept; no complete leave engine is proven by the historical M23 evaluation recorder.",
+    "flow": "Validate requester, leave period, roster and configured policy -> Identify every affected shift, duty and booking -> Show only eligible available replacements and uncovered periods -> Record the selected substitute and send a coverage invitation -> Record explicit acceptance or decline of the exact shifts/overtime -> Recheck all accepted coverage, conflicts and policy versions atomically -> Approve automatically only when required coverage and all rules pass, then publish the roster change -> Record outcomes, unresolved coverage and notifications with decision evidence",
+    "updated": "October 12, 2026",
+    "version": "5.0",
+    "automation": [
+      "Calculate affected shifts and bookings from authoritative schedules",
+      "Filter matching duties, branch/service eligibility and configured work-hour constraints",
+      "Dispatch and track coverage invitations without assuming delivery or consent",
+      "Recheck accepted offers and publish approval/roster changes transactionally",
+      "Send post-commit outcome notifications and retain auditable policy/version evidence"
+    ],
+    "checks": [
+      "An acceptance racing with another shift/request cannot double-book a substitute; incomplete, stale or unconfirmed coverage cannot approve leave.",
+      "An acceptance racing with another shift/request cannot double-book a substitute",
+      "Every required coverage period must be confirmed; partial coverage leaves uncovered periods pending",
+      "A decline, stale policy or changed availability prevents approval and explains the result",
+      "Coverage does not silently reassign a Patient or disclose private leave reasons"
+    ],
+    "dependencies": [
+      "M1 User Management",
+      "M2 Branch Management",
+      "M3 Work Schedules",
+      "M6 Appointment Management",
+      "M18 Notifications",
+      "M22 Audit Logs",
+      "M25 Patient Handovers"
+    ],
+    "basis": "User scope confirmed October 12: Staff/Dentist requests show eligible overtime coverage, coordination and explicit substitute confirmation before leave proceeds. PI-06/PI-08 remain Owner schedule authority and no fixed Dentist minimum.",
+    "metrics": [
+      [
+        "Coverage completeness",
+        "Compare required periods with valid accepted coverage."
+      ],
+      [
+        "Decision exceptions",
+        "Count stale, conflicting or incomplete requests kept unapproved."
+      ],
+      [
+        "Confirmation time",
+        "Measure request-to-confirmation/decision time from recorded events."
+      ]
+    ],
+    "summary": "Validated leave request -> affected shifts/bookings -> eligible coverage choices -> invitation -> explicit substitute confirmation -> fresh policy/conflict checks -> conditional automatic approval and roster publication -> outcome notifications/history.",
+    "stakeholders": {
+      "internal": "Requester/substitute Staff or Dentist; Owner defining standing policy",
+      "external": "None required; coverage is an internal employee workflow"
+    }
+  },
+  {
+    "id": 16,
+    "title": "Patient Inquiries",
+    "owner": "Millar, John Yzhekiel",
+    "record": "Attributed external inquiry, assignment and outcome history",
+    "authority": "Authorized intake users follow actual capabilities; routing authority remains policy-dependent",
+    "inputs": [
+      "External inquiry and channel attribution",
+      "Contact details supplied by the person",
+      "Question/topic and responsible handler",
+      "Verified Patient or booking link when available"
+    ],
+    "steps": [
+      "Capture external inquiry and its actual source/provenance",
+      "Validate contact and topic details without automatic Patient matching",
+      "Assign the handler permitted by current capability/branch rules",
+      "Expose open inquiries and record follow-up work",
+      "Record the attributed external response or contact attempt",
+      "Verify Patient identity when explicit linkage is needed",
+      "Link to an existing permitted M6 appointment through the authorized conversion command",
+      "Close or convert the inquiry and preserve immutable outcome history"
+    ],
+    "outputs": [
+      "Open inquiry and permitted handler worklist",
+      "Attributed response/contact history",
+      "Verified Patient and existing appointment linkage with outcome history"
+    ],
+    "boundary": "M16 owns manually attributed external inquiry cases and their response/booking-link lifecycle. M17 owns identified private conversations. Recorded contact is not proof this app delivered a Messenger message; Owner external-response practice does not grant private-conversation access.",
+    "gate": "Owner social-response practice does not grant unrestricted messaging access; routing and official platform access remain open.",
+    "test": "A contact with a similar name is not silently linked to the wrong Patient.",
+    "evidence": "Reported manual external-inquiry backend foundation; no real social-platform transport demonstrated.",
+    "flow": "Capture external inquiry and its actual source/provenance -> Validate contact and topic details without automatic Patient matching -> Assign the handler permitted by current capability/branch rules -> Expose open inquiries and record follow-up work -> Record the attributed external response or contact attempt -> Verify Patient identity when explicit linkage is needed -> Link to an existing permitted M6 appointment through the authorized conversion command -> Close or convert the inquiry and preserve immutable outcome history",
+    "updated": "October 12, 2026",
+    "version": "5.0",
+    "automation": [
+      "Validate access, stable references and allowed state changes.",
+      "Commit domain changes atomically where required and protect retries.",
+      "Request purpose-limited notifications after committed outcomes."
+    ],
+    "checks": [
+      "A contact with a similar name is not silently linked to the wrong Patient.",
+      "Reject unauthorized access and preserve attributed history."
+    ],
+    "dependencies": [
+      "M1 User Management",
+      "M6 Appointment Management",
+      "M17 Patient Messaging",
+      "M22 Audit Logs"
+    ],
+    "basis": "Original Q23; PI-42 Facebook/Messenger inquiries and PI-43 Owner usually replies. Existing technical Staff-only inquiry scope is a reconciliation issue, not implied Owner API permission.",
+    "metrics": [
+      [
+        "Unanswered cases",
+        "Count open inquiries and factual time since capture."
+      ],
+      [
+        "Outcome history",
+        "Track recorded replies, closure and verified booking linkage."
+      ],
+      [
+        "Identity exceptions",
+        "Count refused wrong-patient or invalid appointment links."
+      ]
+    ],
+    "summary": "Attributed external capture -> validated contact/topic -> permitted handler -> open worklist -> recorded external response -> verified Patient identity -> existing appointment linkage -> closure/conversion history.",
+    "stakeholders": {
+      "internal": "Authorized intake Staff; Owner external-response practice needs capability mapping",
+      "external": "External inquirer on the reported contact channel"
+    }
+  },
+  {
+    "id": 17,
+    "title": "Patient Messaging",
+    "owner": "Millar, John Yzhekiel",
+    "record": "Participant-scoped conversation, immutable messages and read state",
+    "authority": "Explicit authorized Patient/Staff/Dentist participants; current Owner denial remains",
+    "inputs": [
+      "Verified Patient/workflow context",
+      "Authorized conversation participants",
+      "Message or reply command",
+      "Displayed-message/read and closure actions"
+    ],
+    "steps": [
+      "Resolve authorized conversation and participants",
+      "Validate open state and workflow context",
+      "Validate and submit the message idempotently",
+      "Persist immutable content and sender attribution",
+      "Deliver the scoped conversation projection",
+      "Advance read state only for displayed messages",
+      "Close the conversation under approved commands",
+      "Expose permitted history and minimal audit evidence"
+    ],
+    "outputs": [
+      "Authorized conversation and message history",
+      "Participant-specific unread/read state",
+      "Closure outcome and command evidence"
+    ],
+    "boundary": "M17 owns authorized human Patient conversations and displayed-message read state. It does not own M16 inquiry cases, M18 system delivery or M15 employee coverage consent. Current Owner denial persists until a reviewed permission change.",
+    "gate": "New conversation creation/routing, attachments and reopening require a separate approved slice.",
+    "test": "Switching conversations never sends the prior conversation draft to another Patient.",
+    "evidence": "Reported server messaging foundation. Production creation/routing and external-channel integration are not established.",
+    "flow": "Resolve authorized conversation and participants -> Validate open state and workflow context -> Validate and submit the message idempotently -> Persist immutable content and sender attribution -> Deliver the scoped conversation projection -> Advance read state only for displayed messages -> Close the conversation under approved commands -> Expose permitted history and minimal audit evidence",
+    "updated": "October 12, 2026",
+    "version": "5.0",
+    "automation": [
+      "Validate access, stable references and allowed state changes.",
+      "Commit domain changes atomically where required and protect retries.",
+      "Request purpose-limited notifications after committed outcomes."
+    ],
+    "checks": [
+      "Switching conversations never sends the prior conversation draft to another Patient.",
+      "Reject unauthorized access and preserve attributed history."
+    ],
+    "dependencies": [
+      "M1 User Management",
+      "M4 Patient Records",
+      "M16 Patient Inquiries",
+      "M22 Audit Logs"
+    ],
+    "basis": "Agreed project human-messaging scope and reported immutable server conversation foundation. Creation/routing policy is still open.",
+    "metrics": [
+      [
+        "Unread correctness",
+        "Compare unread state with newest actually displayed messages."
+      ],
+      [
+        "Command integrity",
+        "Track duplicate replay and refused wrong-conversation commands."
+      ],
+      [
+        "Conversation access",
+        "Measure permitted history retrieval and unauthorized access refusals."
+      ]
+    ],
+    "summary": "Resolve authorized conversation and participants -> Validate open state and workflow context -> Validate and submit the message idempotently -> Persist immutable content and sender attribution -> Deliver the scoped conversation projection -> Advance read state only for displayed messages -> Close the conversation under approved commands -> Expose permitted history and minimal audit evidence",
+    "stakeholders": {
+      "internal": "Participating authorized Staff/Dentist; current Owner denial remains",
+      "external": "Participating Patient"
+    }
+  },
+  {
+    "id": 18,
+    "title": "Notifications",
+    "owner": "Millar, John Yzhekiel",
+    "record": "Notification intent, dispatch job, attempt and delivery evidence",
+    "authority": "Domain-approved recipients; channel and template authority must be explicit",
+    "inputs": [
+      "Committed domain event and recipient purpose",
+      "Authorized recipient contact/preference",
+      "Approved template and channel",
+      "Transport/provider result or retry request"
+    ],
+    "steps": [
+      "Resolve event identity and eligible recipients",
+      "Render the approved purpose-limited template",
+      "Persist notification intent with duplicate protection",
+      "Dispatch after source transaction commit through durable jobs",
+      "Send through the configured approved transport",
+      "Record transport acceptance or provider delivery/failure evidence accurately",
+      "Retry safe transient failures under defined limits",
+      "Expose scoped notification history and administrative diagnostics"
+    ],
+    "outputs": [
+      "Scoped in-app notification",
+      "Email dispatch and attempt history",
+      "Truthful delivery/failure diagnostics"
+    ],
+    "boundary": "M18 owns committed notification intent, dispatch and truthful delivery evidence. Source modules own invitations, leave consent, booking decisions and settlement. Email/SMS/Messenger channels require actual configured transports; log/array acceptance is not inbox delivery.",
+    "gate": "TD-24 workers and TD-25 truthful diagnostics remain open. Channels, reminder timing and verified external receipt need setup.",
+    "test": "A log-mail driver reports local logging, never recipient delivery; retries do not send duplicate receipts.",
+    "evidence": "Browser-local in-app notifications only (a persisted browser collection and foreground reminders, not authoritative). No backend notification intent, dispatch job, attempt or delivery-evidence record exists. Laravel mailables (verification code, appointment booked/rescheduled/cancelled, payment receipt, employee invitation, owner test) are sent synchronously through one dispatcher and the configured mail driver, whose default is log; each send records its outcome (logged locally, accepted by transport, or failed) as audit evidence, without retries, and no recipient-delivery evidence exists. Actual recipient email delivery has not been demonstrated.",
+    "flow": "Resolve event identity and eligible recipients -> Render the approved purpose-limited template -> Persist notification intent with duplicate protection -> Dispatch after source transaction commit through durable jobs -> Send through the configured approved transport -> Record transport acceptance or provider delivery/failure evidence accurately -> Retry safe transient failures under defined limits -> Expose scoped notification history and administrative diagnostics",
+    "updated": "October 12, 2026",
+    "version": "5.0",
+    "automation": [
+      "Validate access, stable references and allowed state changes.",
+      "Commit domain changes atomically where required and protect retries.",
+      "Request purpose-limited notifications after committed outcomes."
+    ],
+    "checks": [
+      "A log-mail driver reports local logging, never recipient delivery; retries do not send duplicate receipts.",
+      "Reject unauthorized access and preserve attributed history."
+    ],
+    "dependencies": [
+      "Committed domain events",
+      "Configured transport and durable workers",
+      "M1 recipient identity",
+      "M22 minimal audit evidence"
+    ],
+    "basis": "PI-02 email employee invitations, PI-29 booking/change updates, PI-31 reminders for every appointment; user Patient/Staff notifications and leave updates. PI-30 Other was interpreted by the user as all listed channels, but API integration/timing is not confirmed.",
+    "metrics": [
+      [
+        "Transport outcomes",
+        "Separate queued, transport-accepted, failed and verified delivery."
+      ],
+      [
+        "Retry integrity",
+        "Track failed attempts and duplicate side effects prevented."
+      ],
+      [
+        "Delivery evidence",
+        "Report receipt evidence as unavailable when it has not been received."
+      ]
+    ],
+    "summary": "Resolve event identity and eligible recipients -> Render the approved purpose-limited template -> Persist notification intent with duplicate protection -> Dispatch after source transaction commit through durable jobs -> Send through the configured approved transport -> Record transport acceptance or provider delivery/failure evidence accurately -> Retry safe transient failures under defined limits -> Expose scoped notification history and administrative diagnostics",
+    "stakeholders": {
+      "internal": "Authorized source-workflow handlers and delivery operators",
+      "external": "Configured transport provider and recipient Patient"
+    }
+  },
+  {
+    "id": 19,
+    "title": "Prescriptions",
+    "owner": "Ecal, Richmon",
+    "record": "Dentist draft and immutable authorized prescription version",
+    "authority": "Responsible authorized Dentist prescribes; Patient receives a safe read-only copy",
+    "inputs": [
+      "Patient and valid clinical Visit",
+      "Verified Dentist credential reference",
+      "Dentist-selected medication instructions",
+      "Optional human-reviewed document extraction draft"
+    ],
+    "steps": [
+      "Resolve the clinical Visit and authorizing Dentist",
+      "Review permitted recorded allergies and history",
+      "Create the Dentist-authored prescription draft",
+      "Validate required medication/instruction fields",
+      "Require Dentist review of every item and OCR uncertainty",
+      "Authorize the immutable prescription version explicitly",
+      "Generate the approved printable and Patient-safe copy",
+      "Retain version/authorization history and optional M18 delivery reference"
+    ],
+    "outputs": [
+      "Authorized prescription record",
+      "Printable and Patient-safe copy",
+      "Attribution and authorization history"
+    ],
+    "boundary": "M19 owns Dentist prescribing and immutable authorized versions. M14/OCR supplies drafts only; M7 never selects medication or signs a prescription. Print fields and amendments require clinic-approved rules.",
+    "gate": "Clinic-approved print fields, corrections and delivery/legal requirements remain open.",
+    "test": "An OCR draft cannot be printed or presented as an authorized prescription before Dentist approval.",
+    "evidence": "Browser-local only: prescription drafts and Dentist authorization are kept in a browser-persisted collection. The server stores only the Dentist prescription_required flag on the Treatment; there is no backend prescription record, immutable authorized version, route or printable output. Authorized production behavior and printing are not implemented.",
+    "flow": "Resolve the clinical Visit and authorizing Dentist -> Review permitted recorded allergies and history -> Create the Dentist-authored prescription draft -> Validate required medication/instruction fields -> Require Dentist review of every item and OCR uncertainty -> Authorize the immutable prescription version explicitly -> Generate the approved printable and Patient-safe copy -> Retain version/authorization history and optional M18 delivery reference",
+    "updated": "October 12, 2026",
+    "version": "5.0",
+    "automation": [
+      "Validate access, stable references and allowed state changes.",
+      "Commit domain changes atomically where required and protect retries.",
+      "Request purpose-limited notifications after committed outcomes."
+    ],
+    "checks": [
+      "An OCR draft cannot be printed or presented as an authorized prescription before Dentist approval.",
+      "Reject unauthorized access and preserve attributed history."
+    ],
+    "dependencies": [
+      "M4 Patient Records",
+      "M5 Treatment Management",
+      "M14 Document Management",
+      "M18 Notifications",
+      "M22 Audit Logs"
+    ],
+    "basis": "Original Q16; PI-38 confirms both handwritten and printed prescriptions.",
+    "metrics": [
+      [
+        "Authorization",
+        "Track drafts and explicitly authorized prescription versions."
+      ],
+      [
+        "Draft review",
+        "Count extraction uncertainty awaiting Dentist review."
+      ],
+      [
+        "Print integrity",
+        "Verify printed copies correspond to the authorized immutable version."
+      ]
+    ],
+    "summary": "Resolve the clinical Visit and authorizing Dentist -> Review permitted recorded allergies and history -> Create the Dentist-authored prescription draft -> Validate required medication/instruction fields -> Require Dentist review of every item and OCR uncertainty -> Authorize the immutable prescription version explicitly -> Generate the approved printable and Patient-safe copy -> Retain version/authorization history and optional M18 delivery reference",
+    "stakeholders": {
+      "internal": "Responsible authorizing Dentist",
+      "external": "Patient receiving a permitted prescription copy"
+    }
+  },
+  {
+    "id": 20,
+    "title": "Patient Follow-Up",
+    "owner": "Alejo, Hart Jaztin A.",
+    "record": "Dentist-originated follow-up obligation and outcome history",
+    "authority": "Dentist decides clinical need; scheduling follows existing M6 permissions",
+    "inputs": [
+      "Relevant Treatment/Visit and Patient",
+      "Dentist follow-up instruction and chosen date/interval",
+      "Linked appointment outcome",
+      "Approved contact preference and outreach evidence"
+    ],
+    "steps": [
+      "Validate the Dentist decision and source care record",
+      "Create the follow-up obligation with attribution",
+      "Record the Dentist-selected target date and reason",
+      "Expose the authorized scheduling worklist",
+      "Link a normal M6 booking through current permissions",
+      "Request approved reminders through M18",
+      "Track actual booked, missed or completed evidence",
+      "Close or return the obligation to scheduling under approved policy"
+    ],
+    "outputs": [
+      "Clinical follow-up obligation",
+      "Due/unscheduled worklist and booking link",
+      "Attributed follow-up and completion history"
+    ],
+    "boundary": "M20 owns Dentist-originated outstanding care obligations and actual outcomes; M6 booking, M18 transport. No fixed recall interval or automatic clinical decision is inferred.",
+    "gate": "Recall intervals, missed/cancelled reopening and DQ-72 scheduling authority remain open.",
+    "test": "A Staff contact attempt cannot create a clinical follow-up requirement or mark it completed.",
+    "evidence": "Browser-local obligations: follow-up tasks are created in the browser from the Dentist-documented follow-up fields recorded on the server Treatment and are scheduled through ordinary M6 booking commands. There is no backend follow-up obligation, outcome history or reminder record.",
+    "flow": "Validate the Dentist decision and source care record -> Create the follow-up obligation with attribution -> Record the Dentist-selected target date and reason -> Expose the authorized scheduling worklist -> Link a normal M6 booking through current permissions -> Request approved reminders through M18 -> Track actual booked, missed or completed evidence -> Close or return the obligation to scheduling under approved policy",
+    "updated": "October 12, 2026",
+    "version": "5.0",
+    "automation": [
+      "Validate access, stable references and allowed state changes.",
+      "Commit domain changes atomically where required and protect retries.",
+      "Request purpose-limited notifications after committed outcomes."
+    ],
+    "checks": [
+      "A Staff contact attempt cannot create a clinical follow-up requirement or mark it completed.",
+      "Reject unauthorized access and preserve attributed history."
+    ],
+    "dependencies": [
+      "M5 Treatment Management",
+      "M6 Appointment Management",
+      "M18 Notifications",
+      "M22 Audit Logs"
+    ],
+    "basis": "Original Q15/Q27; agreed outstanding-care workflow. DQ-72 and clinic-selected intervals/outcome rules remain open.",
+    "metrics": [
+      [
+        "Outstanding care",
+        "Count due obligations without a completed outcome."
+      ],
+      [
+        "Scheduling links",
+        "Track obligations linked to valid appointments and actual outcomes."
+      ],
+      [
+        "Clinical provenance",
+        "Measure originating Dentist and care-source completeness."
+      ]
+    ],
+    "summary": "Validate the Dentist decision and source care record -> Create the follow-up obligation with attribution -> Record the Dentist-selected target date and reason -> Expose the authorized scheduling worklist -> Link a normal M6 booking through current permissions -> Request approved reminders through M18 -> Track actual booked, missed or completed evidence -> Close or return the obligation to scheduling under approved policy",
+    "stakeholders": {
+      "internal": "Originating Dentist and permitted follow-up/booking Staff",
+      "external": "Patient receiving follow-up contact"
+    }
+  },
+  {
+    "id": 21,
+    "title": "Reports and Analytics",
+    "owner": "Delos Santos, Joevan",
+    "record": "Authorized report definition and source-traceable result/export",
+    "authority": "Owner consumes operational/financial oversight within existing privacy scope",
+    "inputs": [
+      "Authoritative appointments, Visits, queues and work schedules",
+      "Completed care, issued charges and verified payment evidence",
+      "Authorized date, branch and report filters",
+      "Approved metric definitions and source availability"
+    ],
+    "steps": [
+      "Validate report access and requested filters",
+      "Select the complete authorized source window",
+      "Separate live operational snapshots from historical trends",
+      "Calculate exact approved aggregates",
+      "Represent missing or partial data explicitly",
+      "Render meaningful comparisons and drill-down references",
+      "Export permitted data with safe formatting",
+      "Retain report provenance and verify source consistency"
+    ],
+    "outputs": [
+      "Owner dashboard and scoped reports",
+      "Source-traceable financial/operational metrics",
+      "Authorized exports with completeness labels"
+    ],
+    "boundary": "M21 derives read-only results from authoritative records, keeping live snapshots separate from historical trends. M11/M23 own money; M15 owns leave outcomes; clinical/private message/feedback content is not made visible by reporting access.",
+    "gate": "DQ-113 revenue date basis and busy-branch definitions remain open; do not fabricate wait/capacity metrics.",
+    "test": "Current queue counts are not presented as historical daily queue trends; missing data is not a false zero.",
+    "evidence": "Reported M21 technical corrections at 6563e4c; complete executive reporting and production readiness are unverified.",
+    "flow": "Validate report access and requested filters -> Select the complete authorized source window -> Separate live operational snapshots from historical trends -> Calculate exact approved aggregates -> Represent missing or partial data explicitly -> Render meaningful comparisons and drill-down references -> Export permitted data with safe formatting -> Retain report provenance and verify source consistency",
+    "updated": "October 12, 2026",
+    "version": "5.0",
+    "automation": [
+      "Validate access, stable references and allowed state changes.",
+      "Commit domain changes atomically where required and protect retries.",
+      "Request purpose-limited notifications after committed outcomes."
+    ],
+    "checks": [
+      "Current queue counts are not presented as historical daily queue trends; missing data is not a false zero.",
+      "Reject unauthorized access and preserve attributed history."
+    ],
+    "dependencies": [
+      "M3 Work Schedules",
+      "M6 Appointment Management",
+      "M8 Patient Visits",
+      "M9 Patient Queue",
+      "M11 Billing Management",
+      "M23 Payment Management",
+      "M18 Notifications"
+    ],
+    "basis": "Original Q7-Q11 supply estimates only; reported verbal Owner requirement for one-glance operational/revenue oversight. DQ-113 remains unresolved.",
+    "metrics": [
+      [
+        "Source completeness",
+        "Identify absent/partial source windows rather than reporting false zero."
+      ],
+      [
+        "Metric consistency",
+        "Compare money/date aggregates with their authoritative sources."
+      ],
+      [
+        "Report performance",
+        "Measure scoped query/export latency and truncation visibility."
+      ]
+    ],
+    "summary": "Validate report access and requested filters -> Select the complete authorized source window -> Separate live operational snapshots from historical trends -> Calculate exact approved aggregates -> Represent missing or partial data explicitly -> Render meaningful comparisons and drill-down references -> Export permitted data with safe formatting -> Retain report provenance and verify source consistency",
+    "stakeholders": {
+      "internal": "Authorized Owner report viewer",
+      "external": "None for report review; Patient information remains scoped"
+    }
+  },
+  {
+    "id": 22,
+    "title": "Audit Logs",
+    "owner": "Delos Santos, Joevan",
+    "record": "Append-only audit event and scoped investigation/export",
+    "authority": "Current authorized Owner audit access; no unrestricted clinical-content access",
+    "inputs": [
+      "Audit-worthy committed action",
+      "Actor, target, branch and timestamp",
+      "Minimal allowed outcome/change metadata",
+      "Authorized search or export request"
+    ],
+    "steps": [
+      "Capture the committed action with stable references",
+      "Validate required event metadata and sensitive-content exclusions",
+      "Persist append-only evidence consistently with the domain action",
+      "Apply approved access and retention controls",
+      "Filter and paginate in the server database",
+      "Show outcome, actor and source context for investigation",
+      "Flag only defined review signals with transparent provenance",
+      "Export authorized bounded results and record relevant access evidence"
+    ],
+    "outputs": [
+      "Protected audit event history",
+      "Scoped investigation results",
+      "Bounded authorized audit export"
+    ],
+    "boundary": "M22 owns append-oriented minimal action evidence and authorized search/export. Domain records retain their own histories and archive/restore commands. No document, message, feedback or clinical text is copied into audit events.",
+    "gate": "Severity rules, read auditing, retention/export and index performance need review.",
+    "test": "A million-row audit search is server-filtered and paginated without exposing clinical notes or message text.",
+    "evidence": "Reported server append-only audit foundation with Owner read/CSV and cursor pagination; advanced usability remains incomplete.",
+    "flow": "Capture the committed action with stable references -> Validate required event metadata and sensitive-content exclusions -> Persist append-only evidence consistently with the domain action -> Apply approved access and retention controls -> Filter and paginate in the server database -> Show outcome, actor and source context for investigation -> Flag only defined review signals with transparent provenance -> Export authorized bounded results and record relevant access evidence",
+    "updated": "October 12, 2026",
+    "version": "5.0",
+    "automation": [
+      "Validate access, stable references and allowed state changes.",
+      "Commit domain changes atomically where required and protect retries.",
+      "Request purpose-limited notifications after committed outcomes."
+    ],
+    "checks": [
+      "A million-row audit search is server-filtered and paginated without exposing clinical notes or message text.",
+      "Reject unauthorized access and preserve attributed history."
+    ],
+    "dependencies": [
+      "Attributed committed domain actions",
+      "M1 identity and access",
+      "Configured retention and export policy"
+    ],
+    "basis": "Agreed audit/history usability requirements and reported append-only server audit foundation.",
+    "metrics": [
+      [
+        "Search performance",
+        "Measure authorized filter/pagination and export response time."
+      ],
+      [
+        "Event attribution",
+        "Measure actor, target and outcome completeness for supported actions."
+      ],
+      [
+        "History protection",
+        "Track refused mutation attempts under the application database role."
+      ]
+    ],
+    "summary": "Capture the committed action with stable references -> Validate required event metadata and sensitive-content exclusions -> Persist append-only evidence consistently with the domain action -> Apply approved access and retention controls -> Filter and paginate in the server database -> Show outcome, actor and source context for investigation -> Flag only defined review signals with transparent provenance -> Export authorized bounded results and record relevant access evidence",
+    "stakeholders": {
+      "internal": "Authorized Owner audit reviewer and attributed source actors",
+      "external": "No external audit recipient is added"
+    }
+  },
+  {
+    "id": 23,
+    "title": "Payment Management",
+    "owner": "Delos Santos, Joevan",
+    "record": "CheckoutAttempt, verified Payment, receipt and reconciliation exception",
+    "authority": "Patient checkout and financial processing use existing invoice/actor permissions; verified provider evidence is required for settlement",
+    "inputs": [
+      "Payable M11 invoice, exact amount and all active financial holds",
+      "Authorized payer details from Patient/invoice records",
+      "Configured PayMongo test/live mode and credentials",
+      "Authenticated callback/provider session or permitted manual-payment evidence"
+    ],
+    "steps": [
+      "Resolve the payable invoice and authorized payer/actor",
+      "Fetch supported billing details and collect missing required fields",
+      "Create or reuse the permitted hosted checkout attempt",
+      "Record attempt identity without treating redirects as payment",
+      "Verify webhook authenticity and retrieve provider session evidence",
+      "Match invoice/session, exact amount, currency, mode and paid state idempotently",
+      "Commit verified settlement and linked billing impact atomically or retain a reconciliation exception",
+      "Issue linked receipt/history and request approved notification delivery"
+    ],
+    "outputs": [
+      "Hosted checkout or valid payment refusal",
+      "Verified payment, receipt and invoice-linked history",
+      "Retry-safe checkout and reconciliation evidence"
+    ],
+    "boundary": "M23 owns payment collection and reconciliation; M11 owns charges/invoices/balances. This is new planning M23, not the historical automation recorder. Existing PayMongo and HMO safeguards remain; patient autofill is limited to authorized supported fields.",
+    "gate": "Configure credentials/methods/mode, callback reachability and missing payer-field handling. Preserve exact amounts, signatures, provider retrieval, locks and duplicate protection. Partial payments/refunds remain policy decisions; real sandbox and actual receipt delivery remain unverified.",
+    "test": "Repeated verified callbacks create one settlement; a mismatched amount or forged redirect never marks an invoice Paid.",
+    "evidence": "Reported payment/PayMongo foundation currently belongs to historical M11. Separate M23 ownership is planned; sandbox E2E and recipient email receipt have not been verified.",
+    "flow": "Resolve the payable invoice and authorized payer/actor -> Fetch supported billing details and collect missing required fields -> Create or reuse the permitted hosted checkout attempt -> Record attempt identity without treating redirects as payment -> Verify webhook authenticity and retrieve provider session evidence -> Match invoice/session, exact amount, currency, mode and paid state idempotently -> Commit verified settlement and linked billing impact atomically or retain a reconciliation exception -> Issue linked receipt/history and request approved notification delivery",
+    "updated": "October 12, 2026",
+    "version": "5.0",
+    "automation": [
+      "Prefill authorized supported Patient/invoice fields",
+      "Verify provider callbacks and reconcile exact authoritative evidence",
+      "Deduplicate retries and atomically link settlement to the invoice",
+      "Generate receipt references and dispatch approved notifications after commit"
+    ],
+    "checks": [
+      "Repeated verified callbacks create one settlement; a mismatched amount or forged redirect never marks an invoice Paid.",
+      "Repeated verified callbacks create one settlement",
+      "Forged, wrong-mode or amount/session-mismatched evidence cannot settle an invoice",
+      "A captured but mismatched payment remains visible for reconciliation",
+      "Payer autofill and payment history cannot expose another Patient data"
+    ],
+    "dependencies": [
+      "M11 Billing Management",
+      "M4 Patient Records",
+      "M18 Notifications",
+      "M22 Audit Logs"
+    ],
+    "basis": "User PayMongo, billing autofill and linked-history requirement; original Q15/Q18/Q27 payment workflow.",
+    "metrics": [
+      [
+        "Settlement integrity",
+        "Count verified settlements and duplicate callbacks handled safely."
+      ],
+      [
+        "Reconciliation backlog",
+        "Count captured/mismatched evidence awaiting resolution."
+      ],
+      [
+        "Payment history",
+        "Measure invoice/session/receipt linkage and exact amount consistency."
+      ]
+    ],
+    "summary": "Payable invoice -> authorized payer fields -> hosted checkout -> attempt record -> authenticated provider retrieval -> exact idempotent reconciliation -> settlement or exception -> linked receipt/history.",
+    "stakeholders": {
+      "internal": "Current authorized clinic payment handlers",
+      "external": "Patient/payer and PayMongo"
+    }
+  },
+  {
+    "id": 24,
+    "title": "Lab Cases",
+    "owner": "Millar, John Yzhekiel",
+    "record": "Patient-linked LabCase, dispatch/return events and Dentist review history",
+    "authority": "Proposed: authorized Staff coordinates dispatch/return; responsible Dentist authorizes clinical instructions and acceptance/rework; no laboratory login role is added",
+    "inputs": [
+      "Exact Patient, clinical context and Dentist-approved laboratory instructions",
+      "Approved external laboratory and required dates",
+      "Dispatch, expected-return and actual-receipt evidence",
+      "Linked appointment, supporting documents and Dentist review outcome"
+    ],
+    "steps": [
+      "Resolve authorized Patient and care context",
+      "Create the case and record Dentist-approved instructions",
+      "Link the external laboratory, required dates and permitted appointment references",
+      "Record actual dispatch and attributed coordination",
+      "Track expected return and factual overdue/unresolved cases",
+      "Record receipt with supporting evidence",
+      "Require responsible Dentist review and record acceptance or rework",
+      "Publish readiness/worklist outcome and preserve the complete case history"
+    ],
+    "outputs": [
+      "Traceable laboratory case and coordination history",
+      "Outstanding/overdue and rework worklist",
+      "Dentist review and appointment-readiness status"
+    ],
+    "boundary": "M24 owns external lab work from authorized order through accepted return/rework. M14 owns files; M6 booking; M5 clinical care. Receipt alone is not clinical acceptance, treatment completion or payment; no device/sensor or lab API integration is assumed.",
+    "gate": "Confirm actual laboratories, case types, instruction fields, Staff scope, review authority, expected-date/overdue rules, rework/cancellation, lab-fee handling and retention. Manual external events remain attributed evidence.",
+    "test": "Receiving a case cannot mark it Ready without the authorized Dentist acceptance; late/rework cases identify affected bookings without cancelling them.",
+    "evidence": "New module; user confirmed October 12 that external laboratory work is tracked manually. Existing rewards M24 records are not LabCase records.",
+    "flow": "Resolve authorized Patient and care context -> Create the case and record Dentist-approved instructions -> Link the external laboratory, required dates and permitted appointment references -> Record actual dispatch and attributed coordination -> Track expected return and factual overdue/unresolved cases -> Record receipt with supporting evidence -> Require responsible Dentist review and record acceptance or rework -> Publish readiness/worklist outcome and preserve the complete case history",
+    "updated": "October 12, 2026",
+    "version": "5.0",
+    "automation": [
+      "Calculate factual outstanding/overdue lists from recorded dates",
+      "Surface booking dependencies and request approved notifications",
+      "Record receipt and review outcomes with protected history",
+      "Project readiness only from authorized review evidence"
+    ],
+    "checks": [
+      "Receiving a case cannot mark it Ready without the authorized Dentist acceptance; late/rework cases identify affected bookings without cancelling them.",
+      "Receiving a case cannot mark it Ready without Dentist acceptance",
+      "A case/document link cannot be switched to another Patient",
+      "Rework preserves earlier dispatch, receipt and review evidence",
+      "Readiness changes do not silently cancel bookings or complete Treatment"
+    ],
+    "dependencies": [
+      "M4 Patient Records",
+      "M5 Treatment Management",
+      "M6 Appointment Management",
+      "M14 Document Management",
+      "M18 Notifications",
+      "M22 Audit Logs"
+    ],
+    "basis": "User confirmation October 12 at 19:14 Asia/Manila: external lab work is performed and tracked manually. Detailed role/state fields above are the proposed specification.",
+    "metrics": [
+      [
+        "Outstanding lab work",
+        "Count open cases and returns overdue against recorded expected dates."
+      ],
+      [
+        "Review readiness",
+        "Separate received, awaiting-review, rework and accepted outcomes."
+      ],
+      [
+        "Case traceability",
+        "Measure Patient, lab, dispatch, receipt and review evidence linkage."
+      ]
+    ],
+    "summary": "Authorized care context -> Dentist-approved instructions -> lab/date/appointment links -> recorded dispatch -> expected-return tracking -> receipt -> Dentist acceptance or rework -> readiness and case history.",
+    "stakeholders": {
+      "internal": "Authorized Staff coordinator and responsible reviewing Dentist",
+      "external": "External dental laboratory; Patient represented by the case"
+    }
+  },
+  {
+    "id": 25,
+    "title": "Patient Handovers",
+    "owner": "Ecal, Richmon",
+    "record": "PatientHandover, purpose-scoped care packet, acknowledgment and outcome history",
+    "authority": "Proposed: sending Dentist authorizes the clinical handover; receiving Dentist records acceptance; authorized Staff coordinates existing booking/assignment commands",
+    "inputs": [
+      "Exact Patient and sending care context",
+      "Sending and receiving Dentist/branch",
+      "Handover reason, approved summary and outstanding-care references",
+      "Recipient acknowledgment and permitted booking/assignment evidence"
+    ],
+    "steps": [
+      "Resolve the Patient and authorized sending care context",
+      "Create a draft handover with reason and intended recipient",
+      "Review the minimum permitted summary and supporting references",
+      "Notify the scoped receiving team and record actual coordination",
+      "Record acknowledgment, acceptance or decline with attribution",
+      "Coordinate required booking/assignment through existing authorized services",
+      "Record the agreed care-handoff outcome and linked follow-up references",
+      "Close or retain unresolved handover work while preserving history"
+    ],
+    "outputs": [
+      "Traceable internal care-handover case",
+      "Receiving-team acknowledgment and responsibility outcome",
+      "Pending handover worklist and linked care/booking history"
+    ],
+    "boundary": "M25 owns continuity between Dentists/branches, not a branch-change button or ordinary message. M6 bookings, M8 Visit assignment and M5 care remain authoritative. No generic clinical access, automatic reassignment or rewriting completed care is granted by a handover.",
+    "gate": "Confirm who initiates/receives, purpose-specific packet visibility, when care responsibility changes, decline/nonresponse/cancellation, active-Visit handling and return/outcome closure. External specialist referrals are not implied by the confirmed internal workflow.",
+    "test": "A booked receiving appointment does not imply recipient acceptance, clinical access or completed care; an unauthorized recipient cannot read the care packet.",
+    "evidence": "New module; user confirmed October 12 that inter-Dentist/branch handovers are coordinated informally by calls/messages. Existing campaign M25 records are not PatientHandover records.",
+    "flow": "Resolve the Patient and authorized sending care context -> Create a draft handover with reason and intended recipient -> Review the minimum permitted summary and supporting references -> Notify the scoped receiving team and record actual coordination -> Record acknowledgment, acceptance or decline with attribution -> Coordinate required booking/assignment through existing authorized services -> Record the agreed care-handoff outcome and linked follow-up references -> Close or retain unresolved handover work while preserving history",
+    "updated": "October 12, 2026",
+    "version": "5.0",
+    "automation": [
+      "Track outstanding acknowledgments and factual handover status",
+      "Send purpose-limited notifications through M18",
+      "Validate recipient identity and scope before packet access",
+      "Link approved booking, assignment and outcome events without duplicating their commands"
+    ],
+    "checks": [
+      "A booked receiving appointment does not imply recipient acceptance, clinical access or completed care; an unauthorized recipient cannot read the care packet.",
+      "A receiving booking does not prove acknowledgment or accepted responsibility",
+      "An unauthorized recipient cannot read the handover packet",
+      "Prior completed care and author attribution remain unchanged",
+      "Decline/nonresponse remains visible and does not silently reassign the Visit"
+    ],
+    "dependencies": [
+      "M4 Patient Records",
+      "M5 Treatment Management",
+      "M6 Appointment Management",
+      "M8 Patient Visits",
+      "M14 Document Management",
+      "M18 Notifications",
+      "M20 Patient Follow-Up",
+      "M22 Audit Logs"
+    ],
+    "basis": "User confirmation October 12 at 19:14 Asia/Manila: care moves between Dentists/branches with coordination beyond changing an appointment, currently through calls/messages.",
+    "metrics": [
+      [
+        "Pending handovers",
+        "Count requests awaiting receiving-team acknowledgment/outcome."
+      ],
+      [
+        "Responsibility evidence",
+        "Measure attributed acceptance and agreed outcome completeness."
+      ],
+      [
+        "Handover time",
+        "Measure dispatch-to-acknowledgment/outcome elapsed time."
+      ]
+    ],
+    "summary": "Authorized sending context -> intended recipient/reason -> permitted packet review -> recorded coordination -> recipient acknowledgment/acceptance or decline -> normal booking/assignment commands -> handover outcome -> unresolved work or closure/history.",
+    "stakeholders": {
+      "internal": "Sending/receiving Dentist and scoped Staff coordinator",
+      "external": "Patient whose care is handed over within the clinic group"
+    }
+  }
+]

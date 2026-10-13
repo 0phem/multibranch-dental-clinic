@@ -1,5 +1,19 @@
 # Multi-Branch Dental Clinic Operation System
 
+<!-- FINAL_MODULE_SCOPE_2026_10_12_START -->
+## Current module planning scope
+
+The finalized 25-module catalog, five primary assignments per member and requested IPO/automation are in MODULE_COVERAGE.md and docs/MODULE_IPO_BLUEPRINT.md. Read docs/MODULE_SCOPE_DECISIONS_2026_10_12.md, docs/MODULE_IDENTITY_TRANSITION_MAP.md and docs/MODULE_DEVELOPMENT_READINESS.md before new work.
+
+This scope supersedes earlier planning-only module names, counts, assignments and frontend-only descriptions. Existing implementation permissions, domain keys, financial holds, immutable histories and protected ERD contracts below remain operative until an explicit reviewed transition. Historical M10 flow, M12 HMO, M15 configuration, M23 automation, M24 rewards, M25 campaigns and M26 feedback references retain their historical/runtime meanings. They must not be relabeled as new chart/plan/leave/payment/lab/handover records.
+
+The four roles are exactly Patient, Staff, Dentist and Owner. React/Vite, Laravel 13, PostgreSQL and Sanctum remain the stack; verify actual checkout status. M1 includes personnel reference data and security; M3 Work Schedules publishes Staff/Dentist rosters; M15 owns coverage-first leave decisions; M11/M23 planned billing/payment separation preserves current financial authority. No general automation engine, HMO, inventory, rewards or campaigns are added to new development. Backup/recovery and monitoring remain production operations.
+
+The current task is documentation/source reconciliation only. New clinical fields, leave/coverage policy, lab and handover permissions, provider configuration and production behavior must not be invented or claimed verified. Prior clinical/private message/feedback access restrictions remain enforced. Preserved instructions below retain scope-independent authority; only their superseded planning claims are historical.
+
+**Superseded planning content (names, numbers, owners and counts only).** In this file the **superseded planning content** is the "canonical 26-module structure" bullet and the M24/M25 Proposed-Enhancement bullet under Core business rules. **Still operative:** every other business, architecture and quality rule, under the runtime identities. The superseded-names table, the per-document list and the source-verified runtime-key mapping are in `docs/MODULE_IDENTITY_TRANSITION_MAP.md`; runtime domain keys, `src/module-map.js` and `LEGACY_MODULE_DOMAIN` are unchanged.
+<!-- FINAL_MODULE_SCOPE_2026_10_12_END -->
+
 Evidence labels, interview boundaries and Patient product rules: see CLAUDE_OPERATING_MODE.md (applies to every agent).
 
 ## Project

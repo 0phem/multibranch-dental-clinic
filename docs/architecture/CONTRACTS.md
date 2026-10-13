@@ -1,5 +1,19 @@
 # Shared Production Contracts
 
+<!-- FINAL_MODULE_SCOPE_2026_10_12_START -->
+## Current module planning scope
+
+The finalized 25-module catalog, five primary assignments per member and requested IPO/automation are in MODULE_COVERAGE.md and docs/MODULE_IPO_BLUEPRINT.md. Read docs/MODULE_SCOPE_DECISIONS_2026_10_12.md, docs/MODULE_IDENTITY_TRANSITION_MAP.md and docs/MODULE_DEVELOPMENT_READINESS.md before new work.
+
+This scope supersedes earlier planning-only module names, counts, assignments and frontend-only descriptions. Existing implementation permissions, domain keys, financial holds, immutable histories and protected ERD contracts below remain operative until an explicit reviewed transition. Historical M10 flow, M12 HMO, M15 configuration, M23 automation, M24 rewards, M25 campaigns and M26 feedback references retain their historical/runtime meanings. They must not be relabeled as new chart/plan/leave/payment/lab/handover records.
+
+The four roles are exactly Patient, Staff, Dentist and Owner. React/Vite, Laravel 13, PostgreSQL and Sanctum remain the stack; verify actual checkout status. M1 includes personnel reference data and security; M3 Work Schedules publishes Staff/Dentist rosters; M15 owns coverage-first leave decisions; M11/M23 planned billing/payment separation preserves current financial authority. No general automation engine, HMO, inventory, rewards or campaigns are added to new development. Backup/recovery and monitoring remain production operations.
+
+The current task is documentation/source reconciliation only. New clinical fields, leave/coverage policy, lab and handover permissions, provider configuration and production behavior must not be invented or claimed verified. Prior clinical/private message/feedback access restrictions remain enforced. Preserved instructions below retain scope-independent authority; only their superseded planning claims are historical.
+
+**Superseded planning content (names, numbers, owners and counts only).** In this file module numbers in section titles are the **historical runtime identities**; every contract and state machine stays as written. The superseded-names table, the per-document list and the source-verified runtime-key mapping are in `docs/MODULE_IDENTITY_TRANSITION_MAP.md`; runtime domain keys, `src/module-map.js` and `LEGACY_MODULE_DOMAIN` are unchanged.
+<!-- FINAL_MODULE_SCOPE_2026_10_12_END -->
+
 Frozen at `1fa49d1` (then the canonical 25-module structure; the canonical structure became 26 modules with revised names on October 4, 2026 — see `MODULE_COVERAGE.md`) before parallel Wave 1 development. This is the shared
 cross-module reference for all five developers. It does not repeat what other documents already own:
 
