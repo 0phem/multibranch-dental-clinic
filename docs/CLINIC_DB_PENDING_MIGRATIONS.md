@@ -1,5 +1,7 @@
 # Pending clinic-database migrations (`dental_clinic`)
 
+> **Status 2026-10-13 (Phase 2, Step 0):** the ten migrations through `2026_10_18_000100` were applied to `dental_clinic` after a verified backup (`~/Downloads/clinic-db-backups/dental_clinic_20261013_1341.dump`, restore-checked). `2026_10_19_000100` (M1 Priority 1) is applied the same way: backup first, then `php artisan migrate`. The text below is the original pre-migration review.
+
 Inspected 2026-10-13. **Not applied.** The local clinic database is migrated through `2026_10_08_000100_create_automation_tables`. The migrations below exist in the code and are applied in the isolated test database (`dental_clinic_test`) on every test run, but not in `dental_clinic`. Applying them is a team/Owner decision; this document is the input for it.
 
 ## Read-only preflight (2026-10-13, `SELECT` only)
@@ -30,6 +32,7 @@ No preflight condition blocks the migrations on today's data.
 | `2026_10_16_000100_create_messaging_tables` | Creates `conversations`, `conversation_participants`, immutable `conversation_messages` with guard triggers. | patients, branches, users | Drops the tables — **messages are lost**. |
 | `2026_10_17_000100_create_patient_feedback_table` | Creates immutable `patient_feedback`. | patients, visits | Drops the table — **feedback is lost**. |
 | `2026_10_18_000100_create_mail_dispatch_tables` (added 2026-10-13, M18) | Creates `mail_dispatches` and append-only `mail_dispatch_attempts`. | users | Drops both tables — **send history is lost**. |
+| `2026_10_19_000100_add_purpose_to_email_verification_otps` (added 2026-10-13, M1 Priority 1) | Adds `purpose` (default `email_verification`, CHECK) and `new_email` to `email_verification_otps`, plus an index. Existing rows become registration codes. | email_verification_otps | Drops the two columns — pending reset/email-change codes are lost (they expire in 10 minutes anyway). |
 
 Order matters only through the listed dependencies; `php artisan migrate` runs them in filename order, each in its own transaction (PostgreSQL DDL is transactional), so a failing migration leaves the earlier ones applied and itself rolled back.
 
