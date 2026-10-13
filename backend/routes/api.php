@@ -238,7 +238,7 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureAccountAccess::cla
         Route::get('/', [ConversationController::class, 'index']);
         Route::post('/', [ConversationController::class, 'start'])->middleware(['role:patient', 'throttle:m17-start', 'throttle:m17-send']);
         Route::get('/start-options', [ConversationController::class, 'startOptions'])->middleware('role:patient');
-        Route::post('/presence', [ConversationController::class, 'presence']);
+        Route::post('/presence', [ConversationController::class, 'presence'])->middleware('throttle:m17-presence');
         Route::get('/summary', [ConversationController::class, 'summary']);
         Route::get('/{conversation}', [ConversationController::class, 'show']);
         Route::get('/{conversation}/messages', [ConversationController::class, 'messages']);

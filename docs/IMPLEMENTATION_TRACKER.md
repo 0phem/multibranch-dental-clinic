@@ -18,6 +18,13 @@ Started 2026-10-13. Keep current as slices land. Planning numbers follow `MODULE
 - **Message retention period** under RA 10173 (Data Privacy Act). No automatic deletion exists.
 - **The duplicate-phone message at registration.** It still says a matching record may exist, which reveals that a phone number is on file.
 
+**Lower-risk security items (security review 2026-10-13).**
+- *Open sockets after branch access is removed (documented, not changed).* A socket already subscribed keeps receiving that conversation's or branch's signals until it reconnects.
+  - The signals hold identifiers only, never text.
+  - HTTP reads are refused at once, and a new subscription is refused.
+  - Fix later if needed: disconnect the user's sockets on scope change.
+- *Presence heartbeat rate limit (fixed 2026-10-13).* `POST /api/conversations/presence` is limited to 10 per minute per account (`m17-presence`).
+
 **Known build-time items.**
 - `npm audit` reports one high-severity advisory in `source-map-js` (GHSA-68fv-2mgg-jv7q, event-loop denial of service via crafted source maps).
   - It is a build-time dependency of the Vite toolchain, already in the lock file before Phase 2, and not shipped to browsers.

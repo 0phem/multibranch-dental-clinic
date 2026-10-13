@@ -51,6 +51,9 @@ class AppServiceProvider extends ServiceProvider
             ];
         });
         // M26: per ACCOUNT submission bound (storage amplification). A technical safeguard, not a clinic feedback-frequency policy.
+        // M17 presence heartbeat: a visible tab beats every 45 s (plus on tab focus), so 10 a minute per account is generous.
+        \Illuminate\Support\Facades\RateLimiter::for('m17-presence', fn ($request) => \Illuminate\Cache\RateLimiting\Limit::perMinute(10)
+            ->by('user:'.($request->user()?->getAuthIdentifier() ?? 'anon:'.$request->ip()).':presence'));
         \Illuminate\Support\Facades\RateLimiter::for('m17-start', function ($request) {
             $who = 'user:'.($request->user()?->getAuthIdentifier() ?? 'anon:'.$request->ip());
 

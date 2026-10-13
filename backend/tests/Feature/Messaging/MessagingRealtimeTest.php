@@ -352,6 +352,15 @@ class MessagingRealtimeTest extends TestCase
         Mail::assertNotSent(MessageAlertMail::class);
     }
 
+    public function test_the_presence_heartbeat_is_rate_limited_per_account(): void
+    {
+        $this->actingAsUser('patientA');
+        for ($i = 0; $i < 10; $i++) $this->postJson('/api/conversations/presence')->assertOk();
+        $this->postJson('/api/conversations/presence')->assertStatus(429);
+        $this->actingAsUser('patientB');
+        $this->postJson('/api/conversations/presence')->assertOk(); // another account is unaffected
+    }
+
     public function test_owner_is_refused_everywhere(): void
     {
         $id = $this->start()->json('data.conversation.id');
