@@ -1,0 +1,33 @@
+/*
+ * Design A visual language for the first screens a visitor sees (sign-in, registration, Patient home, Staff and Owner
+ * dashboards, billing): the same soft mint / light-blue tints, rounded cards and confident numbers as the emails and PDFs.
+ * Presentation only, loaded last; no layout, content or behaviour changes. Colours keep WCAG AA contrast (text colours unchanged).
+ */
+:root { --a-mint: #eaf5f2; --a-sky: #eaf3fd; --a-edge: #d6e9e4; --a-teal: #0c9b8e; }
+
+/* Sign-in, registration, verification, password reset: a calm tinted backdrop and a card with the brand accent bar. */
+.public-auth .auth-shell {
+  background: radial-gradient(1100px 460px at 50% -8%, var(--a-sky) 0%, rgba(234, 243, 253, 0) 62%), linear-gradient(180deg, #f2f9f7 0%, #f7faf9 100%);
+}
+.public-auth .auth-card { position: relative; overflow: hidden; border-radius: 24px; border-color: var(--a-edge); box-shadow: 0 18px 50px rgba(20, 50, 79, .08); }
+.public-auth .auth-card::before { content: ""; position: absolute; inset: 0 0 auto; height: 6px; background: linear-gradient(90deg, var(--brand) 0%, var(--a-teal) 100%); }
+
+/* Patient home: the greeting card is the hero. */
+.role-patient .pt-hero, .role-patient .pt-first-use-hero {
+  background: linear-gradient(160deg, var(--a-sky) 0%, #eef8f5 55%, #ffffff 100%); border-color: var(--a-edge); border-radius: 24px;
+}
+.role-patient .pt-quick button { border-radius: 16px; }
+
+/* Dashboards: rounded stat cards with confident numbers. */
+.stat-card { border-radius: 18px; border-color: #e1e9f0; }
+.stat-card .stat-value { font-weight: 800; letter-spacing: -.02em; }
+.stat-card .stat-icon { border-radius: 12px; }
+.card { border-radius: 18px; }
+
+/* Billing: invoice cards like the emailed receipt; paid invoices carry a quiet green edge, the total stands out. */
+.role-patient .pt-record { border-radius: 20px; }
+.role-patient .pt-record:has(.status.success) { border-left: 4px solid #1a7f52; }
+.role-patient .pt-total b { font-size: 1.55rem; font-weight: 800; letter-spacing: -.02em; }
+@media (max-width: 520px) {
+  .role-patient .pt-record .row-actions .btn, .role-patient .pt-record > div > .btn.primary { width: 100%; }
+}

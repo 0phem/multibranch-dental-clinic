@@ -5,6 +5,7 @@ import './styles.css'
 import './foundation.css'
 import './patient.css'
 import './public-site.css'
+import './polish.css'
 
 import { loadBranding } from './clinic-config.js'
 
