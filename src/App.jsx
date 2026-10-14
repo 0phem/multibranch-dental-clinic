@@ -14,6 +14,7 @@ import { stopRealtime } from './realtime.js'
 import { bootstrapSession } from './session-bootstrap.js'
 import { clearInvoiceLinkFromUrl, readInvoiceLink, rememberInvoiceLink, takeInvoiceLink } from './invoice-link.js'
 
+const PatientPortal=lazy(()=>import('./patient/Portal.jsx').then(m=>({default:m.PatientPortal})))
 const PatientRegister=lazy(()=>import('./pages/PatientRegister.jsx').then(m=>({default:m.PatientRegister})))
 import * as api from './api-client.js'
 
@@ -38,6 +39,7 @@ const PatientLoyaltyPage=lazy(()=>import('./pages/PatientLoyalty.jsx').then(m=>(
 const PatientMePage=lazy(()=>import('./pages/PatientMe.jsx').then(m=>({default:m.PatientMePage})))
 const AnalyticsPage=lazy(()=>import('./pages/Admin.jsx').then(m=>({default:m.AnalyticsPage})))
 const AutomationPage=lazy(()=>import('./pages/Admin.jsx').then(m=>({default:m.AutomationPage})))
+const AssistantAnswersPage=lazy(()=>import('./pages/AssistantAnswers.jsx').then(m=>({default:m.AssistantAnswersPage})))
 const ClinicBrandingPage=lazy(()=>import('./pages/ClinicBranding.jsx').then(m=>({default:m.ClinicBrandingPage})))
 const BranchesPage=lazy(()=>import('./pages/Admin.jsx').then(m=>({default:m.BranchesPage})))
 const EngagementPage=lazy(()=>import('./pages/Admin.jsx').then(m=>({default:m.EngagementPage})))
@@ -107,6 +109,9 @@ function AppBody() {
     return()=>window.removeEventListener('hashchange',navigate)
   },[])
   const [verification,setVerification]=useState(null)
+  // Decision 1: a verified email does not sign in. The sign-in page opens with the email filled in and this message.
+  const [signInNotice,setSignInNotice]=useState(null)
+  const [serverMe,setServerMe]=useState(null)
   useEffect(()=>{
     if(authPhase==='checking'||publicView!=='home')return
     const section=window.location.hash.slice(1)
@@ -120,6 +125,7 @@ function AppBody() {
   // Server identity fields from /api/me travel with the local compatibility session: the Patient public_id (M6/M4
   // ownership, resolved server-side) and the Staff authorization branch scopes. Neither is ever taken from browser input.
   const enterSession=(session,me)=>{
+    setServerMe(me||null);setSignInNotice(null)
     store.adoptSession({...session,serverUserId:me?.id??null,patientPublicId:me?.patient?.id??null,branchScopes:Array.isArray(me?.branch_scopes)?me.branch_scopes.map(b=>b.id):[]})
     setContext(null)
     setPageState(START_PAGE[session.role]||'dashboard')
@@ -193,9 +199,9 @@ function AppBody() {
   const verifyRegistration=async ({email,otp})=>{
     const result=await api.verifyRegistrationEmail(email,otp)
     if(!result.ok)return result
-    const bridge=store.actions.bridgeBackendIdentity(result.data)
-    if(!bridge.ok)return {ok:false,message:'Your email is verified, but the workspace could not be opened. Please sign in.'}
-    setVerification(null);enterSession(bridge.session,result.data);setAuthPhase('authenticated')
+    setVerification(null)
+    setSignInNotice({email:result.data?.email||email,message:'Your account is verified. Please sign in.'})
+    window.history.replaceState(null,'','#sign-in');setPublicView('login')
     return {ok:true}
   }
 
@@ -204,6 +210,7 @@ function AppBody() {
   const signedOut=()=>{
     stopRealtime() // M17: no socket keeps listening for the previous account
     store.adoptSession(null)
+    setServerMe(null)
     invoiceLink.current=null
     setContext(null);setPageState('dashboard');setActiveBranch('All Branches');setShowRegister(false);setVerification(null)
     setAuthPhase('unauthenticated')
@@ -224,6 +231,14 @@ function AppBody() {
   // api.onSessionInvalidated) means the server session may be gone. Revalidate with /api/me: unless the server confirms
   // the same account is still signed in, return to the normal signed-out Login state. Nothing is retried — the failed
   // command already reported its failure — and browser-local Booking Drafts are left intact for the next sign-in.
+  // Account security changes (email or password) end every session on the server: return to sign-in with a clear message.
+  const signedOutForSecurity=async({email,message})=>{
+    await api.logout()
+    signedOut()
+    setSignInNotice({email,message})
+    window.history.replaceState(null,'','#sign-in');setPublicView('login')
+  }
+
   const latest=useRef(null)
   latest.current={session:store.session,signedOut}
   const revalidating=useRef(false)
@@ -258,7 +273,7 @@ function AppBody() {
       :showRegister
       ?<ChunkBoundary><Suspense fallback={<AuthShell><StartupLoading compact label="Opening registration…"/></AuthShell>}><PatientRegister onRegister={register} onCancel={()=>{setAuthError('');setShowRegister(false)}}/></Suspense></ChunkBoundary>
       :publicView==='home'?<PublicSite/>
-      :<Login onLogin={login} onShowRegister={()=>{setAuthError('');setShowRegister(true)}} onForgotPassword={()=>{setAuthError('');window.location.hash='forgot-password';setPublicView('forgot')}}/>}
+      :<Login key={signInNotice?.email||'login'} initialEmail={signInNotice?.email} notice={signInNotice?.message} onLogin={login} onShowRegister={()=>{setAuthError('');setShowRegister(true)}} onForgotPassword={()=>{setAuthError('');window.location.hash='forgot-password';setPublicView('forgot')}}/>}
     <ToastStack toasts={store.toasts}/>
   </>
 
@@ -269,6 +284,14 @@ function AppBody() {
   if(store.refDataStatus==='error')return <RefDataUnavailable onRetry={store.retryReferenceData}/>
 
   if(!validSession(store.state,store.session))return <><Notice>Your account or branch access changed. Reopen your workspace or ask an administrator.</Notice><Login onLogin={login}/></>
+
+  // The Patient portal (src/patient) reads the clinic server only; the legacy local-state patient screens are not used.
+  if(role==='patient'&&serverMe?.patient?.id)return <>
+    <ChunkBoundary><Suspense fallback={<StartupLoading label="Opening your portal…"/>}>
+      <PatientPortal me={serverMe} store={store} initialPage={page==='billing'?'billing':'home'} initialContext={page==='billing'?context:null} onLogout={logout} onSignedOut={signedOutForSecurity}/>
+    </Suspense></ChunkBoundary>
+    <ToastStack toasts={store.toasts}/>
+  </>
 
   const branch=role==='staff'||role==='dentist'?store.state.branches.find(b=>b.id===store.session?.branchId)?.name||'Unknown branch':activeBranch
   const props={role,activeBranch:branch,store,setPage,context}
@@ -297,6 +320,7 @@ function AppBody() {
     case 'pricing': content=<ServicesPricingPage store={store}/>; break
     case 'automation': content=<AutomationPage store={store}/>; break
     case 'branding': content=<ClinicBrandingPage/>; break
+    case 'assistant': content=<AssistantAnswersPage store={store}/>; break
     case 'audit': content=<AuditTrailPage store={store}/>; break
     case 'engagement': content=<EngagementPage role={role} store={store}/>; break
     case 'loyalty': content=<PatientLoyaltyPage store={store}/>; break

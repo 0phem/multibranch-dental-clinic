@@ -17,7 +17,7 @@ const useLayoutEffectSafe=typeof window==='undefined'?React.useEffect:React.useL
 const NAV_ICONS={
   dashboard:'home',book:'plusCalendar',appointments:'calendar',calendar:'calendar',schedule:'calendar',checkin:'checkin',queue:'queue',capacity:'activity',
   patients:'users',treatment:'tooth',billing:'receipt',hmo:'shield',inquiries:'message',messages:'message',prescriptions:'pill',followups:'followup',
-  branches:'building',team:'users',analytics:'chart',users:'shield',pricing:'receipt',automation:'settings',branding:'sparkles',engagement:'sparkles',loyalty:'gift',me:'user',feedback:'message'
+  branches:'building',team:'users',analytics:'chart',users:'shield',pricing:'receipt',automation:'settings',branding:'sparkles',assistant:'robot',engagement:'sparkles',loyalty:'gift',me:'user',feedback:'message'
 }
 
 const GROUPS={
@@ -28,7 +28,7 @@ const GROUPS={
   patient:[['Overview',['dashboard']],['Booking',['book','appointments']],['Communication',['messages']],['Account',['billing','feedback','me']]],
   staff:[['Today',['dashboard','appointments','calendar','checkin','queue','capacity']],['Patients & finance',['patients','billing','hmo']],['Communication',['inquiries','messages','followups','engagement']]],
   dentist:[['Today',['dashboard','schedule','queue']],['Clinical',['patients','treatment','prescriptions','followups']],['Communication',['messages']]],
-  owner:[['Overview',['dashboard','analytics']],['Operations',['branches','team','capacity','hmo']],['Administration',['users','pricing','automation','audit','branding','engagement']]],
+  owner:[['Overview',['dashboard','analytics']],['Operations',['branches','team','capacity','hmo']],['Administration',['users','pricing','automation','audit','branding','assistant','engagement']]],
 }
 
 // In a clinic-server session the capacity page is the factual live-queue view (src/pages/QueueCounts.jsx); the
@@ -47,8 +47,11 @@ function navGroups(role,serverSession=false){
 // role picker to trust or forge. `onLogin(email,password)` is expected to return a Promise resolving to
 // `{ok:true}` or `{ok:false, message}` (see App.jsx / api-client.js); this component owns only its own
 // submitting/error UI state, never the auth result itself.
-export function Login({ onLogin, onShowRegister, onForgotPassword }) {
-  const [email,setEmail]=React.useState('')
+export function Login({ onLogin, onShowRegister, onForgotPassword, initialEmail = '', notice = '' }) {
+  const [email,setEmail]=React.useState(initialEmail||'')
+  const passwordWrap=React.useRef(null)
+  // After email verification the address is filled in and the empty password field takes focus.
+  React.useEffect(()=>{if(initialEmail)passwordWrap.current?.querySelector('input')?.focus()},[initialEmail])
   const [password,setPassword]=React.useState('')
   const [submitting,setSubmitting]=React.useState(false)
   const [error,setError]=React.useState('')
@@ -63,9 +66,10 @@ export function Login({ onLogin, onShowRegister, onForgotPassword }) {
   }
   return <AuthShell><div className="auth-form" aria-labelledby="login-title">
       <div className="login-copy-wrap"><div className="eyebrow">Patient Portal</div><h1 id="login-title">Welcome back</h1><p className="login-copy">Sign in to continue to your clinic portal.</p></div>
+      {notice&&<Notice tone="success" title={notice}/>}
       <form onSubmit={submit} noValidate aria-busy={submitting}>
         <Field label="Email" required><input type="email" autoComplete="email" value={email} onChange={e=>{setEmail(e.target.value);setError('')}}/></Field>
-        <PasswordField label="Password" autoComplete="current-password" value={password} onChange={e=>{setPassword(e.target.value);setError('')}}/>
+        <div ref={passwordWrap}><PasswordField label="Password" autoComplete="current-password" value={password} onChange={e=>{setPassword(e.target.value);setError('')}}/></div>
         {onForgotPassword&&<p className="login-forgot"><button type="button" className="text-link" onClick={onForgotPassword}>Forgot password?</button></p>}
         {error&&<Notice tone="warning" title="Couldn’t sign in">{error}</Notice>}
         <Button type="submit" className="login-button" icon="arrow" disabled={submitting}>{submitting?'Signing in…':'Sign in'}</Button>
