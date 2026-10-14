@@ -20,7 +20,7 @@ const read = path => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8'
 
 const visitRow = (fields = {}) => ({
   id: serverId(4000), source: 'appointment', status: 'Checked In', revision: 1, arrived_at: '2026-09-19T10:05:00+08:00', clinic_date: '2026-09-19', closed_at: null,
-  patient: { id: serverId(500), code: 'PAT-0500', name: 'Server Patient' }, branch: { id: 'b1', name: 'Branch A' }, dentist: { id: 'd1', name: 'Dr. Miguel Reyes' },
+  patient: { id: serverId(500), code: 'PAT-0500', name: 'Server Patient' }, branch: { id: 'b1', name: 'Dr. Dana Roxas Dental Clinic' }, dentist: { id: 'd1', name: 'Dr. Miguel Reyes' },
   service: { id: 'svc1', name: 'Dental Consultation' }, appointment: { id: serverId(900), code: 'APT-2026-000900', status: 'Checked In', revision: 2, date: '2026-09-19', start_time: '11:00' }, ...fields,
 })
 

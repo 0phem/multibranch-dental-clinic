@@ -11,10 +11,10 @@ import {
 } from '../src/reference-data-bridge.js'
 
 // ---- Mock API response fixtures, shaped exactly like the real backend Resources (Phase 2A plan, H) ------
-const API_BRANCH = { id: 'b1', branch_code: 'BRC-A', name: 'Branch A', city: 'Bocaue', address: '1 St', phone: '(02) 8123 1001', open_time: '09:00:00', close_time: '18:00:00', status: 'Open', capacity_threshold: 80, latitude: null, longitude: null }
+const API_BRANCH = { id: 'b1', branch_code: 'BRC-A', name: 'Dr. Dana Roxas Dental Clinic', city: 'Bocaue', address: '1 St', phone: '(02) 8123 1001', open_time: '09:00:00', close_time: '18:00:00', status: 'Open', capacity_threshold: 80, latitude: null, longitude: null }
 const API_SERVICE = { id: 'svc1', code: 'CONSULT', name: 'Dental Consultation', duration_minutes: 30, reference_fee_php: 600, category: 'General Dentistry', status: 'Active' }
 const API_BRANCH_SERVICE = { branch_ref: 'b1', service_ref: 'svc1', active: true, duration_override_minutes: null }
-const API_STAFF = { id: 's3', userId: 'u10', personId: 'per-s3', name: 'Nina Torres', title: 'Dental Assistant', branchId: 'b1', branch: 'Branch A', shiftStart: '09:00:00', shiftEnd: '18:00:00', available: true }
+const API_STAFF = { id: 's3', userId: 'u10', personId: 'per-s3', name: 'Nina Torres', title: 'Dental Assistant', branchId: 'b1', branch: 'Dr. Dana Roxas Dental Clinic', shiftStart: '09:00:00', shiftEnd: '18:00:00', available: true }
 const API_DENTIST = { id: 'd1', userId: 'u3', personId: 'per-d1', name: 'Miguel Reyes', specialty: 'General Dentistry', license_no: 'PRC-D-1001', assistantStaffId: 's3', branch_ids: ['b1'], service_ids: ['svc1', 'svc2', 'svc3', 'svc4', 'svc5', 'svc11'], shiftStart: '09:00:00', shiftEnd: '18:00:00', available: true }
 
 beforeEach(() => { api.__resetCsrfCacheForTests() })
@@ -41,9 +41,12 @@ test('branch mapper preserves server public identity and unconfirmed operating p
 test('mapBranch produces the exact legacy INITIAL_BRANCHES shape', () => {
   const mapped = mapBranch(API_BRANCH)
   assert.deepEqual(mapped, {
-    id: 'b1', branchCode: 'BRC-A', name: 'Branch A', city: 'Bocaue', address: '1 St', phone: '(02) 8123 1001',
+    id: 'b1', branchCode: 'BRC-A', name: 'Dr. Dana Roxas Dental Clinic', city: 'Bocaue', address: '1 St', phone: '(02) 8123 1001',
     open: '09:00', close: '18:00', status: 'Open', threshold: 80,
+    // The Owner's branch form also edits the map position (and, when the server sends them, email and days open).
+    latitude: null, longitude: null,
   })
+  assert.deepEqual(mapBranch({ ...API_BRANCH, email: null, operating_days: [1, 2, 3, 4, 5, 6] }).operatingDays, [1, 2, 3, 4, 5, 6])
 })
 
 test('mapService produces the exact legacy INITIAL_SERVICES shape', () => {
@@ -192,7 +195,7 @@ for (const collection of ['staff', 'dentists']) test(`${collection} supported ed
     assert.deepEqual(JSON.parse(options.body), expected)
     return jsonResponse(confirmed)
   }
-  let state = normalizeClinicState({ ...personsAndUsersFixture(), branches: [mapBranch(API_BRANCH), { ...mapBranch(API_BRANCH), id: 'b2', name: 'Branch B' }],
+  let state = normalizeClinicState({ ...personsAndUsersFixture(), branches: [mapBranch(API_BRANCH), { ...mapBranch(API_BRANCH), id: 'b2', name: 'Roxas - Cardinal Dental Center' }],
     services: [], branchServices: [], dentistServiceAssignments: [], dentists: [mapDentistProfile(API_DENTIST)], staff: [mapStaffProfile(API_STAFF)], patients: [],
     appointments: [], queue: [], treatments: [], invoices: [], hmo: [], inquiries: [], conversations: [],
     notifications: [], prescriptions: [], followups: [], automations: [], workflowLog: [], campaigns: [],

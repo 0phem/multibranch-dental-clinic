@@ -44,7 +44,7 @@ test('appointment adapter events and arrivals are idempotent',()=>{
 })
 
 test('patient creation returns patient ID, separately linked to its PERSON',()=>{
-  const f=fixture();const r=f.actions.createPatientRecord({person:{firstName:'New',lastName:'Patient',phone:'09170009999'},patient:{preferredBranch:'Branch A'}})
+  const f=fixture();const r=f.actions.createPatientRecord({person:{firstName:'New',lastName:'Patient',phone:'09170009999'},patient:{preferredBranch:'Dr. Dana Roxas Dental Clinic'}})
   assert.equal(r.ok,true,r.message);assert.notEqual(r.record.id,r.record.personId)
   assert.equal(f.state.patients.find(p=>p.id===r.record.id).personId,r.record.personId)
   assert.equal(r.record.name,'New Patient')
@@ -166,7 +166,7 @@ test('day rollover excludes old queues and prevents clinical edits; saved data n
 })
 
 test('legacy branch names migrate, unknown walk-in dates do not become today, and seeds rebase only explicitly',()=>{
-  const f=fixture({appointments:[{...form,id:'a',branch:'Branch A',branchId:undefined,status:'Confirmed'}],queue:[{id:'q',appointmentId:'a',checkInId:'ci',patientId:'p1',dentistId:'d1',status:'Waiting',checkedIn:'09:50'},{id:'old',patientId:'p2',dentistId:'d1',branch:'Branch A',status:'Waiting',checkedIn:'09:30'}]})
+  const f=fixture({appointments:[{...form,id:'a',branch:'Dr. Dana Roxas Dental Clinic',branchId:undefined,status:'Confirmed'}],queue:[{id:'q',appointmentId:'a',checkInId:'ci',patientId:'p1',dentistId:'d1',status:'Waiting',checkedIn:'09:50'},{id:'old',patientId:'p2',dentistId:'d1',branch:'Dr. Dana Roxas Dental Clinic',status:'Waiting',checkedIn:'09:30'}]})
   assert.equal(f.state.queue[0].branchId,'b1');assert.equal(f.state.queue[0].clinicDate,form.date)
   assert.equal(isTodayQueue(f.state.queue[1]),false)
   const rebased=rebaseDemoRecords([{date:'2026-09-19',start:'10:00'}],'2026-09-20')

@@ -23,7 +23,7 @@ setClockSource(() => new Date('2026-09-19T02:08:00Z'))
 const row = (n, fields = {}) => ({
   id: `01K0000000000000000A${String(n).padStart(6, '0')}`, code: `APT-2026-${String(n).padStart(6, '0')}`, status: 'Confirmed', source: 'online', revision: 1,
   date: '2026-09-19', start_time: '09:00', end_time: '09:30', duration_minutes: 30,
-  patient: { id: `01K0000000000000000P${n}`, code: `PAT-${n}`, name: `Patient ${n}` }, branch: { id: 'b1', name: 'Branch A' },
+  patient: { id: `01K0000000000000000P${n}`, code: `PAT-${n}`, name: `Patient ${n}` }, branch: { id: 'b1', name: 'Dr. Dana Roxas Dental Clinic' },
   service: { id: 'svc1', name: 'Consultation' }, dentist: { id: 'd1', name: 'Dr. One' },
   notes: 'private booking note', history: [{ event: 'appointment.created' }], ...fields,
 })
@@ -128,7 +128,7 @@ test('groups by Dentist with Unassigned last, sorts by start time, and filters b
     mapDayAppointment(row(1, { start_time: '10:00', dentist: { id: 'd2', name: 'Dr. Two' } })),
     mapDayAppointment(row(2, { start_time: '09:00', dentist: { id: 'd2', name: 'Dr. Two' } })),
     mapDayAppointment(row(3, { start_time: '08:30', dentist: null })),
-    mapDayAppointment(row(4, { start_time: '08:00', dentist: { id: 'd1', name: 'Dr. One' }, branch: { id: 'b2', name: 'Branch B' } })),
+    mapDayAppointment(row(4, { start_time: '08:00', dentist: { id: 'd1', name: 'Dr. One' }, branch: { id: 'b2', name: 'Roxas - Cardinal Dental Center' } })),
     mapDayAppointment(row(5, { start_time: '08:00', dentist: { id: 'd1', name: 'Dr. One' } })),
   ]
   const all = groupByDentist(rows)
@@ -232,7 +232,7 @@ const bundleFile = new URL('m6-day-calendar-test-bundle.mjs', bundleDir)
 writeFileSync(bundleFile, bundle.outputFiles[0].text)
 const ui = await import(bundleFile.href)
 ui.setBundledClock(() => new Date('2026-09-19T02:08:00Z'))
-const store = session => ({ session, state: { branches: [{ id: 'b1', name: 'Branch A' }, { id: 'b2', name: 'Branch B' }] } })
+const store = session => ({ session, state: { branches: [{ id: 'b1', name: 'Dr. Dana Roxas Dental Clinic' }, { id: 'b2', name: 'Roxas - Cardinal Dental Center' }] } })
 
 test('offline demo shows an honest notice and no calendar; a server session paints loading, never an empty state, before data arrives', () => {
   const demo = renderToString(React.createElement(ui.StaffDayCalendar, { store: store({ role: 'staff' }) }))
@@ -335,7 +335,7 @@ test('week/month fetch through the existing from/to endpoint, page by page, with
 })
 
 test('per-day totals exist only for a complete response; an incomplete one yields none (no complete-looking zeros)', () => {
-  const rows = [mapDayAppointment(row(1, { date: '2026-10-12' })), mapDayAppointment(row(2, { date: '2026-10-12', branch: { id: 'b2', name: 'Branch B' } })), mapDayAppointment(row(3, { date: '2026-10-14' }))]
+  const rows = [mapDayAppointment(row(1, { date: '2026-10-12' })), mapDayAppointment(row(2, { date: '2026-10-12', branch: { id: 'b2', name: 'Roxas - Cardinal Dental Center' } })), mapDayAppointment(row(3, { date: '2026-10-14' }))]
   assert.equal(dayTotals(rows, false), null)
   const all = dayTotals(rows, true)
   assert.deepEqual([all.get('2026-10-12'), all.get('2026-10-14'), all.get('2026-10-13')], [2, 1, undefined]) // an absent day is "no entry", rendered "No appointments" only when complete

@@ -30,6 +30,10 @@
              the gitignored backend/.env.testing; see backend/README.md and backend/.env.testing.example. -->
         <env name="DB_CONNECTION" value="pgsql"/>
         <env name="DB_DATABASE" value="dental_clinic_test"/>
+        <!-- The assistant tests choose their own mode and fake key; never the local .env choice or key. -->
+        <env name="ASSISTANT_MODE" value="auto" force="true"/>
+        <env name="ANTHROPIC_API_KEY" value="" force="true"/>
+        <env name="ASSISTANT_API_KEY" value="" force="true"/>
         <env name="DB_URL" value=""/>
         <env name="MAIL_MAILER" value="array"/>
         <env name="QUEUE_CONNECTION" value="sync"/>

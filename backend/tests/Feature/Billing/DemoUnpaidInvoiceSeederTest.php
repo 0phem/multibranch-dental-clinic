@@ -38,4 +38,20 @@ class DemoUnpaidInvoiceSeederTest extends TestCase
         }
         $this->assertSame(0, Invoice::count());
     }
+
+    public function test_an_issued_invoice_keeps_the_name_it_was_issued_to_after_staff_correct_the_name(): void
+    {
+        $this->seed(DatabaseSeeder::class);
+        $this->seed(DemoUnpaidInvoiceSeeder::class);
+        $invoice = Invoice::with('patient.person')->sole();
+        $this->assertSame('Demo Patient', $invoice->billed_to_name);
+        // Staff correct the legal name (decision 2): audited, and the issued invoice still shows the name at issue.
+        $staff = \App\Models\User::where('email', 'staff.reception@example.test')->first();
+        \Laravel\Sanctum\Sanctum::actingAs($staff);
+        $patient = $invoice->patient;
+        $this->patchJson("/api/patients/{$patient->public_id}", ['first_name' => 'Corrected', 'expected_revision' => $patient->revision])->assertOk();
+        $this->assertSame('Corrected', $patient->person->fresh()->first_name);
+        $this->assertSame(1, \App\Models\AuditLog::where('action', 'patient.profile.updated')->count());
+        $this->assertSame('Demo Patient', app(\App\Services\Billing\BillingDocuments::class)->invoice($invoice->fresh())['patientName']);
+    }
 }

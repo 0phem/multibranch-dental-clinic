@@ -27,7 +27,7 @@ function fixture(patch={}) {
 const maria=f=>sessionForRole('patient',f.state)
 // A GET /api/hmo-cases/mine row (the Patient's server safe subset).
 const REQS=[{rule:'hmo-card',label:'HMO Card',state:'Missing'},{rule:'valid-id',label:'Valid ID',state:'Missing'},{rule:'treatment-request',label:'Dentist treatment request',state:'Missing'}]
-const patientCase=(fields={})=>({id:'01jhmo0000000000000000000a',status:'Missing Requirements',provider_name:'Insurer One',member_number:'••••0123',visit_date:'2026-09-19',appointment:null,branch:{name:'Branch A'},requirements:REQS,submitted_at:null,final_at:null,approved_amount:null,...fields})
+const patientCase=(fields={})=>({id:'01jhmo0000000000000000000a',status:'Missing Requirements',provider_name:'Insurer One',member_number:'••••0123',visit_date:'2026-09-19',appointment:null,branch:{name:'Dr. Dana Roxas Dental Clinic'},requirements:REQS,submitted_at:null,final_at:null,approved_amount:null,...fields})
 const john=f=>({...sessionForRole('patient',f.state),userId:'u13',patientId:'p2',name:'John Dela Cruz'})
 const ok=result=>{assert.equal(result.ok,true,result.message);return result.record}
 const form={patientId:'p1',branchId:'b1',dentistId:'d1',serviceId:'svc1',date:'2026-09-19',start:'11:00'}

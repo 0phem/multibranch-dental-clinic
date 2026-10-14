@@ -23,7 +23,7 @@ test('mapAuditLog normalizes server audit resource into presentation shape', () 
     category: 'administrative',
     severity: 'info',
     actor: { id: '01k9usr123', name: 'Alyssa Cruz', role: 'staff' },
-    branch: { id: '01k9br123', name: 'Branch A' },
+    branch: { id: '01k9br123', name: 'Dr. Dana Roxas Dental Clinic' },
     auditable_type: 'Document',
     auditable_id: '01k9doc456',
     ip_address: '192.168.1.50',
@@ -38,7 +38,7 @@ test('mapAuditLog normalizes server audit resource into presentation shape', () 
   assert.equal(mapped.category, 'administrative')
   assert.equal(mapped.severity, 'info')
   assert.equal(mapped.actor.name, 'Alyssa Cruz')
-  assert.equal(mapped.branch.name, 'Branch A')
+  assert.equal(mapped.branch.name, 'Dr. Dana Roxas Dental Clinic')
   assert.equal(mapped.auditableType, 'Document')
   assert.equal(mapped.ipAddress, '192.168.1.50')
   assert.equal(mapped.payload.title, 'Consent Form')

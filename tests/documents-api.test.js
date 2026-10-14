@@ -17,7 +17,7 @@ beforeEach(() => { calls = []; globalThis.document = { cookie: 'XSRF-TOKEN=t' };
 const ROW = {
   id: '01j0000000000000000000d001', category: 'hmo_card', title: 'Card', original_filename: 'card.pdf', mime_type: 'application/pdf', file_size_bytes: 2048,
   checksum_sha256: 'a'.repeat(64), status: 'Active', metadata: null, patient: { id: 'p', code: 'PAT-1', name: 'A B' }, visit_id: null, hmo_case_id: null,
-  branch: { id: 'b1', name: 'Branch A' }, uploaded_by: { role: 'patient' }, retracted_at: null, retraction_reason: null,
+  branch: { id: 'b1', name: 'Dr. Dana Roxas Dental Clinic' }, uploaded_by: { role: 'patient' }, retracted_at: null, retraction_reason: null,
   text_extraction: 'draft_available', security_scan: 'not_performed', created_at: '2026-09-28T10:00:00+08:00',
   extractions: [{ id: 'e1', method: 'native_text', status: 'Draft', is_draft: true, confidence_score: null, extracted_at: '2026-09-28T10:00:00+08:00' }],
 }

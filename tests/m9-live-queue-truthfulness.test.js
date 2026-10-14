@@ -14,7 +14,7 @@ import { __resetCsrfCacheForTests } from '../src/api-client.js'
 
 setClockSource(() => new Date('2026-09-19T02:08:00Z')) // 10:08 Asia/Manila, clinic day 2026-09-19
 const read = path => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8')
-const entry = (status, fields = {}) => ({ id: `q-${Math.random()}`, status, clinicDate: '2026-09-19', branchId: 'b1', branch: 'Branch A', ...fields })
+const entry = (status, fields = {}) => ({ id: `q-${Math.random()}`, status, clinicDate: '2026-09-19', branchId: 'b1', branch: 'Dr. Dana Roxas Dental Clinic', ...fields })
 const server = { serverUserId: 'u1', role: 'staff' }
 
 test('combined counts: awaiting = Waiting + Called + Treatment Ready; active adds Temporarily Away; Served and closed states are excluded', () => {
@@ -25,7 +25,7 @@ test('combined counts: awaiting = Waiting + Called + Treatment Ready; active add
 })
 
 test('counts cover the current Asia/Manila clinic day only and respect the branch filter', () => {
-  const queue = [entry('Waiting'), entry('Waiting', { clinicDate: '2026-09-18' }), entry('Waiting', { clinicDate: '2026-09-20' }), entry('Waiting', { branchId: 'b2', branch: 'Branch B' }), entry('Called', { branchId: 'b2', branch: 'Branch B' })]
+  const queue = [entry('Waiting'), entry('Waiting', { clinicDate: '2026-09-18' }), entry('Waiting', { clinicDate: '2026-09-20' }), entry('Waiting', { branchId: 'b2', branch: 'Roxas - Cardinal Dental Center' }), entry('Called', { branchId: 'b2', branch: 'Roxas - Cardinal Dental Center' })]
   assert.equal(countQueue(queue).active, 3) // Waiting b1, Waiting b2, Called b2 on 2026-09-19
   assert.equal(countQueue(queue, { branchId: 'b1' }).waiting, 1)
   assert.deepEqual([countQueue(queue, { branchId: 'b2' }).waiting, countQueue(queue, { branchId: 'b2' }).called], [1, 1])
@@ -71,7 +71,7 @@ test('the queue client flags a response at the server row cap as possibly trunca
 const bundle = await build({ stdin: { contents: "export * from './src/pages/QueueCounts.jsx'; export { setClockSource as setBundledClock } from './src/clock.js'", resolveDir: process.cwd() }, bundle: true, write: false, platform: 'node', format: 'esm' })
 const ui = await import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].text).toString('base64')}`)
 ui.setBundledClock(() => new Date('2026-09-19T02:08:00Z')) // the bundle carries its own clock module
-const branches = [{ id: 'b1', name: 'Branch A' }, { id: 'b2', name: 'Branch B' }]
+const branches = [{ id: 'b1', name: 'Dr. Dana Roxas Dental Clinic' }, { id: 'b2', name: 'Roxas - Cardinal Dental Center' }]
 const store = (queue, vis = {}) => ({ state: { queue, branches }, session: server, appointmentsStatus: 'ready', queueSnapshot: { date: '2026-09-19', truncated: false }, appointmentFlow: { refresh() {} }, ...vis })
 const html = el => renderToString(el)
 
@@ -90,11 +90,11 @@ test('rendered server counts are labelled, and zero appears only from a complete
 })
 
 test('the by-branch view tallies each branch separately and filters by the active branch', () => {
-  const s = store([entry('Waiting'), entry('Waiting', { branchId: 'b2', branch: 'Branch B' }), entry('Treatment Ready', { branchId: 'b2', branch: 'Branch B' })])
+  const s = store([entry('Waiting'), entry('Waiting', { branchId: 'b2', branch: 'Roxas - Cardinal Dental Center' }), entry('Treatment Ready', { branchId: 'b2', branch: 'Roxas - Cardinal Dental Center' })])
   const all = html(React.createElement(ui.QueueByBranch, { store: s, activeBranch: 'All Branches', vis: ui.queueVisibilityFor(s) }))
-  assert.match(all, /Branch A[\s\S]*1 awaiting/); assert.match(all, /Branch B[\s\S]*2 awaiting/)
-  const one = html(React.createElement(ui.QueueByBranch, { store: s, activeBranch: 'Branch B', vis: ui.queueVisibilityFor(s) }))
-  assert.doesNotMatch(one, /Branch A/)
+  assert.match(all, /Dr. Dana Roxas Dental Clinic[\s\S]*1 awaiting/); assert.match(all, /Roxas - Cardinal Dental Center[\s\S]*2 awaiting/)
+  const one = html(React.createElement(ui.QueueByBranch, { store: s, activeBranch: 'Roxas - Cardinal Dental Center', vis: ui.queueVisibilityFor(s) }))
+  assert.doesNotMatch(one, /Dr. Dana Roxas Dental Clinic/)
 })
 
 test('the offline demo has no server visibility and keeps its labelled estimates; server views drop them', () => {

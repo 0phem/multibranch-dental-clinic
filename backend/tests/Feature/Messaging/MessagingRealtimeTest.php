@@ -114,14 +114,17 @@ class MessagingRealtimeTest extends TestCase
         $this->start('patientB')->assertStatus(429)->assertJsonPath('code', 'messages_rate_limited');
     }
 
-    public function test_the_default_branch_is_the_latest_visit_or_appointment(): void
+    public function test_the_default_branch_is_the_upcoming_appointment_then_latest_visit_then_first_branch(): void
     {
         $this->actingAsUser('patientA');
-        $this->assertNull($this->getJson('/api/conversations/start-options')->assertOk()->json('data.default_branch_id'));
+        // Decision 6: there is always a front desk to write to; with no history it is the first branch.
+        $none = $this->getJson('/api/conversations/start-options')->assertOk()->json('data');
+        $this->assertSame('first_branch', $none['default_reason']);
+        $this->assertNotNull($none['default_branch_id']);
         $this->postJson('/api/appointments', ['branch_ref' => 'b2', 'service_ref' => 'svc1', 'date' => '2026-09-30', 'start_time' => '14:00'])->assertCreated();
         $options = $this->getJson('/api/conversations/start-options')->assertOk()->json('data');
         $this->assertSame(strtolower($this->b['b2']->public_id), $options['default_branch_id']);
-        $this->assertSame('latest_visit_or_appointment', $options['default_reason']);
+        $this->assertSame('upcoming_appointment', $options['default_reason']);
         $this->assertContains(strtolower($this->b['b1']->public_id), array_column($options['branches'], 'id'));
         $this->actingAsUser('staffB1');
         $this->getJson('/api/conversations/start-options')->assertForbidden();

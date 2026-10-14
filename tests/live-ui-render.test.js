@@ -32,7 +32,7 @@ const render=(Component,props)=>renderToString(React.createElement(Component,pro
 // M12: HMO cases come from the server. `serverCase` builds a GET /api/hmo-cases row; `withCases` puts the mapped server
 // projection into the store exactly as src/store.jsx does.
 const serverCase=(fields={})=>({id:'01jhmo0000000000000000000a',status:'Missing Requirements',revision:1,submission_cycle:0,provider_name:'Insurer One',member_number:'M-000123',
-  visit:{id:'01jvisit000000000000000000a',clinic_date:'2026-09-19',status:'Checked In'},patient:{id:'p1',code:'PAT-0001',name:'Maria Santos'},branch:{id:'b1',name:'Branch A'},
+  visit:{id:'01jvisit000000000000000000a',clinic_date:'2026-09-19',status:'Checked In'},patient:{id:'p1',code:'PAT-0001',name:'Maria Santos'},branch:{id:'b1',name:'Dr. Dana Roxas Dental Clinic'},
   dentist:{id:'d1',name:'Miguel Reyes'},appointment:null,submitted_at:null,follow_up_due_at:null,escalated_at:null,final_at:null,approved_amount:null,created_at:'2026-09-19T10:00:00+08:00',
   requirements:[{rule:'hmo-card',label:'HMO Card',state:'Missing'},{rule:'valid-id',label:'Valid ID',state:'Missing'},{rule:'treatment-request',label:'Dentist treatment request',state:'Missing'}],
   events:[{kind:'created',submission_cycle:0,from_status:null,to_status:'Missing Requirements',occurred_at:'2026-09-19T10:00:00+08:00',actor:{role:'staff',name:'Alyssa Cruz'}}],...fields})
@@ -97,7 +97,7 @@ test('HMO attention and timeline derive from case state and dated events',()=>{
 
 test('Patient HMO shows the server safe subset while Owner oversight is read-only',()=>{
   const f=fixture()
-  const patientRow={id:'01jhmo0000000000000000000a',status:'Missing Requirements',provider_name:'Insurer One',member_number:'••••0123',visit_date:'2026-09-19',appointment:null,branch:{name:'Branch A'},
+  const patientRow={id:'01jhmo0000000000000000000a',status:'Missing Requirements',provider_name:'Insurer One',member_number:'••••0123',visit_date:'2026-09-19',appointment:null,branch:{name:'Dr. Dana Roxas Dental Clinic'},
     requirements:[{rule:'hmo-card',label:'HMO Card',state:'Missing'},{rule:'valid-id',label:'Valid ID',state:'Missing'},{rule:'treatment-request',label:'Dentist treatment request',state:'Missing'}],
     submitted_at:null,final_at:null,approved_amount:null}
   f.role('patient')
@@ -161,7 +161,7 @@ test('the live date and time controls render separate selected and unavailable c
   assert.match(slots,/disabled=""/)
 })
 
-test('live Staff Billing renders compact closed rows and excludes a Branch B invoice',()=>{
+test('live Staff Billing renders compact closed rows and excludes a Roxas - Cardinal Dental Center invoice',()=>{
   const f=fixture()
   f.addInvoice({...structuredClone(m.INITIAL_INVOICES[0]),id:'branch-a-invoice'})
   f.addInvoice(structuredClone(m.INITIAL_INVOICES[1]))

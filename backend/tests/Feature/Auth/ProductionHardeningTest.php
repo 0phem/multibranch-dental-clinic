@@ -190,6 +190,7 @@ class ProductionHardeningTest extends TestCase
         $this->postJson('/api/register',$this->payload())->assertCreated();
         $code=Mail::sent(\App\Mail\OneTimeCodeMail::class)->first()->code;
         $this->postJson('/api/register/verify',['email'=>'review@example.test','otp'=>$code])->assertOk();
+        $this->postJson('/api/login',['email'=>'review@example.test','password'=>'Password123!'])->assertOk(); // verifying does not sign in
         $this->postJson('/api/logout')->assertNoContent();
         $audit=AuditLog::all()->toJson();
         $this->assertStringContainsString('account.email_verified',$audit);

@@ -18,7 +18,7 @@ test('the Owner branding replaces the fallback identity, contact and (only when 
     assert.equal(clinic.logo, 'http://localhost:8000/api/branding/logo?v=2')
     assert.equal(clinic.name, 'Bright Smile Dental', 'blank values keep what is there')
     applyBranding(null)
-    assert.ok(Array.isArray(clinic.branches) && Object.isFrozen(clinic.branches), 'branch map pins are unchanged')
+    assert.equal(clinic.branches, undefined, 'branches come from the clinic records, never from the built-in fallback')
   } finally {
     Object.assign(clinic, before)
   }

@@ -14,7 +14,7 @@ const read = path => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8'
 const caseRow = (fields = {}) => ({
   id: '01jhmo0000000000000000000a', status: 'Pending', revision: 5, submission_cycle: 1, provider_name: 'Insurer One', member_number: 'M-000123',
   visit: { id: '01jvisit000000000000000000a', clinic_date: '2026-09-19', status: 'Completed' }, patient: { id: '01jpatient00000000000000000', code: 'PAT-0500', name: 'Server Patient' },
-  branch: { id: 'b1', name: 'Branch A' }, dentist: { id: 'd1', name: 'Miguel Reyes' }, appointment: { id: '01jappt0000000000000000000a', code: 'APT-2026-000900' },
+  branch: { id: 'b1', name: 'Dr. Dana Roxas Dental Clinic' }, dentist: { id: 'd1', name: 'Miguel Reyes' }, appointment: { id: '01jappt0000000000000000000a', code: 'APT-2026-000900' },
   submitted_at: '2026-09-19T09:00:00+08:00', follow_up_due_at: '2026-09-19T21:00:00+08:00', escalated_at: null, final_at: null, approved_amount: null, created_at: '2026-09-19T08:00:00+08:00',
   requirements: [{ rule: 'hmo-card', label: 'HMO Card', state: 'Validated', document_label: 'Card', validated_at: '2026-09-19T08:30:00+08:00' }],
   events: [
@@ -53,7 +53,7 @@ test('server cases map to a read model with history-derived responses and contac
 })
 
 test('the Patient subset carries no notes, contacts, recorders or history', () => {
-  const p = hmoApi.mapPatientHmoCase({ id: 'c', status: 'Approved', provider_name: 'Insurer One', member_number: '••••0123', visit_date: '2026-09-19', appointment: { id: 'a', code: 'APT-1' }, branch: { name: 'Branch A' }, requirements: [], submitted_at: null, final_at: '2026-09-19T11:00:00+08:00', approved_amount: '1200.00' }, 'p1')
+  const p = hmoApi.mapPatientHmoCase({ id: 'c', status: 'Approved', provider_name: 'Insurer One', member_number: '••••0123', visit_date: '2026-09-19', appointment: { id: 'a', code: 'APT-1' }, branch: { name: 'Dr. Dana Roxas Dental Clinic' }, requirements: [], submitted_at: null, final_at: '2026-09-19T11:00:00+08:00', approved_amount: '1200.00' }, 'p1')
   assert.deepEqual([p.patientSubset, p.patientId, p.approvedAmount, p.memberId], [true, 'p1', '1200.00', '••••0123'])
   assert.deepEqual([p.responses, p.contacts, p.events], [[], [], []])
 })
@@ -111,7 +111,7 @@ test('M12 refusals keep their codes with HMO wording; a 401 reaches the shared s
 })
 
 test('server cases are an in-memory projection; browser HMO records are read-only history, never live', () => {
-  const projection = buildServerProjection({ hmoRows: [caseRow()], claimDecisionRows: [{ visit: { id: 'v2', clinic_date: '2026-09-19' }, patient: { id: 'x', name: 'Other' }, branch: { id: 'b1', name: 'Branch A' } }] })
+  const projection = buildServerProjection({ hmoRows: [caseRow()], claimDecisionRows: [{ visit: { id: 'v2', clinic_date: '2026-09-19' }, patient: { id: 'x', name: 'Other' }, branch: { id: 'b1', name: 'Dr. Dana Roxas Dental Clinic' } }] })
   assert.equal(projection.hmo[0].server, true)
   assert.equal(projection.claimDecisions[0].visitId, 'v2')
   assert.equal(persistableCollection('hmo', projection.hmo).length, 0, 'server cases are never stored')

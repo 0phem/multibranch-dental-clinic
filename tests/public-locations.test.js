@@ -6,44 +6,50 @@ import { readFileSync } from 'node:fs'
 import { build } from 'esbuild'
 import React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { clinic } from '../src/clinic-config.js'
+import { clinic, loadPublicBranches } from '../src/clinic-config.js'
 import { clinicMapOptions } from '../src/clinic-map-options.js'
 import { publicSections } from '../src/public-route.js'
 const require=createRequire(import.meta.url)
 const bundle=await build({entryPoints:['src/pages/PublicLocations.jsx'],bundle:true,write:false,platform:'node',format:'esm',loader:{'.css':'empty'},plugins:[{name:'react',setup(b){b.onResolve({filter:/^react$/},()=>({path:pathToFileURL(require.resolve('react')).href,external:true}))}}]})
-const {PublicLocations}=await import('data:text/javascript;base64,'+Buffer.from(bundle.outputFiles[0].text).toString('base64'))
+const {PublicLocations,BranchList}=await import('data:text/javascript;base64,'+Buffer.from(bundle.outputFiles[0].text).toString('base64'))
 const html=renderToStaticMarkup(React.createElement(PublicLocations))
 
-test('three unique public branch records preserve exact supplied names and addresses',()=>{
-  assert.equal(clinic.branches.length,3)
-  assert.equal(new Set(clinic.branches.map(b=>b.id)).size,3)
-  assert.deepEqual(clinic.branches.map(b=>[b.number,b.name,b.address]),[
-    ['01','Dr. Dana Roxas Dental Clinic','#37, MacArthur Hwy, Bocaue, 3018 Bulacan'],
-    ['02','Roxas - Cardinal Dental Center','67 MacArthur Hwy, Wakas, Bocaue, 3018 Bulacan'],
-    ['03','Roxas Dental Clinic Guiguinto','Unit 20 GD Plaza, Guiguinto, Bulacan'],
-  ])
+test('the website keeps no branch list: names, addresses and pins come from GET /api/public/branches',async()=>{
+  assert.equal(clinic.branches,undefined)
+  const config=readFileSync('src/clinic-config.js','utf8')
+  for(const fact of ['MacArthur','GD Plaza','14.80','120.92'])assert.ok(!config.includes(fact),fact)
+  const original=globalThis.fetch
+  try{
+    globalThis.fetch=async url=>{assert.match(String(url),/\/api\/public\/branches$/);return new Response(JSON.stringify({data:[{id:'b1',number:'01',name:'Dr. Dana Roxas Dental Clinic',address:'#37, MacArthur Hwy, Bocaue, 3018 Bulacan',latitude:14.800254,longitude:120.9233274}]}),{status:200})}
+    const ok=await loadPublicBranches()
+    assert.equal(ok.ok,true);assert.deepEqual(ok.branches.map(b=>[b.number,b.name,b.latitude]),[['01','Dr. Dana Roxas Dental Clinic',14.800254]])
+    globalThis.fetch=async()=>{throw new Error('offline')}
+    assert.deepEqual(await loadPublicBranches(),{ok:false,branches:[]})
+  }finally{globalThis.fetch=original}
 })
-test('place coordinates retain recorded mapping evidence, without moving adjacent Bocaue pins',()=>{
-  assert.deepEqual(clinic.branches.map(b=>[b.latitude,b.longitude]),[
-    [14.800254,120.9233274],[14.7996762,120.9234564],[14.8284409,120.8745988],
-  ])
-  for(const b of clinic.branches)assert.match(b.source,/^https:\/\/www.google.com\/maps\?cid=\d+$/)
+test('place coordinates keep their public mapping evidence in the docs and the branch seeder',()=>{
+  const doc=readFileSync('docs/BRANCH_LOCATIONS.md','utf8'),seeder=readFileSync('backend/database/seeders/RealBranchSeeder.php','utf8')
+  for(const [lat,lng] of [['14.800254','120.9233274'],['14.7996762','120.9234564'],['14.8284409','120.8745988']]){assert.ok(doc.includes(lat)&&doc.includes(lng));assert.ok(seeder.includes(lat)&&seeder.includes(lng))}
+  assert.equal((doc.match(/https:\/\/www.google.com\/maps\?cid=\d+/g)||[]).length,3)
 })
 test('map disables every interaction handler and control',()=>{
   for(const key of ['dragging','scrollWheelZoom','doubleClickZoom','boxZoom','keyboard','touchZoom','tapHold','zoomControl'])assert.equal(clinicMapOptions[key],false,key)
 })
-test('semantic addresses render before map loading and remain outside its hidden canvas',()=>{
-  assert.equal((html.match(/<address>/g)||[]).length,3)
-  assert.equal((html.match(/class="site-branch-card"/g)||[]).length,3)
+test('semantic addresses render as cards, outside the hidden map canvas; loading and failure are honest',()=>{
+  const sample=[1,2,3].map(n=>({id:`b${n}`,number:`0${n}`,name:`Branch record ${n}`,address:`Address ${n}, Bulacan`,latitude:null,longitude:null}))
+  const list=renderToStaticMarkup(React.createElement(BranchList,{branches:sample}))
+  assert.equal((list.match(/<address>/g)||[]).length,3)
+  assert.equal((list.match(/class="site-branch-card"/g)||[]).length,3)
   assert.match(html,/class="site-map-canvas" aria-hidden="true"><\/div>/)
-  for(const b of clinic.branches){assert.ok(html.includes(b.name));assert.ok(html.includes(b.address))}
+  assert.match(html,/Loading our locations/)
+  assert.match(readFileSync('src/pages/PublicLocations.jsx','utf8'),/can’t be shown right now\. Call/)
   assert.match(html,/OpenStreetMap contributors/)
   assert.ok(publicSections.has('locations'))
 })
 test('landing map has an isolated lazy import, failure state and teardown; no operational branch data',()=>{
   const section=readFileSync('src/pages/PublicLocations.jsx','utf8'),map=readFileSync('src/clinic-map.js','utf8')
   assert.match(section,/IntersectionObserver/)
-  assert.match(section,/if\(!near\)return/)
+  assert.match(section,/if\(!near\|\|!pinned.length\)return/)
   assert.match(section,/import\('\.\.\/clinic-map.js'\)/)
   assert.match(section,/\.catch\(\(\)=>\{if\(active\)setStatus\('error'\)\}\)/)
   assert.match(section,/Map unavailable/)

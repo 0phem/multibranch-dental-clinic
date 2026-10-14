@@ -8,7 +8,7 @@ import React from 'react'
 import { renderToString } from 'react-dom/server'
 
 const require=createRequire(import.meta.url)
-const files=['assistant-panel.jsx','components.jsx','store.jsx','layout.jsx','clock.js','contracts.js','workflow.js','phase2.js','phase3-contracts.js','orchestration.js','pages/Dashboards.jsx','pages/Scheduling.jsx','pages/StaffDayCalendar.jsx','pages/PatientFlow.jsx','pages/Clinical.jsx','pages/FinanceCommunication.jsx','pages/Admin.jsx','pages/Pricing.jsx','pages/AuditTrail.jsx','pages/ClinicBranding.jsx','audit-api.js','automation-api.js','analytics-api.js','hmo-api.js','pages/PatientLoyalty.jsx','pages/Feedback.jsx','pages/PatientRegister.jsx','pages/PatientBook.jsx','pages/PatientMe.jsx','pages/PatientVisits.jsx','pages/PatientHome.jsx','loyalty.js','registration.js','scheduling.js','booking-drafts.js','geo.js','patient-view.js','data.js']
+const files=['assistant-panel.jsx','components.jsx','store.jsx','layout.jsx','clock.js','contracts.js','workflow.js','phase2.js','phase3-contracts.js','orchestration.js','pages/Dashboards.jsx','pages/Scheduling.jsx','pages/StaffDayCalendar.jsx','pages/PatientFlow.jsx','pages/Clinical.jsx','pages/FinanceCommunication.jsx','pages/Admin.jsx','pages/Pricing.jsx','pages/AuditTrail.jsx','pages/ClinicBranding.jsx','pages/AssistantAnswers.jsx','audit-api.js','automation-api.js','analytics-api.js','hmo-api.js','pages/PatientLoyalty.jsx','pages/Feedback.jsx','pages/PatientRegister.jsx','pages/PatientBook.jsx','pages/PatientMe.jsx','pages/PatientVisits.jsx','pages/PatientHome.jsx','loyalty.js','registration.js','scheduling.js','booking-drafts.js','geo.js','patient-view.js','data.js']
 const result=await build({stdin:{contents:[...files.map(file=>`export * from './src/${file}';`),`export * from './tests/support/server-appointments.js';`].join('\n'),resolveDir:process.cwd()},bundle:true,write:false,platform:'node',format:'esm',plugins:[{name:'shared-react',setup(b){b.onResolve({filter:/^react$/},()=>({path:pathToFileURL(require.resolve('react')).href,external:true}))}}]})
 const m=await import('data:text/javascript;base64,'+Buffer.from(result.outputFiles[0].text).toString('base64'))
 m.setClockSource(()=>new Date('2026-09-19T02:08:00Z'))
@@ -33,7 +33,7 @@ const initialReferenceData={
 let store
 function Capture(){store=m.useClinic();return null}
 renderToString(React.createElement(m.ClinicProvider,{initialReferenceData},React.createElement(Capture)))
-const pages={dashboard:'DashboardPage',book:'BookingPage',appointments:'AppointmentsPage',schedule:'SchedulePage',calendar:'StaffDayCalendar',checkin:'CheckInPage',queue:'QueuePage',capacity:'CapacityPage',patients:'PatientsPage',treatment:'TreatmentPage',billing:'BillingPage',hmo:'HmoPage',inquiries:'InquiriesPage',messages:'MessagesPage',prescriptions:'PrescriptionsPage',followups:'FollowupsPage',branches:'BranchesPage',team:'TeamPage',analytics:'AnalyticsPage',users:'UsersPage',pricing:'ServicesPricingPage',automation:'AutomationPage',audit:'AuditTrailPage',branding:'ClinicBrandingPage',engagement:'EngagementPage',loyalty:'PatientLoyaltyPage',feedback:'PatientFeedbackPage',me:'PatientMePage'}
+const pages={dashboard:'DashboardPage',book:'BookingPage',appointments:'AppointmentsPage',schedule:'SchedulePage',calendar:'StaffDayCalendar',checkin:'CheckInPage',queue:'QueuePage',capacity:'CapacityPage',patients:'PatientsPage',treatment:'TreatmentPage',billing:'BillingPage',hmo:'HmoPage',inquiries:'InquiriesPage',messages:'MessagesPage',prescriptions:'PrescriptionsPage',followups:'FollowupsPage',branches:'BranchesPage',team:'TeamPage',analytics:'AnalyticsPage',users:'UsersPage',pricing:'ServicesPricingPage',automation:'AutomationPage',audit:'AuditTrailPage',branding:'ClinicBrandingPage',assistant:'AssistantAnswersPage',engagement:'EngagementPage',loyalty:'PatientLoyaltyPage',feedback:'PatientFeedbackPage',me:'PatientMePage'}
 let count=0
 function render(page,role='staff',context=null){
   const session=m.sessionForRole(role,store.state)
@@ -161,13 +161,13 @@ console.log('PASS: Phase 2 procedures, prescription draft privacy/authorization,
 // M12: HMO cases are server-authoritative. The smoke run stands in for the rows GET /api/hmo-cases (Staff) and
 // /api/hmo-cases/mine (Patient) return for p1's completed Visit; the browser holds no HMO commands.
 const hmoRow=(fields={})=>({id:'01jsmokehmo00000000000000a',status:'Pending',revision:5,submission_cycle:1,provider_name:'Insurer One',member_number:'M-000123',
-  visit:{id:completed.record.visitId,clinic_date:'2026-09-19',status:'Completed'},patient:{id:'p1',code:'PAT-0001',name:'Maria Santos'},branch:{id:'b1',name:'Branch A'},
+  visit:{id:completed.record.visitId,clinic_date:'2026-09-19',status:'Completed'},patient:{id:'p1',code:'PAT-0001',name:'Maria Santos'},branch:{id:'b1',name:'Dr. Dana Roxas Dental Clinic'},
   dentist:{id:'d1',name:'Miguel Reyes'},appointment:{id:p1Visit.record.id,code:p1Visit.record.appointmentNo},submitted_at:'2026-09-19T10:00:00+08:00',follow_up_due_at:'2026-09-19T22:00:00+08:00',
   escalated_at:null,final_at:null,approved_amount:null,created_at:'2026-09-19T09:30:00+08:00',
   requirements:['hmo-card','valid-id','treatment-request'].map(rule=>({rule,label:rule,state:'Validated'})),
   events:[{kind:'submission',submission_cycle:1,to_status:'Pending',method:'Portal',note:'Internal submission note',occurred_at:'2026-09-19T10:00:00+08:00',actor:{role:'staff',name:'Alyssa Cruz'}},
     {kind:'contact',submission_cycle:1,to_status:'Pending',method:'Phone',note:'Internal contact history',next_action:'Await provider',occurred_at:'2026-09-19T11:00:00+08:00',actor:{role:'staff',name:'Alyssa Cruz'}}],...fields})
-const patientHmoRow=row=>({id:row.id,status:row.status,provider_name:row.provider_name,member_number:'••••0123',visit_date:'2026-09-19',appointment:row.appointment,branch:{name:'Branch A'},
+const patientHmoRow=row=>({id:row.id,status:row.status,provider_name:row.provider_name,member_number:'••••0123',visit_date:'2026-09-19',appointment:row.appointment,branch:{name:'Dr. Dana Roxas Dental Clinic'},
   requirements:row.requirements,submitted_at:row.submitted_at,final_at:row.final_at,approved_amount:row.status==='Approved'?row.approved_amount:null})
 const withHmo=(role,row)=>{state={...state,hmo:[role==='patient'?m.mapPatientHmoCase(patientHmoRow(row),'p1'):m.mapHmoCase(row)]};store={...store,state,actions}}
 const hmoCase={id:'01jsmokehmo00000000000000a'}
@@ -253,7 +253,7 @@ assert.equal(store.state.treatments.filter(t=>t.server).length,0,'browser storag
 // M12: HMO cases also return only from the server (here: the Staff/Owner rows GET /api/hmo-cases would return).
 renderToString(React.createElement(m.ClinicProvider,{initialReferenceData,initialServerAppointments:serverRows,initialServerTreatments:serverTreatmentRows,initialServerHmo:[approvedHmo]},React.createElement(Capture)))
 assert.ok(render('patients','staff',{patientId:patient.record.id}).includes('PhaseOne Patient'))
-assert.ok(render('schedule','dentist').includes('Branch A'))
+assert.ok(render('schedule','dentist').includes('Dr. Dana Roxas Dental Clinic'))
 assert.ok(render('appointments').includes('Appointment management'))
 render('queue','dentist')
 render('dashboard','staff')

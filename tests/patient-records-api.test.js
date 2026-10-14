@@ -19,7 +19,7 @@ beforeEach(() => { calls = []; globalThis.document = { cookie: 'XSRF-TOKEN=t' };
 const STAFF_ROW = {
   id: '01j0000000000000000000000a', code: 'PAT-0001', name: 'Maria Santos', first_name: 'Maria', last_name: 'Santos', date_of_birth: '1990-05-06', sex: 'Female',
   phone: '+639171234567', emergency_contact: 'Juan', revision: 3, email: 'maria@example.test', address: '1 Main St',
-  preferred_branch: { id: 'b1', name: 'Branch A' }, has_portal_account: true, profile_access: 'full',
+  preferred_branch: { id: 'b1', name: 'Dr. Dana Roxas Dental Clinic' }, has_portal_account: true, profile_access: 'full',
 }
 const IDENTITY_ROW = { id: STAFF_ROW.id, code: 'PAT-0001', name: 'Maria Santos', first_name: 'Maria', last_name: 'Santos', date_of_birth: '1990-05-06', phone: '+639171234567', profile_access: 'identity' }
 

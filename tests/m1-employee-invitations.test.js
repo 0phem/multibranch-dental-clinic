@@ -40,7 +40,7 @@ test('the invitation payload carries only role-appropriate fields and never a pa
   const dentist = invitationPayload({ ...form, role: 'dentist' })
   assert.deepEqual([dentist.title, dentist.license_no, dentist.specialty], [null, 'L', 'S'])
   for (const p of [staff, dentist]) assert.equal(Object.keys(p).some(k => /pass/i.test(k)), false)
-  assert.deepEqual(mapInvitation({ id: 'u1', status: 'Revoked', last_delivery: { status: 'failed' }, branch: { name: 'Branch A' } }).lastDelivery, 'failed')
+  assert.deepEqual(mapInvitation({ id: 'u1', status: 'Revoked', last_delivery: { status: 'failed' }, branch: { name: 'Dr. Dana Roxas Dental Clinic' } }).lastDelivery, 'failed')
 })
 
 let oldFetch
@@ -98,7 +98,7 @@ test('accept page: a valid link shows the password form; a malformed one explain
 })
 
 test('Owner invitation form offers Staff and Dentist only and starts in a loading state', () => {
-  const out = html(React.createElement(ui.EmployeeInvitations, { store: { state: { branches: [{ id: 'b1', name: 'Branch A' }] } } }))
+  const out = html(React.createElement(ui.EmployeeInvitations, { store: { state: { branches: [{ id: 'b1', name: 'Dr. Dana Roxas Dental Clinic' }] } } }))
   assert.match(out, /<option value="staff"[^>]*>Staff<\/option><option value="dentist">Dentist<\/option><\/select>/)
   assert.doesNotMatch(out, /value="owner"|value="patient"/)
   assert.match(out, /Loading invitations/); assert.doesNotMatch(out, /No open invitations/)
@@ -106,13 +106,13 @@ test('Owner invitation form offers Staff and Dentist only and starts in a loadin
 })
 
 test('Staff branch access uses the existing Owner-only scope command; only Staff rows offer it', async () => {
-  mockServer(path => json(200, { data: { user: { id: '01KS', role: 'staff' }, branch_scopes: [{ id: 'b1', name: 'Branch A' }, { id: 'b2', name: 'Branch B' }] } }))
+  mockServer(path => json(200, { data: { user: { id: '01KS', role: 'staff' }, branch_scopes: [{ id: 'b1', name: 'Dr. Dana Roxas Dental Clinic' }, { id: 'b2', name: 'Roxas - Cardinal Dental Center' }] } }))
   const saved = await setBranchScopes('01KS', ['b1', 'b2'])
   assert.deepEqual([calls[0].method, calls[0].path, calls[0].body], ['PUT', '/api/users/01KS/branch-scopes', { branch_refs: ['b1', 'b2'] }])
   assert.deepEqual(saved.data.branch_scopes.map(b => b.id), ['b1', 'b2'])
   await getBranchScopes('01KS'); assert.equal(calls[1].method, 'GET')
   const admin = read('src/pages/Admin.jsx')
   assert.match(admin, /\{u\.role==='staff'&&<Button size="sm" variant="soft" onClick=\{\(\)=>setScopeTarget\(u\)\}>Branch access<\/Button>\}/)
-  const dialog = html(React.createElement(ui.BranchAccessDialog, { user: { id: '01KS', name: 'Rina' }, branches: [{ id: 'b1', name: 'Branch A' }], onClose() {} }))
+  const dialog = html(React.createElement(ui.BranchAccessDialog, { user: { id: '01KS', name: 'Rina' }, branches: [{ id: 'b1', name: 'Dr. Dana Roxas Dental Clinic' }], onClose() {} }))
   assert.match(dialog, /Loading branch access/); assert.doesNotMatch(dialog, /Save branch access/) // no controls before the server answers
 })

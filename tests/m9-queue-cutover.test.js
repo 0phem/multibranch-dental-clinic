@@ -21,7 +21,7 @@ const read = path => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8'
 
 const queueRow = (fields = {}) => ({
   id: serverId(7000), status: 'Waiting', priority: 'Normal', priority_reason: null, queue_number: 3, position: 2, revision: 1, clinic_date: '2026-09-19', closed_at: null,
-  branch: { id: 'b1', name: 'Branch A' }, dentist: { id: 'd1', name: 'Miguel Reyes' },
+  branch: { id: 'b1', name: 'Dr. Dana Roxas Dental Clinic' }, dentist: { id: 'd1', name: 'Miguel Reyes' },
   visit: { id: serverId(4000), status: 'Checked In', source: 'appointment', revision: 1, arrived_at: '2026-09-19T10:05:00+08:00' },
   patient: { id: serverId(500), code: 'PAT-0500', name: 'Server Patient' }, service: { id: 'svc1', name: 'Dental Consultation' },
   appointment: { id: serverId(900), code: 'APT-2026-000900', status: 'Checked In', start_time: '11:00' }, ...fields,
@@ -145,7 +145,7 @@ test('the M5 start Serves the server queue entry; the server Treatment carries t
 test('the Patient view shows only their own server queue state, with no wait estimate', () => {
   const state = { ...buildServerProjection({}), patients: structuredClone(data.INITIAL_PATIENTS), persons: structuredClone(data.INITIAL_PERSONS), users: structuredClone(data.INITIAL_USERS),
     branches: structuredClone(data.INITIAL_BRANCHES), dentists: structuredClone(data.INITIAL_DENTISTS), staff: structuredClone(data.INITIAL_STAFF), services: [], appointments: [], treatments: [], queue: [],
-    myQueue: { phase: 'waiting', queue_status: 'Waiting', queue_number: 4, position: 2, clinic_date: '2026-09-19', arrived_at: '2026-09-19T10:05:00+08:00', branch: { name: 'Branch A' }, dentist: { name: 'Miguel Reyes' }, service: { name: 'Dental Consultation' }, appointment: { start_time: '11:00' } } }
+    myQueue: { phase: 'waiting', queue_status: 'Waiting', queue_number: 4, position: 2, clinic_date: '2026-09-19', arrived_at: '2026-09-19T10:05:00+08:00', branch: { name: 'Dr. Dana Roxas Dental Clinic' }, dentist: { name: 'Miguel Reyes' }, service: { name: 'Dental Consultation' }, appointment: { start_time: '11:00' } } }
   const session = sessionForRole('patient', state)
   const view = patientQueueView(state, session)
   assert.deepEqual([view.phase, view.position, view.queueNumber, view.waitMinutes, view.dentist, view.checkedIn], ['waiting', 2, 4, null, 'Miguel Reyes', '10:05'])

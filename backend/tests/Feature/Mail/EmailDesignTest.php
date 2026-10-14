@@ -114,7 +114,7 @@ class EmailDesignTest extends TestCase
             [$invoice, $receipt] = MailPreviewController::receiptSample();
             $mail = new PaymentReceiptMail($invoice, $receipt);
             $html = $mail->render();
-            foreach (['Payment Receipt', 'Paid', 'Amount paid', '₱1,800.00', 'RCT-2026-000123', 'INV-2026-000123', 'Branch A', 'Card', 'Fully settled',
+            foreach (['Payment Receipt', 'Paid', 'Amount paid', '₱1,800.00', 'RCT-2026-000123', 'INV-2026-000123', 'Dr. Dana Roxas Dental Clinic', 'Card', 'Fully settled',
                 'Oral Prophylaxis (Cleaning)', 'Composite Restoration (Filling)', '₱1,000.00', '₱800.00', 'Subtotal', 'Total',
                 'A PDF copy of this Payment Receipt is attached', 'Next steps', 'Book your next appointment', 'View your receipts'] as $expected) {
                 $this->assertStringContainsString($expected, $html, "$design: $expected");

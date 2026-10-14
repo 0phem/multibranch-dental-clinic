@@ -35,7 +35,7 @@ function fixture(overrides={}) {
 test('eligibility pool excludes Dentists at another branch, without the service, unavailable or inactive',()=>{
   const f=fixture()
   const ids=scheduling.dentistsFor(f.state,'b1','svc1').map(d=>d.id)
-  assert.ok(ids.includes('d1')&&ids.includes('d2'),'both Branch A Dentists who provide svc1 are listed')
+  assert.ok(ids.includes('d1')&&ids.includes('d2'),'both Dr. Dana Roxas Dental Clinic Dentists who provide svc1 are listed')
   assert.ok(!ids.includes('d3')&&!ids.includes('d4')&&!ids.includes('d5'),'Dentists at other branches are excluded')
   const unavailable=fixture({dentists:structuredClone(data.INITIAL_DENTISTS).map(d=>d.id==='d1'?{...d,available:false}:d)})
   assert.deepEqual(scheduling.dentistsFor(unavailable.state,'b1','svc1').map(d=>d.id),['d2'])

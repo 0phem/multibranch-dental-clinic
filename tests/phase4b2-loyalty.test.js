@@ -230,7 +230,7 @@ test('the Owner and engaged Staff keep working while a demoted Staff account fai
 test('branch-bound Staff are limited to Patients in their scope; the Owner is not',()=>{
   const f=fixture();engaged(f)
   const outside=f.state.patients.find(p=>!patientInScope(p,f.state,f.session))
-  assert.ok(outside,'seed has a Patient outside Branch A scope')
+  assert.ok(outside,'seed has a Patient outside Dr. Dana Roxas Dental Clinic scope')
   assert.equal(canManageLoyalty(f.state,f.session,outside.id),false)
   bad(f.actions.recordLoyaltyActivity({patientId:outside.id,activity:'Qualified Visit',points:20},'act-out'),/outside your branch scope/)
   assert.equal(mine(f,outside.id),undefined)
@@ -567,7 +567,7 @@ test('an authorized Owner establishes a loyalty account for a Patient who has no
 test('Staff with the engagement permission establish an account in their scope; Engagement Staff (all branches) can too',()=>{
   const f=fixture({loyalty:[]});engaged(f)
   const inScope=f.state.patients.find(p=>patientInScope(p,f.state,f.session))
-  assert.ok(inScope,'a Patient exists in the Branch A Staff scope')
+  assert.ok(inScope,'a Patient exists in the Dr. Dana Roxas Dental Clinic Staff scope')
   ok(enroll(f,inScope.id,'staff-enroll'));assert.equal(countFor(f,inScope.id),1)
   f.role('staff',{userId:'u11',branchId:null,name:'Mika Ramos'})
   const other=f.state.patients.find(p=>p.id!==inScope.id)

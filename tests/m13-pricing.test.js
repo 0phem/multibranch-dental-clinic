@@ -54,7 +54,7 @@ test('version status and the version in effect today follow effective dates and 
     row({ id: 'b', effective_from: '2026-09-20', amount: '600.00' }),
     row({ id: 'c', effective_from: '2026-10-05', amount: '700.00' }),
     row({ id: 'd', effective_from: '2026-10-10', amount: '800.00', retracted_at: '2026-09-28T10:00:00+08:00', retracted_by: { name: 'Demo Owner' } }),
-    row({ id: 'e', effective_from: '2026-09-25', amount: '650.00', level: 'branch', branch: { id: 'b1', name: 'Branch A' } }),
+    row({ id: 'e', effective_from: '2026-09-25', amount: '650.00', level: 'branch', branch: { id: 'b1', name: 'Dr. Dana Roxas Dental Clinic' } }),
   ].map(pricingApi.mapPriceVersion)
   const status = id => pricingApi.versionStatus(versions.find(v => v.id === id), versions, '2026-09-28')
   assert.deepEqual(['a', 'b', 'c', 'd', 'e'].map(status), ['Superseded', 'In effect', 'Scheduled', 'Retracted', 'In effect'])

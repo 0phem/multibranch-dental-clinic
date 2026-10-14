@@ -251,10 +251,12 @@ class AppointmentBookingTest extends TestCase
         $this->staffBook(['dentist_ref' => 'd1'])->assertCreated();
     }
 
-    public function test_client_cannot_choose_status_source_or_patient_dentist_fields(): void
+    public function test_client_cannot_choose_status_source_or_patient_fields_or_an_unknown_or_ineligible_dentist(): void
     {
         $this->actingAsUser('patientA');
-        $this->book(['dentist_ref' => 'd2'])->assertStatus(422)->assertJsonValidationErrors('dentist_ref');
+        // A Patient may prefer a Dentist (patient portal booking), but only one the scheduling rules accept.
+        $this->book(['dentist_ref' => 'no-such-dentist'])->assertStatus(422)->assertJsonValidationErrors('dentist_ref');
+        $this->book(['dentist_ref' => 'd3'])->assertStatus(422); // not at this branch
         $this->book(['patient_code' => 'PAT-0002'])->assertStatus(422)->assertJsonValidationErrors('patient_code');
         $this->book(['patient_id' => $this->p['B']->public_id])->assertStatus(422)->assertJsonValidationErrors('patient_id');
         $this->book(['status' => 'Completed'])->assertStatus(422)->assertJsonValidationErrors('status');

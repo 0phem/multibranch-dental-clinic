@@ -131,7 +131,7 @@ class AppointmentCutoverSupportTest extends TestCase
         $this->postJson("/api/appointments/{$mine->public_id}/reschedule", ['expected_revision' => 1, 'date' => '2026-10-02', 'start_time' => $slots->first()['start_time']])->assertOk();
     }
 
-    public function test_staff_availability_can_be_limited_to_one_dentist_but_patients_cannot_choose(): void
+    public function test_availability_can_be_limited_to_one_dentist_for_staff_and_patients(): void
     {
         $this->existing('B', 'd1', 'b1', 'svc1', '2026-10-02', '10:00');
         $this->actingAsUser('staffB1');
@@ -141,8 +141,12 @@ class AppointmentCutoverSupportTest extends TestCase
         // An ineligible Dentist yields no slots rather than a guess.
         $this->getJson('/api/appointments/availability?branch_ref=b1&service_ref=svc1&date=2026-10-02&dentist_ref=d3')->assertOk()->assertJsonCount(0, 'data.slots');
 
+        // A Patient may prefer a Dentist too (patient portal booking); the same rules apply and nobody else's details are shown.
         $this->actingAsUser('patientA');
-        $this->getJson('/api/appointments/availability?branch_ref=b1&service_ref=svc1&date=2026-10-02&dentist_ref=d1')->assertStatus(422)->assertJsonValidationErrors('dentist_ref');
+        $mine = collect($this->getJson('/api/appointments/availability?branch_ref=b1&service_ref=svc1&date=2026-10-02&dentist_ref=d1')->assertOk()->json('data.slots'));
+        $this->assertSame(['d1'], $mine->pluck('dentist.id')->unique()->values()->all());
+        $this->assertNotContains('10:00', $mine->pluck('start_time')->all());
+        $this->getJson('/api/appointments/availability?branch_ref=b1&service_ref=svc1&date=2026-10-02&dentist_ref=d3')->assertOk()->assertJsonCount(0, 'data.slots');
     }
 
     // ---- APPOINTMENT LIFECYCLE (after M8) ---------------------------------------------------------------------

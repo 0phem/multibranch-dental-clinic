@@ -62,15 +62,17 @@ class EmailVerificationTest extends TestCase
         });
     }
 
-    public function test_correct_otp_verifies_once_and_logs_in_patient(): void
+    public function test_correct_otp_verifies_once_and_does_not_sign_the_patient_in(): void
     {
         [, $code, $user] = $this->register();
-        $sessionBeforeVerification = $this->app['session']->getId();
 
         $this->postJson('/api/register/verify', ['email' => $user->email, 'otp' => $code])
-            ->assertOk()->assertJsonPath('data.email', $user->email);
-        $this->assertNotSame($sessionBeforeVerification, $this->app['session']->getId());
+            ->assertOk()->assertJsonPath('data.email', $user->email)->assertJsonPath('data.verified', true)
+            ->assertJsonPath('message', 'Your account is verified. Please sign in.');
         $this->assertNotNull($user->fresh()->email_verified_at);
+        // Decision 1: no session is opened by the code; the Patient signs in with the password next.
+        $this->getJson('/api/me')->assertUnauthorized();
+        $this->postJson('/api/login', ['email' => $user->email, 'password' => 'Passw0rd!'])->assertOk();
         $this->getJson('/api/me')->assertOk()->assertJsonPath('data.email', $user->email);
         // Already verified gets the same generic answer as any other failure (no account enumeration).
         $this->postJson('/api/register/verify', ['email' => $user->email, 'otp' => $code])->assertStatus(422)->assertJsonPath('code', 'invalid_otp');
