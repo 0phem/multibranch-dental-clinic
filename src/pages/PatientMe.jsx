@@ -10,7 +10,8 @@ import { fetchMyDocuments, fetchMyConsents, submitDocumentUpload, retractDocumen
 
 const NO_ACCOUNT = <Notice tone="warning" title="We couldn’t confirm your account">Reopen your workspace, or ask the clinic to check your account access.</Notice>
 
-export function PatientMePage({ store, setPage }) {
+// documentsOnly: the patient portal (src/patient) shows only the server-backed consents and documents here; its own Profile page shows the profile.
+export function PatientMePage({ store, setPage, documentsOnly = false }) {
   const { state, toast } = store, session = store.session
   const ctx = patientContext(state, session)
   const [docs, setDocs] = useState([])
@@ -59,8 +60,8 @@ export function PatientMePage({ store, setPage }) {
     reload()
   }, [])
 
-  if (!ctx) return NO_ACCOUNT
-  const branch = state.branches.find(b => b.id === ctx.patient.preferredBranchId)
+  if (!ctx && !documentsOnly) return NO_ACCOUNT
+  const branch = ctx && state.branches.find(b => b.id === ctx.patient.preferredBranchId)
 
   const handleUpload = async (e) => {
     e.preventDefault()
@@ -109,9 +110,10 @@ export function PatientMePage({ store, setPage }) {
   }
 
   return <div className="pt-page">
-    <PageHeader kicker="Your account" title="Me" text="Your profile information, documents, and clinic consents."/>
+    {documentsOnly ? <PageHeader kicker="Your account" title="Documents" text="Your clinic consents, and documents you have shared with the clinic."/>
+      : <PageHeader kicker="Your account" title="Me" text="Your profile information, documents, and clinic consents."/>}
 
-    <section className="pt-record" aria-labelledby="pt-me-profile-title">
+    {!documentsOnly && <section className="pt-record" aria-labelledby="pt-me-profile-title">
       <header><div><h2 id="pt-me-profile-title" className="pt-record-title">Profile</h2><p className="pt-record-sub">This information is read-only for now.</p></div></header>
       {serverProfile
         ? profile.status === 'loading' ? <Notice>Loading your profile…</Notice>
@@ -132,7 +134,7 @@ export function PatientMePage({ store, setPage }) {
         ]}/>}
       {serverProfile && profile.status === 'ready' && <div style={{ marginTop: '12px' }}><ChangeEmailButton/></div>}
       <p className="pt-hint">You can change your sign-in email here. Other profile changes will be available once secure, verified changes are supported; contact the clinic if any of them needs to change now.</p>
-    </section>
+    </section>}
 
     <section className="pt-record" aria-labelledby="pt-me-consents-title" style={{ marginTop: '20px' }}>
       <header><div><h2 id="pt-me-consents-title" className="pt-record-title">Consents & Agreements</h2><p className="pt-record-sub">Active consent records on file with the clinic.</p></div></header>
@@ -153,14 +155,14 @@ export function PatientMePage({ store, setPage }) {
 
     <section className="pt-record" aria-labelledby="pt-me-docs-title" style={{ marginTop: '20px' }}>
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-        <div><h2 id="pt-me-docs-title" className="pt-record-title">My Documents</h2><p className="pt-record-sub">IDs, insurance cards, and medical records kept in your private clinic record. Files are type-checked but not scanned for malware.</p></div>
+        <div><h2 id="pt-me-docs-title" className="pt-record-title">My Documents</h2><p className="pt-record-sub">{documentsOnly ? "IDs and records kept in your private clinic record." : "IDs, insurance cards, and medical records kept in your private clinic record."} Files are type-checked but not scanned for malware.</p></div>
         <Button size="sm" onClick={() => setUploadOpen(true)}>Upload Document</Button>
       </header>
 
       {loading ? <Notice>Loading documents...</Notice> : docError ? (
         <Notice tone="warning" title="Documents unavailable">{docError} <Button size="sm" variant="ghost" onClick={reload}>Retry</Button></Notice>
       ) : docs.length === 0 ? (
-        <Notice tone="info">You haven't uploaded any documents yet. Use the upload button above to submit your ID or HMO card.</Notice>
+        <Notice tone="info">You haven't uploaded any documents yet. Use the upload button above to share a valid ID or another document the clinic asked for.</Notice>
       ) : (
         <div className="pt-list" style={{ marginTop: '12px' }}>
           {docs.map(doc => (
@@ -200,7 +202,7 @@ export function PatientMePage({ store, setPage }) {
         <Field label="Category" required>
           <select value={uploadCategory} onChange={e => setUploadCategory(e.target.value)}>
             <option value="valid_id">Valid ID</option>
-            <option value="hmo_card">HMO / Insurance Card</option>
+            {!documentsOnly && <option value="hmo_card">HMO / Insurance Card</option>}
             <option value="clinical_attachment">Medical / Dental Record</option>
             <option value="other">Other Document</option>
           </select>

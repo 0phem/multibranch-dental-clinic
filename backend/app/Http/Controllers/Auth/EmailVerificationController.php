@@ -4,13 +4,11 @@ namespace App\Http\Controllers\Auth;
 
 use App\Enums\Role;
 use App\Http\Controllers\Controller;
-use App\Http\Resources\UserResource;
 use App\Models\EmailVerificationOtp;
 use App\Models\User;
 use App\Services\Auth\OneTimeCodes;
 use App\Services\Auth\OtpThrottle;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 
@@ -51,12 +49,9 @@ class EmailVerificationController extends Controller
         });
 
         if (isset($result['failure'])) return OneTimeCodes::failure(...$result['failure']);
-        $user = $result['user'];
-        Auth::guard('web')->login($user);
-        $request->session()->regenerate();
-        $request->session()->put('auth_version', (int) $user->auth_version);
-
-        return response()->json(['data' => new UserResource($user->load(['person', 'patient']))]);
+        // Decision 1: verifying the email does NOT sign the Patient in. They sign in with their password next (the portal shows
+        // the sign-in page with the email filled in), so a stolen or forwarded code alone never opens an account.
+        return response()->json(['message' => 'Your account is verified. Please sign in.', 'data' => ['email' => $result['user']->email, 'verified' => true]]);
     }
 
     public function resend(Request $request)
