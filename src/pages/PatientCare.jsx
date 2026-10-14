@@ -6,6 +6,7 @@ import { DefinitionList, RecordCard } from '../patient-ui.jsx'
 import { formatAmount } from '../pricing-api.js'
 import { myBillingInvoices, getBillingInvoice } from '../api-client.js'
 import { ReviewAndPay } from './ReviewAndPay.jsx'
+import { paymentMethodLabel } from '../payment-method.js'
 import { useVisibleRefresh } from '../use-visible-refresh.js'
 
 const NO_ACCOUNT=<Notice tone="warning" title="We couldn’t confirm your account">Reopen your workspace, or ask the clinic to check your account access.</Notice>
@@ -58,7 +59,7 @@ export function PatientBillingPage({ store, context }) {
   if(!patientContext(state,session))return NO_ACCOUNT
   const patient=patientContext(state,session).patient
   const target=resolveTarget(state,session,'billing',context)
-  const items=serverItems!==null?(serverItems||[]).map(i=>({id:i.id,publicId:i.public_id,invoiceNo:i.invoice_number,date:i.issued_at||i.created_at,branch:i.branch?.name||'',status:i.status,total:i.gross_amount,hmoCoverage:i.hmo_coverage_amount,patientResponsibility:i.patient_responsibility_amount,balance:i.balance,settlementType:i.settlement_type,items:(i.lines||[]).map(l=>({key:l.id,name:l.service?.name||'Service',quantity:l.quantity,unit:l.unit_price,amount:l.line_total})),receipt:i.receipt?{number:i.receipt.number,amount:i.receipt.amount,method:i.receipt.method,status:'Recorded',paidAt:i.receipt.issued_at}:null})) : (typeof window==='undefined'?patientInvoices(state,session).map(i=>invoiceView(state,i)):[])
+  const items=serverItems!==null?(serverItems||[]).map(i=>({id:i.id,publicId:i.public_id,invoiceNo:i.invoice_number,date:i.issued_at||i.created_at,branch:i.branch?.name||'',status:i.status,total:i.gross_amount,hmoCoverage:i.hmo_coverage_amount,patientResponsibility:i.patient_responsibility_amount,balance:i.balance,settlementType:i.settlement_type,items:(i.lines||[]).map(l=>({key:l.id,name:l.service?.name||'Service',quantity:l.quantity,unit:l.unit_price,amount:l.line_total})),receipt:i.receipt?{number:i.receipt.number,amount:i.receipt.amount,method:paymentMethodLabel(i.receipt.method),status:'Recorded',paidAt:i.receipt.issued_at}:null})) : (typeof window==='undefined'?patientInvoices(state,session).map(i=>invoiceView(state,i)):[])
   const reviewing=reviewId?items.find(i=>i.id===reviewId):null
   if(reviewing)return <div className="pt-page"><ReviewAndPay invoice={reviewing} onBack={()=>setReviewId(null)}/></div>
   return <div className="pt-page">

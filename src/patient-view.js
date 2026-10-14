@@ -6,6 +6,7 @@ import { followupDisplayState, linkedTreatment, visibleInvoices, visiblePrescrip
 import { LOYALTY_PROGRAM, accountsOf, ledgerIssue, needMoreMessage } from './loyalty.js'
 import { HMO_PROVIDERS, notificationDestination, patientProvidesRequirement, visibleConversations, visibleHmo, visibleNotifications } from './phase3-contracts.js'
 import { dentistsFor, servicesAt } from './scheduling.js'
+import { paymentMethodLabel } from './payment-method.js'
 
 // Relocated to the scheduling domain (Phase 4B.3B); re-exported here so existing Patient-view callers are unaffected.
 export { dentistsFor, servicesAt }
@@ -130,7 +131,7 @@ export function invoiceView(state,i) {
   return {id:i.id,invoiceNo:i.invoiceNo||'',legacy:!!i.legacyAppointment,status:i.status,date:i.visitDate,branch:state.branches.find(b=>b.id===i.branchId)?.name||'',branchId:i.branchId,appointmentId:i.appointmentId||null,treatmentId:i.treatmentId,
     items:(Array.isArray(i.items)?i.items.filter(Boolean):[]).map((item,index)=>({key:item.id||index,name:state.services.find(s=>s.id===item.serviceId)?.name||item.name||'Service',quantity:item.quantity||1,unit:item.unitFee??item.amount,amount:item.amount})),
     total:i.total,
-    receipt:i.receipt?{number:i.receipt,amount:payment?.amount??i.total,status:payment?.status||i.paymentStatus,method:payment?.method||(i.method&&i.method!=='—'?i.method:''),simulated:!!payment?.simulation,paidAt:payment?.recordedAt||i.paidAt||null}:null}
+    receipt:i.receipt?{number:i.receipt,amount:payment?.amount??i.total,status:payment?.status||i.paymentStatus,method:paymentMethodLabel(payment?.method||(i.method&&i.method!=='—'?i.method:'')),simulated:!!payment?.simulation,paidAt:payment?.recordedAt||i.paidAt||null}:null}
 }
 export const money=value=>peso.format(Number(value)||0)
 
