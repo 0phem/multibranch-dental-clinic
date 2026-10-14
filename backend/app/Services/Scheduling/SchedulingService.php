@@ -22,8 +22,8 @@ use Illuminate\Support\Collection;
 //   start times on the hour. Duration stays service-specific.
 // - Staff/Owner: no Patient window; not in the past; start times on a 30-minute boundary (the step the current
 //   Staff slot picker offers — src/logic.js availableSlots).
-// - Branch closures/holidays: no closure infrastructure exists yet (M2/M15), so no closure check is applied and no
-//   closure data is invented.
+// - Branch opening days: branches.operating_days (ISO weekdays) set by the Owner; NULL = every day (the interview, Q10, says
+//   weekends are busier, so no weekday is closed by default). Holiday/one-off closures: none exist yet, none are invented.
 final class SchedulingService
 {
     public const RULE_VERSION = 'dentist-assignment-v1';
@@ -125,6 +125,7 @@ final class SchedulingService
             $check('patient', 'Patient exists', $r->patient);
         }
         $check('branch-status', 'Branch is open', $branch?->status === 'Open');
+        $check('branch-day', 'Branch is open on this day', $branch && ClinicClock::validDate($r->date) && self::openOn($branch, $r->date));
         $check('service-exists', 'Service is active', $service?->status === 'Active');
         $check('service', 'Service available at branch', $assignment);
         $check('dentist', 'Dentist exists', $dentist);
@@ -209,7 +210,7 @@ final class SchedulingService
         $branch = $base->branch;
         $service = $base->service;
         $duration = $branch && $service ? $this->duration($branch, $service) : null;
-        if (! $duration || ! ClinicClock::validDate($date)) {
+        if (! $duration || ! ClinicClock::validDate($date) || ! self::openOn($branch, $date)) {
             return [];
         }
         $pool ??= $this->eligibleDentists($branch, $service);
@@ -294,6 +295,15 @@ final class SchedulingService
             ->filter(fn (Appointment $a) => $a->dentist_profile_id === $dentistId && $a->id !== $ignoreId
                 && ClinicClock::local($a->starts_at)->toDateString() === $date)
             ->sum('duration_minutes');
+    }
+
+    /** True when the branch takes appointments on this clinic date (its opening days; NULL = every day). */
+    public static function openOn(Branch $branch, string $date): bool
+    {
+        $days = $branch->operating_days;
+        if (! is_array($days) || $days === []) return true;
+
+        return in_array(CarbonImmutable::createFromFormat('!Y-m-d', $date, ClinicClock::TIMEZONE)->isoWeekday(), array_map('intval', $days), true);
     }
 
     public static function haversineKm(float $lat1, float $lng1, float $lat2, float $lng2): float

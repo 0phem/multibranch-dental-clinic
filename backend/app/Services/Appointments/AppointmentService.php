@@ -181,6 +181,7 @@ final class AppointmentService
         } catch (\Throwable $e) {
             report($e); // written inside a savepoint: a failure is reported and the appointment change still commits
         }
+        app(\App\Services\Notifications\NotificationCenter::class)->appointment($appointment, $purpose);
     }
 
     /**

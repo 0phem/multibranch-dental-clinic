@@ -27,7 +27,9 @@ class AvailabilityRequest extends FormRequest
             'appointment_id' => ['nullable', 'string', 'exists:appointments,public_id'],
             // Staff/Owner may check one specific eligible Dentist (explicit selection or a Dentist-requested follow-up);
             // a Patient never chooses a Dentist.
-            'dentist_ref' => $patient ? ['prohibited'] : ['nullable', 'string', 'exists:dentist_profiles,legacy_ref'],
+            // A Patient may prefer a Dentist (optional; "Any available" keeps the automatic assignment). The scheduling rules still
+            // check that the Dentist works at the branch, does the service and is free.
+            'dentist_ref' => ['nullable', 'string', 'exists:dentist_profiles,legacy_ref'],
         ];
     }
 }
