@@ -50,6 +50,9 @@ return [
         // Comma-separated payment_method_types enabled on the merchant's PayMongo account. There is NO default: availability
         // depends on the account, so an unset value makes checkout fail closed.
         'payment_method_types' => env('PAYMONGO_PAYMENT_METHOD_TYPES'),
+        // A signed webhook whose timestamp is further than this from the server clock is refused as a replay. PayMongo re-signs
+        // every retry with a fresh timestamp (observed in the live test), so 5 minutes only absorbs network delay and clock skew.
+        'webhook_tolerance_seconds' => (int) env('PAYMONGO_WEBHOOK_TOLERANCE_SECONDS', 300),
     ],
 
 ];

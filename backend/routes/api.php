@@ -66,6 +66,7 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureAccountAccess::cla
         Route::post('/{invoice}/issue', [BillingController::class, 'issue'])->middleware('role:staff');
         Route::post('/{invoice}/payment', [BillingController::class, 'pay'])->middleware('role:staff');
         Route::post('/{invoice}/paymongo-checkout', [PayMongoController::class, 'checkout']);
+        Route::get('/{invoice}/payment-options', [PayMongoController::class, 'options']);
     });
     Route::get('/receipts/mine', [BillingController::class, 'receiptsMine'])->middleware('role:patient');
     Route::get('/billing/treatments', [BillingController::class, 'treatments'])->middleware('role:staff,owner');

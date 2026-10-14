@@ -255,10 +255,10 @@ class PayMongoPaymentTest extends TestCase
 
     public function test_centavo_conversion_is_exact_for_awkward_amounts(): void
     {
-        $this->invoice->update(['gross_amount' => '0.29', 'patient_responsibility_amount' => '0.29']);
+        $this->invoice->update(['gross_amount' => '1.15', 'patient_responsibility_amount' => '1.15']);
         $this->startCheckout('cs_unit_cents');
-        Http::assertSent(fn ($r) => str_contains($r->url(), 'checkout_sessions') && $r->data()['data']['attributes']['line_items'][0]['amount'] === 29); // (int) round(0.29 * 100) style float code can yield 28
-        $this->assertSame('0.29', (string) PaymentCheckoutSession::sole()->amount);
+        Http::assertSent(fn ($r) => str_contains($r->url(), 'checkout_sessions') && $r->data()['data']['attributes']['line_items'][0]['amount'] === 115); // (int) (1.15 * 100) float code yields 114
+        $this->assertSame('1.15', (string) PaymentCheckoutSession::sole()->amount);
     }
 
     public function test_money_return_urls_and_provider_fields_cannot_be_supplied_by_the_client(): void
@@ -749,5 +749,144 @@ class PayMongoPaymentTest extends TestCase
         $staff = User::factory()->create(['role' => Role::Staff]);
         $this->actingAs($staff)->getJson('/api/billing/provider-events')->assertOk()->assertJsonCount(0, 'data');
         $this->actingAs($this->owner)->postJson('/api/billing/provider-events', [])->assertStatus(405);
+    }
+
+    // ---- P3: line items, billing address, provider fixes ---------------------------------------------------------------
+
+    private function sentAttributes(): array
+    {
+        $sent = Http::recorded(fn ($r) => $r->url() === 'https://api.paymongo.com/v2/checkout_sessions')->last();
+
+        return $sent[0]->data()['data']['attributes'];
+    }
+
+    public function test_procedures_that_add_up_to_the_balance_are_sent_as_itemized_lines_and_paymongo_sends_no_receipt_of_its_own(): void
+    {
+        InvoiceLine::where('invoice_id', $this->invoice->id)->update(['unit_price' => '500.00', 'quantity' => 2, 'line_total' => '1000.00']);
+        InvoiceLine::create(['invoice_id' => $this->invoice->id, 'service_id' => InvoiceLine::first()->service_id, 'service_price_id' => InvoiceLine::first()->service_price_id,
+            'line_no' => 2, 'service_code' => 'FIL', 'service_name' => str_repeat('R', 255), 'quantity' => 1, 'unit_price' => '500.00', 'line_total' => '500.00']);
+        $this->fakeCheckout();
+        $this->actingAs($this->patientUser)->postJson("/api/invoices/{$this->invoice->public_id}/paymongo-checkout")->assertOk()->assertJsonPath('data.line_items_mode', 'itemized');
+        $attr = $this->sentAttributes();
+        $this->assertSame([['Dental Cleaning', 50000, 2], [str_repeat('R', 255), 50000, 1]],
+            array_map(fn ($i) => [$i['name'], $i['amount'], $i['quantity']], $attr['line_items']));
+        $this->assertLessThanOrEqual(255, mb_strlen($attr['line_items'][1]['name']));
+        $this->assertFalse($attr['send_email_receipt']);
+        $this->assertSame("http://localhost:5173/?invoice={$this->invoice->public_id}&payment=success#sign-in", $attr['success_url']);
+        $this->assertSame("http://localhost:5173/?invoice={$this->invoice->public_id}&payment=cancelled#sign-in", $attr['cancel_url']);
+    }
+
+    public function test_an_hmo_share_or_earlier_payment_falls_back_to_one_balance_line_with_the_breakdown(): void
+    {
+        $service = app(\App\Services\Payment\PayMongoService::class);
+        // The HMO gate is covered by the billing tests; here only what PayMongo would be shown is checked.
+        $invoice = $this->invoice->fresh('lines')->forceFill(['hmo_coverage_amount' => '500.00', 'patient_responsibility_amount' => '1000.00']);
+        [$items, $mode] = $service->lineItems($invoice, 100000);
+        $this->assertSame('single', $mode);
+        $this->assertSame([['Balance due for Invoice INV-2026-999901', 100000, 1, 'Charges PHP 1,500.00; HMO coverage -PHP 500.00; Balance due PHP 1,000.00']],
+            array_map(fn ($i) => [$i['name'], $i['amount'], $i['quantity'], $i['description']], $items));
+        [$items, $mode] = $service->lineItems($this->invoice->fresh('lines')->forceFill(['paid_amount' => '200.00']), 130000);
+        $this->assertSame(['single', 'Charges PHP 1,500.00; Already paid -PHP 200.00; Balance due PHP 1,300.00'], [$mode, $items[0]['description']]);
+        [, $mode] = $service->lineItems($this->invoice->fresh('lines'), 150000);
+        $this->assertSame('itemized', $mode);
+    }
+
+    public function test_a_balance_below_the_documented_minimum_is_refused_before_paymongo_is_called(): void
+    {
+        $this->invoice->update(['gross_amount' => '0.99', 'patient_responsibility_amount' => '0.99']);
+        Http::fake();
+        $this->actingAs($this->patientUser)->postJson("/api/invoices/{$this->invoice->public_id}/paymongo-checkout")->assertStatus(422)->assertJsonPath('code', 'amount_below_minimum');
+        Http::assertNothingSent();
+    }
+
+    public function test_an_undocumented_payment_method_is_a_configuration_error(): void
+    {
+        config(['services.paymongo.payment_method_types' => 'card, venmo']);
+        Http::fake();
+        $this->actingAs($this->patientUser)->postJson("/api/invoices/{$this->invoice->public_id}/paymongo-checkout")->assertStatus(503)->assertJsonPath('code', 'payment_not_configured');
+        Http::assertNothingSent();
+    }
+
+    public function test_creation_carries_an_idempotency_key_that_is_stable_for_a_retry_and_new_after_a_change(): void
+    {
+        $this->startCheckout('cs_unit_1');
+        $first = Http::recorded(fn ($r) => str_contains($r->url(), 'v2/checkout_sessions'))->last()[0]->header('Idempotency-Key')[0];
+        $this->assertMatchesRegularExpression('/^checkout-[0-9a-f]{48}$/', $first);
+        PaymentCheckoutSession::query()->update(['amount' => '1400.00']); // balance changed: a new session is needed
+        $this->startCheckout('cs_unit_2');
+        $second = Http::recorded(fn ($r) => str_contains($r->url(), 'v2/checkout_sessions'))->last()[0]->header('Idempotency-Key')[0];
+        $this->assertNotSame($first, $second);
+    }
+
+    public function test_a_superseded_session_is_expired_at_paymongo_and_a_refusal_does_not_block_the_new_one(): void
+    {
+        $this->startCheckout('cs_unit_1');
+        PaymentCheckoutSession::query()->update(['amount' => '1400.00']);
+        $this->freshHttp();
+        Http::fake(['https://api.paymongo.com/v1/checkout_sessions/cs_unit_1/expire' => Http::response(['errors' => [['code' => 'resource_failed_state']]], 400),
+            'https://api.paymongo.com/v2/checkout_sessions' => Http::response(['data' => ['id' => 'cs_unit_2', 'attributes' => ['checkout_url' => 'https://checkout.paymongo.com/cs_unit_2', 'livemode' => false]]], 200)]);
+        $this->actingAs($this->patientUser)->postJson("/api/invoices/{$this->invoice->public_id}/paymongo-checkout")->assertOk()->assertJsonPath('data.checkout_session_id', 'cs_unit_2');
+        Http::assertSent(fn ($r) => $r->method() === 'POST' && $r->url() === 'https://api.paymongo.com/v1/checkout_sessions/cs_unit_1/expire');
+        $this->assertSame('Superseded', PaymentCheckoutSession::where('provider_session_id', 'cs_unit_1')->value('status'));
+    }
+
+    public function test_a_billing_address_is_sent_with_paymongo_keys_validated_and_saved_only_when_the_patient_ticks_save(): void
+    {
+        $url = "/api/invoices/{$this->invoice->public_id}/paymongo-checkout";
+        $address = ['line1' => '37 MacArthur Hwy', 'line2' => '', 'city' => 'Bocaue', 'state' => 'Bulacan', 'postal_code' => '3018', 'country' => 'ph'];
+        $this->fakeCheckout();
+        $this->actingAs($this->patientUser)->postJson($url, ['billing_address' => $address])->assertOk();
+        $this->assertSame(['line1' => '37 MacArthur Hwy', 'city' => 'Bocaue', 'state' => 'Bulacan', 'postal_code' => '3018', 'country' => 'PH'], $this->sentAttributes()['billing']['address']);
+        $this->assertNull($this->patient->fresh()->billing_address, 'not saved without the tick');
+
+        $this->fakeCheckout('cs_unit_2');
+        $this->actingAs($this->patientUser)->postJson($url, ['billing_address' => $address + [], 'save_billing_address' => true])->assertOk()
+            ->assertJsonPath('data.checkout_session_id', 'cs_unit_1'); // identical request: the open session is reused
+        $this->assertSame('PH', $this->patient->fresh()->billing_address['country']);
+
+        $this->fakeCheckout('cs_unit_3');
+        $this->actingAs($this->patientUser)->postJson($url, ['billing_address' => ['line1' => 'x', 'country' => 'Philippines']])->assertStatus(422)
+            ->assertJsonValidationErrors(['billing_address.city', 'billing_address.state', 'billing_address.postal_code', 'billing_address.country']);
+        $this->actingAs($this->patientUser)->postJson($url, ['billing_address' => $address + ['street' => 'x']])->assertStatus(422);
+        $this->actingAs($this->patientUser)->postJson($url, ['billing_address' => array_replace($address, ['city' => 'Malolos'])])->assertOk()
+            ->assertJsonPath('data.checkout_session_id', 'cs_unit_3'); // a changed address starts a new session
+    }
+
+    public function test_payment_options_offer_plain_method_names_and_a_prefill_to_the_payer_only(): void
+    {
+        config(['services.paymongo.payment_method_types' => 'card,gcash,paymaya,qrph']);
+        $url = "/api/invoices/{$this->invoice->public_id}/payment-options";
+        $this->actingAs($this->patientUser)->getJson($url)->assertOk()
+            ->assertJsonPath('data.methods', ['Card', 'GCash', 'Maya', 'QR Ph'])
+            ->assertJsonPath('data.billing_address.country', 'PH')
+            ->assertJsonPath('data.billing_address_saved', false)
+            ->assertJsonPath('data.can_save_billing_address', true);
+        $this->patient->forceFill(['billing_address' => ['line1' => 'Saved', 'city' => 'Bocaue', 'state' => 'Bulacan', 'postal_code' => '3018', 'country' => 'PH']])->save();
+        $this->actingAs($this->patientUser)->getJson($url)->assertJsonPath('data.billing_address.line1', 'Saved')->assertJsonPath('data.billing_address_saved', true);
+        $this->actingAs($this->owner)->getJson($url)->assertForbidden();
+    }
+
+    public function test_the_method_falls_back_to_the_sessions_payment_method_used(): void
+    {
+        $this->startCheckout('cs_unit_1');
+        $payment = [['id' => 'pay_unit_1', 'attributes' => ['status' => 'paid', 'amount' => 150000, 'currency' => 'PHP']]];
+        $this->fakeProvider('cs_unit_1', $payment, ['payment_method_used' => 'paymaya']);
+        $this->deliver($this->event())->assertOk();
+        $this->assertSame('PayMongo (MAYA)', \App\Models\Receipt::sole()->method);
+    }
+
+    public function test_a_signed_webhook_outside_the_five_minute_window_is_refused_as_a_replay(): void
+    {
+        $this->startCheckout('cs_unit_1');
+        $this->fakeProvider('cs_unit_1', $this->paid());
+        $raw = json_encode($this->event());
+        $signed = fn (int $t) => "t={$t},te=".hash_hmac('sha256', $t.'.'.$raw, self::SECRET).',li=';
+        $this->postRaw($raw, $signed(time() - 301))->assertStatus(400);
+        $this->postRaw($raw, $signed(time() + 301))->assertStatus(400);
+        $this->assertSame(0, \App\Models\PaymentProviderEvent::count(), 'a refused delivery is not stored');
+        // A retry is re-signed with a fresh timestamp, so it is accepted (and settles once).
+        $this->postRaw($raw, $signed(time() - 120))->assertOk();
+        $this->postRaw($raw, $signed(time()))->assertOk();
+        $this->assertSame(1, \App\Models\Receipt::count());
     }
 }

@@ -23,23 +23,62 @@ class PayMongoController extends Controller
 
     public function __construct(private readonly PayMongoService $payMongoService) {}
 
-    /** POST /api/invoices/{invoice}/paymongo-checkout */
-    public function checkout(Request $request, Invoice $invoice): JsonResponse
+    private function mayPay($user, Invoice $invoice): bool
     {
-        $user = $request->user();
-        $allowed = match ($user->role) {
+        return match ($user->role) {
             Role::Patient => $user->patient !== null && $user->patient->id === $invoice->patient_id,
             Role::Staff => UserBranchScope::where('user_id', $user->id)->where('branch_id', $invoice->branch_id)->exists(),
             default => false, // Owner and Dentist: no payment initiation
         };
-        if (! $allowed) {
+    }
+
+    /** GET /api/invoices/{invoice}/payment-options — what the Review and Pay page needs: accepted methods and the address prefill. */
+    public function options(Request $request, Invoice $invoice): JsonResponse
+    {
+        $user = $request->user();
+        if (! $this->mayPay($user, $invoice)) {
+            return response()->json(['message' => 'You are not authorized to pay for this invoice.'], 403);
+        }
+        $patient = $invoice->patient()->with('person')->first();
+        $saved = is_array($patient?->billing_address) ? array_intersect_key($patient->billing_address, array_flip(PayMongoService::ADDRESS_KEYS)) : null;
+        // Without a saved address, the free-text profile address is offered as line 1 for the Patient to complete (never sent unseen).
+        $prefill = $saved ?: ($patient?->person?->address ? ['line1' => mb_substr($patient->person->address, 0, 255), 'country' => 'PH'] : ['country' => 'PH']);
+
+        return response()->json(['data' => [
+            'methods' => $this->payMongoService->acceptedMethodNames(),
+            'billing_address' => array_merge(array_fill_keys(PayMongoService::ADDRESS_KEYS, ''), $prefill),
+            'billing_address_saved' => (bool) $saved,
+            'can_save_billing_address' => $user->role === Role::Patient,
+        ]]);
+    }
+
+    /** POST /api/invoices/{invoice}/paymongo-checkout */
+    public function checkout(Request $request, Invoice $invoice): JsonResponse
+    {
+        $user = $request->user();
+        if (! $this->mayPay($user, $invoice)) {
             return response()->json(['message' => 'You are not authorized to pay for this invoice.'], 403);
         }
         // The return URLs and every money field are chosen by the server; supplying one is refused, not ignored.
-        $request->validate(array_fill_keys(self::FORBIDDEN_BODY, ['prohibited']));
+        $request->validate(array_fill_keys(self::FORBIDDEN_BODY, ['prohibited']) + [
+            // Decision 9: optional. When given, it is complete (PayMongo's own form asks for these) and uses PayMongo's keys.
+            'billing_address' => ['sometimes', 'nullable', 'array:'.implode(',', PayMongoService::ADDRESS_KEYS)],
+            'billing_address.line1' => ['required_with:billing_address', 'string', 'max:255'],
+            'billing_address.line2' => ['nullable', 'string', 'max:255'],
+            'billing_address.city' => ['required_with:billing_address', 'string', 'max:100'],
+            'billing_address.state' => ['required_with:billing_address', 'string', 'max:100'],
+            'billing_address.postal_code' => ['required_with:billing_address', 'string', 'max:20', 'regex:/^[A-Za-z0-9 -]+$/'],
+            'billing_address.country' => ['required_with:billing_address', 'string', 'regex:/^[A-Za-z]{2}$/'],
+            'save_billing_address' => ['sometimes', 'boolean'],
+        ]);
+        $address = $request->input('billing_address');
+        if (is_array($address)) {
+            $address = array_map(fn ($v) => trim((string) $v), array_merge(array_fill_keys(PayMongoService::ADDRESS_KEYS, ''), $address));
+            $address['country'] = strtoupper($address['country']);
+        }
 
         try {
-            return response()->json(['data' => $this->payMongoService->createCheckoutSession($invoice, $user)]);
+            return response()->json(['data' => $this->payMongoService->createCheckoutSession($invoice, $user, is_array($address) ? $address : null, $request->boolean('save_billing_address'))]);
         } catch (BillingException $e) {
             return response()->json($e->responseBody(), $e->getStatusCode());
         }

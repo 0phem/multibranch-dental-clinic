@@ -63,6 +63,7 @@ class Patient extends Model
     {
         return [
             'consent' => 'boolean',
+            'billing_address' => 'array',
         ];
     }
 

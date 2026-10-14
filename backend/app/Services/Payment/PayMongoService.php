@@ -32,17 +32,30 @@ use Illuminate\Support\Str;
 // data.attributes.payments[] carry id, status, amount and currency; the webhook header is `t=<timestamp>,te=<test>,li=<live>` and
 // the signature is HMAC-SHA256 over "<t>.<raw request body>" with the endpoint secret, `te` for test mode and `li` for live mode,
 // compared in constant time.
-// LIVE PROVIDER VERIFICATION REQUIRED: none of this has run against a real PayMongo test or live account. In particular the
-// documentation shows a v1 path for retrieving a session while creation is v2; if a v2 session cannot be read back that way the
-// integration fails SAFE (every capture is kept as "Needs review"), it never settles on an unconfirmed payment. The payment methods
-// a merchant may offer depend on its PayMongo account, so they are configured explicitly (no default list).
+// LIVE TEST-MODE CHECK (October 14, 2026, docs/PAYMENT_LIVE_TEST.md): a v2-created session IS readable with GET /v1/checkout_sessions
+// /{id}; the paid event arrived signed as documented and settled the invoice. Live mode has not been run. The payment methods a
+// merchant may offer depend on its PayMongo account, so they are configured explicitly (no default list) and must be documented
+// method names.
 class PayMongoService
 {
     public const PAID_EVENT = 'checkout_session.payment.paid';
 
     public const CURRENCY = 'PHP';
 
-    private const METHOD_LABELS = ['gcash' => 'GCASH', 'paymaya' => 'MAYA', 'card' => 'CARD', 'grab_pay' => 'GRABPAY', 'dob' => 'ONLINE BANKING', 'brankas_bdo' => 'ONLINE BANKING', 'qrph' => 'QR PH'];
+    /** The payment_method_types PayMongo documents for Checkout; anything else is a configuration error, never sent. */
+    public const ALLOWED_METHODS = ['shopee_pay', 'qrph', 'billease', 'card', 'dob', 'dob_ubp', 'brankas_bdo', 'brankas_landbank', 'brankas_metrobank', 'gcash', 'grab_pay', 'paymaya'];
+
+    /** Stored with the payment as "PayMongo (<LABEL>)"; shown to people in plain words by App\Support\Brand::paymentMethod(). */
+    private const METHOD_LABELS = ['gcash' => 'GCASH', 'paymaya' => 'MAYA', 'card' => 'CARD', 'grab_pay' => 'GRABPAY', 'shopee_pay' => 'SHOPEEPAY', 'billease' => 'BILLEASE',
+        'dob' => 'ONLINE BANKING', 'dob_ubp' => 'ONLINE BANKING', 'brankas_bdo' => 'ONLINE BANKING', 'brankas_landbank' => 'ONLINE BANKING', 'brankas_metrobank' => 'ONLINE BANKING', 'qrph' => 'QR PH'];
+
+    /** PayMongo's documented minimum amount (PHP 1.00). A smaller balance is refused here instead of by the provider. */
+    public const MIN_CENTAVOS = 100;
+
+    /** PayMongo's documented limit for a line item's name and description. */
+    private const TEXT_LIMIT = 255;
+
+    public const ADDRESS_KEYS = ['line1', 'line2', 'city', 'state', 'postal_code', 'country'];
 
     public function __construct(private readonly BillingService $billing, private readonly AuditService $audit) {}
 
@@ -79,8 +92,9 @@ class PayMongoService
     {
         $configured = config('services.paymongo.payment_method_types');
         $types = is_array($configured) ? $configured : (is_string($configured) ? explode(',', $configured) : []);
-        $types = array_values(array_filter(array_map(fn ($t) => strtolower(trim((string) $t)), $types), fn ($t) => preg_match('/^[a-z0-9_]{2,30}$/', $t)));
-        if (! $types) {
+        $types = array_values(array_unique(array_filter(array_map(fn ($t) => strtolower(trim((string) $t)), $types), fn ($t) => $t !== '')));
+        if (! $types || array_diff($types, self::ALLOWED_METHODS)) {
+            // An undocumented method name would make PayMongo refuse every checkout; it is reported as a configuration error.
             // The methods a merchant may accept depend on its PayMongo account; none are assumed.
             throw new BillingException(503, 'payment_not_configured', 'Online payment methods are not configured on this server.');
         }
@@ -101,85 +115,179 @@ class PayMongoService
 
     // ---- checkout ---------------------------------------------------------------------------------------------------
 
+    /** The configured payment methods in plain words for the Review and Pay page ([] when online payment is not configured). */
+    public function acceptedMethodNames(): array
+    {
+        try {
+            $this->secretKey();
+            $this->live();
+            $types = $this->paymentMethodTypes();
+        } catch (BillingException) {
+            return [];
+        }
+
+        return array_values(array_unique(array_map(fn ($t) => \App\Support\Brand::paymentMethod('PayMongo ('.self::METHOD_LABELS[$t].')'), $types)));
+    }
+
+    /**
+     * What PayMongo is asked to show: one line per performed procedure when the procedures add up to exactly the amount due (no
+     * HMO share, no earlier payment), otherwise one "Balance due" line whose description carries the breakdown. Integer centavos.
+     *
+     * @return array{0: list<array<string, mixed>>, 1: 'itemized'|'single'}
+     */
+    public function lineItems(Invoice $invoice, int $centavos): array
+    {
+        $lines = $invoice->relationLoaded('lines') ? $invoice->lines : $invoice->lines()->get();
+        $items = [];
+        $sum = 0;
+        foreach ($lines as $line) {
+            $unit = $this->billing->centavos((string) $line->unit_price);
+            $qty = (int) $line->quantity;
+            if ($qty < 1 || $unit < 1 || $unit * $qty !== $this->billing->centavos((string) $line->line_total)) {
+                $items = null;
+                break;
+            }
+            $items[] = ['name' => $this->limit((string) $line->service_name), 'amount' => $unit, 'currency' => self::CURRENCY, 'quantity' => $qty];
+            $sum += $unit * $qty;
+        }
+        if ($items && $sum === $centavos) {
+            return [$items, 'itemized'];
+        }
+        $parts = ['Charges '.$this->peso((string) $invoice->gross_amount)];
+        if ((float) $invoice->hmo_coverage_amount > 0) $parts[] = 'HMO coverage -'.$this->peso((string) $invoice->hmo_coverage_amount);
+        if ((float) $invoice->paid_amount > 0) $parts[] = 'Already paid -'.$this->peso((string) $invoice->paid_amount);
+        $parts[] = 'Balance due '.$this->peso(number_format($centavos / 100, 2, '.', ''));
+
+        return [[[
+            'name' => $this->limit("Balance due for Invoice {$invoice->invoice_number}"),
+            'description' => $this->limit(implode('; ', $parts)),
+            'amount' => $centavos, 'currency' => self::CURRENCY, 'quantity' => 1,
+        ]], 'single'];
+    }
+
     /**
      * Creates a hosted checkout session for the invoice's exact current balance and records it. The return URLs are built by the
      * server from the configured SPA origin; a client cannot choose where the provider sends the browser. A provider failure is an
-     * explicit error — never a simulated session.
+     * explicit error — never a simulated session. $address is an optional, already-validated structured billing address
+     * (ADDRESS_KEYS); with $saveAddress the Patient who owns the invoice keeps it on their profile.
      */
-    public function createCheckoutSession(Invoice $invoice, User $actor): array
+    public function createCheckoutSession(Invoice $invoice, User $actor, ?array $address = null, bool $saveAddress = false): array
     {
         $secret = $this->secretKey();
         $this->live(); // mode/key consistency is checked before anything is sent
         $methods = $this->paymentMethodTypes();
         // Serialized per invoice: a second initiation (double click, retry, two tabs) waits here and then sees the first one's session.
-        return DB::transaction(function () use ($invoice, $actor, $secret, $methods) {
+        return DB::transaction(function () use ($invoice, $actor, $secret, $methods, $address, $saveAddress) {
             $invoice = Invoice::whereKey($invoice->id)->lockForUpdate()->firstOrFail();
-            $invoice->loadMissing(['patient.person', 'patient.user', 'branch']);
+            $invoice->loadMissing(['patient.person', 'patient.user', 'branch', 'lines']);
             $balance = $this->billing->payableBalance($invoice); // refuses Paid, non-Issued and HMO-held invoices
+            $centavos = $this->billing->centavos($balance);
+            if ($centavos < self::MIN_CENTAVOS) {
+                throw new BillingException(422, 'amount_below_minimum', 'Online payment needs a balance of at least PHP 1.00. Please settle this balance at the clinic.');
+            }
+            // Saved back to the profile only when ticked, and only by the Patient who owns the invoice (Staff never change it here).
+            if ($saveAddress && $address && $actor->role === \App\Enums\Role::Patient && $actor->patient?->id === $invoice->patient_id) {
+                $invoice->patient->forceFill(['billing_address' => $address])->save();
+            }
+
+            $frontend = rtrim((string) config('app.frontend_url'), '/');
+            $billing = array_filter([
+                'name' => trim(($invoice->patient?->person?->first_name ?? '').' '.($invoice->patient?->person?->last_name ?? '')) ?: null,
+                // Only a real address: a placeholder would send the provider's messages to a stranger.
+                'email' => $invoice->patient?->user?->email ?? $invoice->patient?->person?->email,
+                'phone' => $invoice->patient?->person?->phone,
+                'address' => $address ? array_filter($address, fn ($v) => $v !== null && $v !== '') : null,
+            ]);
+            [$lineItems, $mode] = $this->lineItems($invoice, $centavos);
+            $returnTo = fn (string $status) => "{$frontend}/?invoice={$invoice->public_id}&payment={$status}#sign-in";
+            $attributes = [
+                'line_items' => $lineItems,
+                'payment_method_types' => $methods,
+                'description' => $this->limit("Invoice {$invoice->invoice_number} - ".\App\Support\Brand::name()),
+                'reference_number' => $invoice->public_id,
+                // Our own branded Payment Receipt is the only receipt the Patient gets (answer 7).
+                'send_email_receipt' => false,
+                'show_description' => true, 'show_line_items' => true,
+                'success_url' => $returnTo('success'),
+                'cancel_url' => $returnTo('cancelled'),
+                'metadata' => ['invoice_public_id' => $invoice->public_id, 'invoice_number' => $invoice->invoice_number],
+            ];
+            if ($billing) {
+                $attributes['billing'] = $billing;
+            }
+            $fingerprint = hash('sha256', json_encode([$balance, $attributes]));
+
             $existing = PaymentCheckoutSession::where('invoice_id', $invoice->id)->where('status', 'Open')->first();
-            if ($existing && $existing->checkout_url && (string) $existing->amount === (string) $balance) {
-                // Same invoice, same exact balance: the same hosted page is returned; no second payable opportunity is created.
-                return ['checkout_session_id' => $existing->provider_session_id, 'checkout_url' => $existing->checkout_url, 'reference_number' => $invoice->public_id, 'amount_php' => $balance];
+            if ($existing && $existing->checkout_url && (string) $existing->amount === (string) $balance && $existing->request_fingerprint === $fingerprint) {
+                // Same invoice, same balance, same details: the same hosted page is returned; no second payable opportunity is created.
+                return ['checkout_session_id' => $existing->provider_session_id, 'checkout_url' => $existing->checkout_url, 'reference_number' => $invoice->public_id, 'amount_php' => $balance, 'line_items_mode' => $mode];
             }
             if ($existing) {
-                // The balance changed since that session was created; it can no longer settle this invoice. The provider documents
-                // no expiry for a session, so it may still be open on the provider's side (see the M11 report).
+                // The balance or the details changed: the old session can no longer settle this invoice. It is retired here and
+                // expired at PayMongo so its page stops taking payments.
                 $existing->update(['status' => 'Superseded']);
+                $this->expireAtProvider($existing, $secret);
             }
-            $centavos = $this->billing->centavos($balance);
 
-        $frontend = rtrim((string) config('app.frontend_url'), '/');
-        $billing = array_filter([
-            'name' => trim(($invoice->patient?->person?->first_name ?? '').' '.($invoice->patient?->person?->last_name ?? '')) ?: null,
-            // Only a real address: a placeholder would send the provider's receipt e-mail to a stranger.
-            'email' => $invoice->patient?->user?->email ?? $invoice->patient?->person?->email,
-            'phone' => $invoice->patient?->person?->phone,
-        ]);
-        $attributes = [
-            'line_items' => [[
-                'name' => "Invoice {$invoice->invoice_number} - Dental Services",
-                'amount' => $centavos, 'currency' => self::CURRENCY, 'quantity' => 1,
-                'description' => "Balance payment for treatment at {$invoice->branch?->name}",
-            ]],
-            'payment_method_types' => $methods,
-            'description' => "Invoice {$invoice->invoice_number} - Dr. Dana E. Roxas Dental Clinic",
-            'reference_number' => $invoice->public_id,
-            'send_email_receipt' => (bool) ($billing['email'] ?? false),
-            'show_description' => true, 'show_line_items' => true,
-            'success_url' => "{$frontend}/?payment=success&ref={$invoice->public_id}",
-            'cancel_url' => "{$frontend}/?payment=cancelled&ref={$invoice->public_id}",
-            'metadata' => ['invoice_public_id' => $invoice->public_id, 'invoice_number' => $invoice->invoice_number],
-        ];
-        if ($billing) {
-            $attributes['billing'] = $billing;
-        }
+            // The same request (same invoice, same details, same attempt number) carries the same key, so a retry after a lost
+            // response returns the session PayMongo already made instead of creating a second one.
+            $attempt = PaymentCheckoutSession::where('invoice_id', $invoice->id)->count();
+            $idempotencyKey = 'checkout-'.substr(hash('sha256', $invoice->public_id.'|'.$fingerprint.'|'.$attempt), 0, 48);
+            try {
+                $response = Http::withBasicAuth($secret, '')->acceptJson()->asJson()->timeout(15)->withHeaders(['Idempotency-Key' => $idempotencyKey])
+                    ->post($this->host().'/v2/checkout_sessions', ['data' => ['attributes' => $attributes]]);
+            } catch (ConnectionException) {
+                throw new BillingException(502, 'payment_gateway_unavailable', 'The payment provider could not be reached. No payment was started.');
+            }
+            if (! $response->successful()) {
+                report(new \RuntimeException('PayMongo checkout creation refused with HTTP '.$response->status()));
+                throw new BillingException(502, 'payment_gateway_error', 'The payment provider could not start this payment. No payment was started.');
+            }
+            $sessionId = $response->json('data.id');
+            $checkoutUrl = $response->json('data.attributes.checkout_url');
+            $reportedLive = $response->json('data.attributes.livemode');
+            if (is_bool($reportedLive) && $reportedLive !== $this->live()) {
+                throw new BillingException(502, 'payment_gateway_invalid_response', 'The payment provider answered for a different mode than this server is configured for. No payment was started.');
+            }
+            if (! is_string($sessionId) || $sessionId === '' || ! is_string($checkoutUrl) || ! str_starts_with($checkoutUrl, 'https://')) {
+                throw new BillingException(502, 'payment_gateway_invalid_response', 'The payment provider returned an unusable response. No payment was started.');
+            }
 
-        try {
-            $response = Http::withBasicAuth($secret, '')->acceptJson()->asJson()->timeout(15)->post($this->host().'/v2/checkout_sessions', ['data' => ['attributes' => $attributes]]);
-        } catch (ConnectionException) {
-            throw new BillingException(502, 'payment_gateway_unavailable', 'The payment provider could not be reached. No payment was started.');
-        }
-        if (! $response->successful()) {
-            report(new \RuntimeException('PayMongo checkout creation refused with HTTP '.$response->status()));
-            throw new BillingException(502, 'payment_gateway_error', 'The payment provider could not start this payment. No payment was started.');
-        }
-        $sessionId = $response->json('data.id');
-        $checkoutUrl = $response->json('data.attributes.checkout_url');
-        $reportedLive = $response->json('data.attributes.livemode');
-        if (is_bool($reportedLive) && $reportedLive !== $this->live()) {
-            throw new BillingException(502, 'payment_gateway_invalid_response', 'The payment provider answered for a different mode than this server is configured for. No payment was started.');
-        }
-        if (! is_string($sessionId) || $sessionId === '' || ! is_string($checkoutUrl) || ! str_starts_with($checkoutUrl, 'https://')) {
-            throw new BillingException(502, 'payment_gateway_invalid_response', 'The payment provider returned an unusable response. No payment was started.');
-        }
+            PaymentCheckoutSession::create([
+                'invoice_id' => $invoice->id, 'provider_session_id' => $sessionId, 'checkout_url' => $checkoutUrl, 'amount' => $balance, 'currency' => self::CURRENCY,
+                'status' => 'Open', 'initiated_by_user_id' => $actor->id, 'request_fingerprint' => $fingerprint,
+            ]);
 
-        PaymentCheckoutSession::create([
-            'invoice_id' => $invoice->id, 'provider_session_id' => $sessionId, 'checkout_url' => $checkoutUrl, 'amount' => $balance, 'currency' => self::CURRENCY,
-            'status' => 'Open', 'initiated_by_user_id' => $actor->id,
-        ]);
-
-        return ['checkout_session_id' => $sessionId, 'checkout_url' => $checkoutUrl, 'reference_number' => $invoice->public_id, 'amount_php' => $balance];
+            return ['checkout_session_id' => $sessionId, 'checkout_url' => $checkoutUrl, 'reference_number' => $invoice->public_id, 'amount_php' => $balance, 'line_items_mode' => $mode];
         });
+    }
+
+    /**
+     * Best effort: asks PayMongo to expire a retired session (POST /v1/checkout_sessions/{id}/expire). PayMongo answers 400 when the
+     * session is already paid, in progress or expired; a payment that still lands on it is caught by the webhook as "Needs review"
+     * (its amount no longer matches), never applied. A failure here never blocks the new checkout.
+     */
+    private function expireAtProvider(PaymentCheckoutSession $session, string $secret): void
+    {
+        try {
+            $response = Http::withBasicAuth($secret, '')->acceptJson()->timeout(10)
+                ->post($this->host().'/v1/checkout_sessions/'.rawurlencode($session->provider_session_id).'/expire');
+            if (! $response->successful() && $response->status() !== 400) {
+                report(new \RuntimeException('PayMongo session expiry refused with HTTP '.$response->status()));
+            }
+        } catch (ConnectionException $e) {
+            report($e);
+        }
+    }
+
+    private function limit(string $text): string
+    {
+        return mb_strlen($text) > self::TEXT_LIMIT ? rtrim(mb_substr($text, 0, self::TEXT_LIMIT - 1)).'…' : $text;
+    }
+
+    private function peso(string $amount): string
+    {
+        return 'PHP '.number_format((float) $amount, 2);
     }
 
     // ---- webhook ----------------------------------------------------------------------------------------------------
@@ -190,8 +298,11 @@ class PayMongoService
      * test-mode endpoint and `li` for a live-mode endpoint (the configured mode — never anything read from the body); the
      * comparison is constant-time. It must be called with the UNMODIFIED raw body, before anything is parsed. A header that is
      * malformed, repeats a component, lacks `t`, lacks the component for this mode, or whose signature is not 64 hex characters
-     * is refused. The provider documents no timestamp tolerance, so none is invented; replay is handled by event-id
-     * de-duplication. A missing secret or mode fails closed.
+     * is refused. The timestamp is part of the signed string, so it is also checked: a delivery whose `t` is more than
+     * services.paymongo.webhook_tolerance_seconds (default 300) away from this server's clock is refused as a replay. The live
+     * test (October 14, 2026) showed PayMongo re-signs each retry with a fresh `t` (a retry 31 s later carried t+31), so the
+     * window never blocks a genuine retry. Event-id de-duplication and idempotent settlement remain the second line of defence.
+     * A missing secret or mode fails closed.
      */
     public function verifyWebhookSignature(string $rawPayload, ?string $signatureHeader): bool
     {
@@ -220,7 +331,11 @@ class PayMongoService
             return false;
         }
 
-        return hash_equals(hash_hmac('sha256', $timestamp.'.'.$rawPayload, $secret), strtolower($given));
+        if (! hash_equals(hash_hmac('sha256', $timestamp.'.'.$rawPayload, $secret), strtolower($given))) {
+            return false;
+        }
+
+        return abs(time() - (int) $timestamp) <= max(1, (int) config('services.paymongo.webhook_tolerance_seconds', 300));
     }
 
     /** True when the verified event's own `livemode` flag equals this endpoint's configured mode. */
@@ -348,7 +463,10 @@ class PayMongoService
                 }
             }
 
-            return ['id' => $id, 'centavos' => (int) $amount, 'currency' => strtoupper($currency), 'method' => (string) ($attributes['source']['type'] ?? '')];
+            // The payment's own source type; when absent, the session's payment_method_used (seen filled on read-back in the live test).
+            $method = (string) ($attributes['source']['type'] ?? '') ?: (string) ($response->json('data.attributes.payment_method_used') ?? '');
+
+            return ['id' => $id, 'centavos' => (int) $amount, 'currency' => strtoupper($currency), 'method' => $method];
         }
 
         return 'provider_reports_not_paid';
