@@ -45,11 +45,18 @@ If the webhook check fails, fix it by hand:
 | Role | Sign in |
 | --- | --- |
 | Patient (Bea Villanueva) | `patient@example.test`, or the address set with `scripts/payment-test.sh patient-email` |
-| Staff (front desk, Branch A) | `staff.reception@example.test` |
+| Staff (front desk, Dr. Dana Roxas Dental Clinic) | `staff.reception@example.test` |
 | Dentist (Dr. Rafael Santiago) | `dentist@example.test` |
 | Owner | `owner@example.test` (Clinic Branding is under Administration) |
 
 ## What the demo clinic contains (`DemoClinicSeeder`, demo database only)
+
+- The clinic's **real branches**: Dr. Dana Roxas Dental Clinic (#37, MacArthur Hwy, Bocaue), Roxas - Cardinal Dental Center
+  (67 MacArthur Hwy, Wakas, Bocaue) and Roxas Dental Clinic Guiguinto (Unit 20 GD Plaza, Guiguinto). Hours and branch phone
+  numbers are still placeholders until the clinic sends them (docs/BRANCH_LOCATIONS.md).
+- **Opening days (demo default, approved 2026-10-14): Sunday closed, Saturday open, for every branch.** The Owner can change the
+  closed days per branch in Administration → Branches; the calendar and booking follow at once.
+- The assistant's **draft answers** (Administration → Assistant answers), written from facts in the repository.
 
 - Four fictional patients (`@example.test`; nobody is emailed) and the demo Patient.
 - Upcoming appointments booked through the real scheduling rules.
