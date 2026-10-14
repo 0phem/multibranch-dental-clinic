@@ -6,40 +6,39 @@ use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
-// Reference adapter for the Claude Messages API (`POST /v1/messages`), the FIRST implementation behind AssistantProvider. It is not
-// a recorded clinic vendor decision. Contract used (current official API): JSON body {model, max_tokens, temperature, system,
-// messages:[single user turn]}, headers `x-api-key` (the supported API-key form), `anthropic-version`, `content-type: application/json`;
-// no `tools` key, so the model has nothing to call. One attempt: a retry would multiply cost, so failure is reported and the Patient
-// decides to try again. Only an error CATEGORY and HTTP status are logged — never the prompt, the answer or the key.
+// Claude Messages API (`POST /v1/messages`, `stream: true`), called from the SERVER only. The browser never sees the key, the model
+// id or the request. Server-sent events are read as they arrive: text deltas are passed on immediately (real streaming), tool_use
+// blocks are assembled from their JSON deltas. One attempt per turn (a retry would multiply cost); only an error CATEGORY and HTTP
+// status are logged — never the prompt, the answer or the key.
 //
-// ENDPOINT PINNING: the API key is sent ONLY to the official Anthropic origin below. It is a constant, not configuration: no
-// environment value, request field or Patient input can redirect it, so the secret cannot be sent to an arbitrary HTTPS host. A
-// different provider or an internal proxy must get its own adapter and its own credential model, never reuse this class with
-// another host. Tests intercept the call with the framework HTTP fake instead of pointing the adapter at a test host.
+// ENDPOINT PINNING: the key is sent ONLY to the official Anthropic origin below. It is a constant, not configuration: no environment
+// value, request field or Patient input can redirect it. Tests intercept the call with the framework HTTP fake.
 final class AnthropicProvider implements AssistantProvider
 {
     public const ORIGIN = 'https://api.anthropic.com';
 
-    private const ACCEPTED_STOP_REASONS = ['end_turn', 'stop_sequence'];
-
-    public function complete(string $system, string $patientMessage): string
+    public function configured(): bool
     {
-        $key = (string) config('assistant.api_key');
-        $model = (string) config('assistant.model');
-        $version = (string) config('assistant.anthropic_version');
-        if ($key === '' || ! preg_match('/^[A-Za-z0-9._:-]{3,80}$/', $model) || ! preg_match('/^\d{4}-\d{2}-\d{2}$/', $version) || config('assistant.provider') !== 'anthropic') {
-            throw new AssistantException(503, 'assistant_not_configured', 'The clinic assistant is not available right now. Please contact the clinic.');
-        }
+        return (string) config('assistant.api_key') !== '' && (bool) preg_match('/^[A-Za-z0-9._:-]{3,80}$/', (string) config('assistant.model'))
+            && (bool) preg_match('/^\d{4}-\d{2}-\d{2}$/', (string) config('assistant.anthropic_version'));
+    }
 
+    public function turn(array $request, callable $onText): array
+    {
+        if (! $this->configured()) {
+            throw new AssistantException(503, 'assistant_not_configured', 'The AI assistant is not configured.');
+        }
         try {
-            $response = Http::withHeaders(['x-api-key' => $key, 'anthropic-version' => $version])
-                ->acceptJson()->asJson()->timeout(max(1, (int) config('assistant.timeout_seconds')))->retry(0)
+            $response = Http::withHeaders(['x-api-key' => (string) config('assistant.api_key'), 'anthropic-version' => (string) config('assistant.anthropic_version')])
+                ->withOptions(['stream' => true])->accept('text/event-stream')->asJson()->timeout(max(5, (int) config('assistant.timeout_seconds')))
                 ->post(self::ORIGIN.'/v1/messages', [
-                    'model' => $model,
-                    'max_tokens' => max(1, min(400, (int) config('assistant.max_output_tokens'))),
-                    'temperature' => 0,
-                    'system' => $system,
-                    'messages' => [['role' => 'user', 'content' => $patientMessage]],
+                    'model' => (string) config('assistant.model'),
+                    'max_tokens' => max(64, min(1024, (int) config('assistant.max_output_tokens'))),
+                    'temperature' => 0.2,
+                    'stream' => true,
+                    'system' => $request['system'],
+                    'messages' => $request['messages'],
+                    'tools' => $request['tools'],
                 ]);
         } catch (ConnectionException) {
             Log::warning('assistant.provider_failed', ['category' => 'unreachable']);
@@ -49,32 +48,74 @@ final class AnthropicProvider implements AssistantProvider
             Log::warning('assistant.provider_failed', ['category' => $response->clientError() ? 'refused' : 'server_error', 'status' => $response->status()]);
             throw self::unavailable();
         }
-        // Only the expected successful Messages shape is accepted: an assistant message, a normal stop (a max_tokens cut or a refusal
-        // is never shown), and text blocks only (a tool or any other block is unexpected because no tool was offered).
-        $body = $response->json();
-        $content = is_array($body) ? ($body['content'] ?? null) : null;
-        $text = '';
-        $valid = is_array($body) && ($body['type'] ?? null) === 'message' && ($body['role'] ?? null) === 'assistant'
-            && in_array($body['stop_reason'] ?? null, self::ACCEPTED_STOP_REASONS, true) && is_array($content) && $content !== [];
-        if ($valid) {
-            foreach ($content as $block) {
-                if (! is_array($block) || ($block['type'] ?? null) !== 'text' || ! is_string($block['text'] ?? null)) {
-                    $valid = false;
+
+        $blocks = [];
+        $stop = null;
+        $inputTokens = $outputTokens = 0;
+        $stream = $response->toPsrResponse()->getBody();
+        $buffer = '';
+        $event = null;
+        $handle = function (string $line) use (&$blocks, &$stop, &$inputTokens, &$outputTokens, &$event, $onText) {
+            if (str_starts_with($line, 'event:')) { $event = trim(substr($line, 6)); return; }
+            if (! str_starts_with($line, 'data:')) return;
+            $data = json_decode(trim(substr($line, 5)), true);
+            if (! is_array($data)) return;
+            switch ($data['type'] ?? $event) {
+                case 'message_start':
+                    $inputTokens = (int) ($data['message']['usage']['input_tokens'] ?? 0);
                     break;
-                }
-                $text .= $block['text'];
+                case 'content_block_start':
+                    $block = $data['content_block'] ?? [];
+                    $blocks[(int) ($data['index'] ?? count($blocks))] = ($block['type'] ?? '') === 'tool_use'
+                        ? ['type' => 'tool_use', 'id' => (string) ($block['id'] ?? ''), 'name' => (string) ($block['name'] ?? ''), 'json' => '']
+                        : ['type' => 'text', 'text' => (string) ($block['text'] ?? '')];
+                    break;
+                case 'content_block_delta':
+                    $i = (int) ($data['index'] ?? 0);
+                    $delta = $data['delta'] ?? [];
+                    if (($delta['type'] ?? '') === 'text_delta' && isset($blocks[$i])) {
+                        $blocks[$i]['text'] .= (string) $delta['text'];
+                        $onText((string) $delta['text']);
+                    } elseif (($delta['type'] ?? '') === 'input_json_delta' && isset($blocks[$i])) {
+                        $blocks[$i]['json'] .= (string) ($delta['partial_json'] ?? '');
+                    }
+                    break;
+                case 'message_delta':
+                    $stop = $data['delta']['stop_reason'] ?? $stop;
+                    $outputTokens = (int) ($data['usage']['output_tokens'] ?? $outputTokens);
+                    break;
+                case 'error':
+                    Log::warning('assistant.provider_failed', ['category' => 'stream_error']);
+                    throw self::unavailable();
+            }
+        };
+        while (! $stream->eof()) {
+            $buffer .= $stream->read(1024);
+            while (($pos = strpos($buffer, "\n")) !== false) {
+                $line = rtrim(substr($buffer, 0, $pos), "\r");
+                $buffer = substr($buffer, $pos + 1);
+                if ($line !== '') $handle($line);
             }
         }
-        if (! $valid || trim($text) === '') {
-            Log::warning('assistant.provider_failed', ['category' => 'malformed', 'stop_reason' => is_array($body) && is_string($body['stop_reason'] ?? null) ? substr($body['stop_reason'], 0, 30) : null]);
+        if (trim($buffer) !== '') $handle(trim($buffer));
+
+        ksort($blocks);
+        $content = array_values(array_map(function (array $b) {
+            if ($b['type'] !== 'tool_use') return $b;
+            $input = json_decode($b['json'] === '' ? '{}' : $b['json'], true);
+
+            return ['type' => 'tool_use', 'id' => $b['id'], 'name' => $b['name'], 'input' => is_array($input) ? $input : []];
+        }, $blocks));
+        if (! in_array($stop, ['end_turn', 'tool_use', 'stop_sequence'], true)) {
+            Log::warning('assistant.provider_failed', ['category' => 'unexpected_stop', 'stop' => $stop]);
             throw self::unavailable();
         }
 
-        return $text;
+        return ['content' => $content, 'stop_reason' => $stop, 'input_tokens' => $inputTokens, 'output_tokens' => $outputTokens];
     }
 
     private static function unavailable(): AssistantException
     {
-        return new AssistantException(502, 'assistant_unavailable', 'The clinic assistant could not answer right now. Please try again, or contact the clinic.');
+        return new AssistantException(503, 'assistant_unavailable', 'The AI assistant is not available right now.');
     }
 }
