@@ -5,7 +5,7 @@ PAYMENT RECEIPT - PAID
 
 Hi {!! $firstName !!},
 
-Thank you. We received your payment for invoice {!! $invoice->invoice_number !!}.
+Thank you for your payment. Here is your receipt for invoice {!! $invoice->invoice_number !!}.
 
 Amount paid: {!! $amount !!}
 Receipt number: {!! $receipt->receipt_number !!}
@@ -14,7 +14,7 @@ Invoice number: {!! $invoice->invoice_number !!}
 @endif
 Payment date: {!! $paidAt !!}
 Payment method: {!! $method !!}
-@if ($reference)Reference ID: {!! $reference !!}
+@if ($referenceShort)Reference: {!! $referenceShort !!} (full reference in the attached PDF)
 @endif
 Balance remaining: {!! $balance !!}
 
@@ -35,7 +35,9 @@ Business registration
 @endforeach
 @endif
 
-View in your patient portal: {!! $portalUrl !!}
+A PDF copy of this Payment Receipt is attached.
 
-A PDF copy of this Payment Receipt is attached to this email.
+Next steps
+Book your next appointment: {!! $bookUrl !!}
+View your receipts: {!! $portalUrl !!}
 @endsection
