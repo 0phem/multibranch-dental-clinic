@@ -346,3 +346,45 @@ dialog.patient-logout-dialog { margin: auto 0 0; width: 100%; max-width: none; b
 .role-patient .pt-error { margin: var(--space-3) 0 0; color: var(--red); font-weight: var(--weight-strong); font-size: var(--font-md); }
 .role-patient .pt-code { display: block; margin-bottom: var(--space-3); padding: var(--space-3) var(--space-4); border: 1px dashed var(--line-strong); border-radius: var(--radius); background: var(--surface-2); color: var(--ink); font-size: var(--font-lg); font-weight: var(--weight-strong); letter-spacing: .04em; overflow-wrap: anywhere; user-select: all; }
 .role-patient .pt-entry-points { margin: var(--space-2) 0 0; color: var(--ink); font-weight: var(--weight-strong); font-size: var(--font-body); }
+
+/* M11 Review and Pay — same visual family as the branded Payment Receipt / Invoice emails (header band, logo tile, amount hero). */
+.role-patient .rp { max-width: 640px; margin: 0 auto; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-xl); overflow: hidden; box-shadow: var(--shadow-sm); }
+.role-patient .rp-band { display: flex; align-items: center; gap: 12px; padding: 18px 22px; color: #fff; background: var(--brand); background-image: linear-gradient(135deg, var(--brand-3) 0%, var(--brand) 55%, #0c9b8e 100%); border-bottom: 4px solid #0c9b8e; }
+.role-patient .rp-logo { display: grid; place-items: center; width: 52px; height: 52px; flex: none; background: #fff; border-radius: var(--radius-lg); }
+.role-patient .rp-name { display: grid; line-height: 1.2; min-width: 0; }
+.role-patient .rp-name strong { font-size: 1.05rem; }
+.role-patient .rp-name small { font-size: .7rem; font-weight: var(--weight-strong); letter-spacing: .14em; text-transform: uppercase; color: #dcecfb; }
+.role-patient .rp-branch { margin-left: auto; font-size: var(--font-sm); font-weight: var(--weight-strong); color: #eaf4fd; text-align: right; }
+.role-patient .rp-body { padding: 22px; display: grid; gap: 14px; }
+.role-patient .rp-eyebrow { margin: 0; }
+.role-patient .rp-badge { display: inline-block; padding: 4px 11px; border-radius: 999px; background: #fff1d6; color: #8a5300; font-size: .72rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.role-patient .rp-title { margin: 0; color: var(--ink); font-size: 1.45rem; }
+.role-patient .rp-sub { margin: 0; color: var(--muted); overflow-wrap: anywhere; }
+.role-patient .rp-hero { display: grid; justify-items: center; gap: 4px; padding: 18px; background: var(--brand-soft); border: 1px solid var(--line); border-radius: var(--radius-lg); }
+.role-patient .rp-hero span { font-size: .72rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.role-patient .rp-hero b { font-size: 2.1rem; line-height: 1.15; color: var(--ink); }
+.role-patient .rp-items { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line); border-radius: var(--radius-lg); }
+.role-patient .rp-items li { display: flex; justify-content: space-between; gap: 16px; padding: 11px 16px; border-top: 1px solid var(--line); }
+.role-patient .rp-items li:first-child { border-top: 0; }
+.role-patient .rp-items li > span:first-child { display: grid; min-width: 0; overflow-wrap: anywhere; }
+.role-patient .rp-items li > span:last-child { white-space: nowrap; }
+.role-patient .rp-items b { color: var(--ink); }
+.role-patient .rp-items small { color: var(--muted); }
+.role-patient .rp-items .rp-sum { color: var(--muted); padding-block: 6px; }
+.role-patient .rp-items .rp-total { font-weight: 800; font-size: var(--font-lg); color: var(--ink); border-top: 2px solid var(--brand); }
+.role-patient .rp-form { display: grid; gap: 14px; }
+.role-patient .rp-form fieldset { margin: 0; padding: 14px 16px 16px; border: 1px solid var(--line); border-radius: var(--radius-lg); display: grid; gap: 10px; min-width: 0; }
+.role-patient .rp-form legend { padding: 0 6px; font-weight: var(--weight-strong); color: var(--ink); }
+.role-patient .rp-form legend small, .role-patient .rp-hint { color: var(--muted); font-weight: 400; }
+.role-patient .rp-hint { margin: 0; font-size: var(--font-sm); }
+.role-patient .rp-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.role-patient .rp-check { display: flex; align-items: center; gap: 10px; min-height: 44px; color: var(--text); }
+.role-patient .rp-check input { width: 20px; height: 20px; flex: none; }
+.role-patient .rp-pay { min-height: 50px; font-size: 1rem; }
+.role-patient .rp-note { margin: 0; color: var(--muted); font-size: var(--font-sm); text-align: center; }
+@media (max-width: 520px) {
+  .role-patient .rp-grid { grid-template-columns: 1fr; }
+  .role-patient .rp-branch { display: none; }
+  .role-patient .rp-body { padding: 18px 16px; }
+  .role-patient .rp-hero b { font-size: 1.8rem; }
+}

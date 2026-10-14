@@ -33,7 +33,7 @@ class PaymentReceiptMail extends Mailable
         $data = app(BillingDocuments::class)->receipt($this->receipt);
 
         return new Content(view: 'emails.payment-receipt', text: 'emails.payment-receipt-text', with: $data + [
-            'subjectLine' => $this->envelope()->subject, 'portalUrl' => Brand::forEmail()['portal_url'],
+            'subjectLine' => $this->envelope()->subject, 'portalUrl' => Brand::invoiceUrl($this->invoice->public_id),
             'firstName' => $this->invoice->patient?->person?->first_name ?: 'there',
         ]);
     }

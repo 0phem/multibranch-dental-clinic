@@ -27,7 +27,7 @@ class InvoiceMail extends Mailable
     public function content(): Content
     {
         return new Content(view: 'emails.invoice', text: 'emails.invoice-text', with: app(BillingDocuments::class)->invoice($this->invoice) + [
-            'subjectLine' => $this->envelope()->subject, 'portalUrl' => Brand::forEmail()['portal_url'],
+            'subjectLine' => $this->envelope()->subject, 'portalUrl' => Brand::invoiceUrl($this->invoice->public_id),
             'firstName' => $this->invoice->patient?->person?->first_name ?: 'there',
         ]);
     }

@@ -312,6 +312,8 @@ export function createBillingDraft(treatmentId, key) { return command(`/api/invo
 export function reviewBillingInvoice(id, payload, key) { return command(`/api/invoices/${encodeURIComponent(id)}/review`, payload, key) }
 export function issueBillingInvoice(id, payload, key) { return command(`/api/invoices/${encodeURIComponent(id)}/issue`, payload, key) }
 export function recordBillingPayment(id, payload, key) { return command(`/api/invoices/${encodeURIComponent(id)}/payment`, payload, key) }
+// Review and Pay: accepted methods in plain words and the billing-address prefill (Patient who owns the invoice, or scoped Staff).
+export function getPaymentOptions(invoiceId) { return request(`/api/invoices/${encodeURIComponent(invoiceId)}/payment-options`) }
 export function createPayMongoCheckout(invoiceId, payload = {}) {
   return request(`/api/invoices/${encodeURIComponent(invoiceId)}/paymongo-checkout`, {
     method: 'POST',

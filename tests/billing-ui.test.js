@@ -16,6 +16,7 @@ beforeEach(() => { calls = []; globalThis.document = { cookie: 'XSRF-TOKEN=t' };
 const page = readFileSync(new URL('../src/pages/PatientCare.jsx', import.meta.url), 'utf8')
 const staffPage = readFileSync(new URL('../src/pages/FinanceCommunication.jsx', import.meta.url), 'utf8')
 const client = readFileSync(new URL('../src/api-client.js', import.meta.url), 'utf8')
+const review = readFileSync(new URL('../src/pages/ReviewAndPay.jsx', import.meta.url), 'utf8')
 
 test('starting a checkout sends only the invoice id: the client chooses no URL, amount or state', async () => {
   stubFetch(json(200, {}), json(200, { data: { checkout_url: 'https://checkout.example/x' } }))
@@ -23,7 +24,7 @@ test('starting a checkout sends only the invoice id: the client chooses no URL, 
   const post = calls.find(c => c.method === 'POST')
   assert.ok(post.url.endsWith('/api/invoices/01j0000000000000000000i001/paymongo-checkout'))
   assert.deepEqual(post.body, {})
-  assert.doesNotMatch(page, /success_url|cancel_url/)
+  assert.doesNotMatch(page + review, /success_url|cancel_url/)
 })
 
 test('a refused or failed checkout is surfaced explicitly (never a simulated redirect)', async () => {
@@ -34,22 +35,25 @@ test('a refused or failed checkout is surfaced explicitly (never a simulated red
     assert.equal(result.ok, false)
     assert.ok(result.message.length > 0)
   }
-  assert.match(page, /Could not initiate PayMongo checkout/)
-  assert.match(page, /setCheckoutError\(res\.message/)
+  // Review and Pay redirects only to the checkout_url the server returned; any refusal is shown with the server's message.
+  assert.match(review, /if \(result\.ok && result\.data\?\.checkout_url\) \{ window\.location\.href = result\.data\.checkout_url; return \}/)
+  assert.match(review, /setError\(result\.message \|\| 'The payment could not be started\. No payment was made\.'\)/)
+  assert.match(review, /title="Payment not started"/)
 })
 
 test('returning from the payment page never claims payment: the banner follows the server invoice status', () => {
   assert.doesNotMatch(page, /Payment Successful|Your payment has been received and your invoice is settled/)
   assert.match(page, /Confirming your payment/)
   assert.match(page, /Payment received/)
-  assert.match(page, /Payment not confirmed yet/)
-  // "paid" is only ever derived from the server's own record of the returned invoice.
-  assert.match(page, /row\.id===returnRef&&row\.status==='Paid'/)
-  assert.match(page, /setConfirmation\('paid'\)/)
-  assert.doesNotMatch(page.replace(/setConfirmation\('paid'\)/, ''), /setConfirmation\('paid'\)/, 'only one place can mark it paid')
-  const paidBannerCondition = page.match(/paymentStatus==='success'&&confirmation==='paid'/g) || []
-  assert.equal(paidBannerCondition.length, 1)
+  assert.match(page, /Payment pending/)
+  assert.match(page, /Payment cancelled/)
+  // "paid" is only ever derived from the server's own record of the linked invoice, never from ?payment=success.
+  assert.match(page, /if\(row\.status==='Paid'\)\{setLinkState\(linkPayment\?'paid':null\);return\}/)
+  assert.equal((page.match(/setLinkState\([^)]*'paid'/g) || []).length, 1, 'only one place can mark it paid')
+  assert.equal((page.match(/linkState==='paid'&&/g) || []).length, 1)
   assert.doesNotMatch(page, /status:\s*'Paid'/, 'the page never writes a Paid status')
+  assert.match(page, /useVisibleRefresh\(checkLinked,\{active:linkState==='checking'&&linkPayment==='success',intervalMs:3000\}\)/, 'pending settlement is polled briefly')
+  assert.match(page, /\+\+confirmTries\.current>=20\)setLinkState\('timeout'\)/, 'polling is bounded')
 })
 
 test('a failed invoice load is an explicit error with Retry on the Patient page and never local demo billing', () => {
@@ -88,9 +92,9 @@ test('invoice lists are cursor-paged: bounded requests, honest "showing N" text,
 })
 
 test('the payment confirmation asks for the one returned invoice, independent of paging', () => {
-  assert.match(page, /getBillingInvoice\(returnRef\)/)
+  assert.match(page, /getBillingInvoice\(linkId\)/)
   assert.match(client, /export function getBillingInvoice/)
-  assert.doesNotMatch(page.slice(page.indexOf('const checkConfirmation'), page.indexOf('useVisibleRefresh(checkConfirmation')), /myBillingInvoices\(/)
+  assert.doesNotMatch(page.slice(page.indexOf('const checkLinked'), page.indexOf('useVisibleRefresh(checkLinked')), /myBillingInvoices\(/)
 })
 
 test('receipt list requests are cursor-paged and the Pay action is disabled while a checkout is being created', async () => {
@@ -98,5 +102,6 @@ test('receipt list requests are cursor-paged and the Pay action is disabled whil
   await api.myBillingReceipts({ per_page: 25, cursor: 'zzz' })
   assert.match(calls.at(-1).url, /\/api\/receipts\/mine\?.*per_page=25/)
   assert.match(calls.at(-1).url, /cursor=zzz/)
-  assert.match(page, /disabled=\{payingInvoiceId===inv\.id\}/)
+  assert.match(review, /disabled=\{busy\}/)
+  assert.match(review, /if \(busy\) return/)
 })

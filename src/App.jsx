@@ -12,6 +12,7 @@ import { AcceptInvitation } from './pages/AcceptInvitation.jsx'
 import { PasswordReset } from './pages/PasswordReset.jsx'
 import { stopRealtime } from './realtime.js'
 import { bootstrapSession } from './session-bootstrap.js'
+import { clearInvoiceLinkFromUrl, readInvoiceLink, rememberInvoiceLink, takeInvoiceLink } from './invoice-link.js'
 
 const PatientRegister=lazy(()=>import('./pages/PatientRegister.jsx').then(m=>({default:m.PatientRegister})))
 import * as api from './api-client.js'
@@ -81,6 +82,11 @@ function AppBody() {
   const [authError,setAuthError]=useState('')
   const [page,setPageState]=useState('dashboard')
   const [context,setContext]=useState(null)
+  // An emailed or PayMongo-return link to one invoice is kept until the person is signed in (see invoice-link.js).
+  useState(()=>{if(typeof window!=='undefined')rememberInvoiceLink(readInvoiceLink(window.location.search));return null})
+  // Taken once, then kept for this signed-in session: a repeated session start (React StrictMode runs effects twice in
+  // development) re-applies the same link instead of falling back to the start page. Cleared on sign-out.
+  const invoiceLink=useRef(undefined)
   const [activeBranch,setActiveBranch]=useState('All Branches')
   const [publicView,setPublicView]=useState(()=>publicViewFromHash(typeof window==='undefined'?'':window.location.hash))
   const showRegister=publicView==='register'
@@ -118,6 +124,13 @@ function AppBody() {
     setPageState(START_PAGE[session.role]||'dashboard')
     setActiveBranch(store.state.branches.find(b=>b.id===session.branchId)?.name||'All Branches')
     setPublicView('login')
+    if(invoiceLink.current===undefined)invoiceLink.current=takeInvoiceLink()
+    const link=invoiceLink.current
+    if(link){
+      clearInvoiceLinkFromUrl()
+      // Only a Patient's own billing page takes the link; the server still decides whether the invoice is theirs.
+      if(session.role==='patient'){setContext(link);setPageState('billing')}
+    }
   }
 
   const checkSession=async()=>{
@@ -190,6 +203,7 @@ function AppBody() {
   const signedOut=()=>{
     stopRealtime() // M17: no socket keeps listening for the previous account
     store.adoptSession(null)
+    invoiceLink.current=null
     setContext(null);setPageState('dashboard');setActiveBranch('All Branches');setShowRegister(false);setVerification(null)
     setAuthPhase('unauthenticated')
   }

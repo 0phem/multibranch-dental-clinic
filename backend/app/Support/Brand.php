@@ -16,7 +16,7 @@ final class Brand
 
     /** Plain words for the stored payment method ("PayMongo (CARD)" -> "Card"). Unknown values are shown as stored. */
     private const METHOD_WORDS = ['CARD' => 'Card', 'GCASH' => 'GCash', 'MAYA' => 'Maya', 'GRABPAY' => 'GrabPay', 'ONLINE BANKING' => 'Online banking',
-        'QR PH' => 'QR Ph', 'ONLINE' => 'Online payment'];
+        'QR PH' => 'QR Ph', 'SHOPEEPAY' => 'ShopeePay', 'BILLEASE' => 'BillEase', 'ONLINE' => 'Online payment'];
 
     public static function name(): string
     {
@@ -45,6 +45,12 @@ final class Brand
             'bir' => self::bir($branch),
             'portal_url' => rtrim((string) config('app.frontend_url'), '/').'/#sign-in',
         ];
+    }
+
+    /** The patient portal opened on one invoice (after sign-in when needed): the target of the receipt and invoice buttons. */
+    public static function invoiceUrl(string $invoicePublicId): string
+    {
+        return rtrim((string) config('app.frontend_url'), '/').'/?invoice='.rawurlencode($invoicePublicId).'#sign-in';
     }
 
     /** Absolute path of the logo PNG, or null when the configured file is missing (the header then shows the name only). */

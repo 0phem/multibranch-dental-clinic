@@ -174,4 +174,26 @@ class EmailDesignTest extends TestCase
             && str_contains($mail->render(), 'Payment due') && str_contains($mail->render(), 'Review and pay') && count($mail->attachments()) === 1);
         Mail::assertSent(InvoiceMail::class, 1);
     }
+
+    public function test_plain_text_parts_show_names_and_symbols_as_written_not_html_entities(): void
+    {
+        $text = $this->text(new OneTimeCodeMail('602731', EmailVerificationOtp::REGISTRATION, "Ma'ria & Co"));
+        $this->assertStringContainsString("Hi Ma'ria & Co,", $text);
+        $this->assertStringNotContainsString('&#039;', $text);
+        $this->assertStringNotContainsString('&amp;', $text);
+        [$invoice, $receipt] = MailPreviewController::receiptSample();
+        $invoice->patient->person->first_name = "D'Angelo";
+        $this->assertStringContainsString("Hi D'Angelo,", $this->text(new PaymentReceiptMail($invoice, $receipt)));
+        $this->assertStringContainsString('Hi D&#039;Angelo', (new PaymentReceiptMail($invoice, $receipt))->render(), 'the HTML part still escapes');
+    }
+
+    public function test_receipt_and_invoice_buttons_open_that_invoice_in_the_portal(): void
+    {
+        [$invoice, $receipt] = MailPreviewController::receiptSample();
+        $link = 'http://localhost:5173/?invoice=01SAMPLEINVOICE0000000000#sign-in';
+        config(['app.frontend_url' => 'http://localhost:5173']);
+        $this->assertStringContainsString('href="'.$link.'"', (new PaymentReceiptMail($invoice, $receipt))->render());
+        $this->assertStringContainsString('href="'.$link.'"', (new InvoiceMail(MailPreviewController::invoiceSample()))->render());
+        $this->assertStringContainsString('Review and pay: '.$link, $this->text(new InvoiceMail(MailPreviewController::invoiceSample())));
+    }
 }

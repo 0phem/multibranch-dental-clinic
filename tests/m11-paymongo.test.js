@@ -13,15 +13,19 @@ test('PayMongo and Mailer API methods are properly exported in api-client.js', (
   assert.match(api, /\/api\/mail\/test/)
 })
 
-test('Patient billing page contains PayMongo checkout button and payment return handlers', () => {
-  assert.match(patient, /createPayMongoCheckout/)
-  assert.match(patient, /Pay Online \(GCash \/ Maya \/ Card\)/)
-  assert.match(patient, /Connecting to PayMongo…/)
+test('Patient billing page opens Review and Pay, which starts the PayMongo checkout, and handles the return', () => {
+  const review = fs.readFileSync('src/pages/ReviewAndPay.jsx', 'utf8')
+  assert.match(patient, /Review and pay online/)
+  assert.match(patient, /<ReviewAndPay invoice=\{reviewing\}/)
+  assert.match(review, /createPayMongoCheckout/)
+  assert.match(review, /securely with PayMongo/)
+  assert.match(review, /Opening PayMongo…/)
+  assert.match(review, /Accepted: \{methods\.join\(', '\)\}/)
   // The return redirect is not proof of payment: the banner follows the server's invoice status (see tests/billing-ui.test.js).
   assert.match(patient, /Confirming your payment/)
   assert.match(patient, /Payment received/)
-  assert.match(patient, /Payment Cancelled/)
-  assert.match(patient, /Payment Error/)
+  assert.match(patient, /Payment cancelled/)
+  assert.match(review, /Payment not started/)
 })
 
 test('Admin automation page contains SMTP mailer diagnostics tool for clinic Owner', () => {
