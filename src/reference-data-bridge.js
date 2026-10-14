@@ -17,6 +17,9 @@ export function mapBranch(row) {
     id: row.id, branchCode: row.branch_code, name: row.name, city: row.city, address: row.address,
     phone: row.phone, open: row.open_time?.slice(0, 5), close: row.close_time?.slice(0, 5),
     status: row.status, threshold: row.capacity_threshold,
+    ...(row.email !== undefined ? { email: row.email || '' } : {}),
+    ...(row.latitude !== undefined ? { latitude: row.latitude, longitude: row.longitude } : {}),
+    ...(row.operating_days !== undefined ? { operatingDays: Array.isArray(row.operating_days) ? row.operating_days : null } : {}),
     ...(row.public_id ? { publicId: row.public_id } : {}),
     ...(row.operating_data_status ? { operatingDataStatus: row.operating_data_status } : {}),
   }
@@ -117,6 +120,13 @@ export async function syncBranchUpdate(legacyRef, form) {
   if (form.close !== undefined) payload.close_time = form.close
   if (form.status !== undefined) payload.status = form.status
   if (form.threshold !== undefined) payload.capacity_threshold = form.threshold
+  if (form.email !== undefined) payload.email = form.email ? String(form.email).trim() : null
+  if (form.latitude !== undefined || form.longitude !== undefined) {
+    const coordinate = value => (value === '' || value === null || value === undefined ? null : Number(value))
+    payload.latitude = coordinate(form.latitude); payload.longitude = coordinate(form.longitude)
+  }
+  // Days open (1 = Monday … 7 = Sunday); every day open is sent as null ("every day").
+  if (form.operatingDays !== undefined) payload.operating_days = Array.isArray(form.operatingDays) && form.operatingDays.length && form.operatingDays.length < 7 ? [...form.operatingDays].sort() : null
 
   const result = await api.updateBranch(legacyRef, payload)
   if (!result.ok) return result

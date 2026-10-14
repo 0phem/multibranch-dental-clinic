@@ -26,18 +26,23 @@ class UpdateBranchRequest extends FormRequest
             'city' => ['sometimes', 'string', 'max:100'],
             'address' => ['sometimes', 'string', 'max:255'],
             'phone' => ['sometimes', 'nullable', 'string', 'max:30'],
+            'email' => ['sometimes', 'nullable', 'email', 'max:150'],
+            // Approximate map position for the nearest-branch ranking (both or neither).
+            'latitude' => ['nullable', 'numeric', 'between:4,22', 'required_with:longitude'],
+            'longitude' => ['nullable', 'numeric', 'between:114,128', 'required_with:latitude'],
             'open_time' => ['sometimes', 'date_format:H:i'],
             'close_time' => ['sometimes', 'date_format:H:i'],
             'status' => ['sometimes', Rule::in(['Open', 'Temporarily Closed', 'Inactive'])],
             'capacity_threshold' => ['sometimes', 'integer', 'min:1', 'max:100'],
+            // Days the branch takes appointments (ISO weekday 1 = Monday … 7 = Sunday); null = every day.
+            'operating_days' => ['sometimes', 'nullable', 'array', 'min:1', 'max:7'],
+            'operating_days.*' => ['integer', 'between:1,7', 'distinct'],
 
-            // legacy_ref/latitude/longitude/id are never client-mutable — coordinates stay NULL until a
-            // real future decision populates them (plan section F); legacy_ref is bridge-internal only.
+            // legacy_ref/id are never client-mutable (legacy_ref is bridge-internal only). Coordinates are Owner-editable since
+            // 2026-10-14 (real branches; docs/BRANCH_LOCATIONS.md) and validated above.
             'legacy_ref' => ['prohibited'],
             'public_id' => ['prohibited'],
             'operating_data_status' => ['prohibited'],
-            'latitude' => ['prohibited'],
-            'longitude' => ['prohibited'],
             'id' => ['prohibited'],
         ];
     }

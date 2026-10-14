@@ -55,7 +55,7 @@ final class Brand
             'bir' => self::bir($branch),
             'portal_url' => rtrim((string) config('app.frontend_url'), '/').'/#sign-in',
             'design' => self::design(),
-            // "Dental Clinic · Branch A": the subtitle plus the branch, shown under the clinic name in the v2 header.
+            // "Dental Clinic · Dr. Dana Roxas Dental Clinic": the subtitle plus the branch, shown under the clinic name in the v2 header.
             'tagline' => implode(' · ', array_filter([self::text('subtitle'), $branch?->name])),
         ];
     }

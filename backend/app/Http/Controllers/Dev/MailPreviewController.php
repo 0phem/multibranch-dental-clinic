@@ -65,7 +65,7 @@ class MailPreviewController extends Controller
 
     public static function invoiceSample(bool $withBir = false, string $status = 'Issued'): Invoice
     {
-        $branch = (new Branch)->forceFill(['legacy_ref' => 'b1', 'name' => 'Branch A', 'address' => '#37, MacArthur Hwy, Bocaue, 3018 Bulacan', 'phone' => '0922 878 7341']);
+        $branch = (new Branch)->forceFill(['legacy_ref' => 'b1', 'name' => 'Dr. Dana Roxas Dental Clinic', 'address' => '#37, MacArthur Hwy, Bocaue, 3018 Bulacan', 'phone' => '0922 878 7341']);
         if ($withBir) {
             $branch->forceFill(['bir_registered_name' => 'Sample Dental Services', 'bir_tin' => '000-123-456-00000', 'bir_registered_address' => '#37, MacArthur Hwy, Bocaue, 3018 Bulacan',
                 'bir_vat_status' => 'non_vat', 'bir_permit_numbers' => 'SAMPLE ONLY - not a real registration']);
@@ -103,7 +103,7 @@ class MailPreviewController extends Controller
         $appointment = (new Appointment)->forceFill(['appointment_code' => 'APT-2026-000045', 'status' => $status, 'starts_at' => $start->utc()]);
         $dentist = (new DentistProfile)->setRelation('person', new Person(['first_name' => 'Dana', 'last_name' => 'Roxas']));
         $appointment->setRelation('patient', (new Patient)->setRelation('person', new Person(['first_name' => 'Maria'])))
-            ->setRelation('branch', (new Branch)->forceFill(['name' => 'Branch A', 'address' => '#37, MacArthur Hwy, Bocaue, 3018 Bulacan', 'phone' => '0922 878 7341']))
+            ->setRelation('branch', (new Branch)->forceFill(['name' => 'Dr. Dana Roxas Dental Clinic', 'address' => '#37, MacArthur Hwy, Bocaue, 3018 Bulacan', 'phone' => '0922 878 7341']))
             ->setRelation('service', new Service(['name' => 'Oral Prophylaxis (Cleaning)']))
             ->setRelation('dentist', $dentist);
 

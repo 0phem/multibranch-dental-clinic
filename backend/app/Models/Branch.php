@@ -47,8 +47,10 @@ class Branch extends Model
         'close_time',
         'status',
         'capacity_threshold',
+        'email',
         'latitude',
         'longitude',
+        'operating_days',
     ];
 
     protected function casts(): array
@@ -57,6 +59,7 @@ class Branch extends Model
             'capacity_threshold' => 'integer',
             'latitude' => 'decimal:7',
             'longitude' => 'decimal:7',
+            'operating_days' => 'array',
         ];
     }
 

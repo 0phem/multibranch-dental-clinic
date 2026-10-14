@@ -20,12 +20,15 @@ class BranchResource extends JsonResource
             'city' => $this->city,
             'address' => $this->address,
             'phone' => $this->phone,
+            'email' => $this->email,
             'open_time' => $this->open_time,
             'close_time' => $this->close_time,
             'status' => $this->status,
             'capacity_threshold' => $this->capacity_threshold,
             'latitude' => $this->latitude !== null ? (float) $this->latitude : null,
             'longitude' => $this->longitude !== null ? (float) $this->longitude : null,
+            // ISO weekdays (1 = Monday … 7 = Sunday) the branch takes appointments; null = every day.
+            'operating_days' => $this->operating_days,
         ];
     }
 }

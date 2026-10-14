@@ -36,8 +36,8 @@ export const MODULES = [
 
 export const ROLE_INFO = {
   patient: { label: 'Patient', name: 'Maria Santos', subtitle: 'Patient Portal', patientId: 'p1', userId: 'u12' },
-  staff: { label: 'Staff', name: 'Alyssa Cruz', subtitle: 'Receptionist / Patient Services', userId: 'u2', branchId: 'b1', branch: 'Branch A' },
-  dentist: { label: 'Dentist', name: 'Dr. Miguel Reyes', subtitle: 'Clinical Services', userId: 'u3', dentistId: 'd1', branchId: 'b1', branch: 'Branch A' },
+  staff: { label: 'Staff', name: 'Alyssa Cruz', subtitle: 'Receptionist / Patient Services', userId: 'u2', branchId: 'b1', branch: 'Dr. Dana Roxas Dental Clinic' },
+  dentist: { label: 'Dentist', name: 'Dr. Miguel Reyes', subtitle: 'Clinical Services', userId: 'u3', dentistId: 'd1', branchId: 'b1', branch: 'Dr. Dana Roxas Dental Clinic' },
   owner: { label: 'Owner / Admin', name: 'Dr. Dana Roxas', subtitle: 'Clinic Owner / Administrator', userId: 'u1', branch: 'All Branches' },
 }
 
@@ -56,7 +56,7 @@ export const NAV = {
   ],
   owner: [
     ['dashboard','Executive Dashboard'], ['analytics','Analytics & Reports'], ['branches','Branches'], ['team','People & Team'], ['capacity','Capacity & Workload'],
-    ['hmo','HMO Management'], ['users','User Management'], ['pricing','Services & Pricing'], ['automation','Automation Monitor'], ['audit','Audit Trail'], ['branding','Clinic Branding'], ['engagement','Engagement']
+    ['hmo','HMO Management'], ['users','User Management'], ['pricing','Services & Pricing'], ['automation','Automation Monitor'], ['audit','Audit Trail'], ['branding','Clinic Branding'], ['assistant','Assistant Answers'], ['engagement','Engagement']
   ],
 }
 
@@ -114,24 +114,24 @@ export const INITIAL_DENTIST_SERVICE_ASSIGNMENTS = [
 ]
 
 export const INITIAL_BRANCHES = [
-  { id:'b1', branchCode:'BRC-A', name:'Branch A', city:'Bocaue', address:'Main clinic • Bocaue, Bulacan', open:'09:00', close:'18:00', status:'Open', threshold:80, services:['General Dentistry','Orthodontics','Oral Surgery'], phone:'(02) 8123 1001' },
-  { id:'b2', branchCode:'BRC-B', name:'Branch B', city:'Bocaue', address:'North clinic • Bocaue, Bulacan', open:'09:00', close:'18:00', status:'Open', threshold:80, services:['General Dentistry','Pediatric Dentistry','Teeth Whitening'], phone:'(02) 8123 1002' },
-  { id:'b3', branchCode:'BRC-C', name:'Branch C', city:'Guiguinto', address:'South clinic • Guiguinto, Bulacan', open:'10:00', close:'19:00', status:'Open', threshold:75, services:['General Dentistry','TMD / Orofacial Pain','Dental Implant'], phone:'(02) 8123 1003' },
+  { id:'b1', branchCode:'BRC-A', name:'Dr. Dana Roxas Dental Clinic', city:'Bocaue', address:'#37, MacArthur Hwy, Bocaue, 3018 Bulacan', open:'09:00', close:'18:00', status:'Open', threshold:80, services:['General Dentistry','Orthodontics','Oral Surgery'], phone:'(02) 8123 1001' },
+  { id:'b2', branchCode:'BRC-B', name:'Roxas - Cardinal Dental Center', city:'Bocaue', address:'67 MacArthur Hwy, Wakas, Bocaue, 3018 Bulacan', open:'09:00', close:'18:00', status:'Open', threshold:80, services:['General Dentistry','Pediatric Dentistry','Teeth Whitening'], phone:'(02) 8123 1002' },
+  { id:'b3', branchCode:'BRC-C', name:'Roxas Dental Clinic Guiguinto', city:'Guiguinto', address:'Unit 20 GD Plaza, Guiguinto, Bulacan', open:'10:00', close:'19:00', status:'Open', threshold:75, services:['General Dentistry','TMD / Orofacial Pain','Dental Implant'], phone:'(02) 8123 1003' },
 ]
 
 export const INITIAL_DENTISTS = [
-  { id:'d1', userId:'u3', personId:'per-d1', staffType:'Dentist', licenseNo:'PRC-D-1001', branches:['Branch A'], specialty:'General Dentistry', shiftStart:'09:00', shiftEnd:'18:00', available:true, assistantStaffId:'s3' },
-  { id:'d2', userId:'u6', personId:'per-d2', staffType:'Dentist', licenseNo:'PRC-D-1002', branches:['Branch A'], specialty:'Orthodontics', shiftStart:'10:00', shiftEnd:'19:00', available:true, assistantStaffId:null },
-  { id:'d3', userId:'u7', personId:'per-d3', staffType:'Dentist', licenseNo:'PRC-D-1003', branches:['Branch B'], specialty:'Pediatric Dentistry', shiftStart:'09:00', shiftEnd:'18:00', available:true, assistantStaffId:null },
-  { id:'d4', userId:'u8', personId:'per-d4', staffType:'Dentist', licenseNo:'PRC-D-1004', branches:['Branch C'], specialty:'Dental Implant', shiftStart:'10:00', shiftEnd:'19:00', available:true, assistantStaffId:null },
-  { id:'d5', userId:'u9', personId:'per-d5', staffType:'Dentist', licenseNo:'PRC-D-1005', branches:['Branch B','Branch C'], specialty:'General Dentistry', shiftStart:'11:00', shiftEnd:'19:00', available:true, assistantStaffId:null },
+  { id:'d1', userId:'u3', personId:'per-d1', staffType:'Dentist', licenseNo:'PRC-D-1001', branches:['Dr. Dana Roxas Dental Clinic'], specialty:'General Dentistry', shiftStart:'09:00', shiftEnd:'18:00', available:true, assistantStaffId:'s3' },
+  { id:'d2', userId:'u6', personId:'per-d2', staffType:'Dentist', licenseNo:'PRC-D-1002', branches:['Dr. Dana Roxas Dental Clinic'], specialty:'Orthodontics', shiftStart:'10:00', shiftEnd:'19:00', available:true, assistantStaffId:null },
+  { id:'d3', userId:'u7', personId:'per-d3', staffType:'Dentist', licenseNo:'PRC-D-1003', branches:['Roxas - Cardinal Dental Center'], specialty:'Pediatric Dentistry', shiftStart:'09:00', shiftEnd:'18:00', available:true, assistantStaffId:null },
+  { id:'d4', userId:'u8', personId:'per-d4', staffType:'Dentist', licenseNo:'PRC-D-1004', branches:['Roxas Dental Clinic Guiguinto'], specialty:'Dental Implant', shiftStart:'10:00', shiftEnd:'19:00', available:true, assistantStaffId:null },
+  { id:'d5', userId:'u9', personId:'per-d5', staffType:'Dentist', licenseNo:'PRC-D-1005', branches:['Roxas - Cardinal Dental Center','Roxas Dental Clinic Guiguinto'], specialty:'General Dentistry', shiftStart:'11:00', shiftEnd:'19:00', available:true, assistantStaffId:null },
 ]
 
 export const INITIAL_STAFF = [
-  { id:'s1', userId:'u2', personId:'per-s1', staffType:'Receptionist', licenseNo:'—', specialization:'Patient Services', role:'Receptionist', branch:'Branch A', shiftStart:'09:00', shiftEnd:'18:00', available:true },
-  { id:'s2', userId:'u4', personId:'per-s2', staffType:'HMO Coordinator', licenseNo:'—', specialization:'HMO Processing', role:'HMO Coordinator', branch:'Branch B', shiftStart:'09:00', shiftEnd:'18:00', available:true },
-  { id:'s3', userId:'u10', personId:'per-s3', staffType:'Dental Assistant', licenseNo:'—', specialization:'Chairside Assistance', role:'Dental Assistant', branch:'Branch A', shiftStart:'09:00', shiftEnd:'18:00', available:true },
-  { id:'s4', userId:'u5', personId:'per-s4', staffType:'Cashier', licenseNo:'—', specialization:'Billing', role:'Cashier', branch:'Branch C', shiftStart:'10:00', shiftEnd:'19:00', available:true },
+  { id:'s1', userId:'u2', personId:'per-s1', staffType:'Receptionist', licenseNo:'—', specialization:'Patient Services', role:'Receptionist', branch:'Dr. Dana Roxas Dental Clinic', shiftStart:'09:00', shiftEnd:'18:00', available:true },
+  { id:'s2', userId:'u4', personId:'per-s2', staffType:'HMO Coordinator', licenseNo:'—', specialization:'HMO Processing', role:'HMO Coordinator', branch:'Roxas - Cardinal Dental Center', shiftStart:'09:00', shiftEnd:'18:00', available:true },
+  { id:'s3', userId:'u10', personId:'per-s3', staffType:'Dental Assistant', licenseNo:'—', specialization:'Chairside Assistance', role:'Dental Assistant', branch:'Dr. Dana Roxas Dental Clinic', shiftStart:'09:00', shiftEnd:'18:00', available:true },
+  { id:'s4', userId:'u5', personId:'per-s4', staffType:'Cashier', licenseNo:'—', specialization:'Billing', role:'Cashier', branch:'Roxas Dental Clinic Guiguinto', shiftStart:'10:00', shiftEnd:'19:00', available:true },
   { id:'s5', userId:'u11', personId:'per-s5', staffType:'Patient Engagement Staff', licenseNo:'—', specialization:'Patient Engagement', role:'Patient Engagement Staff', branch:'All Branches', shiftStart:'09:00', shiftEnd:'18:00', available:true },
 ]
 
@@ -139,10 +139,10 @@ export const INITIAL_STAFF = [
 export const INITIAL_BOOKING_DRAFTS = []
 
 export const INITIAL_PATIENTS = [
-  { id:'p1', personId:'per-p1', userId:'u12', patientCode:'PAT-0001', preferredBranch:'Branch A', hmo:'MediCare Plus', hmoMember:'MC-10082', allergies:'None', medicalHistory:'No significant medical history.', dentalHistory:'Routine prophylaxis; mild gingivitis noted previously.', emergencyContact:'Ana Santos • 0917 555 0909', consent:true },
-  { id:'p2', personId:'per-p2', userId:null, patientCode:'PAT-0002', preferredBranch:'Branch B', hmo:'HealthFirst', hmoMember:'HF-22015', allergies:'Penicillin', medicalHistory:'Controlled hypertension.', dentalHistory:'Composite restoration on #26.', emergencyContact:'Joy Dela Cruz • 0918 111 2222', consent:true },
-  { id:'p3', personId:'per-p3', userId:null, patientCode:'PAT-0003', preferredBranch:'Branch A', hmo:'None', hmoMember:'—', allergies:'None', medicalHistory:'None declared.', dentalHistory:'Active orthodontic treatment.', emergencyContact:'Lara Ramos • 0920 811 1919', consent:true },
-  { id:'p4', personId:'per-p4', userId:null, patientCode:'PAT-0004', preferredBranch:'Branch C', hmo:'MediCare Plus', hmoMember:'MC-88912', allergies:'Latex', medicalHistory:'Asthma, controlled.', dentalHistory:'Extraction of #48; follow-up required.', emergencyContact:'Mina Garcia • 0916 220 1000', consent:true },
+  { id:'p1', personId:'per-p1', userId:'u12', patientCode:'PAT-0001', preferredBranch:'Dr. Dana Roxas Dental Clinic', hmo:'MediCare Plus', hmoMember:'MC-10082', allergies:'None', medicalHistory:'No significant medical history.', dentalHistory:'Routine prophylaxis; mild gingivitis noted previously.', emergencyContact:'Ana Santos • 0917 555 0909', consent:true },
+  { id:'p2', personId:'per-p2', userId:null, patientCode:'PAT-0002', preferredBranch:'Roxas - Cardinal Dental Center', hmo:'HealthFirst', hmoMember:'HF-22015', allergies:'Penicillin', medicalHistory:'Controlled hypertension.', dentalHistory:'Composite restoration on #26.', emergencyContact:'Joy Dela Cruz • 0918 111 2222', consent:true },
+  { id:'p3', personId:'per-p3', userId:null, patientCode:'PAT-0003', preferredBranch:'Dr. Dana Roxas Dental Clinic', hmo:'None', hmoMember:'—', allergies:'None', medicalHistory:'None declared.', dentalHistory:'Active orthodontic treatment.', emergencyContact:'Lara Ramos • 0920 811 1919', consent:true },
+  { id:'p4', personId:'per-p4', userId:null, patientCode:'PAT-0004', preferredBranch:'Roxas Dental Clinic Guiguinto', hmo:'MediCare Plus', hmoMember:'MC-88912', allergies:'Latex', medicalHistory:'Asthma, controlled.', dentalHistory:'Extraction of #48; follow-up required.', emergencyContact:'Mina Garcia • 0916 220 1000', consent:true },
 ]
 
 // M6 cutover: appointments are server-authoritative (Laravel/PostgreSQL + backend seeders), so there is no frontend
@@ -159,15 +159,15 @@ export const INITIAL_TREATMENTS = [
 ]
 
 export const INITIAL_INVOICES = [
-  { id:'inv1', invoiceNo:'INV-2026-0001', treatmentId:'t2', patientId:'p1', branchId:'b1', visitDate:'2026-09-12', branch:'Branch A', items:[{serviceId:'svc1',name:'Dental Consultation',amount:600},{serviceId:'svc2',name:'Oral Prophylaxis',amount:1200}], total:1800, netAmount:1800, status:'Paid', paymentStatus:'Paid', method:'GCash', paidAt:'2026-09-12 10:50', receipt:'OR-2026-0912-001' },
-  { id:'inv2', invoiceNo:'INV-2026-0002', treatmentId:null, patientId:'p2', branchId:'b2', visitDate:'2026-09-15', branch:'Branch B', items:[{serviceId:'svc3',name:'Composite Restoration',amount:2500}], total:2500, netAmount:2500, status:'Pending', paymentStatus:'Pending', method:'—', paidAt:null, receipt:null },
-  { id:'inv3', invoiceNo:'INV-2026-0003', treatmentId:'t1', patientId:'p4', branchId:'b3', visitDate:'2026-09-13', branch:'Branch C', items:[{serviceId:'svc4',name:'Tooth Extraction',amount:4500}], total:4500, netAmount:4500, status:'Paid', paymentStatus:'Paid', method:'Card', paidAt:'2026-09-13 15:22', receipt:'OR-2026-0913-008' },
+  { id:'inv1', invoiceNo:'INV-2026-0001', treatmentId:'t2', patientId:'p1', branchId:'b1', visitDate:'2026-09-12', branch:'Dr. Dana Roxas Dental Clinic', items:[{serviceId:'svc1',name:'Dental Consultation',amount:600},{serviceId:'svc2',name:'Oral Prophylaxis',amount:1200}], total:1800, netAmount:1800, status:'Paid', paymentStatus:'Paid', method:'GCash', paidAt:'2026-09-12 10:50', receipt:'OR-2026-0912-001' },
+  { id:'inv2', invoiceNo:'INV-2026-0002', treatmentId:null, patientId:'p2', branchId:'b2', visitDate:'2026-09-15', branch:'Roxas - Cardinal Dental Center', items:[{serviceId:'svc3',name:'Composite Restoration',amount:2500}], total:2500, netAmount:2500, status:'Pending', paymentStatus:'Pending', method:'—', paidAt:null, receipt:null },
+  { id:'inv3', invoiceNo:'INV-2026-0003', treatmentId:'t1', patientId:'p4', branchId:'b3', visitDate:'2026-09-13', branch:'Roxas Dental Clinic Guiguinto', items:[{serviceId:'svc4',name:'Tooth Extraction',amount:4500}], total:4500, netAmount:4500, status:'Paid', paymentStatus:'Paid', method:'Card', paidAt:'2026-09-13 15:22', receipt:'OR-2026-0913-008' },
 ]
 
 export const INITIAL_HMO = [
-  { id:'h1', branchId:'b1', providerId:'hmo-medicare', patientId:'p1', provider:'MediCare Plus', memberId:'MC-10082', treatment:'Oral Prophylaxis', branch:'Branch A', eligibility:'Verified', documents:['ID','HMO Card','Treatment Request'], missing:[], status:'Pending', submittedAt:'2026-09-18 10:15', pendingHours:22, reference:'HMO-2026-0918-01', followUpCount:1, lastContact:'2026-09-19 08:10', providerOutcome:null },
-  { id:'h2', branchId:'b2', providerId:'hmo-healthfirst', patientId:'p2', provider:'HealthFirst', memberId:'HF-22015', treatment:'Composite Restoration', branch:'Branch B', eligibility:'Verified', documents:['HMO Card'], missing:['Valid ID','Dentist treatment request'], status:'Missing Requirements', submittedAt:null, pendingHours:0, reference:null, followUpCount:0, lastContact:null, providerOutcome:null },
-  { id:'h3', branchId:'b3', providerId:'hmo-medicare', patientId:'p4', provider:'MediCare Plus', memberId:'MC-88912', treatment:'Follow-Up', branch:'Branch C', eligibility:'Verified', documents:['ID','HMO Card','Treatment Request'], missing:[], status:'Approved', submittedAt:'2026-09-17 14:30', pendingHours:0, reference:'HMO-2026-0917-04', followUpCount:0, lastContact:'2026-09-18 09:00', providerOutcome:'Approved' },
+  { id:'h1', branchId:'b1', providerId:'hmo-medicare', patientId:'p1', provider:'MediCare Plus', memberId:'MC-10082', treatment:'Oral Prophylaxis', branch:'Dr. Dana Roxas Dental Clinic', eligibility:'Verified', documents:['ID','HMO Card','Treatment Request'], missing:[], status:'Pending', submittedAt:'2026-09-18 10:15', pendingHours:22, reference:'HMO-2026-0918-01', followUpCount:1, lastContact:'2026-09-19 08:10', providerOutcome:null },
+  { id:'h2', branchId:'b2', providerId:'hmo-healthfirst', patientId:'p2', provider:'HealthFirst', memberId:'HF-22015', treatment:'Composite Restoration', branch:'Roxas - Cardinal Dental Center', eligibility:'Verified', documents:['HMO Card'], missing:['Valid ID','Dentist treatment request'], status:'Missing Requirements', submittedAt:null, pendingHours:0, reference:null, followUpCount:0, lastContact:null, providerOutcome:null },
+  { id:'h3', branchId:'b3', providerId:'hmo-medicare', patientId:'p4', provider:'MediCare Plus', memberId:'MC-88912', treatment:'Follow-Up', branch:'Roxas Dental Clinic Guiguinto', eligibility:'Verified', documents:['ID','HMO Card','Treatment Request'], missing:[], status:'Approved', submittedAt:'2026-09-17 14:30', pendingHours:0, reference:'HMO-2026-0917-04', followUpCount:0, lastContact:'2026-09-18 09:00', providerOutcome:'Approved' },
 ]
 
 export const INITIAL_INQUIRIES = [
@@ -203,15 +203,15 @@ export const INITIAL_FOLLOWUPS = [
 
 export const INITIAL_USERS = [
   { id:'u1', personId:'per-owner', username:'dana.roxas', login:'dana.roxas', roleName:'Owner / Admin', role:'Owner / Admin', branchId:null, branch:'All Branches', accountStatus:'Active', status:'Active', permissions:['all'], lastLogin:'2026-09-19 07:40' },
-  { id:'u2', personId:'per-s1', username:'alyssa.cruz', login:'alyssa.cruz', roleName:'Receptionist', role:'Receptionist', branchId:'b1', branch:'Branch A', accountStatus:'Active', status:'Active', permissions:['appointments','checkin','queue','patient-demographics','billing','hmo','messages','followups'], lastLogin:'2026-09-19 08:00' },
-  { id:'u3', personId:'per-d1', username:'miguel.reyes', login:'miguel.reyes', roleName:'Dentist', role:'Dentist', branchId:'b1', branch:'Branch A', accountStatus:'Active', status:'Active', permissions:['schedule','queue','clinical-records','treatment','prescriptions','followups','messages'], lastLogin:'2026-09-19 08:02' },
-  { id:'u4', personId:'per-s2', username:'marco.v', login:'marco.v', roleName:'HMO Coordinator', role:'HMO Coordinator', branchId:'b2', branch:'Branch B', accountStatus:'Active', status:'Active', permissions:['hmo','patient-demographics','messages'], lastLogin:'2026-09-19 07:58' },
-  { id:'u5', personId:'per-s4', username:'lea.mendoza', login:'lea.mendoza', roleName:'Cashier', role:'Cashier', branchId:'b3', branch:'Branch C', accountStatus:'Active', status:'Active', permissions:['billing','patient-demographics'], lastLogin:'2026-09-18 17:55' },
-  { id:'u6', personId:'per-d2', username:'patricia.lim', login:'patricia.lim', roleName:'Dentist', role:'Dentist', branchId:'b1', branch:'Branch A', accountStatus:'Active', status:'Active', permissions:['schedule','queue','clinical-records','treatment','prescriptions','followups','messages'], lastLogin:'2026-09-19 07:52' },
-  { id:'u7', personId:'per-d3', username:'carlo.mendoza', login:'carlo.mendoza', roleName:'Dentist', role:'Dentist', branchId:'b2', branch:'Branch B', accountStatus:'Active', status:'Active', permissions:['schedule','queue','clinical-records','treatment','prescriptions','followups','messages'], lastLogin:'2026-09-19 07:49' },
-  { id:'u8', personId:'per-d4', username:'andrea.flores', login:'andrea.flores', roleName:'Dentist', role:'Dentist', branchId:'b3', branch:'Branch C', accountStatus:'Active', status:'Active', permissions:['schedule','queue','clinical-records','treatment','prescriptions','followups','messages'], lastLogin:'2026-09-19 07:45' },
-  { id:'u9', personId:'per-d5', username:'luis.navarro', login:'luis.navarro', roleName:'Dentist', role:'Dentist', branchId:'b2', branch:'Branch B', accountStatus:'Active', status:'Active', permissions:['schedule','queue','clinical-records','treatment','prescriptions','followups','messages'], lastLogin:'2026-09-19 07:42' },
-  { id:'u10', personId:'per-s3', username:'nina.torres', login:'nina.torres', roleName:'Dental Assistant', role:'Dental Assistant', branchId:'b1', branch:'Branch A', accountStatus:'Active', status:'Active', permissions:['queue','clinical-records'], lastLogin:'2026-09-19 07:54' },
+  { id:'u2', personId:'per-s1', username:'alyssa.cruz', login:'alyssa.cruz', roleName:'Receptionist', role:'Receptionist', branchId:'b1', branch:'Dr. Dana Roxas Dental Clinic', accountStatus:'Active', status:'Active', permissions:['appointments','checkin','queue','patient-demographics','billing','hmo','messages','followups'], lastLogin:'2026-09-19 08:00' },
+  { id:'u3', personId:'per-d1', username:'miguel.reyes', login:'miguel.reyes', roleName:'Dentist', role:'Dentist', branchId:'b1', branch:'Dr. Dana Roxas Dental Clinic', accountStatus:'Active', status:'Active', permissions:['schedule','queue','clinical-records','treatment','prescriptions','followups','messages'], lastLogin:'2026-09-19 08:02' },
+  { id:'u4', personId:'per-s2', username:'marco.v', login:'marco.v', roleName:'HMO Coordinator', role:'HMO Coordinator', branchId:'b2', branch:'Roxas - Cardinal Dental Center', accountStatus:'Active', status:'Active', permissions:['hmo','patient-demographics','messages'], lastLogin:'2026-09-19 07:58' },
+  { id:'u5', personId:'per-s4', username:'lea.mendoza', login:'lea.mendoza', roleName:'Cashier', role:'Cashier', branchId:'b3', branch:'Roxas Dental Clinic Guiguinto', accountStatus:'Active', status:'Active', permissions:['billing','patient-demographics'], lastLogin:'2026-09-18 17:55' },
+  { id:'u6', personId:'per-d2', username:'patricia.lim', login:'patricia.lim', roleName:'Dentist', role:'Dentist', branchId:'b1', branch:'Dr. Dana Roxas Dental Clinic', accountStatus:'Active', status:'Active', permissions:['schedule','queue','clinical-records','treatment','prescriptions','followups','messages'], lastLogin:'2026-09-19 07:52' },
+  { id:'u7', personId:'per-d3', username:'carlo.mendoza', login:'carlo.mendoza', roleName:'Dentist', role:'Dentist', branchId:'b2', branch:'Roxas - Cardinal Dental Center', accountStatus:'Active', status:'Active', permissions:['schedule','queue','clinical-records','treatment','prescriptions','followups','messages'], lastLogin:'2026-09-19 07:49' },
+  { id:'u8', personId:'per-d4', username:'andrea.flores', login:'andrea.flores', roleName:'Dentist', role:'Dentist', branchId:'b3', branch:'Roxas Dental Clinic Guiguinto', accountStatus:'Active', status:'Active', permissions:['schedule','queue','clinical-records','treatment','prescriptions','followups','messages'], lastLogin:'2026-09-19 07:45' },
+  { id:'u9', personId:'per-d5', username:'luis.navarro', login:'luis.navarro', roleName:'Dentist', role:'Dentist', branchId:'b2', branch:'Roxas - Cardinal Dental Center', accountStatus:'Active', status:'Active', permissions:['schedule','queue','clinical-records','treatment','prescriptions','followups','messages'], lastLogin:'2026-09-19 07:42' },
+  { id:'u10', personId:'per-s3', username:'nina.torres', login:'nina.torres', roleName:'Dental Assistant', role:'Dental Assistant', branchId:'b1', branch:'Dr. Dana Roxas Dental Clinic', accountStatus:'Active', status:'Active', permissions:['queue','clinical-records'], lastLogin:'2026-09-19 07:54' },
   { id:'u11', personId:'per-s5', username:'mika.ramos', login:'mika.ramos', roleName:'Patient Engagement Staff', role:'Patient Engagement Staff', branchId:null, branch:'All Branches', accountStatus:'Active', status:'Active', permissions:['inquiries','messages','engagement'], lastLogin:'2026-09-19 08:04' },
   { id:'u12', personId:'per-p1', username:'maria.santos', login:'maria.santos', roleName:'Patient', role:'Patient', branchId:null, branch:'All Branches', accountStatus:'Active', status:'Active', permissions:['patient-portal'], lastLogin:'2026-09-19 08:11' },
 ]

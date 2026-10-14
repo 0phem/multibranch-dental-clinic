@@ -1,9 +1,9 @@
 // Public presentation data only; never used for M2 authorization or scheduling.
-// Names/addresses supplied by the client. Map pins checked against public place records.
-// See docs/PUBLIC_AUTH_LOCATIONS_REFINEMENT.md for verification evidence.
+// Only the clinic's name and contact live here, as the fallback when the server cannot be reached. Branches (names, addresses,
+// map pins) come from the clinic records through GET /api/public/branches (docs/BRANCH_LOCATIONS.md).
 // White-label (decision 12): the identity and contact fields below are the FALLBACK only. At startup main.jsx calls
 // loadBranding(), which replaces them with the Owner's settings from GET /api/branding before the first render; renders without
-// the API (smoke tests, an unreachable server) keep these defaults. Branch map pins stay here as public presentation data.
+// the API (smoke tests, an unreachable server) keep these defaults.
 export const clinic = {
   name: 'Dr. Dana E. Roxas Dental Clinic',
   nameLine: 'Dr. Dana E. Roxas',
@@ -14,29 +14,6 @@ export const clinic = {
   phoneE164: '+639228787341',
   email: 'danaroxas.dentalclinic@gmail.com',
   logo: '/images/logo.png',
-  branches: Object.freeze([
-    Object.freeze({
-      id: 'bocaue-37', number: '01',
-      name: 'Dr. Dana Roxas Dental Clinic',
-      address: '#37, MacArthur Hwy, Bocaue, 3018 Bulacan',
-      latitude: 14.800254, longitude: 120.9233274,
-      source: 'https://www.google.com/maps?cid=15251005469195418416',
-    }),
-    Object.freeze({
-      id: 'bocaue-cardinal', number: '02',
-      name: 'Roxas - Cardinal Dental Center',
-      address: '67 MacArthur Hwy, Wakas, Bocaue, 3018 Bulacan',
-      latitude: 14.7996762, longitude: 120.9234564,
-      source: 'https://www.google.com/maps?cid=166116950672724786',
-    }),
-    Object.freeze({
-      id: 'guiguinto-gd-plaza', number: '03',
-      name: 'Roxas Dental Clinic Guiguinto',
-      address: 'Unit 20 GD Plaza, Guiguinto, Bulacan',
-      latitude: 14.8284409, longitude: 120.8745988,
-      source: 'https://www.google.com/maps?cid=9281875676794275970',
-    }),
-  ]),
 }
 
 /** Applies the public branding (GET /api/branding) to `clinic`. Unknown or empty values keep the fallback. */
@@ -61,8 +38,25 @@ export function applyBranding(data) {
   return clinic
 }
 
+let publicApiBase = 'http://localhost:8000'
+
+/** The open branches for the public website, from the clinic records. {ok, branches} — never a built-in list. */
+export async function loadPublicBranches(timeoutMs = 6000) {
+  if (typeof fetch !== 'function') return { ok: false, branches: [] }
+  const controller = typeof AbortController === 'function' ? new AbortController() : null
+  const timer = setTimeout(() => controller?.abort(), timeoutMs)
+  try {
+    const response = await fetch(`${publicApiBase.replace(/\/$/, '')}/api/public/branches`, { headers: { Accept: 'application/json' }, signal: controller?.signal })
+    const rows = response.ok ? (await response.json())?.data : null
+    if (!Array.isArray(rows)) return { ok: false, branches: [] }
+    return { ok: true, branches: rows.filter(b => b && typeof b.name === 'string' && typeof b.address === 'string').map(b => ({ id: String(b.id), number: String(b.number || ''), name: b.name, address: b.address,
+      latitude: typeof b.latitude === 'number' ? b.latitude : null, longitude: typeof b.longitude === 'number' ? b.longitude : null })) }
+  } catch { return { ok: false, branches: [] } } finally { clearTimeout(timer) }
+}
+
 /** Fetches the public branding once at startup; never blocks the app for more than `timeoutMs`. */
 export async function loadBranding(apiBase, timeoutMs = 2500) {
+  publicApiBase = apiBase || publicApiBase
   if (typeof fetch !== 'function') return clinic
   const controller = typeof AbortController === 'function' ? new AbortController() : null
   const timer = setTimeout(() => controller?.abort(), timeoutMs)
