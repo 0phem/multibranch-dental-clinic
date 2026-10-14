@@ -254,7 +254,65 @@ export function myQueue() { return request('/api/queue/mine') }
 export function queueCommand(id, name, payload, key) { return command(`/api/queue/${encodeURIComponent(id)}/${encodeURIComponent(name)}`, payload, key) }
 
 // M7 Patient assistant: the ONLY input is the message; the server derives everything else and holds the provider credential.
-export function askAssistant(message) { return request('/api/assistant/messages', { method: 'POST', body: JSON.stringify({ message }) }) }
+export function askAssistant(message, history = []) { return request('/api/assistant/messages', { method: 'POST', body: JSON.stringify(history.length ? { message, history } : { message }) }) }
+export function assistantInfo() { return request('/api/assistant') }
+/**
+ * Streams an assistant answer (server-sent events from the clinic server; the AI key never reaches the browser).
+ * onEvent(name, data): 'meta' {mode}, 'delta' {text}, 'replace' {text}, 'done' {answer, outcome, mode, actions, handoff}.
+ * Resolves with {ok:true, data: <done payload>} or a normal failure ({ok:false, kind, message, code}).
+ */
+export async function streamAssistant(message, history = [], onEvent = () => {}) {
+  let response
+  try {
+    response = await rawFetch('/api/assistant/stream', { method: 'POST', body: JSON.stringify(history.length ? { message, history } : { message }), headers: { Accept: 'text/event-stream' } })
+  } catch {
+    return { ok: false, kind: 'network', message: 'Could not reach the clinic system. Check your connection and try again.' }
+  }
+  if (!response.ok) return parseFailure(response)
+  if (!response.body?.getReader) { const text = await response.text(); return parseSse(text, onEvent) }
+  const reader = response.body.getReader(), decoder = new TextDecoder()
+  let buffer = '', done = null
+  for (;;) {
+    const { value, done: finished } = await reader.read()
+    if (value) buffer += decoder.decode(value, { stream: true })
+    let cut
+    while ((cut = buffer.indexOf('\n\n')) !== -1) {
+      const chunk = buffer.slice(0, cut); buffer = buffer.slice(cut + 2)
+      const result = parseSse(chunk + '\n\n', onEvent); if (result.data) done = result.data
+    }
+    if (finished) break
+  }
+  if (buffer.trim()) { const result = parseSse(buffer + '\n\n', onEvent); if (result.data) done = result.data }
+  return done ? { ok: true, data: done } : { ok: false, kind: 'server', message: 'The assistant stopped before answering. Try again.' }
+}
+function parseSse(text, onEvent) {
+  let done = null
+  for (const block of text.split('\n\n')) {
+    const name = /^event: (.+)$/m.exec(block)?.[1], raw = /^data: (.+)$/m.exec(block)?.[1]
+    if (!name || !raw) continue
+    let data = null
+    try { data = JSON.parse(raw) } catch { continue }
+    onEvent(name, data)
+    if (name === 'done') done = data
+  }
+  return { ok: !!done, data: done }
+}
+
+// M7 knowledge base (Owner): the clinic's own assistant answers. Every change is audited by the server.
+export function listAssistantAnswers() { return request('/api/assistant-answers') }
+export function createAssistantAnswer(payload) { return request('/api/assistant-answers', { method: 'POST', body: JSON.stringify(payload) }) }
+export function updateAssistantAnswer(id, payload) { return request(`/api/assistant-answers/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(payload) }) }
+export function testAssistantAnswer(question) { return request('/api/assistant-answers/test', { method: 'POST', body: JSON.stringify({ question }) }) }
+
+// Identity-specific notifications from real server events (each person sees only their own).
+export function listNotifications() { return request('/api/notifications') }
+export function readNotification(id) { return request(`/api/notifications/${encodeURIComponent(id)}/read`, { method: 'POST', body: '{}' }) }
+export function readAllNotifications() { return request('/api/notifications/read-all', { method: 'POST', body: '{}' }) }
+
+// Patient booking helpers (read-only searches; the booking command is createAppointment).
+export function bookingBranchOptions(params) { return request(`/api/appointments/branch-options${query(params)}`) }
+export function bookingDentistOptions(params) { return request(`/api/appointments/dentist-options${query(params)}`) }
+export function bookingCalendar(params) { return request(`/api/appointments/calendar${query(params)}`) }
 
 // M26 Patient feedback (foundation, Patient only): submit, own history, eligible Visits. Cursor-paged. There is no reviewer API.
 export function eligibleFeedbackVisits(params) { return request(`/api/feedback/eligible-visits${query(params)}`) }
@@ -313,6 +371,22 @@ export function reviewBillingInvoice(id, payload, key) { return command(`/api/in
 export function issueBillingInvoice(id, payload, key) { return command(`/api/invoices/${encodeURIComponent(id)}/issue`, payload, key) }
 export function recordBillingPayment(id, payload, key) { return command(`/api/invoices/${encodeURIComponent(id)}/payment`, payload, key) }
 // Review and Pay: accepted methods in plain words and the billing-address prefill (Patient who owns the invoice, or scoped Staff).
+/** Downloads an invoice or receipt PDF (the emailed document) and saves it in the browser. {ok} or a normal failure. */
+export async function downloadBillingPdf(invoiceId, kind = 'invoice') {
+  let response
+  try {
+    response = await rawFetch(`/api/invoices/${encodeURIComponent(invoiceId)}/${kind === 'receipt' ? 'receipt-pdf' : 'pdf'}`, { headers: { Accept: 'application/pdf' } })
+  } catch {
+    return { ok: false, kind: 'network', message: 'Could not reach the clinic system. Check your connection and try again.' }
+  }
+  if (!response.ok) return response.status === 404 ? { ok: false, kind: 'not_found', message: 'This document is not available.' } : parseFailure(response)
+  const name = /filename="([^"]+)"/.exec(response.headers.get('Content-Disposition') || '')?.[1] || `${kind}.pdf`
+  const url = URL.createObjectURL(await response.blob())
+  const a = Object.assign(document.createElement('a'), { href: url, download: name })
+  document.body.appendChild(a); a.click(); a.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+  return { ok: true }
+}
 export function getPaymentOptions(invoiceId) { return request(`/api/invoices/${encodeURIComponent(invoiceId)}/payment-options`) }
 export function createPayMongoCheckout(invoiceId, payload = {}) {
   return request(`/api/invoices/${encodeURIComponent(invoiceId)}/paymongo-checkout`, {
