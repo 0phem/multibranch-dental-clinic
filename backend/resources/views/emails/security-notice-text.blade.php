@@ -1,23 +1,23 @@
 @extends('emails.layout-text', ['reason' => $reason])
 
 @section('content')
-{{ $heading }}
+{!! $heading !!}
 
-Hi {{ $name }},
+Hi {!! $name !!},
 
 @foreach ($paragraphs as $paragraph)
-{{ $paragraph }}
+{!! $paragraph !!}
 
 @endforeach
 @if ($when)
-When: {{ $when }} (Philippine time)
+When: {!! $when !!} (Philippine time)
 
 @endif
 @if ($action)
-{{ $action['label'] }}: {{ $action['url'] }}
+{!! $action['label'] !!}: {!! $action['url'] !!}
 
 @endif
 @if ($warning)
-{{ $warning }}
+{!! $warning !!}
 @endif
 @endsection

@@ -1,16 +1,16 @@
 @extends('emails.layout-text', ['reason' => $reason])
 
 @section('content')
-{{ $heading }}
+{!! $heading !!}
 
-Hi {{ $name }},
+Hi {!! $name !!},
 
-{{ $intro }}
+{!! $intro !!}
 
-Your verification code: {{ $code }}
-It expires in {{ $minutes }} minutes and works once.
+Your verification code: {!! $code !!}
+It expires in {!! $minutes !!} minutes and works once.
 
 Never share this code with anyone, including clinic staff. We will never call or message you to ask for it.
 
-{{ $ignore }}
+{!! $ignore !!}
 @endsection

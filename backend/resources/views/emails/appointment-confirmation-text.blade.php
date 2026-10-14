@@ -4,19 +4,19 @@
 @section('content')
 Your appointment is confirmed
 
-Hi {{ $appointment->patient?->person?->first_name ?? 'there' }},
+Hi {!! $appointment->patient?->person?->first_name ?? 'there' !!},
 
-Reference: {{ $appointment->appointment_code }}
-@if ($appointment->branch)Clinic branch: {{ $appointment->branch->name }}
+Reference: {!! $appointment->appointment_code !!}
+@if ($appointment->branch)Clinic branch: {!! $appointment->branch->name !!}
 @endif
-Date: {{ $start->format('F j, Y (l)') }}
-Time: {{ $start->format('g:i A') }}
-@if ($appointment->dentist?->person)Dentist: Dr. {{ $appointment->dentist->person->first_name }} {{ $appointment->dentist->person->last_name }}
+Date: {!! $start->format('F j, Y (l)') !!}
+Time: {!! $start->format('g:i A') !!}
+@if ($appointment->dentist?->person)Dentist: Dr. {!! $appointment->dentist->person->first_name !!} {!! $appointment->dentist->person->last_name !!}
 @endif
-@if ($appointment->service)Service: {{ $appointment->service->name }}
+@if ($appointment->service)Service: {!! $appointment->service->name !!}
 @endif
-Status: {{ $appointment->status }}
+Status: {!! $appointment->status !!}
 
-View in your patient portal: {{ \App\Support\Brand::forEmail()['portal_url'] }}
+View in your patient portal: {!! \App\Support\Brand::forEmail()['portal_url'] !!}
 Need to reschedule? Manage your appointment in your patient portal or call your clinic branch.
 @endsection

@@ -3,11 +3,11 @@
 @section('content')
 You have a new message
 
-Hi {{ $name }},
+Hi {!! $name !!},
 
-The {{ $clinic }} team sent you a message in your patient portal. Sign in to read it and reply.
+The {!! $clinic !!} team sent you a message in your patient portal. Sign in to read it and reply.
 
-Sign in to read it: {{ $link }}
+Sign in to read it: {!! $link !!}
 
 For your privacy, messages are never included in email.
 @endsection

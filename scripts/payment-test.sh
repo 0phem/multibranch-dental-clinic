@@ -3,7 +3,8 @@
 # visits and invoices never enter the clinic database `dental_clinic`. Never prints a key or secret.
 #
 #   scripts/payment-test.sh demo-db          create/migrate/seed dental_clinic_demo (first time) and issue one unpaid demo invoice
-#   scripts/payment-test.sh invoice          issue one more unpaid demo invoice (PHP 1,800: cleaning + filling, demo prices)
+#   scripts/payment-test.sh invoice [A]      issue one more unpaid demo invoice (PHP 1,800: cleaning + filling, demo prices);
+#                                            A = the demo Patient's address if it was changed with patient-email
 #   scripts/payment-test.sh patient-email A  give the demo Patient (in the DEMO database only) a real inbox A, so receipt emails arrive;
 #                                            sign in as A afterwards (same demo password)
 #   scripts/payment-test.sh api              serve the API on :8000 against dental_clinic_demo (stop `php artisan serve` first)
@@ -34,7 +35,8 @@ case "${1:-}" in
     ;;
   invoice)
     refuse_production
-    (cd "$BACKEND" && php artisan db:seed --class=DemoUnpaidInvoiceSeeder --force)
+    # Optional: the demo Patient's address after `patient-email` (default patient@example.test).
+    (cd "$BACKEND" && DEMO_PATIENT_EMAIL="${2:-${DEMO_PATIENT_EMAIL:-}}" php artisan db:seed --class=DemoUnpaidInvoiceSeeder --force)
     ;;
   patient-email)
     refuse_production
@@ -89,6 +91,6 @@ case "${1:-}" in
     fi
     ;;
   *)
-    sed -n '2,12p' "$0"; exit 1
+    sed -n '2,13p' "$0"; exit 1
     ;;
 esac

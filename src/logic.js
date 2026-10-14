@@ -42,9 +42,21 @@ export function addMinutes(time, mins) {
   return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`
 }
 
+// A calendar date ("2026-10-14") is shown as that date; a full timestamp from the server ("2026-10-14T02:28:17+08:00") or a Date
+// is shown as its clinic (Asia/Manila) date. Anything missing, empty or unreadable is shown as "—", never "Invalid Date".
 export const dateLabel = date => {
-  if (!date) return '—'
-  return new Date(`${date}T00:00:00`).toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'})
+  const options={month:'short',day:'numeric',year:'numeric'}
+  if (date instanceof Date) return Number.isNaN(date.getTime()) ? '—' : date.toLocaleDateString('en-PH',{...options,timeZone:'Asia/Manila'})
+  const text=typeof date==='string'?date.trim():''
+  const calendar=/^(\d{4})-(\d{2})-(\d{2})$/.exec(text)
+  if (calendar) {
+    const [y,m,d]=calendar.slice(1).map(Number), day=new Date(Date.UTC(y,m-1,d))
+    if (day.getUTCFullYear()!==y||day.getUTCMonth()!==m-1||day.getUTCDate()!==d) return '—'
+    return day.toLocaleDateString('en-PH',{...options,timeZone:'UTC'})
+  }
+  if (!/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/.test(text)) return '—'
+  const instant=new Date(text.replace(' ','T').replace(/([+-]\d{2})$/,'$1:00')) // PostgreSQL may write "+08"
+  return Number.isNaN(instant.getTime()) ? '—' : instant.toLocaleDateString('en-PH',{...options,timeZone:'Asia/Manila'})
 }
 
 export function statusTone(value='') {

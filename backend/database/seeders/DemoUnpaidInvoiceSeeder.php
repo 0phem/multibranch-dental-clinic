@@ -37,12 +37,14 @@ class DemoUnpaidInvoiceSeeder extends Seeder
         }
         $owner = User::where('email', 'owner@example.test')->first();
         $staff = User::where('email', 'staff.reception@example.test')->first();
-        $patientUser = User::where('email', 'patient@example.test')->with('patient')->first();
+        // The demo Patient, or the address it was moved to with `scripts/payment-test.sh patient-email` (DEMO_PATIENT_EMAIL).
+        $patientEmail = strtolower(trim((string) (env('DEMO_PATIENT_EMAIL') ?: 'patient@example.test')));
+        $patientUser = User::where('email', $patientEmail)->where('role', 'patient')->with('patient')->first();
         $branch = Branch::where('legacy_ref', 'b1')->first();
         $dentist = DentistProfile::where('legacy_ref', 'd1')->first();
         $dentistUser = $dentist ? User::where('person_id', $dentist->person_id)->first() : null;
         if (! $owner || ! $staff || ! $patientUser?->patient || ! $branch || ! $dentist) {
-            $this->command?->error('DemoUnpaidInvoiceSeeder needs the demo accounts, branch b1 and dentist d1: run `php artisan db:seed` first.');
+            $this->command?->error("DemoUnpaidInvoiceSeeder needs the demo accounts, the demo Patient ({$patientEmail}), branch b1 and dentist d1: run `php artisan db:seed` first, or set DEMO_PATIENT_EMAIL.");
 
             return;
         }
@@ -84,6 +86,6 @@ class DemoUnpaidInvoiceSeeder extends Seeder
         $invoice = $billing->transition($staff, $invoice, 'Review', $invoice->revision);
         $invoice = $billing->transition($staff, $invoice, 'Issued', $invoice->revision);
 
-        $this->command?->info("Demo invoice {$invoice->invoice_number} ({$invoice->public_id}) issued to patient@example.test: PHP {$invoice->patient_responsibility_amount}, status {$invoice->status}.");
+        $this->command?->info("Demo invoice {$invoice->invoice_number} ({$invoice->public_id}) issued to {$patientEmail}: PHP {$invoice->patient_responsibility_amount}, status {$invoice->status}.");
     }
 }

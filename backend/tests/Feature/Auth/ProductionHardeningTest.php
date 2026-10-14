@@ -74,6 +74,7 @@ class ProductionHardeningTest extends TestCase
 
     public function test_registration_and_otp_endpoints_are_throttled_even_for_unknown_accounts(): void
     {
+        $this->freezeTime(); // the limit is per minute: a minute boundary between the 30th and 31st request would reset it
         for ($i=0;$i<30;$i++) $this->postJson('/api/register',[])->assertStatus(422);
         $this->postJson('/api/register',[])->assertStatus(429);
         for ($i=0;$i<30;$i++) $this->postJson('/api/register/verify',['email'=>'missing@example.test','otp'=>'123456'])->assertStatus(422);
