@@ -21,6 +21,7 @@ class Service extends Model
         'reference_fee_php',
         'category',
         'status',
+        'description',
     ];
 
     protected function casts(): array

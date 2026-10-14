@@ -16,6 +16,11 @@ class DemoAccountsSeeder extends Seeder
 {
     public function run(): void
     {
+        if ($refusal = \App\Support\ClinicDatabaseGuard::refusal('DemoAccountsSeeder')) {
+            $this->command?->error($refusal);
+
+            return;
+        }
         if (app()->isProduction()) {
             $this->command?->error('DemoAccountsSeeder refuses to run in production.');
 

@@ -11,11 +11,16 @@ use Illuminate\Database\Seeder;
 // matching the frontend demo accounts they mirror (u2 Receptionist and u10 Dental Assistant, both scoped to b1 in
 // src/data.js INITIAL_USERS). This is an explicit demo grant, not derived from staff_profiles.branch_id: operational
 // assignment never implies authorization scope (CONTRACTS.md §1). Idempotent; existing scopes are never removed.
-// The Branch B demo Staff login and the staff profiles for the demo Staff logins are in DemoStaffProfileSeeder.
+// The b2 (Roxas - Cardinal Dental Center) demo Staff login and the staff profiles for the demo Staff logins are in DemoStaffProfileSeeder.
 class DemoStaffScopeSeeder extends Seeder
 {
     public function run(): void
     {
+        if ($refusal = \App\Support\ClinicDatabaseGuard::refusal('DemoStaffScopeSeeder')) {
+            $this->command?->error($refusal);
+
+            return;
+        }
         if (app()->isProduction()) {
             $this->command?->error('DemoStaffScopeSeeder refuses to run in production.');
 

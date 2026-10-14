@@ -49,6 +49,8 @@ Route::post('/password/reset', [\App\Http\Controllers\Auth\PasswordResetControll
 // Public white-label branding (decision 12): name, contact, design, colours and logo for every screen.
 Route::get('/branding', [\App\Http\Controllers\BrandingController::class, 'show']);
 Route::get('/branding/logo', [\App\Http\Controllers\BrandingController::class, 'logo']);
+// Public website: the open branches (name, address, map coordinates). Read-only, no personal data.
+Route::get('/public/branches', [\App\Http\Controllers\PublicBranchController::class, 'index'])->middleware('throttle:60,1');
 
 // Public Payment Gateway Webhook (PayMongo HMAC-SHA256 signature verified)
 Route::post('/webhooks/paymongo', [PayMongoController::class, 'webhook']);
@@ -56,6 +58,10 @@ Route::post('/webhooks/paymongo', [PayMongoController::class, 'webhook']);
 Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureAccountAccess::class])->group(function () {
     Route::post('/logout', [AuthenticatedSessionController::class, 'destroy']);
     Route::get('/me', [CurrentUserController::class, 'show']);
+    // Identity-specific notifications written by real server events (each user sees only their own).
+    Route::get('/notifications', [\App\Http\Controllers\NotificationController::class, 'index']);
+    Route::post('/notifications/read-all', [\App\Http\Controllers\NotificationController::class, 'readAll']);
+    Route::post('/notifications/{notification}/read', [\App\Http\Controllers\NotificationController::class, 'read']);
     // M1 self-service sign-in email change: current password, then a one-time code sent to the new address.
     Route::post('/account/email', [\App\Http\Controllers\Auth\EmailChangeController::class, 'request'])->middleware('throttle:m1-otp');
     Route::post('/account/email/confirm', [\App\Http\Controllers\Auth\EmailChangeController::class, 'confirm'])->middleware('throttle:m1-otp');
@@ -71,6 +77,9 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureAccountAccess::cla
         Route::post('/{invoice}/payment', [BillingController::class, 'pay'])->middleware('role:staff');
         Route::post('/{invoice}/paymongo-checkout', [PayMongoController::class, 'checkout']);
         Route::get('/{invoice}/payment-options', [PayMongoController::class, 'options']);
+        // The emailed PDFs, for download (own invoices only for a Patient).
+        Route::get('/{invoice}/pdf', [\App\Http\Controllers\BillingDocumentController::class, 'invoice'])->middleware(['role:patient,staff,owner', 'throttle:30,1']);
+        Route::get('/{invoice}/receipt-pdf', [\App\Http\Controllers\BillingDocumentController::class, 'receipt'])->middleware(['role:patient,staff,owner', 'throttle:30,1']);
     });
     Route::get('/receipts/mine', [BillingController::class, 'receiptsMine'])->middleware('role:patient');
     Route::get('/billing/treatments', [BillingController::class, 'treatments'])->middleware('role:staff,owner');
@@ -204,6 +213,9 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureAccountAccess::cla
         Route::get('/', [AppointmentController::class, 'index'])->middleware('role:patient,staff,dentist,owner');
         Route::get('/availability', [AppointmentController::class, 'availability'])->middleware('role:patient,staff,owner');
         Route::get('/recommendation', [AppointmentController::class, 'recommendation'])->middleware('role:patient');
+        Route::get('/branch-options', [AppointmentController::class, 'branchOptions'])->middleware('role:patient');
+        Route::get('/dentist-options', [AppointmentController::class, 'dentistOptions'])->middleware('role:patient,staff,owner');
+        Route::get('/calendar', [AppointmentController::class, 'calendar'])->middleware('role:patient,staff,owner');
         Route::post('/', [AppointmentController::class, 'store'])->middleware('role:patient,staff,owner');
         Route::get('/{appointment}', [AppointmentController::class, 'show'])->middleware('role:patient,staff,dentist,owner');
         Route::post('/{appointment}/reschedule', [AppointmentController::class, 'reschedule'])->middleware('role:patient,staff,owner');
@@ -275,7 +287,16 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureAccountAccess::cla
     });
 
     // M7 Patient AI Support: Patient-only, stateless, read-only; rate-limited per account (a technical cost/abuse bound).
+    Route::get('/assistant', [AssistantController::class, 'show'])->middleware('role:patient');
     Route::post('/assistant/messages', [AssistantController::class, 'ask'])->middleware(['role:patient', 'throttle:m7-assistant']);
+    Route::post('/assistant/stream', [AssistantController::class, 'stream'])->middleware(['role:patient', 'throttle:m7-assistant']);
+    // M7 knowledge base: the clinic's own assistant answers (Owner only; every change audited).
+    Route::prefix('assistant-answers')->middleware('role:owner')->group(function () {
+        Route::get('/', [\App\Http\Controllers\AssistantAnswerController::class, 'index']);
+        Route::post('/', [\App\Http\Controllers\AssistantAnswerController::class, 'store']);
+        Route::post('/test', [\App\Http\Controllers\AssistantAnswerController::class, 'test'])->middleware('throttle:60,1');
+        Route::patch('/{assistantAnswer}', [\App\Http\Controllers\AssistantAnswerController::class, 'update']);
+    });
 
     // M5 Treatment & Clinical Workflow. {treatment} binds on the ULID public_id. Reads are role-scoped and projected per
     // role (TreatmentPolicy); documentation and completion are named commands of the responsible Dentist only.

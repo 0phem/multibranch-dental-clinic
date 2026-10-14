@@ -44,6 +44,11 @@ class DemoClinicSeeder extends Seeder
 
     public function run(): void
     {
+        if ($refusal = \App\Support\ClinicDatabaseGuard::refusal('DemoClinicSeeder')) {
+            $this->command?->error($refusal);
+
+            return;
+        }
         if (app()->isProduction()) {
             $this->command?->error('DemoClinicSeeder refuses to run in production.');
 
@@ -59,8 +64,11 @@ class DemoClinicSeeder extends Seeder
 
             return;
         }
+        $this->call(RealBranchSeeder::class); // the clinic's real branch names, addresses and map coordinates
+        $this->call(AssistantAnswerSeeder::class); // the assistant's draft answers (from facts in the repository)
+        $this->demoOpeningDays();
         if (Person::where('email', self::PATIENTS[0][2])->exists()) {
-            $this->command?->warn('DemoClinicSeeder already ran on this database; nothing changed.');
+            $this->command?->warn('DemoClinicSeeder already ran on this database; demo data unchanged (real branch names and demo opening days checked).');
 
             return;
         }
@@ -109,6 +117,15 @@ class DemoClinicSeeder extends Seeder
             ->whereHas('recipient', fn ($q) => $q->where('email', 'like', '%@example.test'))->update(['status' => 'superseded', 'completed_at' => now()]);
 
         $this->command?->info("Demo clinic ready: 4 patients, {$booked} upcoming appointments, 2 paid invoices, unpaid {$unpaid->invoice_number} (PHP {$unpaid->patient_responsibility_amount}) for {$demoPatientUser->email}, 1 conversation. {$cancelled} email(s) to fictional patients cancelled.");
+    }
+
+    /**
+     * Demo default (approved 2026-10-14): every demo branch is closed on Sunday and open Monday to Saturday. Set only where a
+     * branch has no closed days yet, so an Owner's change in the Branches screen is kept. The clinic's real days are an open item.
+     */
+    private function demoOpeningDays(): void
+    {
+        Branch::whereIn('legacy_ref', array_keys(RealBranchSeeder::REAL))->whereNull('operating_days')->update(['operating_days' => json_encode([1, 2, 3, 4, 5, 6])]);
     }
 
     /** Books the first valid slot from the next weekday on (09:00–16:00, hourly), by the front desk; false if none is free. */

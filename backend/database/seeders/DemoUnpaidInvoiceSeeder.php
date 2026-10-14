@@ -10,8 +10,8 @@ use Illuminate\Database\Seeder;
 // DEMO DATA ONLY (refuses to run in production; intended for a separate demo database, never the clinic's records).
 // Creates ONE unpaid, Issued invoice for the demo Patient so a PayMongo test checkout has something to pay. Every run adds a new one.
 //
-// It follows the approved billing flow instead of inserting an invoice: a completed walk-in visit and Treatment at Branch A by the
-// demo Dentist (d1) with two performed procedures, then the real M11 commands as the demo Branch A Staff member:
+// It follows the approved billing flow instead of inserting an invoice: a completed walk-in visit and Treatment at b1 (Dr. Dana Roxas Dental Clinic) by the
+// demo Dentist (d1) with two performed procedures, then the real M11 commands as the demo b1 (Dr. Dana Roxas Dental Clinic) Staff member:
 // createDraft -> Review -> Issue. Prices come from the real M13 command as the demo Owner, only if the service has no price yet.
 // DEMO PRICES from interview Q12 (lower end of each range): cleaning (Oral Prophylaxis) PHP 1,000; filling (Composite
 // Restoration) PHP 800. They are demo values, not the clinic's approved price list.
@@ -21,6 +21,11 @@ class DemoUnpaidInvoiceSeeder extends Seeder
 
     public function run(): void
     {
+        if ($refusal = \App\Support\ClinicDatabaseGuard::refusal('DemoUnpaidInvoiceSeeder')) {
+            $this->command?->error($refusal);
+
+            return;
+        }
         if (app()->isProduction()) {
             $this->command?->error('DemoUnpaidInvoiceSeeder refuses to run in production.');
 

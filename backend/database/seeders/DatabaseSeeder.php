@@ -29,7 +29,7 @@ class DatabaseSeeder extends Seeder
 
         // M6: explicit demo authorization scope for the demo Staff logins (after BranchSeeder).
         $this->call(DemoStaffScopeSeeder::class);
-        // M17 demo: every demo Staff login gets a profile; one Staff login works at Branch B (cross-branch messaging demo).
+        // M17 demo: every demo Staff login gets a profile; one Staff login works at b2 (Roxas - Cardinal Dental Center) (cross-branch messaging demo).
         $this->call(DemoStaffProfileSeeder::class);
     }
 }
