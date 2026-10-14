@@ -46,6 +46,10 @@ Route::post('/login', [AuthenticatedSessionController::class, 'store'])->middlew
 Route::post('/password/forgot', [\App\Http\Controllers\Auth\PasswordResetController::class, 'forgot'])->middleware('throttle:m1-otp');
 Route::post('/password/reset', [\App\Http\Controllers\Auth\PasswordResetController::class, 'reset'])->middleware('throttle:m1-otp');
 
+// Public white-label branding (decision 12): name, contact, design, colours and logo for every screen.
+Route::get('/branding', [\App\Http\Controllers\BrandingController::class, 'show']);
+Route::get('/branding/logo', [\App\Http\Controllers\BrandingController::class, 'logo']);
+
 // Public Payment Gateway Webhook (PayMongo HMAC-SHA256 signature verified)
 Route::post('/webhooks/paymongo', [PayMongoController::class, 'webhook']);
 
@@ -91,6 +95,14 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureAccountAccess::cla
     Route::post('/patients/{patient}/consents/{consent}/withdraw', [DocumentController::class, 'withdrawConsent']);
 
     // M22 Audit Trail & Activity Monitoring Management (Owner only)
+    // Owner: white-label settings and per-branch BIR fields (decisions 8 and 12).
+    Route::prefix('settings')->middleware('role:owner')->group(function () {
+        Route::get('/branding', [\App\Http\Controllers\BrandingController::class, 'settings']);
+        Route::put('/branding', [\App\Http\Controllers\BrandingController::class, 'update']);
+        Route::post('/branding/logo', [\App\Http\Controllers\BrandingController::class, 'uploadLogo']);
+        Route::delete('/branding/logo', [\App\Http\Controllers\BrandingController::class, 'resetLogo']);
+        Route::put('/branches/{branch}/bir', [\App\Http\Controllers\BrandingController::class, 'updateBranchBir']);
+    });
     Route::prefix('audit-logs')->middleware('role:owner')->group(function () {
         Route::get('/', [AuditController::class, 'index']);
         Route::get('/export', [AuditController::class, 'export']);

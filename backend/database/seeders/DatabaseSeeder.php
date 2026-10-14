@@ -11,6 +11,7 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
+        $this->call(ClinicSettingsSeeder::class); // the clinic's white-label settings (never overwrites an Owner change)
         $this->call(DemoAccountsSeeder::class);
 
         // Phase 2A reference data. Order matters: Branch/Service before the join tables that reference

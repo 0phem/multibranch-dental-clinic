@@ -57,6 +57,8 @@ class MailDispatcher
         $mailer = (string) config('mail.default');
         $kind = $this->transportKind();
         try {
+            // The From name follows the white-label sender name (the address stays the configured, authenticated sender).
+            if (! $mail->from) $mail->from((string) config('mail.from.address'), \App\Support\Brand::senderName());
             Mail::to($to)->send($mail);
             $status = $kind === 'local' ? 'logged_only' : 'transport_accepted';
             $error = null;

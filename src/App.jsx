@@ -38,6 +38,7 @@ const PatientLoyaltyPage=lazy(()=>import('./pages/PatientLoyalty.jsx').then(m=>(
 const PatientMePage=lazy(()=>import('./pages/PatientMe.jsx').then(m=>({default:m.PatientMePage})))
 const AnalyticsPage=lazy(()=>import('./pages/Admin.jsx').then(m=>({default:m.AnalyticsPage})))
 const AutomationPage=lazy(()=>import('./pages/Admin.jsx').then(m=>({default:m.AutomationPage})))
+const ClinicBrandingPage=lazy(()=>import('./pages/ClinicBranding.jsx').then(m=>({default:m.ClinicBrandingPage})))
 const BranchesPage=lazy(()=>import('./pages/Admin.jsx').then(m=>({default:m.BranchesPage})))
 const EngagementPage=lazy(()=>import('./pages/Admin.jsx').then(m=>({default:m.EngagementPage})))
 const TeamPage=lazy(()=>import('./pages/Admin.jsx').then(m=>({default:m.TeamPage})))
@@ -295,6 +296,7 @@ function AppBody() {
     case 'users': content=<UsersPage store={store}/>; break
     case 'pricing': content=<ServicesPricingPage store={store}/>; break
     case 'automation': content=<AutomationPage store={store}/>; break
+    case 'branding': content=<ClinicBrandingPage/>; break
     case 'audit': content=<AuditTrailPage store={store}/>; break
     case 'engagement': content=<EngagementPage role={role} store={store}/>; break
     case 'loyalty': content=<PatientLoyaltyPage store={store}/>; break

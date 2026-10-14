@@ -7,6 +7,7 @@ import { formatAmount } from '../pricing-api.js'
 import { myBillingInvoices, getBillingInvoice } from '../api-client.js'
 import { ReviewAndPay } from './ReviewAndPay.jsx'
 import { paymentMethodLabel } from '../payment-method.js'
+import { clinic } from '../clinic-config.js'
 import { useVisibleRefresh } from '../use-visible-refresh.js'
 
 const NO_ACCOUNT=<Notice tone="warning" title="We couldn’t confirm your account">Reopen your workspace, or ask the clinic to check your account access.</Notice>
@@ -77,7 +78,7 @@ export function PatientBillingPage({ store, context }) {
       </div>}
       {inv.receipt&&<p className="pt-hint">Receipt available: {inv.receipt.number}</p>}
       {inv.receipt&&<Button size="sm" variant="soft" aria-expanded={openReceiptId===inv.id} aria-controls={`receipt-${inv.id}`} onClick={()=>setOpenReceiptId(openReceiptId===inv.id?null:inv.id)}>{openReceiptId===inv.id?'Hide Receipt':'View Receipt'}</Button>}
-      {inv.receipt&&openReceiptId===inv.id&&<div className="pt-receipt" id={`receipt-${inv.id}`}><h4>Payment receipt</h4><p className="pt-hint">Dr. Dana E. Roxas Dental Clinic</p><DefinitionList items={[
+      {inv.receipt&&openReceiptId===inv.id&&<div className="pt-receipt" id={`receipt-${inv.id}`}><h4>Payment receipt</h4><p className="pt-hint">{clinic.name}</p><DefinitionList items={[
         {label:'Branch',value:inv.branch},
         {label:'Patient',value:patient.name},
         {label:'Service',value:inv.items.map(item=>item.name).join(', ')},

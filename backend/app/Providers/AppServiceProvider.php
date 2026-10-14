@@ -12,6 +12,8 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->bind(\App\Services\Assistant\AssistantProvider::class, \App\Services\Assistant\AnthropicProvider::class);
+        // White-label settings: loaded once per request or queue job (reset between jobs), so changes apply without a restart.
+        $this->app->scoped(\App\Support\ClinicSettings::class);
     }
 
     /**

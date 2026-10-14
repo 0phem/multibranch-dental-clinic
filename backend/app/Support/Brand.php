@@ -19,7 +19,7 @@ final class Brand
     /** The configured email/PDF design ('fresh' = A, the default, or 'premium' = B); anything else falls back to 'fresh'. */
     public static function design(): string
     {
-        $design = strtolower(trim((string) config('clinic.brand.design')));
+        $design = strtolower(trim((string) (self::setting('design') ?? config('clinic.brand.design'))));
 
         return in_array($design, self::DESIGNS, true) ? $design : 'fresh';
     }
@@ -38,7 +38,7 @@ final class Brand
     {
         $colours = [];
         foreach (self::DEFAULT_COLOURS as $key => $default) {
-            $value = (string) config("clinic.brand.$key");
+            $value = (string) (self::setting($key) ?? config("clinic.brand.$key"));
             $colours[$key] = preg_match(self::HEX, $value) ? strtolower($value) : $default;
         }
 
@@ -66,9 +66,22 @@ final class Brand
         return rtrim((string) config('app.frontend_url'), '/').'/?invoice='.rawurlencode($invoicePublicId).'#sign-in';
     }
 
+    /** True when the Owner uploaded a logo (otherwise the supplied clinic logo is used everywhere). */
+    public static function hasCustomLogo(): bool
+    {
+        $uploaded = self::setting('logo');
+
+        return is_string($uploaded) && preg_match('/^logo-[0-9a-f]{16}\.png$/', $uploaded) && is_file(storage_path('app/brand/'.$uploaded));
+    }
+
     /** Absolute path of the logo PNG, or null when the configured file is missing (the header then shows the name only). */
     public static function logoPath(): ?string
     {
+        // An uploaded logo (Owner settings) is a file name inside storage/app/brand; otherwise the configured default.
+        $uploaded = self::setting('logo');
+        if (is_string($uploaded) && preg_match('/^logo-[0-9a-f]{16}\.png$/', $uploaded) && is_file($file = storage_path('app/brand/'.$uploaded))) {
+            return $file;
+        }
         $path = (string) config('clinic.brand.logo');
 
         return $path !== '' && is_file($path) && is_readable($path) ? $path : null;
@@ -169,9 +182,23 @@ final class Brand
         return array_filter(array_map(fn ($v) => is_string($v) ? trim($v) : $v, $fields), fn ($v) => is_string($v) && $v !== '');
     }
 
+    /** The name in the From line of every email: the Owner's sender name, else the clinic name. */
+    public static function senderName(): string
+    {
+        return self::text('sender_name') ?? self::name();
+    }
+
+    /** A white-label setting saved by the Owner, or null when it is not set (then the config/clinic.php default applies). */
+    private static function setting(string $key): mixed
+    {
+        $value = ClinicSettings::current()->get($key);
+
+        return is_string($value) && trim($value) === '' ? null : $value;
+    }
+
     private static function text(string $key): ?string
     {
-        $value = trim((string) config("clinic.brand.$key"));
+        $value = trim((string) (self::setting($key) ?? config("clinic.brand.$key")));
 
         return $value !== '' ? $value : null;
     }

@@ -320,6 +320,12 @@ export function createPayMongoCheckout(invoiceId, payload = {}) {
     body: JSON.stringify(payload),
   })
 }
+// White-label settings (Owner): clinic identity, contact, design, colours, logo and per-branch BIR fields.
+export function getBrandingSettings() { return request('/api/settings/branding') }
+export function updateBrandingSettings(payload) { return request('/api/settings/branding', { method: 'PUT', body: JSON.stringify(payload) }) }
+export function uploadBrandingLogo(file) { const form = new FormData(); form.append('logo', file); return request('/api/settings/branding/logo', { method: 'POST', body: form }) }
+export function resetBrandingLogo() { return request('/api/settings/branding/logo', { method: 'DELETE' }) }
+export function updateBranchBir(branchId, payload) { return request(`/api/settings/branches/${encodeURIComponent(branchId)}/bir`, { method: 'PUT', body: JSON.stringify(payload) }) }
 // M1 employee invitations (Owner) and public acceptance.
 export function listEmployeeInvitations() { return request('/api/employee-invitations') }
 export function createEmployeeInvitation(payload) { return request('/api/employee-invitations', { method: 'POST', body: JSON.stringify(payload) }) }
