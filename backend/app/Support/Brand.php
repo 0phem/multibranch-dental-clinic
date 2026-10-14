@@ -12,7 +12,17 @@ final class Brand
 {
     private const HEX = '/^#[0-9a-fA-F]{6}$/';
 
-    private const DEFAULT_COLOURS = ['primary' => '#1865ac', 'primary_dark' => '#124b80', 'accent' => '#0c9b8e'];
+    private const DEFAULT_COLOURS = ['primary' => '#1865ac', 'primary_dark' => '#124b80', 'accent' => '#0c9b8e', 'accent_dark' => '#0a7f74'];
+
+    public const DESIGNS = ['fresh', 'premium'];
+
+    /** The configured email/PDF design ('fresh' = A, the default, or 'premium' = B); anything else falls back to 'fresh'. */
+    public static function design(): string
+    {
+        $design = strtolower(trim((string) config('clinic.brand.design')));
+
+        return in_array($design, self::DESIGNS, true) ? $design : 'fresh';
+    }
 
     /** Plain words for the stored payment method ("PayMongo (CARD)" -> "Card"). Unknown values are shown as stored. */
     private const METHOD_WORDS = ['CARD' => 'Card', 'GCASH' => 'GCash', 'MAYA' => 'Maya', 'GRABPAY' => 'GrabPay', 'ONLINE BANKING' => 'Online banking',
@@ -44,6 +54,9 @@ final class Brand
             'branch_phone' => $branch?->phone,
             'bir' => self::bir($branch),
             'portal_url' => rtrim((string) config('app.frontend_url'), '/').'/#sign-in',
+            'design' => self::design(),
+            // "Dental Clinic · Branch A": the subtitle plus the branch, shown under the clinic name in the v2 header.
+            'tagline' => implode(' · ', array_filter([self::text('subtitle'), $branch?->name])),
         ];
     }
 
@@ -67,6 +80,53 @@ final class Brand
         $path = self::logoPath();
 
         return $path ? 'data:image/png;base64,'.base64_encode((string) file_get_contents($path)) : null;
+    }
+
+    /**
+     * Direction A's wave divider under the header, drawn from the brand colours (a PNG: email clients ignore SVG). Drawn once per
+     * colour pair at 4x and scaled down for smooth edges, then cached in storage/app/brand. Returns the file path, or null.
+     */
+    public static function wavePath(string $top = '#eaf5f2', string $bottom = '#ffffff'): ?string
+    {
+        if (! function_exists('imagecreatetruecolor') || ! preg_match(self::HEX, $top) || ! preg_match(self::HEX, $bottom)) return null;
+        $dir = storage_path('app/brand');
+        $path = $dir.'/wave-'.substr(md5(strtolower($top.$bottom).'v1'), 0, 12).'.png';
+        if (is_file($path)) return $path;
+        if (! is_dir($dir) && ! @mkdir($dir, 0775, true) && ! is_dir($dir)) return null;
+        [$w, $h, $k] = [1200, 64, 4];
+        $big = imagecreatetruecolor($w * $k, $h * $k);
+        $rgb = fn ($hex) => array_map('hexdec', str_split(ltrim($hex, '#'), 2));
+        imagefill($big, 0, 0, imagecolorallocate($big, ...$rgb($bottom)));
+        $fill = imagecolorallocate($big, ...$rgb($top));
+        $points = [0, 0];
+        for ($x = 0; $x <= $w * $k; $x += 8) {
+            $points[] = $x;
+            $points[] = (int) round(($h * $k) * (0.55 + 0.28 * sin($x / ($w * $k) * 2 * M_PI * 1.15 + 0.6)));
+        }
+        array_push($points, $w * $k, 0);
+        imagefilledpolygon($big, $points, $fill);
+        $small = imagecreatetruecolor($w, $h);
+        imagecopyresampled($small, $big, 0, 0, 0, 0, $w, $h, $w * $k, $h * $k);
+        $ok = imagepng($small, $path, 9);
+        imagedestroy($big);
+        imagedestroy($small);
+
+        return $ok ? $path : null;
+    }
+
+    /** An image file as a data: URI (PDFs and the /dev/mail preview). */
+    public static function dataUri(?string $path): ?string
+    {
+        return $path && is_file($path) ? 'data:image/png;base64,'.base64_encode((string) file_get_contents($path)) : null;
+    }
+
+    /** A long provider reference, shortened for email to its last 8 characters ("…P5PsDCpj"); the PDF shows it in full. */
+    public static function shortReference(?string $reference): ?string
+    {
+        $reference = trim((string) $reference);
+        if ($reference === '') return null;
+
+        return mb_strlen($reference) > 12 ? '…'.mb_substr($reference, -8) : $reference;
     }
 
     public static function paymentMethod(?string $stored): string

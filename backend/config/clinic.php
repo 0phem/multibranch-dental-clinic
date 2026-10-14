@@ -38,6 +38,11 @@ return [
         'primary' => env('CLINIC_BRAND_PRIMARY', '#1865ac'),
         'primary_dark' => env('CLINIC_BRAND_PRIMARY_DARK', '#124b80'),
         'accent' => env('CLINIC_BRAND_ACCENT', '#0c9b8e'),
+        // Email and PDF design: 'fresh' (A, the default: white and airy, mint and light-blue accents, centred logo, wave divider)
+        // or 'premium' (B: deep brand-blue header, teal accents, invoice-style layout). Either can be switched at any time.
+        'design' => env('CLINIC_EMAIL_DESIGN', 'fresh'),
+        // Accent used for buttons and "Paid" badges in the premium design; dark enough for white text (WCAG AA for large text).
+        'accent_dark' => env('CLINIC_BRAND_ACCENT_DARK', '#0a7f74'),
         'address' => env('CLINIC_ADDRESS', 'Bocaue, Bulacan'),
         'phone' => env('CLINIC_PHONE', '0922 878 7341'),
         'email' => env('CLINIC_EMAIL', env('CLINIC_SUPPORT_EMAIL', 'danaroxas.dentalclinic@gmail.com')),
