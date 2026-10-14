@@ -8,4 +8,5 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 export DB_DATABASE="${DEMO_DB:-dental_clinic_demo}"
+if [ "$DB_DATABASE" = "dental_clinic" ] && [ "${ALLOW_CLINIC_DATABASE:-}" != "yes" ]; then echo "Refusing: the pre-defense check runs on dental_clinic_demo, never the clinic database dental_clinic." >&2; exit 1; fi
 cd "$ROOT/backend" && exec php artisan demo:check ${NGROK_DOMAIN:+--tunnel="$NGROK_DOMAIN"} "$@"

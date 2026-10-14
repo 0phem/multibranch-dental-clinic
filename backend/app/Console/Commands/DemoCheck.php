@@ -29,6 +29,11 @@ class DemoCheck extends Command
 
     public function handle(): int
     {
+        if ($refusal = \App\Support\ClinicDatabaseGuard::refusal('demo:check')) {
+            $this->error($refusal);
+
+            return self::FAILURE;
+        }
         $this->line('Pre-defense check ('.now()->setTimezone('Asia/Manila')->format('M j, Y g:i A').', database '.config('database.connections.'.config('database.default').'.database').')');
         $this->line(str_repeat('-', 72));
 
@@ -39,6 +44,8 @@ class DemoCheck extends Command
         $tunnel = $this->tunnel();
         $this->webhook($webhooks, $tunnel);
         $this->demoData();
+        $this->placeholderBranches();
+        $this->assistant();
         $this->queue();
 
         $this->line(str_repeat('-', 72));
@@ -63,9 +70,7 @@ class DemoCheck extends Command
             ? $this->result('FAIL', 'APP_ENV is production', 'The demo runs with APP_ENV=local (test-mode payments, demo data).')
             : $this->result('PASS', 'APP_ENV is '.app()->environment());
         $db = (string) config('database.connections.'.config('database.default').'.database');
-        $db === 'dental_clinic'
-            ? $this->result('WARN', 'Checking the clinic database dental_clinic', 'The demo uses dental_clinic_demo: run scripts/predefense-check.sh (it selects the demo database).')
-            : $this->result('PASS', "Demo database: {$db}");
+        $this->result('PASS', "Demo database: {$db}"); // the clinic database is refused before any check runs
     }
 
     private function processes(): void
@@ -192,6 +197,34 @@ class DemoCheck extends Command
             .' and event checkout_session.payment.paid; if PayMongo shows a new secret, put it in PAYMONGO_WEBHOOK_SECRET in backend/.env and restart the API.');
     }
 
+    /**
+     * No placeholder branch name ("Branch A/B/C") may remain in the demo data or in what the system shows (screens, emails, PDFs,
+     * the assistant). Checks the database and the shipped source; RealBranchSeeder (which maps the placeholders) and tests are skipped.
+     */
+    private function placeholderBranches(): void
+    {
+        $found = [];
+        try {
+            foreach (DB::table('branches')->pluck('name') as $name) if (preg_match('/^Branch [ABC]$/', (string) $name)) $found[] = "branch \"$name\"";
+            if (DB::table('persons')->where(fn ($q) => $q->where('first_name', '~', 'Branch [ABC]\\M')->orWhere('last_name', '~', 'Branch [ABC]\\M'))->exists()) $found[] = 'a person named after a placeholder branch';
+        } catch (\Throwable) {
+            $found[] = 'the database could not be read';
+        }
+        $root = dirname(base_path());
+        foreach (['src', 'backend/app', 'backend/resources', 'backend/database', 'public'] as $dir) {
+            if (! is_dir("$root/$dir")) continue;
+            $files = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator("$root/$dir", \FilesystemIterator::SKIP_DOTS));
+            foreach ($files as $file) {
+                $path = $file->getPathname();
+                if (! preg_match('/\\.(php|js|jsx|mjs|html|json|css)$/', $path) || str_ends_with($path, 'RealBranchSeeder.php') || str_ends_with($path, 'DemoCheck.php')) continue;
+                if (preg_match('/\\bBranch [ABC]\\b/', (string) file_get_contents($path))) $found[] = substr($path, strlen($root) + 1);
+            }
+        }
+        $found
+            ? $this->result('FAIL', 'Placeholder branch names remain', implode(', ', array_slice($found, 0, 6)).'. Replace them with the real branch names (RealBranchSeeder::REAL).')
+            : $this->result('PASS', 'Real branch names everywhere (no "Branch A/B/C")');
+    }
+
     private function demoData(): void
     {
         try {
@@ -207,6 +240,27 @@ class DemoCheck extends Command
         $ready ? $this->result('PASS', "Unpaid invoice ready to pay: {$ready->invoice_number} (PHP {$ready->patient_responsibility_amount}) for ".($ready->patient?->user?->email ?? 'the demo patient'))
             : $this->result('FAIL', 'No unpaid invoice to pay', 'Issue one: scripts/payment-test.sh invoice <demo patient email>.');
         $settings ? $this->result('PASS', "Clinic branding settings stored ($settings)") : $this->result('WARN', 'No clinic settings stored (defaults are used)', 'Run: php artisan db:seed --class=ClinicSettingsSeeder.');
+    }
+
+    private function assistant(): void
+    {
+        $setting = (string) config('assistant.mode');
+        if (app(\App\Services\Assistant\AssistantService::class)->mode() === 'ai') {
+            $this->result('PASS', 'Assistant: AI mode (model '.config('assistant.model').'; key present, value not shown; ASSISTANT_MODE='.$setting.')');
+        } elseif ($setting === 'ai') {
+            $this->result('WARN', 'Assistant: knowledge mode, although ASSISTANT_MODE=ai', 'No ANTHROPIC_API_KEY is set, so it answers from the clinic\'s answers and records. Add the key, or set ASSISTANT_MODE=knowledge.');
+        } else {
+            $this->result('PASS', 'Assistant: knowledge mode (answers from the clinic\'s own answers and records; nothing leaves the server)');
+        }
+        try {
+            $active = \App\Models\AssistantAnswer::where('active', true)->count();
+            $drafts = \App\Models\AssistantAnswer::where('active', true)->where('draft', true)->count();
+            $active === 0 ? $this->result('WARN', 'Assistant answers: none active', 'Seed them: php artisan db:seed --class=AssistantAnswerSeeder (demo database).')
+                : ($drafts ? $this->result('WARN', "Assistant answers: {$active} active, {$drafts} draft(s) still to be confirmed by the clinic", 'Administration → Assistant answers.')
+                    : $this->result('PASS', "Assistant answers: {$active} active, all confirmed"));
+        } catch (\Throwable) {
+            $this->result('FAIL', 'Assistant answers table missing', 'Run the migrations on the demo database.');
+        }
     }
 
     private function queue(): void

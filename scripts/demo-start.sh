@@ -65,7 +65,10 @@ stop() {
 trap stop INT TERM EXIT
 
 echo "== Starting (Ctrl+C stops everything)"
-# PHP's built-in server, not `php artisan serve`, which does not pass DB_DATABASE to its child process.
+# PHP's built-in server, not `php artisan serve`, which does not pass DB_DATABASE to its child process. It runs several worker
+# processes (PHP_CLI_SERVER_WORKERS, default 4; API_WORKERS overrides), so a slow request such as a PDF or the booking calendar
+# does not hold up the others.
+export PHP_CLI_SERVER_WORKERS="${API_WORKERS:-4}"
 run api "$BACKEND/public" php -S "localhost:$API_PORT" ../vendor/laravel/framework/src/Illuminate/Foundation/resources/server.php
 run worker "$BACKEND" php artisan queue:work --queue=mail,default
 run scheduler "$BACKEND" php artisan schedule:work
