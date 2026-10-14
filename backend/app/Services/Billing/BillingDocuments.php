@@ -51,7 +51,7 @@ class BillingDocuments
 
         return [
             'invoice' => $invoice, 'receipt' => $receipt, 'branch' => $invoice->branch,
-            'patientName' => $this->patientName($invoice),
+            'patientName' => $this->patientName($invoice, $receipt),
             'amount' => Brand::money($receipt->amount),
             'paidAt' => Brand::dateTime($receipt->issued_at),
             'method' => Brand::paymentMethod($receipt->method),
@@ -164,8 +164,11 @@ class BillingDocuments
         $canvas->page_text($width - $margin - $rightWidth, $secondLine ? $y + 11 : $y, $right, $font, $size, $grey);
     }
 
-    private function patientName(Invoice $invoice): string
+    /** The name as it was when the invoice was issued (decision 2); documents from before that snapshot show the current name. */
+    private function patientName(Invoice $invoice, ?Receipt $receipt = null): string
     {
+        $snapshot = trim((string) ($receipt?->received_from_name ?: $invoice->billed_to_name));
+        if ($snapshot !== '') return $snapshot;
         $person = $invoice->patient?->person;
 
         return trim(($person?->first_name ?? '').' '.($person?->last_name ?? '')) ?: 'Patient';

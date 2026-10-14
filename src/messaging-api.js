@@ -55,7 +55,7 @@ export async function loadStartOptions() {
   const result = await api.conversationStartOptions()
   if (!result.ok) return normalizeFailure(result)
   const d = result.data || {}
-  return { ok: true, branches: (d.branches || []).map(b => ({ id: b.id, name: b.name })), defaultBranchId: d.default_branch_id ?? '', defaultReason: d.default_reason ?? null }
+  return { ok: true, branches: (d.branches || []).map(b => ({ id: b.id, name: b.name, address: b.address || '' })), defaultBranchId: d.default_branch_id ?? '', defaultReason: d.default_reason ?? null }
 }
 
 /** A Patient's first message to a branch front desk. Their open conversation at that branch is reused by the server. */

@@ -189,6 +189,7 @@ final class MessagingService
         // Sending a message means the sender has seen everything up to it.
         ConversationParticipant::where('conversation_id', $conversation->id)->where('user_id', $actor->id)->update(['last_read_message_id' => $message->id, 'last_read_at' => ClinicClock::now()]);
         $this->alertPatientIfOffline($conversation, $message, $actor);
+        if ($actor->role !== Role::Patient) app(\App\Services\Notifications\NotificationCenter::class)->messageReceived($conversation, $message->id);
         RealtimeEvents::afterCommit(new MessagePosted($conversation->public_id, $message->public_id, $actor->role->value, $conversation->branch->public_id, $this->personalChannels($conversation)));
 
         return $message;

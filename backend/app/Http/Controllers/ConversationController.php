@@ -35,17 +35,23 @@ class ConversationController extends Controller
         abort_unless($patient, 403);
         Presence::touch($request->user());
         $branches = Branch::where('status', 'Open')->orderBy('name')->get();
-        $latestVisit = DB::table('visits')->where('patient_id', $patient->id)->orderByDesc('arrived_at')->first(['branch_id', 'arrived_at']);
-        $latestAppointment = DB::table('appointments')->where('patient_id', $patient->id)->where('status', '<>', 'Cancelled')->orderByDesc('starts_at')->first(['branch_id', 'starts_at']);
-        $latest = collect([[$latestVisit?->branch_id, $latestVisit?->arrived_at], [$latestAppointment?->branch_id, $latestAppointment?->starts_at]])
-            ->filter(fn ($row) => $row[0] !== null)->sortByDesc(fn ($row) => \Carbon\CarbonImmutable::parse($row[1])->getTimestamp())->first();
-        $defaultId = $latest[0] ?? $patient->preferred_branch_id;
+        // Decision 6: no required branch step. The front desk is chosen in this order: the branch of the next upcoming
+        // appointment, else of the latest visit, else the Patient's preferred branch, else the first branch. The Patient can change it.
+        $upcoming = DB::table('appointments')->where('patient_id', $patient->id)->whereIn('status', ['Confirmed', 'Pending'])
+            ->where('starts_at', '>=', now()->toIso8601String())->orderBy('starts_at')->value('branch_id');
+        $latestVisit = DB::table('visits')->where('patient_id', $patient->id)->orderByDesc('arrived_at')->value('branch_id');
+        [$defaultId, $reason] = match (true) {
+            $upcoming !== null && $branches->contains('id', $upcoming) => [$upcoming, 'upcoming_appointment'],
+            $latestVisit !== null && $branches->contains('id', $latestVisit) => [$latestVisit, 'latest_visit'],
+            $patient->preferred_branch_id !== null && $branches->contains('id', $patient->preferred_branch_id) => [$patient->preferred_branch_id, 'preferred_branch'],
+            default => [$branches->sortBy('id')->first()?->id, 'first_branch'],
+        };
         $default = $branches->firstWhere('id', $defaultId);
 
         return response()->json(['data' => [
-            'branches' => $branches->map(fn (Branch $b) => ['id' => strtolower($b->public_id), 'name' => $b->name])->values(),
+            'branches' => $branches->map(fn (Branch $b) => ['id' => strtolower($b->public_id), 'name' => $b->name, 'address' => $b->address])->values(),
             'default_branch_id' => $default ? strtolower($default->public_id) : null,
-            'default_reason' => $default ? ($latest ? 'latest_visit_or_appointment' : 'preferred_branch') : null,
+            'default_reason' => $default ? $reason : null,
         ]]);
     }
 

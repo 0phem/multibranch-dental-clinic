@@ -22,7 +22,7 @@ function LiveStatus({ state }) {
   return <span className={`chat-live is-${state}`} role="status" aria-live="polite"><span className="chat-live-dot" aria-hidden="true"/>{label}</span>
 }
 
-export function ServerMessagesPage({ store, role }) {
+export function ServerMessagesPage({ store, role, initial = null }) {
   const { toast } = store
   const patient = role === 'patient'
   const staff = role === 'staff'
@@ -34,7 +34,8 @@ export function ServerMessagesPage({ store, role }) {
   const [threads, setThreads] = useState({})   // id -> {messages (oldest first), older, error, loadingOlder}
   const [pending, setPending] = useState({})   // id -> [{key, text, status: 'sending'|'failed', message}]
   const [live, setLive] = useState('idle')
-  const [composing, setComposing] = useState(false)
+  // initial: {compose: true, text} opens the new-message form pre-filled (e.g. "correct my name"); {conversationId} opens a thread.
+  const [composing, setComposing] = useState(!!initial?.compose)
   const drafts = useRef(createDrafts())
   const [, redraw] = useReducer(n => n + 1, 0)
   const threadsRef = useRef(threads)
@@ -51,7 +52,7 @@ export function ServerMessagesPage({ store, role }) {
     setError(''); setList(result.rows); setNextCursor(result.nextCursor)
     setChannels(previous => (previous.join() === result.channels.join() ? previous : result.channels))
   }
-  useEffect(() => { refreshList() }, [])
+  useEffect(() => { refreshList().then(() => { if (initial?.conversationId) openThread(initial.conversationId) }) }, [])
   useEffect(() => onRealtimeState(setLive), [])
   useEffect(() => { startRealtime() }, [])
 
@@ -180,7 +181,7 @@ export function ServerMessagesPage({ store, role }) {
       </section>
 
       <section className="chat-thread" aria-label={selected ? `Conversation: ${title(selected)}` : 'Conversation'}>
-        {composing && <NewConversation drafts={drafts.current} onCancel={() => setComposing(false)} onStarted={async id => { setComposing(false); await refreshList(); openThread(id) }}/>}
+        {composing && <NewConversation drafts={drafts.current} prefill={initial?.compose ? initial.text : ''} onCancel={() => setComposing(false)} onStarted={async id => { setComposing(false); await refreshList(); openThread(id) }}/>}
         {!composing && !selected && <div className="chat-placeholder"><Icon name="message" size={28}/><p>{list.length ? 'Choose a conversation to read it.' : patient ? 'Your conversations with the clinic will appear here.' : 'Nothing to answer right now.'}</p></div>}
         {!composing && selected && <>
           <header className="chat-thread-head">
@@ -216,9 +217,10 @@ export function ServerMessagesPage({ store, role }) {
   </div>
 }
 
-function NewConversation({ drafts, onCancel, onStarted }) {
+function NewConversation({ drafts, prefill = '', onCancel, onStarted }) {
   const [options, setOptions] = useState(null)
   const [branchId, setBranchId] = useState('')
+  const [changing, setChanging] = useState(false)
   const [error, setError] = useState('')
   const [sending, setSending] = useState(false)
   const [, redraw] = useReducer(n => n + 1, 0)
@@ -229,6 +231,8 @@ function NewConversation({ drafts, onCancel, onStarted }) {
     })
   }, [])
   const draftId = 'new-conversation'
+  useEffect(() => { if (prefill && !drafts.text(draftId).trim()) { drafts.setText(draftId, prefill); redraw() } }, [prefill])
+  const chosen = options?.branches.find(b => b.id === branchId)
   const submit = async event => {
     event.preventDefault()
     if (sending) return
@@ -244,9 +248,12 @@ function NewConversation({ drafts, onCancel, onStarted }) {
     <h2>New message</h2>
     {!options && !error && <Notice>Loading branches…</Notice>}
     {options && <>
-      <Field label="Branch" required hint={options.defaultReason === 'latest_visit_or_appointment' ? 'Suggested from your latest visit or appointment.' : options.defaultReason === 'preferred_branch' ? 'Your preferred branch.' : 'Choose the branch you want to contact.'}>
-        <select value={branchId} onChange={e => setBranchId(e.target.value)}><option value="">Choose a branch</option>{options.branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</select>
-      </Field>
+      {/* Decision 6: no required branch step. The front desk is suggested (next appointment, latest visit, preferred, first branch)
+          and shown as one line; the Patient may change it. */}
+      {chosen && !changing ? <p className="chat-to">To: <b>{chosen.name} front desk</b>{chosen.address ? <span> · {chosen.address}</span> : null} · <button type="button" className="link-button" onClick={() => setChanging(true)}>Change</button></p>
+        : <Field label="Send to" required hint="The front desk of the branch you choose will reply here.">
+          <select value={branchId} onChange={e => { setBranchId(e.target.value); if (e.target.value) setChanging(false) }}><option value="">Choose a branch</option>{options.branches.map(b => <option key={b.id} value={b.id}>{b.name} front desk</option>)}</select>
+        </Field>}
       <Field label="Message" required hint="The front desk of that branch will reply here. Please don’t include card numbers or passwords.">
         <textarea rows={4} maxLength={MAX_MESSAGE} value={drafts.text(draftId)} onChange={e => { drafts.setText(draftId, e.target.value); redraw() }}/>
       </Field>
