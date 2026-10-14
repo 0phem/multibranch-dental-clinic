@@ -1,0 +1,221 @@
+<?php
+
+namespace App\Console\Commands;
+
+use App\Models\Invoice;
+use App\Models\Patient;
+use App\Services\Mail\MailDispatcher;
+use Illuminate\Console\Command;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Mail;
+
+/**
+ * Pre-defense check: prints PASS / WARN / FAIL for everything the live demo needs, with what to do by hand when something fails.
+ * Read-only, except `--send=ADDRESS`, which sends one diagnostic email. Never prints a key, secret or password.
+ *
+ *   scripts/predefense-check.sh            (runs this against the demo database)
+ *   php artisan demo:check --tunnel=your-name.ngrok-free.dev --send=you@example.com
+ */
+class DemoCheck extends Command
+{
+    protected $signature = 'demo:check {--tunnel= : public tunnel host (default: NGROK_DOMAIN, or the running ngrok tunnel)} {--send= : also send one real diagnostic email to this address}';
+
+    protected $description = 'Pre-defense check of processes, email, PayMongo, tunnel, webhook, demo data and queue';
+
+    private int $fails = 0;
+
+    private int $warns = 0;
+
+    public function handle(): int
+    {
+        $this->line('Pre-defense check ('.now()->setTimezone('Asia/Manila')->format('M j, Y g:i A').', database '.config('database.connections.'.config('database.default').'.database').')');
+        $this->line(str_repeat('-', 72));
+
+        $this->environment();
+        $this->processes();
+        $this->smtp();
+        [$webhooks] = $this->payMongo();
+        $tunnel = $this->tunnel();
+        $this->webhook($webhooks, $tunnel);
+        $this->demoData();
+        $this->queue();
+
+        $this->line(str_repeat('-', 72));
+        $summary = $this->fails ? "{$this->fails} FAIL, {$this->warns} WARN" : ($this->warns ? "all required checks passed, {$this->warns} WARN" : 'everything passed');
+        $this->fails ? $this->error("Result: {$summary}") : $this->info("Result: {$summary}");
+
+        return $this->fails ? self::FAILURE : self::SUCCESS;
+    }
+
+    private function result(string $status, string $what, ?string $fix = null): void
+    {
+        $line = str_pad($status, 5).' '.$what;
+        match ($status) { 'PASS' => $this->info($line), 'WARN' => $this->warn($line), default => $this->error($line) };
+        if ($fix && $status !== 'PASS') $this->line('      → '.$fix);
+        if ($status === 'FAIL') $this->fails++;
+        if ($status === 'WARN') $this->warns++;
+    }
+
+    private function environment(): void
+    {
+        app()->isProduction()
+            ? $this->result('FAIL', 'APP_ENV is production', 'The demo runs with APP_ENV=local (test-mode payments, demo data).')
+            : $this->result('PASS', 'APP_ENV is '.app()->environment());
+        $db = (string) config('database.connections.'.config('database.default').'.database');
+        $db === 'dental_clinic'
+            ? $this->result('WARN', 'Checking the clinic database dental_clinic', 'The demo uses dental_clinic_demo: run scripts/predefense-check.sh (it selects the demo database).')
+            : $this->result('PASS', "Demo database: {$db}");
+    }
+
+    private function processes(): void
+    {
+        $ps = (string) @shell_exec('ps -axo command 2>/dev/null');
+        $running = fn (string $pattern) => (bool) preg_match($pattern, $ps);
+        $http = function (string $url): ?int {
+            try { return Http::timeout(4)->get($url)->status(); } catch (\Throwable) { return null; }
+        };
+        $api = rtrim((string) config('app.url'), '/');
+        ($code = $http("$api/up")) === 200 ? $this->result('PASS', "API answers at $api") : $this->result('FAIL', "API at $api/up answered ".($code ?? 'nothing'), 'Start it: scripts/demo-start.sh (or scripts/payment-test.sh api).');
+        $frontend = rtrim((string) config('app.frontend_url'), '/');
+        ($code = $http($frontend)) === 200 ? $this->result('PASS', "Frontend answers at $frontend") : $this->result('FAIL', "Frontend at $frontend answered ".($code ?? 'nothing'), 'Start it: scripts/demo-start.sh (or npm run dev).');
+        $running('/artisan queue:work/') ? $this->result('PASS', 'Queue worker running') : $this->result('FAIL', 'No queue worker', 'Emails are not sent without it: scripts/demo-start.sh (or scripts/payment-test.sh worker).');
+        $running('/artisan schedule:(work|run)/') ? $this->result('PASS', 'Scheduler running (retries and due emails)') : $this->result('WARN', 'No scheduler', 'Failed emails are not retried without it: scripts/demo-start.sh starts `php artisan schedule:work`.');
+        if (config('broadcasting.default') === 'reverb') {
+            $host = (string) config('reverb.servers.reverb.host', '127.0.0.1');
+            $port = (int) config('reverb.servers.reverb.port', 8080);
+            $socket = @fsockopen($host === '0.0.0.0' ? '127.0.0.1' : $host, $port, $errno, $errstr, 2);
+            $socket ? $this->result('PASS', "Reverb (live messages) listening on port $port") : $this->result('WARN', "Reverb not listening on port $port", 'Messages still work by polling; for live updates start scripts/demo-start.sh (php artisan reverb:start).');
+            if ($socket) fclose($socket);
+        }
+    }
+
+    private function smtp(): void
+    {
+        $mailer = (string) config('mail.default');
+        if (in_array($mailer, MailDispatcher::LOCAL_TRANSPORTS, true)) {
+            $this->result('FAIL', "Mail goes to '$mailer' only (not delivered)", 'Set MAIL_MAILER=smtp and the Gmail settings in backend/.env.');
+
+            return;
+        }
+        try {
+            $transport = Mail::mailer()->getSymfonyTransport();
+            if (method_exists($transport, 'start')) { $transport->start(); $transport->stop(); }
+            $this->result('PASS', "SMTP login accepted ($mailer, sender ".config('mail.from.address').')');
+        } catch (\Throwable $e) {
+            $this->result('FAIL', 'SMTP login failed ('.class_basename($e).')', 'Check MAIL_HOST, MAIL_USERNAME and the Gmail app password in backend/.env (never the normal password).');
+
+            return;
+        }
+        if ($to = $this->option('send')) {
+            $r = app(MailDispatcher::class)->send((string) $to, new \App\Mail\ClinicTestMail, 'smtp_test');
+            $r['status'] === 'transport_accepted' ? $this->result('PASS', "Diagnostic email accepted for $to") : $this->result('FAIL', "Diagnostic email to $to: {$r['status']}");
+        }
+    }
+
+    /** @return array{0: ?array} the PayMongo webhooks list (null when it could not be read) */
+    private function payMongo(): array
+    {
+        $secret = (string) config('services.paymongo.secret_key');
+        $mode = (string) config('services.paymongo.mode');
+        if ($secret === '' || ! config('services.paymongo.public_key') || ! config('services.paymongo.webhook_secret')) {
+            $this->result('FAIL', 'PayMongo keys or webhook secret missing', 'Paste the test keys and PAYMONGO_WEBHOOK_SECRET into backend/.env (docs/PAYMENT_LIVE_TEST.md).');
+
+            return [null];
+        }
+        $mode === 'test' && str_starts_with($secret, 'sk_test_') && str_starts_with((string) config('services.paymongo.public_key'), 'pk_test_')
+            ? $this->result('PASS', 'PayMongo in TEST mode with test keys')
+            : $this->result('FAIL', 'PayMongo is not in test mode with sk_test_/pk_test_ keys', 'For the demo use PAYMONGO_MODE=test and the test keys only.');
+        try {
+            $response = Http::withBasicAuth($secret, '')->acceptJson()->timeout(8)->get(rtrim((string) config('services.paymongo.base_url'), '/').'/v1/webhooks');
+        } catch (\Throwable) {
+            $this->result('FAIL', 'PayMongo could not be reached', 'Check the internet connection.');
+
+            return [null];
+        }
+        if (! $response->successful()) {
+            $this->result('FAIL', 'PayMongo refused the secret key (HTTP '.$response->status().')', 'Copy the test secret key again from dashboard.paymongo.com → Developers → API keys.');
+
+            return [null];
+        }
+        $this->result('PASS', 'PayMongo accepted the test secret key');
+
+        return [(array) $response->json('data', [])];
+    }
+
+    private function tunnel(): ?string
+    {
+        $host = (string) ($this->option('tunnel') ?: env('NGROK_DOMAIN', ''));
+        if ($host === '') {
+            try {
+                $tunnels = Http::timeout(2)->get('http://127.0.0.1:4040/api/tunnels')->json('tunnels', []);
+                $host = (string) (collect($tunnels)->pluck('public_url')->first(fn ($u) => str_starts_with((string) $u, 'https://')) ?? '');
+            } catch (\Throwable) {}
+        }
+        $host = preg_replace('#^https?://#', '', rtrim($host, '/'));
+        if (! $host) {
+            $this->result('FAIL', 'No tunnel found', 'Start it: NGROK_DOMAIN=your-name.ngrok-free.dev scripts/demo-start.sh (or scripts/payment-test.sh tunnel).');
+
+            return null;
+        }
+        try {
+            $up = Http::timeout(8)->get("https://$host/up")->status();
+            $hook = Http::timeout(8)->asJson()->post("https://$host/api/webhooks/paymongo", [])->status();
+        } catch (\Throwable) {
+            $up = $hook = null;
+        }
+        $up === 200 && $hook === 400
+            ? $this->result('PASS', "Tunnel https://$host reaches the API and the webhook refuses unsigned calls")
+            : $this->result('FAIL', "Tunnel https://$host: /up ".($up ?? 'no answer').", webhook ".($hook ?? 'no answer').' (expected 200 and 400)', 'Start the tunnel to port 8000; a 503 webhook answer means a PAYMONGO_* value is missing or maintenance mode is on.');
+
+        return $host;
+    }
+
+    private function webhook(?array $webhooks, ?string $tunnel): void
+    {
+        if ($webhooks === null || ! $tunnel) {
+            $this->result('WARN', 'Webhook registration not checked (needs PayMongo and the tunnel)');
+
+            return;
+        }
+        $expected = "https://$tunnel/api/webhooks/paymongo";
+        $paid = collect($webhooks)->filter(fn ($w) => in_array('checkout_session.payment.paid', (array) ($w['attributes']['events'] ?? []), true));
+        $match = $paid->first(fn ($w) => rtrim((string) ($w['attributes']['url'] ?? ''), '/') === $expected);
+        if ($match && ($match['attributes']['status'] ?? 'enabled') === 'enabled') {
+            $this->result('PASS', "PayMongo webhook registered for $expected");
+
+            return;
+        }
+        $registered = $paid->map(fn ($w) => ($w['attributes']['url'] ?? '?').' ('.($w['attributes']['status'] ?? '?').')')->implode(', ') ?: 'none';
+        $this->result('FAIL', "No enabled PayMongo webhook for $expected (registered: $registered)",
+            'By hand: dashboard.paymongo.com (Test mode) → Developers → Webhooks → edit the endpoint (or add one) with URL '.$expected
+            .' and event checkout_session.payment.paid; if PayMongo shows a new secret, put it in PAYMONGO_WEBHOOK_SECRET in backend/.env and restart the API.');
+    }
+
+    private function demoData(): void
+    {
+        try {
+            $patients = Patient::count();
+            $ready = Invoice::where('status', 'Issued')->whereRaw('patient_responsibility_amount > paid_amount')->with('patient.user')->orderByDesc('id')->first();
+            $settings = DB::table('clinic_settings')->count();
+        } catch (\Throwable) {
+            $this->result('FAIL', 'Demo database not ready (tables missing)', 'Run scripts/demo-start.sh once (it migrates and seeds the demo database).');
+
+            return;
+        }
+        $patients >= 5 ? $this->result('PASS', "Demo data: $patients patients") : $this->result('FAIL', "Only $patients patient(s)", 'Seed the demo: (cd backend && DB_DATABASE=dental_clinic_demo php artisan db:seed --class=DemoClinicSeeder).');
+        $ready ? $this->result('PASS', "Unpaid invoice ready to pay: {$ready->invoice_number} (PHP {$ready->patient_responsibility_amount}) for ".($ready->patient?->user?->email ?? 'the demo patient'))
+            : $this->result('FAIL', 'No unpaid invoice to pay', 'Issue one: scripts/payment-test.sh invoice <demo patient email>.');
+        $settings ? $this->result('PASS', "Clinic branding settings stored ($settings)") : $this->result('WARN', 'No clinic settings stored (defaults are used)', 'Run: php artisan db:seed --class=ClinicSettingsSeeder.');
+    }
+
+    private function queue(): void
+    {
+        $jobs = DB::table('jobs')->count();
+        $failed = DB::table('failed_jobs')->count();
+        $due = DB::table('mail_dispatches')->whereIn('status', ['pending', 'retry_scheduled'])->count();
+        $jobs === 0 ? $this->result('PASS', 'Queue empty') : $this->result('WARN', "$jobs job(s) waiting in the queue", 'They run as soon as the queue worker is up.');
+        $failed === 0 ? $this->result('PASS', 'No failed jobs') : $this->result('WARN', "$failed failed job(s)", 'Inspect with: php artisan queue:failed');
+        $due === 0 ? $this->result('PASS', 'No email waiting to be sent') : $this->result('WARN', "$due email(s) waiting to be sent", 'The scheduler sends them within a minute (php artisan schedule:work).');
+    }
+}
