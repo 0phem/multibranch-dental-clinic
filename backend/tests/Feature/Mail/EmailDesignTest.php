@@ -86,36 +86,74 @@ class EmailDesignTest extends TestCase
         }
     }
 
-    public function test_the_logo_is_embedded_in_the_message_as_a_cid_image_not_a_remote_or_data_url(): void
+    public function test_the_logo_is_embedded_in_the_message_as_a_cid_image_not_a_remote_or_data_url_in_both_designs(): void
     {
-        $email = $this->sent(new OneTimeCodeMail('602731', EmailVerificationOtp::REGISTRATION, 'Maria'));
-        $html = $email->getHtmlBody();
-        $this->assertMatchesRegularExpression('/<img src="cid:[^"]+" width="44" height="44" alt="[^"]+ logo"/', $html);
-        $this->assertStringNotContainsString('data:image', $html);
-        $this->assertStringNotContainsString('ngrok', $html);
-        $inline = collect($email->getAttachments())->filter(fn ($part) => $part->getMediaType().'/'.$part->getMediaSubtype() === 'image/png'
-            && $part->getPreparedHeaders()->getHeaderBody('Content-Disposition') === 'inline');
-        $this->assertCount(1, $inline);
-        $this->assertLessThan(40 * 1024, strlen($inline->first()->getBody()));
-        $this->assertNotNull($email->getTextBody());
+        // premium (B): logo only; fresh (A): logo plus the wave divider, both embedded PNGs.
+        foreach (['premium' => [60, 1], 'fresh' => [64, 2]] as $design => [$size, $images]) {
+            config(['clinic.brand.design' => $design]);
+            $email = $this->sent(new OneTimeCodeMail('602731', EmailVerificationOtp::REGISTRATION, 'Maria'));
+            $html = $email->getHtmlBody();
+            $this->assertMatchesRegularExpression('/<img src="cid:[^"]+" width="'.$size.'" height="'.$size.'" alt="[^"]+ logo"/', $html, $design);
+            $this->assertStringNotContainsString('data:image', $html, $design);
+            $this->assertStringNotContainsString('ngrok', $html, $design);
+            $this->assertDoesNotMatchRegularExpression('/<img src="https?:/', $html, $design.': no remote images');
+            $inline = collect($email->getAttachments())->filter(fn ($part) => $part->getMediaType().'/'.$part->getMediaSubtype() === 'image/png'
+                && $part->getPreparedHeaders()->getHeaderBody('Content-Disposition') === 'inline');
+            $this->assertCount($images, $inline, $design);
+            foreach ($inline as $part) $this->assertLessThan(40 * 1024, strlen($part->getBody()), $design);
+            $this->assertSame($images, preg_match_all('/<img src="cid:/', $html), $design.': every image is a CID image');
+            $this->assertNotNull($email->getTextBody());
+            $this->assertDoesNotMatchRegularExpression('/official/i', $html.$email->getTextBody().$email->getSubject(), $design);
+        }
     }
 
-    public function test_the_receipt_email_shows_plain_payment_words_and_attaches_its_branded_pdf(): void
+    public function test_the_receipt_email_shows_plain_payment_words_and_attaches_its_branded_pdf_in_both_designs(): void
     {
-        [$invoice, $receipt] = MailPreviewController::receiptSample();
-        $html = (new PaymentReceiptMail($invoice, $receipt))->render();
-        foreach (['Payment Receipt', 'Paid', '₱1,800.00', 'RCT-2026-000123', 'INV-2026-000123', 'Branch A', 'Card', 'pay_SAMPLE0000000000000000', 'Fully settled',
-            'View in your patient portal', 'A PDF copy of this Payment Receipt is attached', 'Oral Prophylaxis (Cleaning)', 'Subtotal'] as $expected) {
-            $this->assertStringContainsString($expected, $html);
-        }
-        $this->assertStringNotContainsString('PayMongo (CARD)', $html);
-        $this->assertStringNotContainsString('Business registration', $html, 'no BIR block when the branch has none');
+        foreach (['fresh', 'premium'] as $design) {
+            config(['clinic.brand.design' => $design]);
+            [$invoice, $receipt] = MailPreviewController::receiptSample();
+            $mail = new PaymentReceiptMail($invoice, $receipt);
+            $html = $mail->render();
+            foreach (['Payment Receipt', 'Paid', 'Amount paid', '₱1,800.00', 'RCT-2026-000123', 'INV-2026-000123', 'Branch A', 'Card', 'Fully settled',
+                'Oral Prophylaxis (Cleaning)', 'Composite Restoration (Filling)', '₱1,000.00', '₱800.00', 'Subtotal', 'Total',
+                'A PDF copy of this Payment Receipt is attached', 'Next steps', 'Book your next appointment', 'View your receipts'] as $expected) {
+                $this->assertStringContainsString($expected, $html, "$design: $expected");
+            }
+            $this->assertStringNotContainsString('PayMongo (CARD)', $html, $design.': the method in plain words only');
+            $this->assertStringContainsString('…00000000', $html, $design.': the reference is shortened in the email');
+            $this->assertStringNotContainsString('pay_SAMPLE0000000000000000', $html, $design.': the full reference is in the PDF, not the email');
+            $this->assertStringNotContainsString('Business registration', $html, 'no BIR block when the branch has none');
+            $this->assertStringContainsString('font-size:16px', $html, $design.': 16px body text');
+            $this->assertStringContainsString('font-size:44px', $html, $design.': the amount is the hero');
+            $this->assertDoesNotMatchRegularExpression('/official/i', $html.$this->text($mail).$mail->envelope()->subject, $design);
+            $this->assertStringContainsString('Reference: …00000000', $this->text($mail));
 
-        $email = $this->sent(new PaymentReceiptMail(...MailPreviewController::receiptSample()));
-        $pdf = collect($email->getAttachments())->first(fn ($part) => $part->getMediaSubtype() === 'pdf');
-        $this->assertNotNull($pdf);
-        $this->assertSame('Payment-Receipt-RCT-2026-000123.pdf', $pdf->getFilename());
-        $this->assertStringStartsWith('%PDF', $pdf->getBody());
+            $email = $this->sent(new PaymentReceiptMail(...MailPreviewController::receiptSample()));
+            $pdf = collect($email->getAttachments())->first(fn ($part) => $part->getMediaSubtype() === 'pdf');
+            $this->assertNotNull($pdf, $design);
+            $this->assertSame('Payment-Receipt-RCT-2026-000123.pdf', $pdf->getFilename());
+            $this->assertStringStartsWith('%PDF', $pdf->getBody());
+            $pdfHtml = view('pdf.payment-receipt', app(BillingDocuments::class)->receipt($receipt) + ['brand' => Brand::forEmail($invoice->branch), 'logo' => null, 'wave' => null])->render();
+            $this->assertStringContainsString('pay_SAMPLE0000000000000000', $pdfHtml, $design.': the PDF shows the full reference');
+        }
+    }
+
+    public function test_a_long_invoice_pdf_breaks_across_pages_without_splitting_rows_in_both_designs(): void
+    {
+        $invoice = MailPreviewController::longInvoiceSample();
+        $this->assertGreaterThanOrEqual(14, $invoice->lines->count());
+        foreach (['fresh', 'premium'] as $design) {
+            config(['clinic.brand.design' => $design]);
+            $bytes = app(BillingDocuments::class)->invoicePdf($invoice);
+            $this->assertStringStartsWith('%PDF', $bytes, $design);
+            $this->assertGreaterThan(1, preg_match_all('#/Type\s*/Page[^s]#', $bytes), $design.': more than one page');
+            $html = view('pdf.invoice', app(BillingDocuments::class)->invoice($invoice) + ['brand' => Brand::forEmail($invoice->branch), 'logo' => null, 'wave' => null])->render();
+            // Rows never split across a page break, and the column headings repeat on every page.
+            $this->assertStringContainsString('.items tr { page-break-inside: avoid; }', $html, $design);
+            $this->assertStringContainsString('.items thead { display: table-header-group; }', $html, $design);
+            $this->assertSame($invoice->lines->count(), substr_count($html, '<td class="qty">'), $design.': every procedure is listed');
+            $this->assertDoesNotMatchRegularExpression('/official/i', $html, $design);
+        }
     }
 
     public function test_bir_fields_appear_only_when_the_branch_has_them(): void
@@ -151,10 +189,17 @@ class EmailDesignTest extends TestCase
         $html = (new OneTimeCodeMail('602731', EmailVerificationOtp::REGISTRATION))->render();
         $this->assertStringContainsString('Sample Smiles Clinic', $html);
         $this->assertStringContainsString('#7a2e8c', $html);
-        $this->assertStringContainsString('#0c9b8e', $html, 'an invalid colour falls back to the default accent');
         $this->assertStringNotContainsString('not-a-colour', $html);
+        // The accent is used by design B's header rule: an invalid accent falls back to the default there.
+        config(['clinic.brand.design' => 'premium']);
+        $premium = (new OneTimeCodeMail('602731', EmailVerificationOtp::REGISTRATION))->render();
+        $this->assertStringContainsString('#0c9b8e', $premium, 'an invalid colour falls back to the default accent');
+        $this->assertStringNotContainsString('not-a-colour', $premium);
         config(['clinic.brand.logo' => '/nonexistent/logo.png']);
-        $this->assertStringNotContainsString('<img', (new OneTimeCodeMail('602731', EmailVerificationOtp::REGISTRATION))->render(), 'a missing logo shows the name only');
+        foreach (['premium', 'fresh'] as $design) {
+            config(['clinic.brand.design' => $design]);
+            $this->assertStringNotContainsString('logo"', (new OneTimeCodeMail('602731', EmailVerificationOtp::REGISTRATION))->render(), "$design: a missing logo shows the name only");
+        }
     }
 
     public function test_payment_methods_are_shown_in_plain_words(): void
@@ -195,5 +240,24 @@ class EmailDesignTest extends TestCase
         $this->assertStringContainsString('href="'.$link.'"', (new PaymentReceiptMail($invoice, $receipt))->render());
         $this->assertStringContainsString('href="'.$link.'"', (new InvoiceMail(MailPreviewController::invoiceSample()))->render());
         $this->assertStringContainsString('Review and pay: '.$link, $this->text(new InvoiceMail(MailPreviewController::invoiceSample())));
+    }
+
+    public function test_the_totals_never_sit_alone_on_a_page_whatever_the_number_of_procedures(): void
+    {
+        $documents = app(BillingDocuments::class);
+        foreach (['fresh', 'premium'] as $design) {
+            config(['clinic.brand.design' => $design]);
+            foreach (range(1, 30) as $n) {
+                $invoice = MailPreviewController::invoiceSample();
+                $lines = collect(range(1, $n))->map(fn ($i) => (new \App\Models\InvoiceLine)->forceFill(['line_no' => $i, 'quantity' => 1, 'unit_price' => '100.00', 'line_total' => '100.00',
+                    'service_name' => 'Procedure '.$i.($i % 5 === 0 ? ' with an extra long description that wraps onto a second line' : '')]));
+                $invoice->forceFill(['gross_amount' => $n * 100, 'patient_responsibility_amount' => $n * 100])->setRelation('lines', $lines);
+                $this->assertStringStartsWith('%PDF', $documents->invoicePdf($invoice));
+                $layout = $documents->lastLayout;
+                // The second-to-last procedure, the totals and the note end on the same page.
+                $this->assertSame($layout['pdf-tail'], $layout['pdf-totals'], "$design, $n procedures");
+                $this->assertSame($layout['pdf-tail'], $layout['pdf-end'], "$design, $n procedures");
+            }
+        }
     }
 }

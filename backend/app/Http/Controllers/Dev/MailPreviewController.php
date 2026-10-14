@@ -71,7 +71,8 @@ class MailPreviewController extends Controller
                 'bir_vat_status' => 'non_vat', 'bir_permit_numbers' => 'SAMPLE ONLY - not a real registration']);
         }
         $person = new Person(['first_name' => 'Maria', 'last_name' => 'Santos']);
-        $patient = (new Patient)->setRelation('person', $person);
+        $patient = (new Patient)->forceFill(['billing_address' => ['line1' => '37 MacArthur Highway', 'line2' => '', 'city' => 'Bocaue', 'state' => 'Bulacan', 'postal_code' => '3018', 'country' => 'PH']])
+            ->setRelation('person', $person)->setRelation('user', new User(['email' => 'maria.santos@example.test']));
         $paid = $status === 'Paid';
         $invoice = (new Invoice)->forceFill(['public_id' => '01SAMPLEINVOICE0000000000', 'invoice_number' => 'INV-2026-000123', 'status' => $status, 'gross_amount' => '1800.00',
             'hmo_coverage_amount' => '0.00', 'patient_responsibility_amount' => '1800.00', 'paid_amount' => $paid ? '1800.00' : '0.00',
@@ -109,6 +110,34 @@ class MailPreviewController extends Controller
         return $appointment;
     }
 
+    /** `?design=fresh|premium` previews a design without changing the setting. */
+    private function applyDesign(): void
+    {
+        if (in_array(request('design'), \App\Support\Brand::DESIGNS, true)) config(['clinic.brand.design' => request('design')]);
+    }
+
+    /** A long invoice (14 procedures, some with long names) for checking PDF page breaks. */
+    public static function longInvoiceSample(): Invoice
+    {
+        $invoice = self::invoiceSample();
+        $names = ['Comprehensive Oral Examination', 'Periapical Radiograph', 'Oral Prophylaxis (Cleaning)', 'Composite Restoration, Class II, Two Surfaces (Upper Left First Molar)',
+            'Composite Restoration, Class I (Lower Right Second Premolar)', 'Fluoride Varnish Application', 'Pit and Fissure Sealant (per tooth)', 'Simple Tooth Extraction',
+            'Surgical Extraction of Impacted Lower Third Molar, Including Bone Removal and Sectioning', 'Post-operative Consultation', 'Root Canal Treatment, Anterior Tooth',
+            'Temporary Filling', 'Desensitizing Treatment', 'Panoramic Radiograph'];
+        $lines = collect();
+        $total = 0;
+        foreach ($names as $i => $name) {
+            $unit = [500, 350, 1000, 1800, 1200, 600, 450, 800, 4500, 300, 6000, 400, 500, 900][$i];
+            $qty = in_array($i, [1, 6], true) ? 2 : 1;
+            $lines->push((new InvoiceLine)->forceFill(['line_no' => $i + 1, 'service_name' => $name, 'quantity' => $qty, 'unit_price' => number_format($unit, 2, '.', ''), 'line_total' => number_format($unit * $qty, 2, '.', '')]));
+            $total += $unit * $qty;
+        }
+        $amount = number_format($total, 2, '.', '');
+        $invoice->forceFill(['invoice_number' => 'INV-2026-000777', 'gross_amount' => $amount, 'patient_responsibility_amount' => $amount])->setRelation('lines', $lines);
+
+        return $invoice;
+    }
+
     public function index()
     {
         View::share('brandPreview', true);
@@ -116,7 +145,7 @@ class MailPreviewController extends Controller
             $mail = $make();
             $html = $mail->render();
 
-            return '<tr><td><a href="/dev/mail/'.$name.'">'.e($name).'</a></td><td><a href="/dev/mail/'.$name.'?theme=dark">dark</a></td><td>'.e($mail->envelope()->subject)
+            return '<tr><td><a href="/dev/mail/'.$name.'">'.e($name).'</a> &middot; <a href="/dev/mail/'.$name.'?design=fresh">A</a> &middot; <a href="/dev/mail/'.$name.'?design=premium">B</a></td><td><a href="/dev/mail/'.$name.'?theme=dark">dark</a></td><td>'.e($mail->envelope()->subject)
                 .'</td><td>'.number_format(strlen($html) / 1024, 1).' KB</td><td>'
                 .($this->text($mail) !== null ? '<a href="/dev/mail/'.$name.'?format=text">plain text</a>' : 'none').'</td></tr>';
         })->implode('');
@@ -124,13 +153,14 @@ class MailPreviewController extends Controller
         return response('<!doctype html><meta charset="utf-8"><title>Email previews</title><style>body{font-family:system-ui,Arial,sans-serif;padding:24px;color:#182b41}td,th{padding:6px 12px;text-align:left}a{color:#1865ac}</style>'
             .'<h1>Email previews (development only)</h1><p>Sample data only. Nothing is sent and no record is read. The logo is shown inline here; real emails embed it as an attachment (CID).</p>'
             .'<table border="1" cellspacing="0" style="border-collapse:collapse;"><tr><th>Template</th><th>Dark</th><th>Subject</th><th>HTML size</th><th>Text part</th></tr>'.$rows.'</table>'
-            .'<h2>PDF copies</h2><p><a href="/dev/mail/pdf/receipt">Payment Receipt PDF</a> &middot; <a href="/dev/mail/pdf/receipt-bir">with BIR fields</a> &middot; <a href="/dev/mail/pdf/invoice">Invoice PDF</a></p>');
+            .'<h2>PDF copies</h2><p><a href="/dev/mail/pdf/receipt">Payment Receipt PDF</a> &middot; <a href="/dev/mail/pdf/receipt-bir">with BIR fields</a> &middot; <a href="/dev/mail/pdf/invoice">Invoice PDF</a> &middot; <a href="/dev/mail/pdf/invoice-long">long invoice (14 items)</a>. Add ?design=fresh or ?design=premium to any link.</p>');
     }
 
     public function show(string $template)
     {
         $make = self::samples()[$template] ?? abort(404);
         View::share('brandPreview', true);
+        $this->applyDesign();
         $mail = $make();
         if (request('format') === 'text') {
             return response($this->text($mail) ?? abort(404), 200, ['Content-Type' => 'text/plain; charset=UTF-8']);
@@ -146,7 +176,9 @@ class MailPreviewController extends Controller
 
     public function pdf(string $document, BillingDocuments $documents)
     {
+        $this->applyDesign();
         $bytes = match ($document) {
+            'invoice-long' => $documents->invoicePdf(self::longInvoiceSample()),
             'receipt' => $documents->receiptPdf(self::receiptSample()[1]),
             'receipt-bir' => $documents->receiptPdf(self::receiptSample(withBir: true)[1]),
             'invoice' => $documents->invoicePdf(self::invoiceSample()),
