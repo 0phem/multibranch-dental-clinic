@@ -52,4 +52,19 @@ The first real checkout runs in **test mode** against a **separate demo database
    2. Go to Menu → Receipts & Payments, choose **Pay Online** on the demo invoice, and pay with test card `4343 4343 4343 4345` (any future expiry, any 3-digit CVC, no 3-D Secure).
    3. Compare each stage with what the code expects: session creation, webhook delivery, signature check, session read-back, settlement and receipt email.
 
-More unpaid invoices for repeat tests: `scripts/payment-test.sh invoice`. When finished, stop terminals 1–3 and restart the normal `php artisan serve` (back to `dental_clinic`).
+More unpaid invoices for repeat tests: `scripts/payment-test.sh invoice jaztinalcantara17+demo@gmail.com` (the demo Patient's current address; omit it if you never ran `patient-email`). When finished, stop terminals 1–3 and restart the normal `php artisan serve` (back to `dental_clinic`).
+
+## Results (test mode, `dental_clinic_demo`)
+
+| Date | Invoice | Method | Path | Outcome |
+| --- | --- | --- | --- | --- |
+| Oct 14, 2026 02:28 | INV-2026-000001 | Card 4343… | one combined line (before itemization) | Settled; receipt RCT-2026-000001 emailed |
+| Oct 14, 2026 13:27 | INV-2026-000003 | GCash (test) | **itemized** (2 lines), billing address sent from Review and Pay | Settled on PayMongo's retry; receipt RCT-2026-000002 emailed; `send_email_receipt` false |
+
+Observed provider behaviour:
+
+* `GET /v1/checkout_sessions/{id}` reads a session created with `POST /v2/checkout_sessions`.
+* The session `status` stays `active` after payment. `payment_method_used` was `null` in the card webhook body but filled on read-back. For GCash it was `gcash` in both. The payment's `source.type` was always present (`card`, `gcash`).
+* **Webhook retries are re-signed.** With the API in maintenance mode, the first delivery of `evt_ScCCpFrVyb3yYTba3Ftbr578` got 503. PayMongo retried 31 seconds later with a fresh `t` (`1791955641`, then `1791955672`), and the retry settled the invoice.
+
+**Decision (mismatch 3):** because retries carry a fresh timestamp, the webhook now refuses a signed delivery whose `t` is more than 5 minutes from the server clock (`PAYMONGO_WEBHOOK_TOLERANCE_SECONDS`, default 300). Event-id de-duplication and idempotent settlement stay in place. The server clock must be NTP-synchronised.
