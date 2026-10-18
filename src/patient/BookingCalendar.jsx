@@ -17,6 +17,7 @@ export function BookingCalendar({ branchId, serviceId, dentistId = null, appoint
   const [month, setMonth] = useState(value ? value.slice(0, 7) : null)
   const [state, setState] = useState({ status: 'loading', data: null, error: '' })
   const [attempt, setAttempt] = useState(0)
+  const [closedNote, setClosedNote] = useState(null) // F5: the reason of a closed day the patient tapped
   useEffect(() => {
     if (month && state.data?.month === month && state.status === 'ready') return undefined // the first load already returned this month
     let live = true
@@ -53,14 +54,16 @@ export function BookingCalendar({ branchId, serviceId, dentistId = null, appoint
         {cells.map((day, i) => day === null ? <span key={`b${i}`} className="pp-cal-blank" aria-hidden="true"/> : <button
           key={day.date} type="button" role="gridcell"
           className={`pp-cal-day is-${day.status} ${day.date === data.today ? 'is-today' : ''} ${value === day.date ? 'is-selected' : ''}`}
-          disabled={day.status !== 'available' && !(onFullDay && day.status === 'full')} aria-pressed={value === day.date}
-          aria-label={`${dateLong(day.date)}, ${LABEL[day.status]}${onFullDay && day.status === 'full' ? ', choose to join the waitlist' : ''}${day.date === data.today ? ', today' : ''}`}
-          onClick={() => (day.status === 'full' ? onFullDay(day.date) : onChange(day.date))}>
+          disabled={day.status !== 'available' && !(onFullDay && day.status === 'full') && !(day.status === 'closed' && day.reason)}
+          aria-disabled={day.status === 'closed' ? true : undefined} aria-pressed={value === day.date} title={day.status === 'closed' && day.reason ? `Closed: ${day.reason}` : undefined}
+          aria-label={`${dateLong(day.date)}, ${LABEL[day.status]}${day.status === 'closed' && day.reason ? `: ${day.reason}` : ''}${onFullDay && day.status === 'full' ? ', choose to join the waitlist' : ''}${day.date === data.today ? ', today' : ''}`}
+          onClick={() => (day.status === 'closed' ? setClosedNote(day) : day.status === 'full' ? onFullDay(day.date) : onChange(day.date))}>
           <span className="pp-cal-num">{Number(day.date.slice(8))}</span>
           {day.status === 'available' && <span className="pp-cal-dot" aria-hidden="true"/>}
         </button>)}
       </div>
       <div className="pp-cal-legend" aria-hidden="true"><span><i className="is-available"/>Available</span><span><i className="is-full"/>Fully booked</span><span><i className="is-closed"/>Closed</span><span><i className="is-today"/>Today</span></div>
+      {closedNote && <p className="pp-hint pp-closed-note" role="status">{dateLong(closedNote.date)}: closed — {closedNote.reason}</p>}
       {!anyAvailable && <p className="pp-hint">No open days in this month{data.next_month ? ' — try the next month.' : '.'}</p>}
     </>}
   </div>

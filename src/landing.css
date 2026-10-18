@@ -217,3 +217,8 @@
 .lp-map .site-location-map { min-height: 0; }
 .lp-map .site-map-canvas { height: 300px; }
 @media (max-width: 759px) { .lp-chips { flex-wrap: nowrap; overflow-x: auto; margin-right: -16px; padding-right: 16px; scrollbar-width: none; } .lp-chip { flex: none; } }
+
+/* F5 upcoming closures on the landing page */
+.lp-closures { margin-top:20px; border-left:4px solid #b26a00; }
+.lp-closures h3 { display:flex; align-items:center; gap:8px; margin:0 0 8px; }
+.lp-closures ul { margin:0; padding-left:18px; display:grid; gap:4px; }

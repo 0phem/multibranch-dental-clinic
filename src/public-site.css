@@ -409,3 +409,12 @@ html:has(.public-site), html:has(.public-auth) { scroll-behavior:smooth; scroll-
 .site-map-canvas .leaflet-tile-pane { filter:saturate(.65); }
 .public-auth .auth-form .field input[aria-invalid=true],
 .public-auth .auth-phone-field.has-error .phone-field { border-color:var(--red); }
+
+/* F1–F3 one-time email links (#respond/<token>) */
+.public-auth .respond-facts { display:grid; gap:0; margin:4px 0 18px; border:1px solid #e1eaf1; border-radius:14px; overflow:hidden; }
+.public-auth .respond-facts > div { display:flex; justify-content:space-between; gap:12px; padding:12px 14px; border-top:1px solid #e1eaf1; }
+.public-auth .respond-facts > div:first-child { border-top:0; }
+.public-auth .respond-facts dt { color:#5b6b7f; font-weight:600; }
+.public-auth .respond-facts dd { margin:0; text-align:right; font-weight:750; color:#14283d; overflow-wrap:anywhere; }
+.public-auth .respond-facts dd small { display:block; font-weight:500; color:#5b6b7f; }
+.public-auth .respond-alt { display:block; text-align:center; margin-top:14px; min-height:44px; line-height:44px; }

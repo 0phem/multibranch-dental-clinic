@@ -20,6 +20,7 @@ export function mapQueueEntry(row, patientIdFor = id => id) {
     status: row.status,
     priority: row.priority,
     priorityReason: row.priority_reason || '',
+    lateArrival: !!row.late_arrival,
     queueNumber: row.queue_number,
     position: row.position ?? null,
     revision: row.revision,
@@ -74,6 +75,11 @@ const commandResult = result => (result.ok ? { ok: true, row: result.data } : qu
 /** Named transitions: 'call' | 'ready' | 'away' | 'return'. */
 export async function transitionQueue(entry, name, key) {
   return commandResult(await api.queueCommand(entry.id, name, { expected_revision: entry.revision }, key))
+}
+
+/** F2: restore a late arrival's normal place in the queue (Staff override of R2-07), reason required. */
+export async function restoreQueueOrder(entry, reason, key) {
+  return commandResult(await api.queueCommand(entry.id, 'late-order', { expected_revision: entry.revision, reason }, key))
 }
 
 /** Operational priority (Normal / Priority / Urgent) with a required reason — not clinical triage. */

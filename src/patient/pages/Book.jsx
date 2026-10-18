@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Button, Icon } from '../../components.jsx'
-import { bookingBranchOptions, bookingDentistOptions, cancelWaitlist, joinWaitlist, listServices } from '../../api-client.js'
+import { bookingBranchOptions, bookingDentistOptions, cancelWaitlist, joinWaitlist, listServices, publicFaq } from '../../api-client.js'
 import { commandKey, createAppointment } from '../../appointments-api.js'
 import { clinic } from '../../clinic-config.js'
 import { BookingCalendar, TimeSlots } from '../BookingCalendar.jsx'
@@ -16,7 +16,7 @@ const STEPS = ['Service', 'Branch', 'Dentist', 'Date', 'Time', 'Review']
 export function BookPage({ prefill = null, onDone, onNavigate, toast }) {
   const [fullDay, setFullDay] = useState(null) // a fully booked day the patient may wait for (A5)
   const [step, setStep] = useState(0)
-  const [choice, setChoice] = useState({ service: null, branch: null, dentist: null, date: '', slot: null })
+  const [choice, setChoice] = useState({ service: null, branch: null, dentist: null, date: '', slot: null, wanted: null })
   useEffect(() => { setFullDay(null) }, [step, choice.branch?.id, choice.service?.id, choice.dentist?.id])
   const [done, setDone] = useState(null)
   const services = useLoad(() => listServices(), [])
@@ -46,7 +46,8 @@ export function BookPage({ prefill = null, onDone, onNavigate, toast }) {
 
     <section className="pp-card pp-step pp-slide" key={step} aria-labelledby="pp-step-title">
       <h2 id="pp-step-title" tabIndex={-1} ref={headRef}>{['Choose a service', 'Choose a branch', 'Choose a dentist', 'Choose a day', 'Choose a time', 'Review and confirm'][step]}</h2>
-      {step === 0 && <ServiceStep services={services} value={choice.service} onPick={s => { set({ service: s, branch: choice.service?.id === s.id ? choice.branch : null, dentist: null, date: '', slot: null }); go(1) }}/>}
+      {step === 0 && <ServiceStep services={services} value={choice.service} onPick={(s, wanted = null) => { set({ service: s, wanted, branch: choice.service?.id === s.id ? choice.branch : null, dentist: null, date: '', slot: null }); go(1) }}/>}
+      {step > 0 && choice.wanted && <p className="pp-note"><Icon name="alert" size={18}/> {choice.wanted.name} starts with a consultation, so you are booking {choice.service.name}. Your dentist plans the next steps with you.</p>}
       {step === 1 && <BranchStep service={choice.service} value={choice.branch} preferred={prefill?.branch} onPick={b => { set({ branch: b, dentist: choice.branch?.id === b.id ? choice.dentist : null, date: '', slot: null }); go(2) }}/>}
       {step === 2 && <DentistStep service={choice.service} branch={choice.branch} value={choice.dentist} onPick={d => { set({ dentist: d, date: '', slot: null }); go(3) }}/>}
       {step === 3 && <>
@@ -68,7 +69,11 @@ export function BookPage({ prefill = null, onDone, onNavigate, toast }) {
 
 function ServiceStep({ services, value, onPick }) {
   const [q, setQ] = useState('')
-  const active = (services.data || []).filter(s => s.status === 'Active')
+  const all = services.data || []
+  // F7 (R2-17): hidden services are not offered online; a consultation-first one books its consultation instead.
+  const active = all.filter(s => s.status === 'Active' && s.online_booking !== 'hidden')
+  const consultationFor = s => (s.online_booking === 'consultation_first' ? all.find(x => x.id === s.consultation_service_id && x.status === 'Active') : null)
+  const pick = s => { const c = consultationFor(s); return c ? onPick(c, s) : onPick(s) }
   const filtered = active.filter(s => `${s.name} ${s.category} ${s.description || ''}`.toLowerCase().includes(q.trim().toLowerCase()))
   const groups = useMemo(() => [...new Set(filtered.map(s => s.category || 'Other'))].map(c => [c, filtered.filter(s => (s.category || 'Other') === c)]), [filtered])
   if (services.status === 'loading') return <Skeleton lines={4} card={false} label="Loading services"/>
@@ -80,9 +85,10 @@ function ServiceStep({ services, value, onPick }) {
     {groups.map(([category, list]) => <div key={category} className="pp-group">
       <h3 className="pp-group-title">{category}</h3>
       <div className="pp-options">
-        {list.map(s => <button key={s.id} type="button" className={`pp-option ${value?.id === s.id ? 'is-selected' : ''}`} aria-pressed={value?.id === s.id} onClick={() => onPick(s)}>
+        {list.map(s => <button key={s.id} type="button" className={`pp-option ${value?.id === s.id ? 'is-selected' : ''}`} aria-pressed={value?.id === s.id} onClick={() => pick(s)}>
           <span className="pp-option-icon" aria-hidden="true"><Icon name="tooth" size={20}/></span>
-          <span className="pp-option-body"><b>{s.name}</b>{s.description && <small>{s.description}</small>}<em><Icon name="clock" size={14}/> About {s.duration_minutes} minutes</em></span>
+          <span className="pp-option-body"><b>{s.name}</b>{s.description && <small>{s.description}</small>}
+            {consultationFor(s) ? <em className="pp-consult"><Icon name="alert" size={14}/> Starts with a consultation: you book {consultationFor(s).name}</em> : <em><Icon name="clock" size={14}/> About {s.duration_minutes} minutes</em>}</span>
           {value?.id === s.id && <Icon name="check" size={18} className="pp-option-check"/>}
         </button>)}
       </div>
@@ -164,6 +170,8 @@ function DentistStep({ service, branch, value, onPick }) {
 }
 
 function Review({ choice, onEdit, onBooked }) {
+  const [policy, setPolicy] = useState(null)
+  useEffect(() => { publicFaq().then(r => { if (r.ok) setPolicy(r.meta?.cancellation_policy || null) }) }, [])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const key = useRef(commandKey())
@@ -180,6 +188,7 @@ function Review({ choice, onEdit, onBooked }) {
   return <>
     <dl className="pp-summary">{rows.map(([k, v, s]) => <div key={k}><dt>{k}</dt><dd>{v}</dd><button type="button" className="link-button" onClick={() => onEdit(s)} aria-label={`Change ${k.toLowerCase()}`}>Change</button></div>)}</dl>
     <p className="pp-note"><Icon name="wallet" size={18}/> You’ll receive your invoice after your visit and can pay online in Billing.</p>
+    {policy && <p className="pp-note pp-policy"><Icon name="calendar" size={18}/> {policy}</p>}
     {error && <p className="pp-error-text" role="alert">{error}</p>}
     <Button width="full" className="pp-primary" disabled={busy} onClick={confirm}>{busy ? 'Booking…' : 'Confirm appointment'}</Button>
   </>

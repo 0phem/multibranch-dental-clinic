@@ -11,6 +11,7 @@ import { ChunkBoundary, StartupLoading } from './StartupLoading.jsx'
 import { AuthShell } from './pages/AuthShell.jsx'
 import { AcceptInvitation } from './pages/AcceptInvitation.jsx'
 import { PasswordReset } from './pages/PasswordReset.jsx'
+import { RespondLink } from './pages/RespondLink.jsx'
 import { stopRealtime } from './realtime.js'
 import { bootstrapSession } from './session-bootstrap.js'
 import { clearInvoiceLinkFromUrl, readInvoiceLink, rememberInvoiceLink, takeInvoiceLink } from './invoice-link.js'
@@ -41,6 +42,9 @@ const PatientLoyaltyPage=lazy(()=>import('./pages/PatientLoyalty.jsx').then(m=>(
 const PatientMePage=lazy(()=>import('./pages/PatientMe.jsx').then(m=>({default:m.PatientMePage})))
 const AnalyticsPage=lazy(()=>import('./pages/Admin.jsx').then(m=>({default:m.AnalyticsPage})))
 const AutomationPage=lazy(()=>import('./pages/Admin.jsx').then(m=>({default:m.AutomationPage})))
+const ClosedDatesPage=lazy(()=>import('./pages/ClosedDates.jsx').then(m=>({default:m.ClosedDatesPage})))
+const AcceptedHmosPage=lazy(()=>import('./pages/AcceptedHmos.jsx').then(m=>({default:m.AcceptedHmosPage})))
+const WordingApprovalsPage=lazy(()=>import('./pages/WordingApprovals.jsx').then(m=>({default:m.WordingApprovalsPage})))
 const AutomationsPage=lazy(()=>import('./pages/Automations.jsx').then(m=>({default:m.AutomationsPage})))
 const AssistantAnswersPage=lazy(()=>import('./pages/AssistantAnswers.jsx').then(m=>({default:m.AssistantAnswersPage})))
 const ClinicBrandingPage=lazy(()=>import('./pages/ClinicBranding.jsx').then(m=>({default:m.ClinicBrandingPage})))
@@ -263,6 +267,8 @@ function AppBody() {
 
   const setPage=(next,record=null)=>{if(role&&canAccessPage(store.state,store.session,next)){setContext(record);setPageState(next)}}
 
+  // F1–F3 one-time email links work without signing in (and whether or not someone is signed in on this browser).
+  if(publicView==='respond')return <RespondLink hash={typeof window==='undefined'?'':window.location.hash}/>
   if(authPhase==='checking')return <AuthChecking/>
   if(authPhase==='error'&&publicView!=='home')return <AuthUnavailable onRetry={checkSession}/>
 
@@ -327,6 +333,9 @@ function AppBody() {
     case 'users': content=<UsersPage store={store}/>; break
     case 'pricing': content=<ServicesPricingPage store={store}/>; break
     case 'automations': content=<AutomationsPage store={store}/>; break
+    case 'closures': content=<ClosedDatesPage store={store} role={role}/>; break
+    case 'hmos': content=<AcceptedHmosPage store={store}/>; break
+    case 'wording': content=<WordingApprovalsPage store={store}/>; break
     case 'automation': content=<AutomationPage store={store}/>; break
     case 'branding': content=<ClinicBrandingPage/>; break
     case 'assistant': content=<AssistantAnswersPage store={store}/>; break

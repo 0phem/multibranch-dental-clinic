@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { Button, Card, Field, Modal, Notice, PageHeader, Status, Table } from '../components.jsx'
 import { clinicNow } from '../clock.js'
 import { commandKey } from '../appointments-api.js'
+import { listServices, setServiceOnlineBooking } from '../api-client.js'
 import { createPriceVersion, formatAmount, inEffect, loadPriceVersions, retractPriceVersion, validAmount, versionStatus } from '../pricing-api.js'
 
 // M13 pricing foundation — Owner "Services & Pricing". Confirmed prices are Owner-entered, effective-dated, append-only
@@ -83,6 +84,8 @@ export function ServicesPricingPage({ store }) {
       ]}/>
     </Card>}
 
+    <OnlineBookingModes toast={toast}/>
+
     <Modal open={!!selected} onClose={() => setSelectedId(null)} title={selected ? `${selected.name} — prices` : ''} subtitle="Versions are never edited. A scheduled (future) version can be retracted before it starts." wide>{selected && <>
       <h3>Price history</h3>
       {history.length ? <Table rows={history} columns={[
@@ -116,4 +119,35 @@ export function ServicesPricingPage({ store }) {
       <div className="form-actions"><Button variant="ghost" disabled={busy} onClick={() => setRetracting(null)}>Keep it</Button><Button disabled={busy} onClick={retract}>Retract</Button></div>
     </>}</Modal>
   </>
+}
+
+/**
+ * F7 (R2-17): how each service is offered in online booking. "Consultation first" (for example Braces) shows "Starts with a
+ * consultation" and books the chosen consultation instead; "Not shown online" leaves it to the front desk. Audited.
+ */
+function OnlineBookingModes({ toast }) {
+  const [services, setServices] = useState(null), [busy, setBusy] = useState('')
+  const load = () => listServices().then(r => { if (r.ok) setServices(r.data || []) })
+  useEffect(() => { load() }, [])
+  if (!services) return null
+  const bookable = services.filter(s => s.status === 'Active' && s.online_booking === 'bookable')
+  const change = async (service, mode, consultation) => {
+    if (mode === 'consultation_first' && !consultation) consultation = bookable.find(s => s.id !== service.id && /consult/i.test(s.name))?.id || bookable.find(s => s.id !== service.id)?.id
+    setBusy(service.id)
+    const r = await setServiceOnlineBooking(service.id, { online_booking: mode, consultation_ref: mode === 'consultation_first' ? consultation : null })
+    setBusy('')
+    if (!r.ok) return toast((r.kind === 'validation' ? Object.values(r.errors || {})[0]?.[0] : r.message) || 'Not saved.', 'warning')
+    toast(`${service.name}: saved.`, 'success'); load()
+  }
+  return <Card title="Online booking" subtitle="Interview R2-17: braces and other sensitive services start with a consultation, and the patient pays for that consultation.">
+    <Table rows={services.filter(s => s.status === 'Active')} columns={[
+      { key: 'name', label: 'Service', render: s => <b>{s.name}</b> },
+      { key: 'mode', label: 'In online booking', render: s => <select aria-label={`Online booking for ${s.name}`} value={s.online_booking} disabled={busy === s.id} onChange={e => change(s, e.target.value)}>
+        <option value="bookable">Patients book it directly</option><option value="consultation_first">Starts with a consultation</option><option value="hidden">Not shown online</option>
+      </select> },
+      { key: 'consult', label: 'Consultation booked instead', render: s => s.online_booking === 'consultation_first'
+        ? <select aria-label={`Consultation for ${s.name}`} value={s.consultation_service_id || ''} disabled={busy === s.id} onChange={e => change(s, 'consultation_first', e.target.value)}>
+          {bookable.filter(c => c.id !== s.id).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select> : <small className="block-muted">—</small> },
+    ]}/>
+  </Card>
 }

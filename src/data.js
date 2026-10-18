@@ -47,16 +47,16 @@ export const NAV = {
     ['hmo','HMO Coverage'], ['messages','Messages'], ['billing','Receipts & Payments'], ['prescriptions','Prescriptions'], ['followups','Follow-Up Care'], ['loyalty','Referral & Loyalty'], ['feedback','Share Feedback'], ['me','Me']
   ],
   staff: [
-    ['dashboard','Operations'], ['appointments','Appointments'], ['calendar','Appointment Calendar'], ['checkin','Check-In'], ['queue','Live Queue'], ['capacity','Capacity'],
+    ['dashboard','Operations'], ['appointments','Appointments'], ['calendar','Appointment Calendar'], ['checkin','Check-In'], ['queue','Live Queue'], ['capacity','Capacity'], ['closures','Closed Dates'],
     ['patients','Patient Records'], ['billing','Billing & Payments'], ['hmo','HMO Management'], ['inquiries','Social Inquiries'], ['messages','Messages'], ['followups','Follow-Up Tasks'], ['engagement','Engagement']
   ],
   dentist: [
     ['dashboard','Clinical Home'], ['schedule','My Schedule'], ['queue','My Queue'], ['patients','Patient Records'], ['treatment','Treatment'],
-    ['prescriptions','Prescriptions'], ['followups','Follow-Up Care'], ['messages','Messages']
+    ['prescriptions','Prescriptions'], ['followups','Follow-Up Care'], ['messages','Messages'], ['wording','Wording to Approve']
   ],
   owner: [
-    ['dashboard','Executive Dashboard'], ['analytics','Analytics & Reports'], ['branches','Branches'], ['team','People & Team'], ['capacity','Capacity & Workload'],
-    ['hmo','HMO Management'], ['users','User Management'], ['pricing','Services & Pricing'], ['automations','Automations'], ['automation','Automation Monitor'], ['audit','Audit Trail'], ['branding','Clinic Branding'], ['assistant','Assistant Answers'], ['engagement','Engagement']
+    ['dashboard','Executive Dashboard'], ['analytics','Analytics & Reports'], ['branches','Branches'], ['team','People & Team'], ['calendar','Appointment Calendar'], ['capacity','Capacity & Workload'],
+    ['hmo','HMO Management'], ['users','User Management'], ['pricing','Services & Pricing'], ['automations','Automations'], ['closures','Closed Dates'], ['hmos','Accepted HMOs'], ['automation','Automation Monitor'], ['audit','Audit Trail'], ['branding','Clinic Branding'], ['assistant','Assistant Answers'], ['engagement','Engagement']
   ],
 }
 

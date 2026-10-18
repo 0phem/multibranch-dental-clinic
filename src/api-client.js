@@ -474,3 +474,45 @@ export function dismissNoShowFlag(id) { return request(`/api/no-show-flags/${enc
 export function myWaitlist() { return request('/api/waitlist/mine') }
 export function joinWaitlist(body) { return request('/api/waitlist', { method: 'POST', body: JSON.stringify(body) }) }
 export function cancelWaitlist(id) { return request(`/api/waitlist/${encodeURIComponent(id)}/cancel`, { method: 'POST' }) }
+const json = (path, method, body) => request(path, { method, ...(body === undefined ? {} : { body: JSON.stringify(body) }) })
+const enc = encodeURIComponent
+// Interview round 2. F1 message wording (Owner edits, previews, tests and approves; a Dentist approves recall wording).
+export function listMessageTemplates() { return request('/api/message-templates') }
+export function updateMessageTemplate(key, body) { return json(`/api/message-templates/${enc(key)}`, 'PUT', body) }
+export function approveMessageTemplate(key, revision) { return json(`/api/message-templates/${enc(key)}/approve`, 'POST', { expected_revision: revision }) }
+export function dentistApproveMessageTemplate(key, revision) { return json(`/api/message-templates/${enc(key)}/dentist-approve`, 'POST', { expected_revision: revision }) }
+export function previewMessageTemplate(key, draft) { return json(`/api/message-templates/${enc(key)}/preview`, 'POST', draft || {}) }
+export function testMessageTemplate(key) { return json(`/api/message-templates/${enc(key)}/test`, 'POST') }
+// F1–F3 one-time email links (no sign-in): describe, then perform (cancel and move-up need confirm: true).
+export function describeResponseLink(token) { return request(`/api/public/respond?token=${enc(token)}`) }
+export function performResponseLink(token, confirm = false) { return json('/api/public/respond', 'POST', { token, confirm }) }
+// F2–F4 front desk.
+export function frontDeskToday() { return request('/api/front-desk/today') }
+export function undoNoShow(appointmentId, revision) { return json(`/api/front-desk/appointments/${enc(appointmentId)}/undo-no-show`, 'POST', { expected_revision: revision }) }
+export function useFreeTimeForWalkIn(openingId) { return json(`/api/slot-openings/${enc(openingId)}/walk-in`, 'POST') }
+export function confirmAppointment(appointmentId, revision) { return json(`/api/appointments/${enc(appointmentId)}/confirm`, 'POST', { expected_revision: revision }) }
+export function clearAttendanceFlag(patientId, reason) { return json(`/api/patients/${enc(patientId)}/attendance/clear`, 'POST', { reason }) }
+// F2–F3 patient answers in the app.
+export function sayOnMyWay(appointmentId) { return json(`/api/appointments/${enc(appointmentId)}/on-my-way`, 'POST') }
+export function mySlotOffers() { return request('/api/slot-offers/mine') }
+export function acceptSlotOffer(offerId) { return json(`/api/slot-offers/${enc(offerId)}/accept`, 'POST') }
+// F5 closed dates.
+export function listClosures() { return request('/api/branch-closures') }
+export function createClosure(body) { return json('/api/branch-closures', 'POST', body) }
+export function changeClosure(id, action) { return json(`/api/branch-closures/${enc(id)}`, 'PATCH', { action }) }
+export function suggestHolidays() { return json('/api/branch-closures/suggest-holidays', 'POST') }
+export function closureAffected(id) { return request(`/api/branch-closures/${enc(id)}/affected`) }
+export function notifyClosurePatients(id) { return json(`/api/branch-closures/${enc(id)}/notify`, 'POST') }
+export function publicClosures() { return request('/api/public/closures') }
+// F6 calendar load.
+export function calendarLoad(params) { return request(`/api/calendar/load${query(params)}`) }
+// F7 online booking mode per service (Owner).
+export function setServiceOnlineBooking(serviceId, body) { return json(`/api/services/${enc(serviceId)}/online-booking`, 'PATCH', body) }
+// F8 accepted HMOs (information only) and the patient's own HMO details.
+export function listAcceptedHmos() { return request('/api/accepted-hmos') }
+export function addAcceptedHmo(body) { return json('/api/accepted-hmos', 'POST', body) }
+export function updateAcceptedHmo(id, body) { return json(`/api/accepted-hmos/${enc(id)}`, 'PATCH', body) }
+export function publicHmos() { return request('/api/public/hmos') }
+export function publicFaq() { return request('/api/public/faq') }
+export function myHmo() { return request('/api/me/hmo') }
+export function saveMyHmo(body) { return json('/api/me/hmo', 'PUT', body) }

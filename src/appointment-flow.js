@@ -101,6 +101,14 @@ export function createAppointmentFlow({ getState, getSession, getActions, refres
       return { ok: true, row: result.row }
     },
 
+    // F2: restore a late arrival's normal place (Staff override of R2-07, reason required).
+    async queueRestoreOrder(entry, reason, key) {
+      const result = await queue.restoreQueueOrder(entry, reason, key)
+      if (!result.ok) return afterServerCommand(result)
+      await refresh()
+      return { ok: true, row: result.row }
+    },
+
     // M6 pre-arrival No-show: the scheduled Patient did not arrive, so there is no Visit and no queue entry.
     async noShow(appointment, key) {
       const result = await api.transitionAppointment(appointment, 'no-show', key)

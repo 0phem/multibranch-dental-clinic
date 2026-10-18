@@ -10,6 +10,7 @@ import { bookableBranches } from './Scheduling.jsx'
 import { clinicDate } from '../clock.js'
 import { PatientQueuePage } from './PatientVisits.jsx'
 import { PossibleNoShows } from './PossibleNoShows.jsx'
+import { FrontDeskToday } from './FrontDeskToday.jsx'
 import { QueueByBranch, QueueStatusCounts, useQueueVisibility } from './QueueCounts.jsx'
 import { encounterContext, inScope, isActiveQueue, isTodayQueue, sessionForRole } from '../contracts.js'
 
@@ -93,6 +94,7 @@ export function CheckInPage({ store }) {
   return <>
     <PageHeader kicker="Front desk" title="Patient check-in" text="Confirm arrival and move the patient into the live queue. Arrivals are recorded by the clinic server; no repeated registration is needed for an existing patient."/>
     <PossibleNoShows toast={toast} onChanged={()=>flow?.refresh()}/>
+    <FrontDeskToday toast={toast} onChanged={()=>flow?.refresh()}/>
     <AppointmentsLoadNotice store={store}/>
     <div className="checkin-shell">
       <div className="checkin-mode"><button className={mode==='scheduled'?'active':''} onClick={()=>setMode('scheduled')}><Icon name="calendar" size={18}/>Scheduled</button><button className={mode==='walkin'?'active':''} onClick={()=>setMode('walkin')}><Icon name="user" size={18}/>Walk-in</button></div>
@@ -158,13 +160,17 @@ export function QueuePage({ role, activeBranch, store, setPage }) {
     const reason=window.prompt('Reason for urgent queue priority (operational, not a clinical assessment):')
     if(reason?.trim())run(entry,'Queue priority updated.',key=>flow.queuePriority(entry,'Urgent',reason.trim(),key))
   }
+  const restore=entry=>{
+    const reason=window.prompt('Reason for giving this late arrival their normal place in the queue:')
+    if(reason?.trim())run(entry,'Normal queue place restored.',key=>flow.queueRestoreOrder(entry,reason.trim(),key))
+  }
   const operational=['staff','owner'].includes(role)
   const vis=useQueueVisibility(store)
   const demo=vis.mode==='demo'
   useVisibleRefresh(flow?.refresh,{active:role!=='patient'})
   if (role==='patient') return <PatientQueuePage store={store} setPage={setPage}/>
   return <>
-    <PageHeader title={role==='dentist'?'My Patient Queue':'Patient Queue'} text="The clinic server keeps the queue: numbers, order and positions update for everyone. Priority and arrival order decide positions inside each Dentist’s queue." aside={<Button variant="ghost" onClick={()=>flow?.refresh()}>Refresh</Button>}/>
+    <PageHeader title={role==='dentist'?'My Patient Queue':'Patient Queue'} text="The clinic server keeps the queue: numbers, order and positions update for everyone. Priority, then on-time before late arrivals, then arrival order decide positions inside each Dentist’s queue." aside={<Button variant="ghost" onClick={()=>flow?.refresh()}>Refresh</Button>}/>
     <Card title={role==='dentist'?'My queue filters':'Queue filters'} className="filter-card"><div className="filter-row"><label>Branch <select value={activeBranch} disabled><option>{activeBranch}</option></select></label>{role!=='dentist'&&<label>Dentist <select value={dentistFilter} onChange={e=>setDentistFilter(e.target.value)}><option>All Dentists</option>{state.dentists.filter(d=>role==='owner'||d.branchIds.includes(session.branchId)).map(d=><option key={d.id} value={d.id}>{d.name}</option>)}</select></label>}<label>Status <select value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}><option>Active</option><option>All</option><option>Waiting</option><option>Called</option><option>Treatment Ready</option><option>Temporarily Away</option><option value="Served">Served (treatment started)</option></select></label></div></Card>
     <AppointmentsLoadNotice store={store}/>
     {!demo&&<QueueStatusCounts store={store} activeBranch={role==='owner'?activeBranch:'All Branches'} vis={vis}/>}
@@ -173,7 +179,7 @@ export function QueuePage({ role, activeBranch, store, setPage }) {
       <Table rows={visible} columns={[
         {key:'position',label:'Pos.',render:q=>q.position?`#${q.position}`:'—'},
         {key:'queueNumber',label:'Queue no.',render:q=>q.queueNumber||'—'},
-        {key:'patient',label:'Patient',render:q=><div><b>{q.patientName||patientName(q.patientId,state.patients)}</b><small className="block-muted">{q.priority} priority{q.priorityReason?` (${q.priorityReason})`:''} • {q.appointmentCode||(q.walkIn?'Walk-in visit':'Scheduled visit')}</small></div>},
+        {key:'patient',label:'Patient',render:q=><div><b>{q.patientName||patientName(q.patientId,state.patients)}</b><small className="block-muted">{q.lateArrival&&<span className="fd-badge is-late">Late arrival · queued last</span>} {q.priority} priority{q.priorityReason?` (${q.priorityReason})`:''} • {q.appointmentCode||(q.walkIn?'Walk-in visit':'Scheduled visit')}</small></div>},
         {key:'branch',label:'Branch'},{key:'dentist',label:'Dentist',render:q=>dentistName(q.dentistId,state.dentists)},
         {key:'checkedIn',label:'Checked in',render:q=>displayTime(q.checkedIn)},
         ...(demo?[{key:'wait',label:'Est. wait (demo)',render:q=>`${queueWaitEstimate(q,state.queue,state.appointments,state.treatments,state.dentists)} min`}]:[]),
@@ -187,6 +193,7 @@ export function QueuePage({ role, activeBranch, store, setPage }) {
             {['Waiting','Called','Treatment Ready'].includes(q.status)&&<Button size="sm" variant="ghost" disabled={!!busy} onClick={()=>update(q,'away','Marked temporarily away.')}>Temporarily Away</Button>}
             {q.status==='Temporarily Away'&&<Button size="sm" variant="soft" disabled={!!busy} onClick={()=>update(q,'return','Returned to the queue.')}>Return to Queue</Button>}
             {active(q)&&q.priority!=='Urgent'&&<Button size="sm" variant="ghost" disabled={!!busy} onClick={()=>priority(q)}>Urgent queue priority</Button>}
+            {active(q)&&q.lateArrival&&<Button size="sm" variant="ghost" disabled={!!busy} onClick={()=>restore(q)}>Restore normal place</Button>}
           </>}
         </div>}
 

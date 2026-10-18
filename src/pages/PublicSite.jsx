@@ -5,6 +5,7 @@ import { hoursSummary, openStatus } from '../patient/format.js'
 import { PublicFooter, PublicHeader } from './PublicChrome.jsx'
 import { LocationMap } from './PublicLocations.jsx'
 import { directionsUrl, telHref, usePublicData } from './public-data.js'
+import { publicClosures, publicFaq } from '../api-client.js'
 
 // The public landing page. Every clinic fact comes from the clinic server: the name and logo from the branding settings,
 // branches (contacts and hours) from GET /api/public/branches, services from GET /api/public/services, and the FAQ from the
@@ -169,9 +170,22 @@ function Branches() {
       {status === 'loading' && <div className="lp-grid-3" role="status" aria-label="Loading branches">{[0, 1, 2].map(i => <div key={i} className="lp-card lp-skeleton"><span/><span/><span/></div>)}</div>}
       {status === 'error' && <p className="lp-fallback">Our branches can’t be shown right now. Call <a href={telHref(clinic.phoneDisplay)}>{clinic.phoneDisplay}</a> or email <a href={`mailto:${clinic.email}`}>{clinic.email}</a> and we’ll help you find the nearest clinic.</p>}
       {status === 'ready' && <ul className="lp-grid-3">{rows.map(b => <BranchCard key={b.id} branch={b} now={now}/>)}</ul>}
+      <UpcomingClosures/>
       {status === 'ready' && rows.some(b => b.latitude != null) && <div className="lp-map lp-reveal"><LocationMap branches={rows}/></div>}
     </div>
   </section>
+}
+
+/** F5 (R2-13): the closures the Owner confirmed in the next 60 days. Hidden when there are none. */
+function UpcomingClosures() {
+  const [rows, setRows] = useState([])
+  useEffect(() => { publicClosures().then(r => { if (r.ok) setRows(r.data || []) }) }, [])
+  if (!rows.length) return null
+  const day = d => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-PH', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' })
+  return <div className="lp-card lp-closures lp-reveal" role="region" aria-label="Upcoming closures">
+    <h3><Icon name="calendar" size={18}/> Upcoming closures</h3>
+    <ul>{rows.map(c => <li key={c.id}><b>{day(c.date)}</b> · {c.branch?.name || 'All branches'}{c.partial_hours ? ` · open ${c.partial_hours.open}–${c.partial_hours.close} only` : ' · closed'}{c.reason ? ` · ${c.reason}` : ''}</li>)}</ul>
+  </div>
 }
 
 function Features() {
@@ -187,7 +201,12 @@ function Features() {
 
 function Faq() {
   const { status, rows } = usePublicData('faq')
-  const items = status === 'ready' && rows.length ? rows.map(r => [r.question, r.answer]) : PORTAL_FAQ
+  const [extra, setExtra] = useState({ policy: null, hmos: [] })
+  useEffect(() => { publicFaq().then(r => { if (r.ok) setExtra({ policy: r.meta?.cancellation_policy || null, hmos: r.meta?.accepted_hmos || [] }) }) }, [])
+  // F4 and F8: the cancellation policy as the Owner set it, and only the HMOs the clinic verified.
+  const items = [...(status === 'ready' && rows.length ? rows.map(r => [r.question, r.answer]) : PORTAL_FAQ),
+    ...(extra.policy ? [['Can I cancel or reschedule?', extra.policy]] : []),
+    ...(extra.hmos.length ? [['Which HMOs does the clinic accept?', `${extra.hmos.map(h => h.name + (h.branch ? ` (${h.branch})` : '') + (h.note ? `, ${h.note}` : '')).join('; ')}. Coverage is checked at the clinic.`]] : [])]
   return <section id="faq" className="lp-section" aria-labelledby="lp-faq-title">
     <div className="lp-container lp-narrow">
       <div className="lp-heading lp-reveal"><p className="lp-eyebrow">FAQ</p><h2 id="lp-faq-title">Questions patients ask</h2></div>

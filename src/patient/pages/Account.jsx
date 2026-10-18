@@ -1,7 +1,7 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { Button, Field, Icon } from '../../components.jsx'
 import { PasswordField } from '../../pages/PasswordField.jsx'
-import { confirmEmailChange, getPatientRecord, requestEmailChange, requestPasswordReset, resetPassword } from '../../api-client.js'
+import { confirmEmailChange, getPatientRecord, myHmo, requestEmailChange, requestPasswordReset, resetPassword, saveMyHmo } from '../../api-client.js'
 import { dateLong } from '../format.js'
 import { ErrorState, PageHead, Skeleton, useLoad } from '../ui.jsx'
 
@@ -27,12 +27,37 @@ export function ProfilePage({ me, onNavigate }) {
       <dl className="pp-summary">{rows.map(([k, v]) => <div key={k}><dt>{k}</dt><dd>{v || <span className="pp-muted">Not on file</span>}</dd></div>)}</dl>
       <p className="pp-hint">To update these details, message the front desk or tell them at your next visit.</p>
     </section>}
+    <HmoDetails/>
     <section className="pp-card pp-fade">
       <p className="pp-eyebrow">Sign-in email</p>
       <p className="pp-email">{me.email}</p>
       <Button size="sm" variant="ghost" icon="lock" onClick={() => onNavigate('security')}>Change in Account security</Button>
     </section>
   </div>
+}
+
+/** F8: the patient's own HMO provider and member number (optional), for the front desk to check at the visit. No claims here. */
+function HmoDetails() {
+  const [form, setForm] = useState(null), [accepted, setAccepted] = useState([]), [busy, setBusy] = useState(false), [note, setNote] = useState('')
+  useEffect(() => { myHmo().then(r => { if (r.ok) { setForm({ hmo_provider_name: r.data.hmo_provider_name || '', hmo_member_number: r.data.hmo_member_number || '' }); setAccepted(r.data.accepted || []) } }) }, [])
+  if (!form) return null
+  const save = async e => {
+    e.preventDefault()
+    setBusy(true); setNote('')
+    const r = await saveMyHmo(form)
+    setBusy(false)
+    setNote(r.ok ? 'Saved. The front desk will check your coverage at your visit.' : (r.kind === 'validation' ? Object.values(r.errors || {})[0]?.[0] : r.message) || 'Not saved.')
+  }
+  return <section className="pp-card pp-fade" aria-labelledby="pp-hmo">
+    <p className="pp-eyebrow" id="pp-hmo">HMO (optional)</p>
+    <p className="pp-hint">If you have an HMO card, add it here. Coverage is checked at the clinic; nothing is claimed online.{accepted.length ? ` HMOs the clinic has confirmed: ${accepted.map(h => h.name + (h.branch ? ` (${h.branch})` : '')).join(', ')}.` : ''}</p>
+    <form onSubmit={save} className="pp-form">
+      <Field label="HMO provider"><input value={form.hmo_provider_name} maxLength={120} onChange={e => setForm(f => ({ ...f, hmo_provider_name: e.target.value }))}/></Field>
+      <Field label="Member number"><input value={form.hmo_member_number} maxLength={60} autoComplete="off" onChange={e => setForm(f => ({ ...f, hmo_member_number: e.target.value }))}/></Field>
+      <Button type="submit" size="sm" disabled={busy}>{busy ? 'Saving…' : 'Save HMO details'}</Button>
+      {note && <p className="pp-hint" role="status">{note}</p>}
+    </form>
+  </section>
 }
 
 /** Account security (decision 3): changing the sign-in email needs the current password (checked by the server), then a code sent to the new address. */
