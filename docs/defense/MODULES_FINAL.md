@@ -1,0 +1,71 @@
+# Final module list for the defense (25 modules)
+
+Frozen on 2026-10-18 from the module catalog v5.0 (`MODULE_COVERAGE.md`), checked against the code and tests on branch
+`feat/auth-messaging-paymongo`. A status is never higher than what the code and tests prove.
+
+**Status words.** **Implemented**: works end to end on the clinic server and is covered by tests. **Partial**: the core works
+and is tested; named parts are missing. **Mock only**: a browser-only prototype with no server record. **Planned**: designed,
+not built. Test paths are under `backend/tests/Feature/` unless they start with `tests/` (frontend). Interview answers (Q, PI)
+are verbatim in `docs/defense/INTERVIEW_EVIDENCE.md`.
+
+## Summary
+
+| State | Count | Modules |
+| --- | --- | --- |
+| Implemented | 8 | M5, M6, M7, M11, M17, M18, M22, M23 |
+| Partial | 9 | M1, M2, M4, M8, M9, M13, M14, M16, M21 |
+| Mock only | 2 | M19, M20 |
+| Planned | 6 | M3, M10, M12, M15, M24, M25 |
+
+## Modules
+
+| Module | Status | What works today | Evidence | Interview basis |
+| --- | --- | --- | --- | --- |
+| M1 User Management | Partial | Patient sign-up with a 6-digit email code (sign-in after verification, no auto-login); password reset and email change by code; Owner invites employees by email; four roles checked on the server. Missing: more than one Owner account; ID OCR (planned enhancement, below). | `Auth/*`, `Identity/EmployeeInvitationTest`, `RbacTest`; `tests/public-auth-site.test.js` | PI-01, PI-02 |
+| M2 Branch Management | Partial | Three real branches with address, phone, email (when given), map position and opening hours per weekday; the Owner edits them; the public website and every email read them. Missing: holiday and temporary-closure calendar. | `Reference/*`, `Appointments/BranchHoursTest`, `Reference/PublicBranchesTest`; `tests/landing.test.js` | Q2, PI-14, PI-15 |
+| M3 Work Schedules | Planned | Dentists have one fixed shift (project values); there is no dated roster, no per-day schedule and no availability exceptions. | None (not started) | PI-05, PI-06, PI-08 |
+| M4 Patient Records | Partial | Patient identity and profile; Staff edit with an audit entry (field names only); the patient sees a read-only legal name; the name on issued invoices and receipts is kept as issued. Missing: full history, merge, archive. | `Patients/PatientRecordTest`, `ConcurrentPatientRecordTest`, `Billing/DemoUnpaidInvoiceSeederTest` | Q17, Q28 |
+| M5 Treatment Management | Implemented | Visit-linked treatment by the responsible Dentist; completed treatment is locked. | `Treatments/TreatmentTest`, `ConcurrentTreatmentStartTest` | Q15, Q27, Q29, PI-09 |
+| M6 Appointment Management | Implemented | One-flow booking (service, branch near you, Dentist or "any available", day, time); only real open times; per-day branch hours and closed Sunday enforced; no double booking (database guard); reschedule and cancel; confirmation and change emails. Not built: scheduled reminders, attendance replies. | `Appointments/*` (incl. `BranchHoursTest`, `ConcurrentBookingTest`, `AppointmentEmailTest`) | Q20, Q27, Q28, Q29, PI-29 |
+| M7 AI Chatbot | Implemented (knowledge mode) | Clinic Assistant answering from the clinic's own answers and live records (English, Filipino, Taglish); emergencies, medical advice and other patients' data are refused; unknowns go to the front desk; Owner edits and tests answers. AI mode exists but is switched off. | `Assistant/AssistantKnowledgeTest`, `Assistant/AssistantTest` | Q23, PI-42, PI-43 |
+| M8 Patient Visits | Partial | Check-in of booked patients and walk-ins (within today's branch hours), Visit records. Missing: complete assignment workflow and live integration checks. | `Visits/*` | Q15, PI-13, PI-21 |
+| M9 Patient Queue | Partial | Queue numbers and transitions on the server. Missing: complete live screens; removed from the patient portal. | `Queue/*` | Q19, Q21, PI-24, PI-25 |
+| M10 Dental Charts | Planned | Nothing built (no tooth chart records). | None (not started) | Q17 (records kept in digital software) |
+| M11 Billing Management | Implemented | Draft invoice from the treatment's performed procedures, Staff review and issue, invoice email with PDF, immutable charges, PDF downloads for the patient. | `Billing/*` | Q27 |
+| M12 Treatment Plans | Planned | Only a free-text "treatment plan" field on a treatment; no versioned plan or patient decision. | None (not started) | Q29 (treatment decided case by case) |
+| M13 Services and Pricing | Partial | Services with descriptions; versioned prices resolved for each invoice line; prices are not shown to patients. Missing: clinic-approved prices (demo prices only). | `Pricing/*` | Q1, Q12 |
+| M14 Document Management | Partial | Private document upload and download for the patient's own documents; retraction instead of deletion. Missing: extraction drafts in production use. | `Documents/DocumentManagementTest` | Q16 |
+| M15 Leave Management | Planned | Nothing built. | None (not started) | — (no interview answer) |
+| M16 Patient Inquiries | Partial | Staff record inquiries that arrived elsewhere, with assignment and outcome. No link to Facebook/Messenger. | `Inquiries/*` | PI-42 |
+| M17 Patient Messaging | Implemented | Real-time chat between the patient and the branch front desk; the branch is chosen automatically; email alert (no text) when the patient is away; the Owner cannot read patient conversations. | `Messaging/*` | PI-30, PI-42, PI-43 |
+| M18 Notifications | Implemented (email and in-app) | Email outbox with automatic retries (up to 4 attempts); in-app notifications only from real events. Not built: scheduled appointment reminders. | `Mail/*`, `Appointments/PatientPortalApiTest` | PI-29, PI-31 |
+| M19 Prescriptions | Mock only | Browser-only drafts; the server stores only a "prescription required" flag on the treatment. | Browser-local only | Q16, PI-38 |
+| M20 Patient Follow-Up | Mock only | Browser-only tasks built from the follow-up fields of a treatment. | Browser-local only | Q15 (next appointment arranged during payment) |
+| M21 Reports and Analytics | Partial | Owner metrics from server data. Missing: complete period and branch filtering, exports. | `Analytics/*` | Q32 |
+| M22 Audit Logs | Implemented | Append-only audit trail (the database refuses changes and deletes); Owner search and CSV export. | `Audit/*` | — (accountability; no interview answer) |
+| M23 Payment Management | Implemented (test mode) | PayMongo hosted checkout; the invoice is settled only by the verified webhook; Payment Receipt email with PDF. Live keys need the clinic's own PayMongo account. | `Payment/PayMongoPaymentTest`, rehearsal `docs/defense/REHEARSAL_REPORT.md` | Q27 |
+| M24 Lab Cases | Planned | Nothing built. | None (not started) | Team confirmation 2026-10-12: external lab work is tracked manually (`MODULE_COVERAGE.md`) |
+| M25 Patient Handovers | Planned | Nothing built. | None (not started) | Team confirmation 2026-10-12: handovers are coordinated informally by calls and messages (`MODULE_COVERAGE.md`) |
+
+## Planned enhancement of M1: ID OCR at registration (not a new module)
+
+Status: **Planned** (nothing built). Purpose: read the patient's name and birth date from a photo of a valid ID to prefill the
+sign-up form. Privacy rules it must follow (RA 10173):
+
+- OCR **only prefills** the form; the patient checks and confirms every field before submitting.
+- **Staff verify the ID** in person at the first visit; the OCR result is never treated as proof of identity.
+- **Explicit consent** before the photo is taken or uploaded, with a short notice of why and for how long it is kept.
+- The ID image is **stored encrypted** in private storage, never in emails or logs.
+- The image is **kept only as long as needed** (until Staff verify the ID), then deleted; only the verification result is kept.
+- A retention period and the DPO's approval are needed before it is built (`OPEN_ITEMS.md`, item 8).
+
+## Data retention (what the code does today)
+
+| Module | Retention behaviour | Status |
+| --- | --- | --- |
+| M1 User Management | Removing a user is a soft delete (`users.deleted_at`); sessions and tokens end; the audit keeps the action. | Implemented |
+| M4 Patient Records | There is no delete path for a patient record. Archiving (soft delete with audit) is not built. | Planned |
+| M5 Treatment, M8 Visits, M9 Queue, M11 Billing, M16 Inquiries, M17 Messaging, M18 email log, M22 Audit, feedback, appointment history | The database refuses deletes (and most updates) of these records by trigger: they are append-only. Draft treatment lines can be replaced while the treatment is still a draft. | Implemented |
+| M13 Services and Pricing | A price version is retracted, never deleted. | Implemented |
+| M14 Document Management | A document is retracted with a reason, never deleted. | Implemented |
+| Retention periods (how long anything is kept) | Not decided by the clinic (`OPEN_ITEMS.md`, item 8). | Planned |
