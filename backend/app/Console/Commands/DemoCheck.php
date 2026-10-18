@@ -48,6 +48,7 @@ class DemoCheck extends Command
         $this->branchContacts();
         $this->assistant();
         $this->queue();
+        $this->automations();
 
         $this->line(str_repeat('-', 72));
         $summary = $this->fails ? "{$this->fails} FAIL, {$this->warns} WARN" : ($this->warns ? "all required checks passed, {$this->warns} WARN" : 'everything passed');
@@ -86,7 +87,8 @@ class DemoCheck extends Command
         $frontend = rtrim((string) config('app.frontend_url'), '/');
         ($code = $http($frontend)) === 200 ? $this->result('PASS', "Frontend answers at $frontend") : $this->result('FAIL', "Frontend at $frontend answered ".($code ?? 'nothing'), 'Start it: scripts/demo-start.sh (or npm run dev).');
         $running('/artisan queue:work/') ? $this->result('PASS', 'Queue worker running') : $this->result('FAIL', 'No queue worker', 'Emails are not sent without it: scripts/demo-start.sh (or scripts/payment-test.sh worker).');
-        $running('/artisan schedule:(work|run)/') ? $this->result('PASS', 'Scheduler running (retries and due emails)') : $this->result('WARN', 'No scheduler', 'Failed emails are not retried without it: scripts/demo-start.sh starts `php artisan schedule:work`.');
+        // The scheduled automations (reminders, no-shows, overdue invoices, summary) and email retries run only with the scheduler.
+        $running('/artisan schedule:(work|run)/') ? $this->result('PASS', 'Scheduler running (automations, retries and due emails)') : $this->result('FAIL', 'No scheduler', 'Reminders and the other automations do not run without it: scripts/demo-start.sh starts `php artisan schedule:work`.');
         if (config('broadcasting.default') === 'reverb') {
             $host = (string) config('reverb.servers.reverb.host', '127.0.0.1');
             $port = (int) config('reverb.servers.reverb.port', 8080);
@@ -290,5 +292,29 @@ class DemoCheck extends Command
         $jobs === 0 ? $this->result('PASS', 'Queue empty') : $this->result('WARN', "$jobs job(s) waiting in the queue", 'They run as soon as the queue worker is up.');
         $failed === 0 ? $this->result('PASS', 'No failed jobs') : $this->result('WARN', "$failed failed job(s)", 'Inspect with: php artisan queue:failed');
         $due === 0 ? $this->result('PASS', 'No email waiting to be sent') : $this->result('WARN', "$due email(s) waiting to be sent", 'The scheduler sends them within a minute (php artisan schedule:work).');
+    }
+
+    /** Every automation has its settings row; the enabled ones ran recently (the scheduler really runs them); no email is stuck. */
+    private function automations(): void
+    {
+        try {
+            $rows = DB::table('automation_settings')->get()->keyBy('key');
+        } catch (\Throwable $e) {
+            $this->result('FAIL', 'Automation settings could not be read', 'Run the migrations on the demo database: DB_DATABASE=dental_clinic_demo php artisan migrate.');
+
+            return;
+        }
+        $missing = array_diff(\App\Services\Automations\AutomationCatalog::KEYS, $rows->keys()->all());
+        $missing ? $this->result('FAIL', 'Automation setting rows missing: '.implode(', ', $missing), 'Run the migrations (2026_10_27_000100_create_automation_settings_and_deliveries inserts them).')
+            : $this->result('PASS', 'Every automation has a setting row ('.$rows->where('enabled', true)->count().' of '.$rows->count().' on)');
+        $stale = $rows->filter(fn ($r) => $r->enabled && (! $r->last_run_at || \Carbon\CarbonImmutable::parse($r->last_run_at)->lt(now()->subMinutes(3))))->keys();
+        $stale->isEmpty() ? $this->result('PASS', 'Automations ran in the last 3 minutes')
+            : $this->result('FAIL', 'Automations not run recently: '.$stale->implode(', '), 'Start the scheduler (scripts/demo-start.sh), or run once: php artisan automations:run.');
+        $timeout = max(60, (int) config('clinic.mail_processing_timeout_seconds', 600));
+        $stuck = DB::table('mail_dispatches')->where(fn ($q) => $q->where('status', 'processing')->where('locked_at', '<', now()->subSeconds($timeout)->toIso8601String()))
+            ->orWhere(fn ($q) => $q->whereIn('status', ['pending', 'retry_scheduled'])->where(fn ($t) => $t->whereNull('next_attempt_at')->orWhere('next_attempt_at', '<', now()->subMinutes(10)->toIso8601String()))
+                ->where('created_at', '<', now()->subMinutes(10)->toIso8601String()))->count();
+        $stuck === 0 ? $this->result('PASS', 'No stuck email in the outbox')
+            : $this->result('FAIL', "$stuck email(s) stuck in the outbox for more than 10 minutes", 'Check the queue worker and scheduler; then php artisan mail:process-due.');
     }
 }

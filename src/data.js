@@ -56,7 +56,7 @@ export const NAV = {
   ],
   owner: [
     ['dashboard','Executive Dashboard'], ['analytics','Analytics & Reports'], ['branches','Branches'], ['team','People & Team'], ['capacity','Capacity & Workload'],
-    ['hmo','HMO Management'], ['users','User Management'], ['pricing','Services & Pricing'], ['automation','Automation Monitor'], ['audit','Audit Trail'], ['branding','Clinic Branding'], ['assistant','Assistant Answers'], ['engagement','Engagement']
+    ['hmo','HMO Management'], ['users','User Management'], ['pricing','Services & Pricing'], ['automations','Automations'], ['automation','Automation Monitor'], ['audit','Audit Trail'], ['branding','Clinic Branding'], ['assistant','Assistant Answers'], ['engagement','Engagement']
   ],
 }
 

@@ -17,7 +17,7 @@ const useLayoutEffectSafe=typeof window==='undefined'?React.useEffect:React.useL
 const NAV_ICONS={
   dashboard:'home',book:'plusCalendar',appointments:'calendar',calendar:'calendar',schedule:'calendar',checkin:'checkin',queue:'queue',capacity:'activity',
   patients:'users',treatment:'tooth',billing:'receipt',hmo:'shield',inquiries:'message',messages:'message',prescriptions:'pill',followups:'followup',
-  branches:'building',team:'users',analytics:'chart',users:'shield',pricing:'receipt',automation:'settings',branding:'sparkles',assistant:'robot',engagement:'sparkles',loyalty:'gift',me:'user',feedback:'message'
+  branches:'building',team:'users',analytics:'chart',users:'shield',pricing:'receipt',automations:'clock',automation:'settings',branding:'sparkles',assistant:'robot',engagement:'sparkles',loyalty:'gift',me:'user',feedback:'message'
 }
 
 const GROUPS={
@@ -28,7 +28,7 @@ const GROUPS={
   patient:[['Overview',['dashboard']],['Booking',['book','appointments']],['Communication',['messages']],['Account',['billing','feedback','me']]],
   staff:[['Today',['dashboard','appointments','calendar','checkin','queue','capacity']],['Patients & finance',['patients','billing','hmo']],['Communication',['inquiries','messages','followups','engagement']]],
   dentist:[['Today',['dashboard','schedule','queue']],['Clinical',['patients','treatment','prescriptions','followups']],['Communication',['messages']]],
-  owner:[['Overview',['dashboard','analytics']],['Operations',['branches','team','capacity','hmo']],['Administration',['users','pricing','automation','audit','branding','assistant','engagement']]],
+  owner:[['Overview',['dashboard','analytics']],['Operations',['branches','team','capacity','hmo']],['Administration',['users','pricing','automations','automation','audit','branding','assistant','engagement']]],
 }
 
 // In a clinic-server session the capacity page is the factual live-queue view (src/pages/QueueCounts.jsx); the

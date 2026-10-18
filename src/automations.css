@@ -1,0 +1,43 @@
+/* Administration → Automations (Owner) */
+.au-page { display: grid; gap: 16px; }
+.au-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr)); gap: 16px; align-items: start; }
+.au-card.is-off .au-form, .au-card.is-off .au-desc { opacity: .72; }
+.au-desc { margin: 0 0 12px; color: var(--text); line-height: 1.5; }
+.au-muted { color: var(--muted, #5b6b7f); }
+.au-form { display: grid; gap: 10px; }
+.au-form input[type=number], .au-form input[type=time], .au-form input:not([type]), .au-form input[inputmode], .au-form select { min-height: 44px; }
+.au-check { display: flex; gap: 10px; align-items: flex-start; line-height: 1.4; min-height: 44px; padding-top: 10px; }
+.au-check input { width: 20px; height: 20px; margin-top: 1px; flex: none; }
+.au-check small { display: block; color: var(--muted, #5b6b7f); }
+.au-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.au-error { margin: 0; color: #a3301f; font-weight: 600; }
+.au-switch { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 12px; border: 1px solid var(--line-strong, #c9d6e2); border-radius: 999px; background: #fff; font-weight: 700; color: var(--ink, #14283d); cursor: pointer; }
+.au-switch span { position: relative; width: 38px; height: 22px; border-radius: 999px; background: #c9d3dd; transition: background .15s; }
+.au-switch span::after { content: ''; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform .15s; }
+.au-switch[aria-checked=true] span { background: #0c7f75; }
+.au-switch[aria-checked=true] span::after { transform: translateX(16px); }
+.au-switch:focus-visible { outline: 3px solid #1865ac; outline-offset: 2px; }
+.au-stats { display: flex; flex-wrap: wrap; gap: 8px 18px; margin: 14px 0 0; padding-top: 12px; border-top: 1px solid var(--line, #e1eaf1); }
+.au-stats div { min-width: 70px; }
+.au-stats dt { font-size: .75rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted, #5b6b7f); }
+.au-stats dd { margin: 2px 0 0; font-weight: 750; color: var(--ink, #14283d); }
+.au-stats dd.is-bad { color: #a3301f; }
+.au-rules { border: 1px solid var(--line, #e1eaf1); border-radius: 12px; padding: 10px 12px; display: grid; gap: 8px; }
+.au-rules legend { font-weight: 700; padding: 0 4px; }
+.au-rule { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.au-rule > span { font-weight: 650; min-width: 140px; }
+.au-rule input { width: 72px; }
+.au-add { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.au-demo { border: 2px dashed #b26a00; }
+.au-demo-form { grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); align-items: end; }
+.au-result { margin: 12px 0 0; padding-left: 18px; }
+@media (prefers-reduced-motion: reduce) { .au-switch span, .au-switch span::after { transition: none; } }
+
+/* A2 possible no-shows on the front-desk Check-In page */
+.ns-card { border-left: 4px solid #b26a00; }
+.ns-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.ns-list li { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px 16px; padding: 10px 0; border-top: 1px solid var(--line, #e1eaf1); }
+.ns-list li:first-child { border-top: 0; }
+.ns-list li > div:first-child { display: grid; gap: 2px; min-width: 0; }
+.ns-list span { color: var(--muted, #5b6b7f); overflow-wrap: anywhere; }
+.ns-actions { display: flex; gap: 8px; flex-wrap: wrap; }

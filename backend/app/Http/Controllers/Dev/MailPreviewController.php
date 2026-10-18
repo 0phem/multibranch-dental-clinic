@@ -60,6 +60,15 @@ class MailPreviewController extends Controller
             'appointment-rescheduled' => fn () => new AppointmentChangedMail(self::appointmentSample(), 'rescheduled'),
             'appointment-cancelled' => fn () => new AppointmentChangedMail(self::appointmentSample('Cancelled'), 'cancelled'),
             'smtp-test' => fn () => new ClinicTestMail(),
+            // Scheduled automations (Administration → Automations).
+            'appointment-reminder' => fn () => new \App\Mail\AppointmentReminderMail(self::appointmentSample(), 'lead'),
+            'appointment-reminder-morning' => fn () => new \App\Mail\AppointmentReminderMail(self::appointmentSample(), 'morning'),
+            'no-show-rebook' => fn () => new \App\Mail\NoShowRebookMail(self::appointmentSample('No-show')),
+            'invoice-overdue' => fn () => new \App\Mail\InvoiceOverdueMail(self::invoiceSample()),
+            'recall' => fn () => new \App\Mail\RecallMail((new \App\Models\Visit)->setRelation('branch', self::appointmentSample()->branch)->setRelation('patient', self::appointmentSample()->patient)),
+            'waitlist-opening' => fn () => new \App\Mail\WaitlistOpeningMail((new \App\Models\WaitlistEntry(['clinic_date' => ClinicClock::addDays(ClinicClock::today(), 2)]))
+                ->setRelation('branch', self::appointmentSample()->branch)->setRelation('patient', self::appointmentSample()->patient)->setRelation('service', new Service(['name' => 'Oral Prophylaxis (Cleaning)']))->setRelation('dentist', null)),
+            'owner-summary' => fn () => new \App\Mail\OwnerDailySummaryMail((new User)->setRelation('person', new Person(['first_name' => 'Dana'])), ClinicClock::today()),
         ];
     }
 
@@ -100,7 +109,7 @@ class MailPreviewController extends Controller
     {
         $start = ClinicClock::at(ClinicClock::now()->addDays(3)->toDateString(), '10:30');
         // Unsaved models keep a zone-less date string that is read back as UTC, so sample instants are given in UTC.
-        $appointment = (new Appointment)->forceFill(['appointment_code' => 'APT-2026-000045', 'status' => $status, 'starts_at' => $start->utc()]);
+        $appointment = (new Appointment)->forceFill(['public_id' => '01SAMPLEAPPOINTMENT00000000', 'appointment_code' => 'APT-2026-000045', 'status' => $status, 'revision' => 1, 'starts_at' => $start->utc(), 'ends_at' => $start->addMinutes(30)->utc()]);
         $dentist = (new DentistProfile)->setRelation('person', new Person(['first_name' => 'Dana', 'last_name' => 'Roxas']));
         $appointment->setRelation('patient', (new Patient)->setRelation('person', new Person(['first_name' => 'Maria'])))
             ->setRelation('branch', (new Branch)->forceFill(['name' => 'Dr. Dana Roxas Dental Clinic', 'address' => '#37, MacArthur Hwy, Bocaue, 3018 Bulacan', 'phone' => '0922 878 7341']))
