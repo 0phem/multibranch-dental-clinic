@@ -1,5 +1,5 @@
 import React, { useEffect, useId, useRef, useState } from 'react'
-import { Button, Field, Notice } from '../components.jsx'
+import { Button, Field, Icon, Notice } from '../components.jsx'
 import { COUNTRY_CODES, DEFAULT_COUNTRY, normalizePhoneNumber } from '../phone.js'
 import { AuthShell } from './AuthShell.jsx'
 import { PasswordField } from './PasswordField.jsx'
@@ -58,7 +58,49 @@ function PhoneField({ countryCode, localNumber, onCountryChange, onLocalNumberCh
         value={localNumber} onChange={e=>onLocalNumberChange(e.target.value)}/>
     </div>
     {error&&<small id={errorId} className="field-error" role="alert">{error}</small>}
-    <small id={hintId}>Choose a country, then enter the phone number. Used for clinic contact only.</small>
+    <small id={hintId}>Philippine mobile, e.g. 917 123 4567 (or 0917 123 4567). Used for clinic contact only.</small>
+  </div>
+}
+
+// Client-side checks, shown inline before the server's own validation (which stays authoritative and enumeration-safe).
+export const PASSWORD_RULES = [['length', 'At least 8 characters', pw => pw.length >= 8], ['letter', 'A letter', pw => /\p{L}/u.test(pw)], ['number', 'A number', pw => /\d/.test(pw)]]
+
+/** 0–4 with a label; it only guides the patient — the server rules decide. */
+export function passwordStrength(pw) {
+  const value = String(pw || '')
+  if (!value) return { score: 0, label: '' }
+  let score = PASSWORD_RULES.filter(([, , test]) => test(value)).length >= 3 ? 2 : 1
+  if (value.length >= 12) score++
+  if (/[a-z]/.test(value) && /[A-Z]/.test(value) && /[^A-Za-z0-9]/.test(value)) score++
+  return { score: Math.min(4, score), label: ['', 'Weak', 'Fair', 'Good', 'Strong'][Math.min(4, score)] }
+}
+
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+/** Field errors for the form as typed; an empty object means it may be sent to the server. */
+export function validateRegistration(form, { phoneOk = true, phoneReason = '', consent = false, today = '' } = {}) {
+  const errors = {}
+  if (!form.first_name?.trim()) errors.first_name = 'Enter your first name.'
+  if (!form.last_name?.trim()) errors.last_name = 'Enter your last name.'
+  if (!form.date_of_birth) errors.date_of_birth = 'Enter your date of birth.'
+  else if (today && form.date_of_birth > today) errors.date_of_birth = 'The date of birth cannot be in the future.'
+  if (!EMAIL.test(String(form.email || '').trim())) errors.email = 'Enter a valid email address, for example name@gmail.com.'
+  if (!phoneOk) errors.phone = phoneReason || 'Enter a valid phone number.'
+  const pw = String(form.password || '')
+  const missing = PASSWORD_RULES.filter(([, , test]) => !test(pw)).map(([, label]) => label.toLowerCase())
+  if (missing.length) errors.password = `Your password needs ${missing.join(', ')}.`
+  else if (pw.length > 72) errors.password = 'Use at most 72 characters.'
+  if (form.password_confirmation !== pw || !pw) errors.password_confirmation = 'The passwords do not match.'
+  if (!consent) errors.consent = 'Please agree to the Privacy Policy and Terms of Use to continue.'
+  return errors
+}
+
+function PasswordHelp({ value }) {
+  const strength = passwordStrength(value)
+  return <div className="lp-pw-help">
+    <div className={`lp-meter s${strength.score}`} aria-hidden="true"><span/><span/><span/><span/></div>
+    <p className="lp-pw-label" aria-live="polite">{strength.label ? `Strength: ${strength.label}` : 'Use 8 or more characters with letters and numbers.'}</p>
+    <ul className="lp-pw-rules">{PASSWORD_RULES.map(([key, label, test]) => <li key={key} className={test(String(value || '')) ? 'is-met' : ''}>
+      <Icon name={test(String(value || '')) ? 'check' : 'x'} size={14}/>{label}<span className="sr-only">{test(String(value || '')) ? ' (done)' : ' (not yet)'}</span></li>)}</ul>
   </div>
 }
 
@@ -66,12 +108,23 @@ export function PatientRegister({ onRegister, onCancel }) {
   const [form,setForm]=useState(emptyForm)
   const [phoneLocal,setPhoneLocal]=useState('')
   const [countryCode,setCountryCode]=useState(DEFAULT_COUNTRY.code)
+  const [consent,setConsent]=useState(false)
   const [errors,setErrors]=useState({})
+  const [touched,setTouched]=useState({})
   const [formError,setFormError]=useState('')
   const [submitting,setSubmitting]=useState(false)
+  const maxDob=clinicDate()
+  const formRef=useRef(null)
+  const check=(nextForm=form,nextConsent=consent)=>{
+    const phone=normalizePhoneNumber(countryCode,phoneLocal)
+    return validateRegistration(nextForm,{phoneOk:phone.ok,phoneReason:phone.reason,consent:nextConsent,today:maxDob})
+  }
+  // Inline validation: a field shows its message once the patient has left it (or tried to submit).
+  const blur=key=>()=>{setTouched(t=>({...t,[key]:true}));const found=check();setErrors(e=>({...e,[key]:found[key]}))}
   const update=(key,value)=>{
-    setForm(f=>({...f,[key]:value}))
-    setErrors(e=>(e[key]?{...e,[key]:undefined}:e))
+    const next={...form,[key]:value}
+    setForm(next)
+    if(touched[key]||errors[key])setErrors(e=>({...e,[key]:check(next)[key]}))
     setFormError('')
   }
   const updatePhone=value=>{setPhoneLocal(value);setErrors(e=>(e.phone?{...e,phone:undefined}:e));setFormError('')}
@@ -80,56 +133,53 @@ export function PatientRegister({ onRegister, onCancel }) {
   const submit=async event=>{
     event.preventDefault()
     if(submitting)return
+    const found=check()
+    if(Object.keys(found).length){
+      setErrors(found);setTouched({first_name:true,last_name:true,date_of_birth:true,email:true,phone:true,password:true,password_confirmation:true,consent:true})
+      requestAnimationFrame(()=>formRef.current?.querySelector('[aria-invalid="true"]')?.focus())
+      return
+    }
     const phone=normalizePhoneNumber(countryCode,phoneLocal)
-    if(!phone.ok){setErrors(e=>({...e,phone:phone.reason}));return}
     setSubmitting(true)
     setErrors({})
     setFormError('')
+    // The server decides; its answer does not reveal whether an email already has an account (unchanged behaviour).
     const result=await onRegister({...form,phone:phone.e164})
     setSubmitting(false)
     if(result?.ok)return
     if(result?.kind==='validation'){
       const fieldErrors=Object.fromEntries(Object.entries(result.errors||{}).map(([key,messages])=>[key,messages?.[0]]))
       setErrors(fieldErrors)
-      if(!Object.keys(fieldErrors).length)setFormError(result.message||'Enter valid registration details.')
+      if(!Object.keys(fieldErrors).length)setFormError(result.message||'Please check your details and try again.')
       return
     }
-    setFormError(result?.message||'Something went wrong. Try again.')
+    setFormError(result?.message||'Something went wrong on our side. Please try again in a moment.')
   }
 
-  const maxDob=clinicDate()
-  return <AuthShell wide><div className="auth-form auth-register" aria-labelledby="register-title">
-      <div className="login-copy-wrap">
-        <div className="eyebrow">New patient</div>
-        <h1 id="register-title">Create your patient account</h1>
-        <p className="login-copy">Your details help the clinic keep your visits and account connected.</p>
+  return <AuthShell><div className="auth-form auth-register" aria-labelledby="register-title">
+      <div className="lp-card-head">
+        <h1 id="register-title">Create your account</h1>
+        <p>Book visits, pay online and message the clinic in one place.</p>
       </div>
-      <form onSubmit={submit} noValidate aria-busy={submitting}>
-        <fieldset className="auth-group"><legend>Personal information</legend>
-        <div className="form-grid">
-          <Field label="First name" required error={errors.first_name}><input value={form.first_name} onChange={e=>update('first_name',e.target.value)} autoComplete="given-name"/></Field>
-          <Field label="Last name" required error={errors.last_name}><input value={form.last_name} onChange={e=>update('last_name',e.target.value)} autoComplete="family-name"/></Field>
-          <Field label="Date of birth" required error={errors.date_of_birth}><input type="date" required max={maxDob} value={form.date_of_birth} onChange={e=>update('date_of_birth',e.target.value)} autoComplete="bday"/></Field>
+      <form ref={formRef} onSubmit={submit} noValidate aria-busy={submitting} className="lp-form">
+        <div className="lp-form-row">
+          <Field label="First name" required error={errors.first_name}><input value={form.first_name} onChange={e=>update('first_name',e.target.value)} onBlur={blur('first_name')} autoComplete="given-name" aria-invalid={errors.first_name?true:undefined}/></Field>
+          <Field label="Last name" required error={errors.last_name}><input value={form.last_name} onChange={e=>update('last_name',e.target.value)} onBlur={blur('last_name')} autoComplete="family-name" aria-invalid={errors.last_name?true:undefined}/></Field>
         </div>
-        </fieldset>
-        <fieldset className="auth-group"><legend>Contact information</legend>
-        <div className="form-grid">
-          <div className="span-2"><Field label="Email" required hint="We'll send your verification code to this email address." error={errors.email}><input type="email" value={form.email} onChange={e=>update('email',e.target.value)} autoComplete="email"/></Field></div>
-          <div className="span-2"><PhoneField countryCode={countryCode} localNumber={phoneLocal} onCountryChange={updateCountry} onLocalNumberChange={updatePhone} error={errors.phone}/></div>
+        <Field label="Date of birth" required error={errors.date_of_birth}><input type="date" required max={maxDob} value={form.date_of_birth} onChange={e=>update('date_of_birth',e.target.value)} onBlur={blur('date_of_birth')} autoComplete="bday" aria-invalid={errors.date_of_birth?true:undefined}/></Field>
+        <Field label="Email" required hint="This is the email you will sign in with. We send your 6-digit code here." error={errors.email}><input type="email" inputMode="email" value={form.email} onChange={e=>update('email',e.target.value)} onBlur={blur('email')} autoComplete="email" aria-invalid={errors.email?true:undefined}/></Field>
+        <PhoneField countryCode={countryCode} localNumber={phoneLocal} onCountryChange={updateCountry} onLocalNumberChange={updatePhone} error={errors.phone}/>
+        <PasswordField label="Password" value={form.password} onChange={e=>update('password',e.target.value)} onBlur={blur('password')} autoComplete="new-password" error={errors.password} hint={<PasswordHelp value={form.password}/>}/>
+        <PasswordField label="Confirm password" value={form.password_confirmation} onChange={e=>update('password_confirmation',e.target.value)} onBlur={blur('password_confirmation')} autoComplete="new-password" error={errors.password_confirmation}/>
+        <div className={`lp-consent ${errors.consent?'has-error':''}`}>
+          <label><input type="checkbox" checked={consent} aria-invalid={errors.consent?true:undefined} aria-describedby={errors.consent?'consent-error':undefined}
+            onChange={e=>{setConsent(e.target.checked);if(errors.consent)setErrors(x=>({...x,consent:e.target.checked?undefined:x.consent}))}}/>
+            <span>I agree to the <a href="#privacy" target="_blank" rel="noreferrer">Privacy Policy</a> and <a href="#terms" target="_blank" rel="noreferrer">Terms of Use</a>.</span></label>
+          {errors.consent&&<small id="consent-error" className="field-error" role="alert">{errors.consent}</small>}
         </div>
-        </fieldset>
-        <fieldset className="auth-group"><legend>Account security</legend>
-        <div className="form-grid">
-          <PasswordField label="Password" value={form.password} onChange={e=>update('password',e.target.value)} autoComplete="new-password" error={errors.password}/>
-          <PasswordField label="Confirm password" value={form.password_confirmation} onChange={e=>update('password_confirmation',e.target.value)} autoComplete="new-password" error={errors.password_confirmation}/>
-        </div>
-        </fieldset>
-        {formError&&<Notice tone="warning" title="Couldn’t create your account">{formError}</Notice>}
-        <div className="auth-submit">
-          <Button type="submit" icon="arrow" disabled={submitting}>{submitting?'Creating account…':'Create account'}</Button>
-
-        </div>
+        {formError&&<Notice tone="warning" title="We couldn’t create your account">{formError}</Notice>}
+        <Button type="submit" width="full" className="lp-submit" disabled={submitting}>{submitting?'Creating your account…':'Create account'}</Button>
       </form>
-      <p className="login-register-link">Already have an account? <button type="button" className="text-link" onClick={onCancel}>Back to sign in</button></p>
+      <p className="lp-switch">Already have an account? <button type="button" className="text-link" onClick={onCancel}>Sign in</button></p>
   </div></AuthShell>
 }
