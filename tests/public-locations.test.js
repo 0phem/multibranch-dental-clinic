@@ -11,8 +11,8 @@ import { clinicMapOptions } from '../src/clinic-map-options.js'
 import { publicSections } from '../src/public-route.js'
 const require=createRequire(import.meta.url)
 const bundle=await build({entryPoints:['src/pages/PublicLocations.jsx'],bundle:true,write:false,platform:'node',format:'esm',loader:{'.css':'empty'},plugins:[{name:'react',setup(b){b.onResolve({filter:/^react$/},()=>({path:pathToFileURL(require.resolve('react')).href,external:true}))}}]})
-const {PublicLocations,BranchList}=await import('data:text/javascript;base64,'+Buffer.from(bundle.outputFiles[0].text).toString('base64'))
-const html=renderToStaticMarkup(React.createElement(PublicLocations))
+const {LocationMap}=await import('data:text/javascript;base64,'+Buffer.from(bundle.outputFiles[0].text).toString('base64'))
+const html=renderToStaticMarkup(React.createElement(LocationMap,{branches:[{id:'b1',number:'01',name:'Branch record 1',address:'Address 1, Bulacan',latitude:14.8,longitude:120.9}]}))
 
 test('the website keeps no branch list: names, addresses and pins come from GET /api/public/branches',async()=>{
   assert.equal(clinic.branches,undefined)
@@ -35,16 +35,12 @@ test('place coordinates keep their public mapping evidence in the docs and the b
 test('map disables every interaction handler and control',()=>{
   for(const key of ['dragging','scrollWheelZoom','doubleClickZoom','boxZoom','keyboard','touchZoom','tapHold','zoomControl'])assert.equal(clinicMapOptions[key],false,key)
 })
-test('semantic addresses render as cards, outside the hidden map canvas; loading and failure are honest',()=>{
-  const sample=[1,2,3].map(n=>({id:`b${n}`,number:`0${n}`,name:`Branch record ${n}`,address:`Address ${n}, Bulacan`,latitude:null,longitude:null}))
-  const list=renderToStaticMarkup(React.createElement(BranchList,{branches:sample}))
-  assert.equal((list.match(/<address>/g)||[]).length,3)
-  assert.equal((list.match(/class="site-branch-card"/g)||[]).length,3)
+test('the map canvas is hidden from assistive technology, credits OpenStreetMap, and the branches section is a landing anchor',()=>{
   assert.match(html,/class="site-map-canvas" aria-hidden="true"><\/div>/)
-  assert.match(html,/Loading our locations/)
-  assert.match(readFileSync('src/pages/PublicLocations.jsx','utf8'),/can’t be shown right now\. Call/)
   assert.match(html,/OpenStreetMap contributors/)
-  assert.ok(publicSections.has('locations'))
+  assert.match(html,/1 location/)
+  assert.ok(publicSections.has('branches'))
+  assert.match(readFileSync('src/pages/PublicSite.jsx','utf8'),/can’t be shown right now\. Call/)
 })
 test('landing map has an isolated lazy import, failure state and teardown; no operational branch data',()=>{
   const section=readFileSync('src/pages/PublicLocations.jsx','utf8'),map=readFileSync('src/clinic-map.js','utf8')

@@ -3,7 +3,6 @@
 namespace Tests\Feature\Assistant;
 
 use App\Models\AssistantAnswer;
-use App\Models\Branch;
 use App\Models\User;
 use Database\Seeders\AssistantAnswerSeeder;
 use Database\Seeders\DatabaseSeeder;
@@ -38,7 +37,6 @@ class AssistantKnowledgeTest extends TestCase
         $this->seed(RealBranchSeeder::class);
         $this->seed(AssistantAnswerSeeder::class);
         $this->seed(DemoUnpaidInvoiceSeeder::class);
-        Branch::query()->update(['operating_days' => json_encode([1, 2, 3, 4, 5, 6])]); // the approved demo default: Sunday closed
         $this->patient = User::where('email', 'patient@example.test')->firstOrFail();
         $this->actingAs($this->patient);
         // The next Monday-to-Saturday day after today (online booking starts tomorrow; Sunday is closed in the demo default).
@@ -63,7 +61,7 @@ class AssistantKnowledgeTest extends TestCase
             // English
             'services' => ['What services do you offer?', 'knowledge_answered', 'Oral Prophylaxis', 'open_booking'],
             'branches' => ['Where are your branches?', 'knowledge_answered', 'Roxas - Cardinal Dental Center', null],
-            'hours' => ['What time do you open?', 'knowledge_answered', '9:00 AM', null],
+            'hours' => ['What time do you open?', 'knowledge_answered', '8:00 AM', null],
             'sunday' => ['Are you open on Sunday?', 'knowledge_answered', 'closed on Sunday', null],
             'saturday' => ['Are you open on Saturdays?', 'knowledge_answered', 'open on Saturday', null],
             'booking' => ['How do I book an appointment?', 'knowledge_answered', 'only real open times', 'open_booking'],
@@ -89,7 +87,7 @@ class AssistantKnowledgeTest extends TestCase
             'magkano pasta' => ['Magkano po ang pasta?', 'knowledge_answered', 'Composite Restoration', null],
             'bukas linggo' => ['Bukas ba kayo sa Linggo?', 'knowledge_answered', 'closed on Sunday', null],
             'saan' => ['Saan po kayo located?', 'knowledge_answered', '#37, MacArthur Hwy', null],
-            'anong oras' => ['Anong oras po kayo bukas?', 'knowledge_answered', '9:00 AM', null],
+            'anong oras' => ['Anong oras po kayo bukas?', 'knowledge_answered', '8:00 AM', null],
             'magpa-book' => ['Paano po magpa-book?', 'knowledge_answered', 'only real open times', 'open_booking'],
             'resched' => ['Pa-resched po ng appointment ko', 'knowledge_answered', 'Reschedule', 'open_visits'],
             'kailan sched' => ['Kailan ang sched ko?', 'knowledge_answered', '{DATE}', null],
@@ -150,6 +148,20 @@ class AssistantKnowledgeTest extends TestCase
         $parking = $this->ask('Do you have parking?');
         $this->assertTrue($parking['handoff']);
         $this->assertDoesNotMatchRegularExpression('/\b(yes|we have|available)\b/i', $parking['answer']);
+    }
+
+    public function test_the_clinics_real_hours_and_contacts_per_branch(): void
+    {
+        $this->assertSame('knowledge_answered', ($all = $this->ask('What are your clinic hours?'))['outcome']);
+        $this->assertStringContainsString('All 3 branches: Monday to Friday 8:00 AM to 8:00 PM; Saturday 8:00 AM to 5:00 PM; Sunday closed', $all['answer']);
+        $this->assertStringContainsString('All 3 branches: closed on Sunday', $this->ask('Bukas ba kayo sa Linggo?')['answer']);
+        $this->assertStringContainsString('Roxas Dental Clinic Guiguinto: open on Saturday, 8:00 AM to 5:00 PM', $this->ask('Anong oras bukas ang Guiguinto sa Sabado?')['answer']);
+        $this->assertStringContainsString('Roxas - Cardinal Dental Center: call 0922 878 7341, email danaroxasdental@gmail.com', $this->ask('Cardinal branch contact number?')['answer']);
+        $this->assertStringContainsString('Dr. Dana Roxas Dental Clinic: call 0922 878 7341, email danaroxas.dentalclinic@gmail.com', $this->ask('How can I contact the clinic?')['answer']);
+        $guiguinto = $this->ask('What is the email of the Guiguinto branch?');
+        $this->assertStringContainsString('Roxas Dental Clinic Guiguinto: call 0933 867 8725, no email on file', $guiguinto['answer']);
+        $this->assertTrue(collect($guiguinto['actions'])->contains('type', 'contact_front_desk'), 'the front-desk handoff is offered');
+        $this->assertDoesNotMatchRegularExpression('/guiguinto@|@roxas/i', $guiguinto['answer'], 'no invented email');
     }
 
     public function test_short_follow_ups_continue_the_previous_question(): void

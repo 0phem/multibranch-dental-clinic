@@ -783,7 +783,7 @@ class PayMongoPaymentTest extends TestCase
         $invoice = $this->invoice->fresh('lines')->forceFill(['hmo_coverage_amount' => '500.00', 'patient_responsibility_amount' => '1000.00']);
         [$items, $mode] = $service->lineItems($invoice, 100000);
         $this->assertSame('single', $mode);
-        $this->assertSame([['Balance due for Invoice INV-2026-999901', 100000, 1, 'Charges PHP 1,500.00; HMO coverage -PHP 500.00; Balance due PHP 1,000.00']],
+        $this->assertSame([['Balance due for Invoice INV-2026-999901', 100000, 1, 'Charges PHP 1,500.00; Less coverage -PHP 500.00; Balance due PHP 1,000.00']],
             array_map(fn ($i) => [$i['name'], $i['amount'], $i['quantity'], $i['description']], $items));
         [$items, $mode] = $service->lineItems($this->invoice->fresh('lines')->forceFill(['paid_amount' => '200.00']), 130000);
         $this->assertSame(['single', 'Charges PHP 1,500.00; Already paid -PHP 200.00; Balance due PHP 1,300.00'], [$mode, $items[0]['description']]);

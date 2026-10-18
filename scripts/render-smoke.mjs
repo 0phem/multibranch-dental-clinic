@@ -559,7 +559,7 @@ const loginWithRegister=renderToString(React.createElement(m.Login,{onLogin:()=>
 assert.ok(loginWithRegister.includes('Create an account'))
 assert.ok(!renderToString(React.createElement(m.Login,{onLogin:()=>{}})).includes('Create an account'),'the Create-an-account link is absent unless onShowRegister is supplied')
 const registerHtml=renderToString(React.createElement(m.PatientRegister,{onRegister:()=>({ok:false,message:'x'}),onCancel:()=>{}}))
-assert.ok(registerHtml.includes('Create your patient account')&&registerHtml.includes('First name'))
+assert.ok(registerHtml.includes('Create your account')&&registerHtml.includes('First name'))
 assert.ok(/type="password"/i.test(registerHtml),'a real password field is present (Backend Foundation 1B registers against the real backend)')
 assert.ok(registerHtml.includes('Confirm password'),'a confirm-password field is present')
 assert.ok(!registerHtml.includes('Preferred branch'),'no branch preference field — the real backend registration contract collects none yet')
