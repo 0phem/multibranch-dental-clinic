@@ -186,3 +186,26 @@ Server-side role checks on every request, email codes for sign-in, passwords sto
 append-only financial and audit records, soft delete or retraction instead of hard delete, and knowledge mode for the assistant
 (nothing typed leaves the system). Retention periods and the DPO review are still open (OPEN_ITEMS 8, 16).
 
+## G. Automations (Administration → Automations)
+
+**40. What if a reminder email fails?**
+Every email is written to the outbox first and sent by the worker; a failure is retried automatically (up to 4 attempts, with
+a growing wait) and recorded. The Owner sees sent, skipped and failed counts for the last 7 days on each automation card, and
+the pre-defense check fails if an email is stuck. A patient without a verified email is skipped, not guessed.
+
+**41. What if it sends twice?**
+It cannot by design: each action has one key per appointment, invoice or visit and type (for example "reminder for appointment
+X at revision 2"). The key is unique in the database for both the automation log and the email outbox, so a retry, a second
+scheduler or a crash-restart finds the key already used. Just before sending, the outbox re-checks the record: a cancelled,
+moved or paid record is not emailed. Tested in `Automations/AutomationsTest`.
+
+**42. Who can turn it off?**
+Only the Owner, per automation, in Administration → Automations; every switch and setting change is in the audit trail with
+who, the old and the new value. Recall ships off. The values are defaults the clinic has not confirmed yet.
+
+**43. Is any message sent without human approval?**
+Reminders, overdue-invoice reminders, waitlist openings and the Owner summary are sent automatically once the Owner leaves them
+on: they only repeat facts already in the records (a time, a balance, a count), never clinical content or prices in reminders.
+Nothing that decides about a patient is automatic: a possible no-show is only flagged, and the front desk confirms or undoes it;
+the "We missed you" email is off by default and goes only after that human confirmation.
+

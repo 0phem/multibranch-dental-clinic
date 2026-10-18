@@ -14,22 +14,22 @@ unless they start with `tests/` (frontend). Module names and owners: `MODULE_COV
 | M3 Work Schedules | Not started | — | — |
 | M4 Patient Records | Partly built | Audited profile edits; name kept as issued on invoices/receipts | Staff → Patients |
 | M5 Treatment Management | Built | Visit-linked treatment; completed treatment locked | Dentist → Treatment |
-| M6 Appointment Management | Built | Conflict-free booking, Dentist auto-assignment, nearest-branch suggestion, month calendar, confirmation and change emails | Patient → Book a visit |
+| M6 Appointment Management | Built | Conflict-free booking, Dentist auto-assignment, nearest-branch suggestion, month calendar, confirmation and change emails; scheduled reminders; waitlist for full days | Patient → Book a visit; Owner → Automations → Demo clock |
 | M7 AI Chatbot | Built (knowledge mode) | Answers from the clinic's own answers and live records; hands unknowns to the front desk | Patient → Ask us; Owner → Assistant answers |
-| M8 Patient Visits | Partly built | Check-in and walk-in Visit records | Staff → Check-In |
+| M8 Patient Visits | Partly built | Check-in and walk-in Visit records; possible no-shows flagged for the front desk (a person confirms) | Staff → Check-In |
 | M9 Patient Queue | Partly built | Queue numbers and transitions | Staff → Queue |
 | M10 Dental Charts | Not started | — | — |
-| M11 Billing Management | Built | Draft invoice from completed treatment, issue, invoice email with PDF, PDF download | Staff → Billing; Patient → Billing |
+| M11 Billing Management | Built | Draft invoice from completed treatment, issue, invoice email with PDF, PDF download; overdue reminders (stop when paid) | Staff → Billing; Patient → Billing |
 | M12 Treatment Plans | Not started | — | — |
 | M13 Services and Pricing | Partly built | Versioned prices; price resolved for each invoice line | Owner → Services & Pricing |
 | M14 Document Management | Partly built | Private document storage with type checks | Patient → Documents |
 | M15 Leave Management | Not started | — | — |
 | M16 Patient Inquiries | Partly built | Recorded inquiries with assignment | Staff → Inquiries |
 | M17 Patient Messaging | Built | Real-time chat, auto-routed front desk, email alert when the patient is away | Patient ↔ Staff Messages |
-| M18 Notifications | Built (email + in-app) | Email outbox with automatic retries; in-app notifications from real events | Patient bell; `scripts/predefense-check.sh` |
+| M18 Notifications | Built (email + in-app) | Email outbox with automatic retries; in-app notifications from real events; the scheduler for the six automations | Patient bell; Owner → Automations |
 | M19 Prescriptions | Mock only | — (browser-local) | — |
-| M20 Patient Follow-Up | Mock only | — (browser-local) | — |
-| M21 Reports and Analytics | Partly built | Server metrics for the Owner | Owner → Analytics |
+| M20 Patient Follow-Up | Mock only | Follow-up tasks browser-local; a server recall email exists but ships off with no rules | Owner → Automations → Recall |
+| M21 Reports and Analytics | Partly built | Server metrics for the Owner; daily summary email (numbers only) | Owner → Analytics; summary email |
 | M22 Audit Logs | Built | Append-only audit of sign-ins, changes and money events | Owner → Audit Trail |
 | M23 Payment Management | Built (test mode) | PayMongo checkout; payment settled automatically from the verified webhook; Payment Receipt email with PDF | Patient → Billing → Review and pay |
 | M24 Lab Cases | Not started | — | — |
@@ -90,9 +90,26 @@ unless they start with `tests/` (frontend). Module names and owners: `MODULE_COV
   PI-43.
 - **Proof:** `Assistant/AssistantKnowledgeTest` (55 realistic questions), `Assistant/AssistantTest`.
 
+### 9. Scheduled automations (M6, M8, M11, M18, M20, M21)
+Run every minute by the scheduler (`automations:run`); each action has one key per record and type in the append-only
+`automation_deliveries` log and the same key in the email outbox, so a retry or a second run never sends twice; the outbox
+re-checks the record just before sending. All times are Asia/Manila. Every number is an Owner setting (Administration →
+Automations) with a default the clinic has **not** confirmed; every change is audited with the old and new value.
+
+| # | Automation | Default | Replaces | Proof |
+| --- | --- | --- | --- | --- |
+| A1 | Appointment reminder: date, time, branch, address, phone, Reschedule or cancel link, calendar file | On; 24 h before; morning-of (8:00 AM) off | PI-31 the front desk reminds every patient | `Automations/AutomationsTest` (24 h, morning-of across midnight and the UTC date, reschedule, cancel, lead time, unverified email) |
+| A2 | Possible no-show flag after the grace period; the front desk confirms (existing No-show command) or undoes; optional "We missed you" email | On; 30 min; email off | PI-21 late arrivals case by case (the decision stays with a person; policy P4 open) | same file (flag, confirm, undo, branch scope) |
+| A3 | Overdue invoice reminder: number, balance, Pay online link; never the treatment lines; only while the branch is open | On; days 3, 7, 14 | Q27 billing follow-up by the receptionist | same file (steps, opening hours, stops when paid, missed step) |
+| A4 | Recall "time for your check-up", once per completed visit and interval | **Off; no rules** (the clinic gave none) | Q15 next visit arranged at payment | same file |
+| A5 | Waitlist: "Notify me if a time opens" on a full day; earliest waiting patients told when a time opens; nothing held | On; 3 patients | Q20 conflicts, Q21 waiting | same file (cancellation frees a time, expiry, never deleted) |
+| A6 | Owner daily summary per branch: bookings, completed visits, cancellations, possible no-shows, payments, invoices, new accounts; numbers only | On; 8:30 PM | Q32 measurable "better" | same file (send time, Manila day boundary, no patient names) |
+
+Demo: Owner → Automations → **Demo clock** (demo database only) or `php artisan automations:demo --appointment=APT-…`.
+
 ### Not automated (say so if asked)
-- **Appointment reminders.** PI-31: the clinic reminds patients for every appointment today. The system sends confirmation and
-  change emails, but **no scheduled reminder email** yet.
+- **Reminders by SMS or Messenger** (PI-30): email and in-app only.
+- **Finalizing a no-show**: always a person (policy P4 unresolved).
 - **HMO contacting** (Q22, Q23): removed from this scope; not automated.
 - **Prescriptions** (Q16, PI-38) and **follow-ups**: browser-local prototypes only.
 
@@ -117,7 +134,7 @@ unless they start with `tests/` (frontend). Module names and owners: `MODULE_COV
 | M15 | — | None (not started) |
 | M16 | PI-42 | `Inquiries/*` |
 | M17 | PI-42, PI-43, PI-30 | `Messaging/*` |
-| M18 | PI-29 booking/change updates; PI-31 reminders (not yet automated) | `Mail/*`, `PatientPortalApiTest` |
+| M18 | PI-29 booking/change updates; PI-31 reminders (scheduled emails) | `Mail/*`, `PatientPortalApiTest`, `Automations/AutomationsTest` |
 | M19 | PI-38 hand-written and printed prescriptions | Browser-local only |
 | M20 | Q15 next appointment arranged at payment | Browser-local only |
 | M21 | Q32 measurable "better" | `Analytics/*` |

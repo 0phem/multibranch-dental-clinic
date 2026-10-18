@@ -15,11 +15,13 @@ flowchart TB
       S0["<b>SYSTEM</b><br/>Builds a draft invoice from the performed procedures<br/><i>System does it</i>"]:::auto
       S2["<b>SYSTEM</b><br/>Emails the invoice with a PDF<br/><i>System does it</i>"]:::auto
       S4["<b>SYSTEM</b><br/>Records the payment; emails the receipt PDF<br/><i>System does it</i>"]:::auto
+      S5["<b>SYSTEM</b><br/>Still unpaid after 3, 7, 14 days: reminder email; stops when paid<br/><i>System does it</i>"]:::auto
     end
     S0 --> S1
     S1 --> S2
     S2 --> S3
     S3 --> S4
+    S4 --> S5
     classDef cited fill:#eaf3fd,stroke:#1865ac,color:#142a40,stroke-width:1.5px
     classDef confirm fill:#fffaf0,stroke:#b26a00,color:#5e3c00,stroke-width:1.5px,stroke-dasharray:6 4
     classDef auto fill:#e6f5ee,stroke:#0c7f75,color:#0f3d33,stroke-width:1.5px

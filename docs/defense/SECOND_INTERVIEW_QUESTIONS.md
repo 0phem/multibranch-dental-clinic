@@ -141,3 +141,17 @@ Clinic: ______________________   Answered by: ______________________   Date: ___
 24. Do you collect patient feedback today? How?
    - Who does it / tool: ______________________________
    - How long / what goes wrong: ______________________________
+
+## Whole clinic
+
+25. Which software does the clinic use today (its name, and who maintains it)?
+   - Answer: ______________________________
+
+26. Could you show us (a demo or screenshots) the screens your staff use every day?
+   - Answer: ______________________________
+
+27. What do you like and dislike about the current software?
+   - Answer: ______________________________
+
+28. What are each Dentist's real weekly hours at each branch (days and times)?
+   - Answer: ______________________________

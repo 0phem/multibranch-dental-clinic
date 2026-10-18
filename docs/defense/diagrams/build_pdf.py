@@ -79,7 +79,7 @@ figure .svg {{ width: 100%; display: flex; justify-content: center; }}
 figure svg {{ max-width: 100% !important; max-height: 172mm; width: auto; height: auto; }}
 .wide figure svg {{ max-height: 118mm; }}
 .tall figure svg {{ max-height: 232mm; }}
-.arch figure svg {{ max-height: 240mm; }}
+.arch figure svg {{ max-height: 232mm; min-width: 60%; }}
 .bvn th {{ width: 26%; }} .bvn td {{ width: 37%; }}
 .legend {{ display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 6px 0; font-size: 8.2pt; color: #3a4e63; }}
 .legend .k {{ display: inline-block; width: 18px; height: 11px; border-radius: 3px; vertical-align: -1px; margin-right: 4px; border: 1.5px solid; }}
@@ -93,7 +93,7 @@ ul {{ margin: 4px 0; padding-left: 18px; }} li {{ margin: 2px 0; }}
   <h1>Process documentation:<br/>before and with the system</h1>
   <p>For each of the 25 modules, how the clinic did the work before (AS-IS, from the clinic interview only) and how the
   Multi-Branch Dental Clinic Operation System does it now (TO-BE, from the code and its tests).</p>
-  <p class="meta">Version of 2026-10-18 · branch feat/auth-messaging-paymongo · sources: docs/defense/INTERVIEW_EVIDENCE.md,
+  <p class="meta">Version of 2026-10-19 · branch feat/auth-messaging-paymongo · sources: docs/defense/INTERVIEW_EVIDENCE.md,
   docs/defense/MODULES_FINAL.md, docs/defense/AUTOMATION_EVIDENCE.md</p>
 </section>
 <section class="page"><div class="bar"></div><h2>Scope and how to read this document</h2>
@@ -109,8 +109,11 @@ ul {{ margin: 4px 0; padding-left: 18px; }} li {{ margin: 2px 0; }}
   <h3>Module summary</h3>
   <table><thead><tr><th>#</th><th>Module</th><th>Status</th><th>Automation type</th></tr></thead><tbody>{summary_rows}</tbody></table>
 </section>
-<section class="page tall"><div class="bar"></div><h2>End-to-end patient journey</h2>{legend}
-  <div class="pair"><figure><figcaption>AS-IS (before)</figcaption>{svg('overview-as-is')}</figure><figure><figcaption>TO-BE (with the system)</figcaption>{svg('overview-to-be')}</figure></div>
+<section class="page arch"><div class="bar"></div><h2>End-to-end patient journey: before (AS-IS)</h2>{legend}
+  <figure><figcaption>AS-IS (from the interview)</figcaption>{svg('overview-as-is')}</figure>
+</section>
+<section class="page arch"><div class="bar"></div><h2>End-to-end patient journey: with the system (TO-BE)</h2>{legend}
+  <figure><figcaption>TO-BE (what the system does today)</figcaption>{svg('overview-to-be')}</figure>
 </section>
 <section class="page arch"><div class="bar"></div><h2>System architecture (as built)</h2>
   <p class="sources">Running today in the demo: one clinic server, PostgreSQL, Gmail SMTP and PayMongo test mode.</p>
@@ -124,13 +127,14 @@ ul {{ margin: 4px 0; padding-left: 18px; }} li {{ margin: 2px 0; }}
 <section class="page"><div class="bar"></div><h2>Limitations and open items</h2>
   <ul>
     <li>Planned modules (M3, M10, M12, M15, M24, M25) and mock-only modules (M19, M20) are drawn as designs, not working software.</li>
-    <li>Appointment reminders are not automated yet (PI-31); confirmation and change emails are.</li>
+    <li>Six scheduled automations (reminders, possible no-shows, overdue invoices, recall, waitlist, Owner summary) run with
+    defaults the clinic has not confirmed; recall ships off with no rules. A no-show is only flagged: a person confirms it.</li>
     <li>Online times are limited by the dentists' seeded shifts until the clinic gives real schedules (PI-06).</li>
     <li>Branches 1 and 2 share one phone number (to confirm); branch 3 has no email and an incomplete address.</li>
     <li>Payments run in PayMongo test mode; live payments need the clinic's own PayMongo account.</li>
     <li>Privacy Policy and Terms are drafts; retention periods are not decided (RA 10173).</li>
     <li>Some timestamps are stored 8 hours early (docs/TIMEZONE_PLAN.md); fix planned after the defense.</li>
-    <li>24 questions for the second interview: docs/defense/SECOND_INTERVIEW_QUESTIONS.md. Full list of clinic decisions: docs/defense/OPEN_ITEMS.md.</li>
+    <li>28 questions for the second interview: docs/defense/SECOND_INTERVIEW_QUESTIONS.md. Full list of clinic decisions: docs/defense/OPEN_ITEMS.md.</li>
   </ul>
 </section>
 </body></html>"""

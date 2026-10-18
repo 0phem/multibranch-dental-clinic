@@ -280,8 +280,8 @@
    "base": "M6-appointment-management",
    "name": "Appointment Management",
    "status": "Implemented",
-   "errors": "Scheduling conflicts (Q20) are blocked by the database",
-   "automation": "Rule-based (open times, no overlaps), event-driven (emails)",
+   "errors": "Scheduling conflicts (Q20) blocked by the database; manual reminders (PI-31) replaced by scheduled emails",
+   "automation": "Rule-based (open times, no overlaps), event-driven (emails), scheduled (reminders, waitlist)",
    "as_is": [
     {
      "lane": "Patient",
@@ -347,8 +347,18 @@
     },
     {
      "lane": "System",
-     "text": "Reminder email before the visit",
-     "kind": "planned"
+     "text": "Reminder email 24 h before (Owner setting); recalculated on reschedule",
+     "kind": "auto"
+    },
+    {
+     "lane": "Patient",
+     "text": "Full day? \"Notify me if a time opens\"",
+     "kind": "manual"
+    },
+    {
+     "lane": "System",
+     "text": "Cancellation frees a time: emails the earliest waiting patients",
+     "kind": "auto"
     }
    ]
   },
@@ -414,8 +424,8 @@
    "base": "M8-patient-visits",
    "name": "Patient Visits",
    "status": "Partial",
-   "errors": "Arrivals not linked to their booking",
-   "automation": "Rule-based",
+   "errors": "Arrivals not linked to their booking; missed visits noticed late",
+   "automation": "Rule-based, scheduled (no-show flag; a person decides)",
    "as_is": [
     {
      "lane": "Front desk",
@@ -453,6 +463,16 @@
      "lane": "System",
      "text": "Links the Visit to the appointment",
      "kind": "auto"
+    },
+    {
+     "lane": "System",
+     "text": "No check-in after the grace period: flags a possible no-show",
+     "kind": "auto"
+    },
+    {
+     "lane": "Front desk",
+     "text": "Confirms the no-show or undoes the flag",
+     "kind": "manual"
     },
     {
      "lane": "Front desk",
@@ -555,8 +575,8 @@
    "base": "M11-billing-management",
    "name": "Billing Management",
    "status": "Implemented",
-   "errors": "Charges not matching the treatment; edited receipts (database blocks changes)",
-   "automation": "Event-driven (draft, emails), rule-based (immutable charges)",
+   "errors": "Charges not matching the treatment; edited receipts (database blocks changes); unpaid balances forgotten",
+   "automation": "Event-driven (draft, emails), rule-based (immutable charges), scheduled (overdue reminders)",
    "as_is": [
     {
      "lane": "Front desk",
@@ -598,6 +618,11 @@
     {
      "lane": "System",
      "text": "Records the payment; emails the receipt PDF",
+     "kind": "auto"
+    },
+    {
+     "lane": "System",
+     "text": "Still unpaid after 3, 7, 14 days: reminder email; stops when paid",
      "kind": "auto"
     }
    ]
@@ -854,8 +879,8 @@
    "base": "M18-notifications",
    "name": "Notifications",
    "status": "Implemented",
-   "errors": "Missed updates; failed emails are retried",
-   "automation": "Event-driven, scheduled (retries)",
+   "errors": "Missed updates and reminders (PI-31); failed emails are retried; no duplicates",
+   "automation": "Event-driven, scheduled (reminders, retries)",
    "as_is": [
     {
      "lane": "Front desk",
@@ -896,8 +921,13 @@
     },
     {
      "lane": "System",
-     "text": "Scheduled reminder before each visit",
-     "kind": "planned"
+     "text": "Scheduler: reminders, overdue invoices, waitlist, Owner summary",
+     "kind": "auto"
+    },
+    {
+     "lane": "System",
+     "text": "One key per record and type: never sent twice",
+     "kind": "auto"
     }
    ]
   },
@@ -948,8 +978,8 @@
    "base": "M20-patient-follow-up",
    "name": "Patient Follow-Up",
    "status": "Mock only",
-   "errors": "Not built on the server yet",
-   "automation": "Planned",
+   "errors": "Follow-up tasks not on the server yet",
+   "automation": "Scheduled recall email (off by default); follow-up tasks planned",
    "as_is": [
     {
      "lane": "Front desk",
@@ -975,7 +1005,12 @@
     },
     {
      "lane": "System",
-     "text": "Follow-up list and reminder on the server",
+     "text": "Recall email per service category (off; no clinic rules yet)",
+     "kind": "auto"
+    },
+    {
+     "lane": "System",
+     "text": "Follow-up list on the server",
      "kind": "planned"
     }
    ]
@@ -1009,6 +1044,11 @@
      "lane": "Owner",
      "text": "Views the dashboard",
      "kind": "manual"
+    },
+    {
+     "lane": "System",
+     "text": "Daily summary email at 8:30 PM: numbers only",
+     "kind": "auto"
     },
     {
      "lane": "Owner",
@@ -1228,7 +1268,7 @@
    {
     "lane": "System",
     "text": "Reminder email",
-    "kind": "planned"
+    "kind": "auto"
    },
    {
     "lane": "Front desk",

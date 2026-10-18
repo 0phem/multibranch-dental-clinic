@@ -20,13 +20,13 @@ flowchart TB
     subgraph L4[" "]
     direction LR
       S2["<b>SYSTEM</b><br/>Confirmation email<br/><i>System does it</i>"]:::auto
-      S3["<b>SYSTEM</b><br/>Reminder email<br/><i>Planned</i>"]:::planned
+      S3["<b>SYSTEM</b><br/>Reminder email<br/><i>System does it</i>"]:::auto
       S6["<b>SYSTEM</b><br/>Invoice email with PDF<br/><i>System does it</i>"]:::auto
       S8["<b>SYSTEM</b><br/>Receipt email with PDF<br/><i>System does it</i>"]:::auto
     end
     S0 --> S1
     S1 --> S2
-    S2 -.-> S3
+    S2 --> S3
     S3 --> S4
     S4 --> S5
     S5 --> S6

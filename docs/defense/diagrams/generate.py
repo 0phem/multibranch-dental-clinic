@@ -94,7 +94,10 @@ flowchart LR
       DB[("<b>SUPABASE</b><br/>PostgreSQL<br/><i>Planned</i>")]:::planned
       ST["<b>SUPABASE</b><br/>Private file storage<br/><i>Planned</i>"]:::planned
     end
+    D["<b>CUSTOM DOMAIN</b><br/>one clinic domain (HTTPS)<br/><i>Planned</i>"]:::planned
     M["Transactional email provider<br/><i>clinic's own domain</i><br/><i>Planned</i>"]:::planned
+    D --> V
+    D --> A
     P["PayMongo<br/><i>clinic's own account</i>"]
     V --> A
     V <--> R
@@ -138,6 +141,13 @@ def main():
            'Clinic: ______________________   Answered by: ______________________   Date: ____________', '']
     count = 0
     groups = [(f'M{m["n"]} {m["name"]}', m['as_is']) for m in MODULES] + [('Patient journey (overview)', OVERVIEW_AS_IS)]
+    # Questions that are not tied to one diagram box (asked for the whole clinic).
+    general = [
+        'Which software does the clinic use today (its name, and who maintains it)?',
+        'Could you show us (a demo or screenshots) the screens your staff use every day?',
+        'What do you like and dislike about the current software?',
+        'What are each Dentist\'s real weekly hours at each branch (days and times)?',
+    ]
     for title, steps in groups:
         qs = [s['confirm'] for s in steps if 'confirm' in s]
         if not qs:
@@ -146,6 +156,10 @@ def main():
         for q in qs:
             count += 1
             out += [f'{count}. {q}', '   - Who does it / tool: ______________________________', '   - How long / what goes wrong: ______________________________', '']
+    out += ['## Whole clinic', '']
+    for q in general:
+        count += 1
+        out += [f'{count}. {q}', '   - Answer: ______________________________', '']
     with open(os.path.join(HERE, '..', 'SECOND_INTERVIEW_QUESTIONS.md'), 'w') as f:
         f.write('\n'.join(out))
     print(f'{len(written)} diagrams, {count} questions')

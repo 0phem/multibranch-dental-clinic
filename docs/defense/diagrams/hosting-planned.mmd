@@ -13,7 +13,10 @@ flowchart LR
       DB[("<b>SUPABASE</b><br/>PostgreSQL<br/><i>Planned</i>")]:::planned
       ST["<b>SUPABASE</b><br/>Private file storage<br/><i>Planned</i>"]:::planned
     end
+    D["<b>CUSTOM DOMAIN</b><br/>one clinic domain (HTTPS)<br/><i>Planned</i>"]:::planned
     M["Transactional email provider<br/><i>clinic's own domain</i><br/><i>Planned</i>"]:::planned
+    D --> V
+    D --> A
     P["PayMongo<br/><i>clinic's own account</i>"]
     V --> A
     V <--> R
