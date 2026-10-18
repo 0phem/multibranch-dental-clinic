@@ -58,6 +58,46 @@ class NotificationCenter
             'messages', $conversation->public_id, "message_received:{$messageId}");
     }
 
+    /** Scheduled automations: written when the automation acts, with the same key as its email (once per event). */
+    public function appointmentReminder(Appointment $appointment, string $dedupe): void
+    {
+        $user = $appointment->patient?->user;
+        if (! $user) return;
+        $appointment->loadMissing(['service', 'branch']);
+        $when = ClinicClock::local($appointment->starts_at)->format('D, M j, g:i A');
+        $this->write($user, 'appointment_reminder', 'Upcoming visit reminder', implode(' · ', array_filter([$when, $appointment->branch?->name])), 'visits', $appointment->public_id, $dedupe);
+    }
+
+    public function noShowRebook(Appointment $appointment, string $dedupe): void
+    {
+        $user = $appointment->patient?->user;
+        if (! $user) return;
+        $this->write($user, 'no_show_rebook', 'We missed you', 'Book a new time that suits you', 'book', $appointment->public_id, $dedupe);
+    }
+
+    public function invoiceOverdue(Invoice $invoice, string $dedupe): void
+    {
+        $user = $invoice->patient?->user;
+        if (! $user) return;
+        $this->write($user, 'invoice_overdue', "Invoice {$invoice->invoice_number} is still unpaid", 'Balance '.Brand::money($invoice->balance()), 'billing', $invoice->public_id, $dedupe);
+    }
+
+    public function recallDue(\App\Models\Visit $visit, string $category, string $dedupe): void
+    {
+        $user = $visit->patient?->user;
+        if (! $user) return;
+        $this->write($user, 'recall_due', 'Time for your check-up', 'Book your next visit when it suits you', 'book', null, $dedupe);
+    }
+
+    public function waitlistOpening(\App\Models\WaitlistEntry $entry, string $dedupe): void
+    {
+        $user = $entry->patient?->user;
+        if (! $user) return;
+        $entry->loadMissing(['branch', 'service']);
+        $day = \Carbon\CarbonImmutable::createFromFormat('!Y-m-d', $entry->dateString(), ClinicClock::TIMEZONE)->format('D, M j');
+        $this->write($user, 'waitlist_opening', 'A time opened on '.$day, implode(' · ', array_filter([$entry->service?->name, $entry->branch?->name, 'first come, first served'])), 'book', null, $dedupe);
+    }
+
     private function write(User $user, string $kind, string $title, ?string $body, ?string $page, ?string $targetId, string $dedupe): void
     {
         try {

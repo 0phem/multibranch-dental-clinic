@@ -120,6 +120,26 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureAccountAccess::cla
         Route::get('/{auditLog}', [AuditController::class, 'show']);
     });
 
+    // Scheduled automations (Administration → Automations, Owner only). Not the M23 rule monitor below.
+    Route::prefix('automations')->middleware('role:owner')->group(function () {
+        Route::get('/', [\App\Http\Controllers\AutomationSettingsController::class, 'index']);
+        Route::post('/demo-run', [\App\Http\Controllers\AutomationSettingsController::class, 'demo'])->middleware('throttle:20,1');
+        Route::put('/{key}', [\App\Http\Controllers\AutomationSettingsController::class, 'update']);
+        Route::post('/{key}/test', [\App\Http\Controllers\AutomationSettingsController::class, 'test'])->middleware('throttle:6,1');
+    });
+    // A2 possible no-shows (front desk). Confirm uses the existing No-show command; the Owner sees every branch.
+    Route::prefix('no-show-flags')->middleware('role:staff,owner')->group(function () {
+        Route::get('/', [\App\Http\Controllers\NoShowFlagController::class, 'index']);
+        Route::post('/{noShowFlag}/confirm', [\App\Http\Controllers\NoShowFlagController::class, 'confirm']);
+        Route::post('/{noShowFlag}/dismiss', [\App\Http\Controllers\NoShowFlagController::class, 'dismiss']);
+    });
+    // A5 waitlist for fully booked days (Patient, own entries only).
+    Route::prefix('waitlist')->middleware('role:patient')->group(function () {
+        Route::get('/mine', [\App\Http\Controllers\WaitlistController::class, 'mine']);
+        Route::post('/', [\App\Http\Controllers\WaitlistController::class, 'store'])->middleware('throttle:20,1');
+        Route::post('/{waitlistEntry}/cancel', [\App\Http\Controllers\WaitlistController::class, 'cancel']);
+    });
+
     // M23 Workflow Automation & Exception Management (Owner only)
     Route::prefix('automation')->middleware('role:owner')->group(function () {
         Route::get('/snapshot', [AutomationController::class, 'snapshot']);

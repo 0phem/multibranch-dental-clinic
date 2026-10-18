@@ -459,3 +459,18 @@ export function dispatchAutomationRule(ruleCode, payload) {
 // M21 Operational Analytics & Executive Intelligence (Owner only)
 export function getExecutiveSummary(params) { return request(`/api/analytics/executive-summary${query(params)}`) }
 export function getBranchPerformance(params) { return request(`/api/analytics/branch-performance${query(params)}`) }
+
+// Scheduled automations (Administration → Automations, Owner). Settings changes carry the revision they were based on.
+export function listAutomations() { return request('/api/automations') }
+export function updateAutomation(key, body) { return request(`/api/automations/${encodeURIComponent(key)}`, { method: 'PUT', body: JSON.stringify(body) }) }
+export function testAutomation(key) { return request(`/api/automations/${encodeURIComponent(key)}/test`, { method: 'POST' }) }
+/** Demo database only (the server refuses elsewhere): run one automation now with a simulated clock. */
+export function runAutomationDemo(body) { return request('/api/automations/demo-run', { method: 'POST', body: JSON.stringify(body) }) }
+// A2 possible no-shows (front desk): confirm uses the existing No-show command; undo leaves the appointment unchanged.
+export function listNoShowFlags() { return request('/api/no-show-flags') }
+export function confirmNoShowFlag(id) { return request(`/api/no-show-flags/${encodeURIComponent(id)}/confirm`, { method: 'POST' }) }
+export function dismissNoShowFlag(id) { return request(`/api/no-show-flags/${encodeURIComponent(id)}/dismiss`, { method: 'POST' }) }
+// A5 waitlist for fully booked days (Patient's own entries).
+export function myWaitlist() { return request('/api/waitlist/mine') }
+export function joinWaitlist(body) { return request('/api/waitlist', { method: 'POST', body: JSON.stringify(body) }) }
+export function cancelWaitlist(id) { return request(`/api/waitlist/${encodeURIComponent(id)}/cancel`, { method: 'POST' }) }

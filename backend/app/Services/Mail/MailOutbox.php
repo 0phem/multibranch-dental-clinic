@@ -30,7 +30,9 @@ use Illuminate\Support\Facades\DB;
  */
 class MailOutbox
 {
-    public const PURPOSES = ['appointment_confirmation', 'appointment_rescheduled', 'appointment_cancelled', 'payment_receipt', 'invoice_issued', 'message_alert'];
+    public const PURPOSES = ['appointment_confirmation', 'appointment_rescheduled', 'appointment_cancelled', 'payment_receipt', 'invoice_issued', 'message_alert',
+        // Scheduled automations (App\Services\Automations): re-checked against the record just before sending.
+        'appointment_reminder', 'no_show_rebook', 'invoice_overdue', 'recall_due', 'waitlist_opening', 'owner_daily_summary'];
 
     public function __construct(private readonly MailDispatcher $dispatcher) {}
 
@@ -134,6 +136,20 @@ class MailOutbox
             if (! $appointment) return [null, null, true, null];
             // A later change produced its own message; this older one would show details that are no longer true.
             if ($dispatch->subject_revision !== null && $appointment->revision !== $dispatch->subject_revision) return [null, $appointment, true, null];
+            if ($dispatch->purpose === 'appointment_reminder') {
+                // Cancelled, checked in, moved (new revision, handled above) or already started: no reminder.
+                if (! in_array($appointment->status, ['Pending', 'Confirmed'], true) || $appointment->starts_at->lessThanOrEqualTo(now()) || $appointment->visit()->exists()) return [null, $appointment, true, null];
+                [$user, $reason] = \App\Services\Automations\Recipient::patient($appointment->patient);
+
+                return [new \App\Mail\AppointmentReminderMail($appointment, str_ends_with($dispatch->dedupe_key, ':morning') ? 'morning' : 'lead'), $appointment, false, $reason ? null : $user?->email];
+            }
+            if ($dispatch->purpose === 'no_show_rebook') {
+                // Already booked again (or the No-show was not kept): the invitation is not needed.
+                if ($appointment->status !== 'No-show' || \App\Services\Automations\RecallReminders::hasUpcoming($appointment->patient_id, \Carbon\CarbonImmutable::now())) return [null, $appointment, true, null];
+                [$user, $reason] = \App\Services\Automations\Recipient::patient($appointment->patient);
+
+                return [new \App\Mail\NoShowRebookMail($appointment), $appointment, false, $reason ? null : $user?->email];
+            }
             $mail = $dispatch->purpose === 'appointment_confirmation'
                 ? new AppointmentConfirmationMail($appointment)
                 : new AppointmentChangedMail($appointment, $dispatch->purpose === 'appointment_cancelled' ? 'cancelled' : 'rescheduled');
@@ -157,6 +173,35 @@ class MailOutbox
             $patient = $receipt->invoice?->patient;
 
             return [new PaymentReceiptMail($receipt->invoice, $receipt), $receipt->invoice, false, $patient?->user?->email ?? $patient?->person?->email];
+        }
+        if ($dispatch->subject_type === 'invoice' && $dispatch->purpose === 'invoice_overdue') {
+            $invoice = \App\Models\Invoice::where('public_id', $dispatch->subject_public_id)->with(['patient.person', 'patient.user', 'branch'])->first();
+            // Paid, voided or settled before the worker ran: no reminder.
+            if (! $invoice || $invoice->status !== 'Issued' || (float) $invoice->balance() <= 0) return [null, $invoice, true, null];
+            [$user, $reason] = \App\Services\Automations\Recipient::patient($invoice->patient);
+
+            return [new \App\Mail\InvoiceOverdueMail($invoice), $invoice, false, $reason ? null : $user?->email];
+        }
+        if ($dispatch->subject_type === 'visit' && $dispatch->purpose === 'recall_due') {
+            $visit = \App\Models\Visit::where('public_id', $dispatch->subject_public_id)->with(['patient.user', 'patient.person', 'branch', 'appointment.service', 'requestedService'])->first();
+            if (! $visit || \App\Services\Automations\RecallReminders::hasUpcoming($visit->patient_id, \Carbon\CarbonImmutable::now())) return [null, $visit, true, null];
+            [$user, $reason] = \App\Services\Automations\Recipient::patient($visit->patient);
+
+            return [new \App\Mail\RecallMail($visit), $visit, false, $reason ? null : $user?->email];
+        }
+        if ($dispatch->subject_type === 'waitlistentry' && $dispatch->purpose === 'waitlist_opening') {
+            $entry = \App\Models\WaitlistEntry::where('public_id', $dispatch->subject_public_id)->with(['patient.user', 'patient.person', 'branch', 'service', 'dentist.person'])->first();
+            if (! $entry || $entry->dateString() < \App\Support\ClinicClock::today()) return [null, $entry, true, null];
+            [$user, $reason] = \App\Services\Automations\Recipient::patient($entry->patient);
+
+            return [new \App\Mail\WaitlistOpeningMail($entry), $entry, false, $reason ? null : $user?->email];
+        }
+        if ($dispatch->subject_type === 'user' && $dispatch->purpose === 'owner_daily_summary') {
+            $owner = $dispatch->recipient;
+            if (! $owner || $owner->account_status !== 'Active' || $owner->deleted_at || ! $dispatch->subject_revision) return [null, $owner, true, null];
+            $date = \Carbon\CarbonImmutable::createFromFormat('!Ymd', (string) $dispatch->subject_revision, \App\Support\ClinicClock::TIMEZONE)->toDateString();
+
+            return [new \App\Mail\OwnerDailySummaryMail($owner, $date), null, false, $owner->email];
         }
         if ($dispatch->subject_type === 'invoice') {
             $invoice = \App\Models\Invoice::where('public_id', $dispatch->subject_public_id)->with(['patient.person', 'patient.user', 'branch', 'lines'])->first();

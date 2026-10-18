@@ -14,6 +14,7 @@ import { PasswordReset } from './pages/PasswordReset.jsx'
 import { stopRealtime } from './realtime.js'
 import { bootstrapSession } from './session-bootstrap.js'
 import { clearInvoiceLinkFromUrl, readInvoiceLink, rememberInvoiceLink, takeInvoiceLink } from './invoice-link.js'
+import { clearPageLinkFromUrl, pageForLink, readPageLink, rememberPageLink, takePageLink } from './page-link.js'
 
 const PatientPortal=lazy(()=>import('./patient/Portal.jsx').then(m=>({default:m.PatientPortal})))
 const PatientRegister=lazy(()=>import('./pages/PatientRegister.jsx').then(m=>({default:m.PatientRegister})))
@@ -40,6 +41,7 @@ const PatientLoyaltyPage=lazy(()=>import('./pages/PatientLoyalty.jsx').then(m=>(
 const PatientMePage=lazy(()=>import('./pages/PatientMe.jsx').then(m=>({default:m.PatientMePage})))
 const AnalyticsPage=lazy(()=>import('./pages/Admin.jsx').then(m=>({default:m.AnalyticsPage})))
 const AutomationPage=lazy(()=>import('./pages/Admin.jsx').then(m=>({default:m.AutomationPage})))
+const AutomationsPage=lazy(()=>import('./pages/Automations.jsx').then(m=>({default:m.AutomationsPage})))
 const AssistantAnswersPage=lazy(()=>import('./pages/AssistantAnswers.jsx').then(m=>({default:m.AssistantAnswersPage})))
 const ClinicBrandingPage=lazy(()=>import('./pages/ClinicBranding.jsx').then(m=>({default:m.ClinicBrandingPage})))
 const BranchesPage=lazy(()=>import('./pages/Admin.jsx').then(m=>({default:m.BranchesPage})))
@@ -87,7 +89,7 @@ function AppBody() {
   const [page,setPageState]=useState('dashboard')
   const [context,setContext]=useState(null)
   // An emailed or PayMongo-return link to one invoice is kept until the person is signed in (see invoice-link.js).
-  useState(()=>{if(typeof window!=='undefined')rememberInvoiceLink(readInvoiceLink(window.location.search));return null})
+  useState(()=>{if(typeof window!=='undefined'){rememberInvoiceLink(readInvoiceLink(window.location.search));rememberPageLink(readPageLink(window.location.search))}return null})
   // Taken once, then kept for this signed-in session: a repeated session start (React StrictMode runs effects twice in
   // development) re-applies the same link instead of falling back to the start page. Cleared on sign-out.
   const invoiceLink=useRef(undefined)
@@ -139,6 +141,10 @@ function AppBody() {
       // Only a Patient's own billing page takes the link; the server still decides whether the invoice is theirs.
       if(session.role==='patient'){setContext(link);setPageState('billing')}
     }
+    // Links from the automation emails (reminder, rebook, recall, waitlist, Owner summary).
+    const target=link?null:pageForLink(takePageLink(),session.role)
+    if(!link)clearPageLinkFromUrl()
+    if(target){setContext(target[1]);setPageState(target[0])}
   }
 
   const checkSession=async()=>{
@@ -290,7 +296,7 @@ function AppBody() {
   // The Patient portal (src/patient) reads the clinic server only; the legacy local-state patient screens are not used.
   if(role==='patient'&&serverMe?.patient?.id)return <>
     <ChunkBoundary><Suspense fallback={<StartupLoading label="Opening your portal…"/>}>
-      <PatientPortal me={serverMe} store={store} initialPage={page==='billing'?'billing':'home'} initialContext={page==='billing'?context:null} onLogout={logout} onSignedOut={signedOutForSecurity}/>
+      <PatientPortal me={serverMe} store={store} initialPage={['billing','visits','book'].includes(page)?page:'home'} initialContext={['billing','visits'].includes(page)?context:null} onLogout={logout} onSignedOut={signedOutForSecurity}/>
     </Suspense></ChunkBoundary>
     <ToastStack toasts={store.toasts}/>
   </>
@@ -320,6 +326,7 @@ function AppBody() {
     case 'analytics': content=<AnalyticsPage activeBranch={activeBranch} store={store}/>; break
     case 'users': content=<UsersPage store={store}/>; break
     case 'pricing': content=<ServicesPricingPage store={store}/>; break
+    case 'automations': content=<AutomationsPage store={store}/>; break
     case 'automation': content=<AutomationPage store={store}/>; break
     case 'branding': content=<ClinicBrandingPage/>; break
     case 'assistant': content=<AssistantAnswersPage store={store}/>; break

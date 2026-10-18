@@ -69,6 +69,18 @@ final class Brand
     }
 
     /** True when the Owner uploaded a logo (otherwise the supplied clinic logo is used everywhere). */
+    /** The patient portal opened on one appointment in My visits (reschedule or cancel there), after sign-in when needed. */
+    public static function appointmentUrl(string $appointmentPublicId): string
+    {
+        return rtrim((string) config('app.frontend_url'), '/').'/?appointment='.rawurlencode($appointmentPublicId).'#sign-in';
+    }
+
+    /** The portal opened on one page after sign-in: 'book' (patients) or 'reports' (the Owner's analytics). */
+    public static function pageUrl(string $page): string
+    {
+        return rtrim((string) config('app.frontend_url'), '/').'/?open='.rawurlencode($page).'#sign-in';
+    }
+
     public static function hasCustomLogo(): bool
     {
         $uploaded = self::setting('logo');

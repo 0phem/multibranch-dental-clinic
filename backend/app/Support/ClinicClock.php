@@ -32,6 +32,12 @@ final class ClinicClock
         return CarbonImmutable::instance($instant)->setTimezone(self::TIMEZONE);
     }
 
+    /** A clinic date plus whole calendar days (Asia/Manila; no time of day involved). */
+    public static function addDays(string $date, int $days): string
+    {
+        return CarbonImmutable::createFromFormat('!Y-m-d', $date, self::TIMEZONE)->addDays($days)->toDateString();
+    }
+
     /** Calendar-month addition with end-of-month clamping (src/clock.js addCalendarMonths). */
     public static function addCalendarMonths(string $date, int $months): string
     {
