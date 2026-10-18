@@ -12,7 +12,8 @@ const LABEL = { available: 'available', full: 'fully booked', closed: 'closed', 
  * look different, available days are highlighted, today is marked, and the months move only within the online booking window.
  * Every state comes from GET /api/appointments/calendar, i.e. the same rules the booking command enforces.
  */
-export function BookingCalendar({ branchId, serviceId, dentistId = null, appointmentId = null, value, onChange }) {
+// `onFullDay` (booking only): a fully booked day stays selectable so the patient can join the waitlist for it (A5).
+export function BookingCalendar({ branchId, serviceId, dentistId = null, appointmentId = null, value, onChange, onFullDay = null }) {
   const [month, setMonth] = useState(value ? value.slice(0, 7) : null)
   const [state, setState] = useState({ status: 'loading', data: null, error: '' })
   const [attempt, setAttempt] = useState(0)
@@ -52,9 +53,9 @@ export function BookingCalendar({ branchId, serviceId, dentistId = null, appoint
         {cells.map((day, i) => day === null ? <span key={`b${i}`} className="pp-cal-blank" aria-hidden="true"/> : <button
           key={day.date} type="button" role="gridcell"
           className={`pp-cal-day is-${day.status} ${day.date === data.today ? 'is-today' : ''} ${value === day.date ? 'is-selected' : ''}`}
-          disabled={day.status !== 'available'} aria-pressed={value === day.date}
-          aria-label={`${dateLong(day.date)}, ${LABEL[day.status]}${day.date === data.today ? ', today' : ''}`}
-          onClick={() => onChange(day.date)}>
+          disabled={day.status !== 'available' && !(onFullDay && day.status === 'full')} aria-pressed={value === day.date}
+          aria-label={`${dateLong(day.date)}, ${LABEL[day.status]}${onFullDay && day.status === 'full' ? ', choose to join the waitlist' : ''}${day.date === data.today ? ', today' : ''}`}
+          onClick={() => (day.status === 'full' ? onFullDay(day.date) : onChange(day.date))}>
           <span className="pp-cal-num">{Number(day.date.slice(8))}</span>
           {day.status === 'available' && <span className="pp-cal-dot" aria-hidden="true"/>}
         </button>)}

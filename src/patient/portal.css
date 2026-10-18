@@ -346,3 +346,8 @@
 .hours-day { width: 92px; font-weight: 650; color: var(--ink); }
 .hours-closed { display: inline-flex; align-items: center; gap: 6px; color: var(--text); }
 .hours-row input[type=time] { min-height: 38px; padding: 0 8px; border: 1px solid var(--line-strong); border-radius: 10px; }
+/* A5 waitlist offer under the booking calendar (a fully booked day) */
+.pp-waitlist { margin-top: 14px; border-left: 4px solid var(--brand, #1865ac); }
+.pp-waitlist h3 { margin: 0 0 6px; font-size: 1.05rem; }
+.pp-waitlist p { margin: 0 0 12px; line-height: 1.5; }
+.pp-cal-day.is-full:not(:disabled) { cursor: pointer; }

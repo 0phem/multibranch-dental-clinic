@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Button, Icon } from '../../components.jsx'
-import { bookingBranchOptions, bookingDentistOptions, listServices } from '../../api-client.js'
+import { bookingBranchOptions, bookingDentistOptions, cancelWaitlist, joinWaitlist, listServices } from '../../api-client.js'
 import { commandKey, createAppointment } from '../../appointments-api.js'
 import { clinic } from '../../clinic-config.js'
 import { BookingCalendar, TimeSlots } from '../BookingCalendar.jsx'
@@ -14,8 +14,10 @@ const STEPS = ['Service', 'Branch', 'Dentist', 'Date', 'Time', 'Review']
  * any available Dentist), and the Patient can change every one. Choices are kept when going back. Real data only.
  */
 export function BookPage({ prefill = null, onDone, onNavigate, toast }) {
+  const [fullDay, setFullDay] = useState(null) // a fully booked day the patient may wait for (A5)
   const [step, setStep] = useState(0)
   const [choice, setChoice] = useState({ service: null, branch: null, dentist: null, date: '', slot: null })
+  useEffect(() => { setFullDay(null) }, [step, choice.branch?.id, choice.service?.id, choice.dentist?.id])
   const [done, setDone] = useState(null)
   const services = useLoad(() => listServices(), [])
   const headRef = useRef(null)
@@ -49,7 +51,8 @@ export function BookPage({ prefill = null, onDone, onNavigate, toast }) {
       {step === 2 && <DentistStep service={choice.service} branch={choice.branch} value={choice.dentist} onPick={d => { set({ dentist: d, date: '', slot: null }); go(3) }}/>}
       {step === 3 && <>
         <p className="pp-hint">{choice.branch.name} · {choice.service.name}{choice.dentist ? ` · ${choice.dentist.name}` : ' · any available dentist'}</p>
-        <BookingCalendar branchId={choice.branch.id} serviceId={choice.service.id} dentistId={choice.dentist?.id} value={choice.date} onChange={date => { set({ date, slot: null }); go(4) }}/>
+        <BookingCalendar branchId={choice.branch.id} serviceId={choice.service.id} dentistId={choice.dentist?.id} value={choice.date} onChange={date => { set({ date, slot: null }); go(4) }} onFullDay={setFullDay}/>
+        {fullDay && <WaitlistOffer key={fullDay} date={fullDay} choice={choice} toast={toast}/>}
       </>}
       {step === 4 && <>
         <p className="pp-hint">{dateLong(choice.date)} at {choice.branch.name}</p>
@@ -199,5 +202,37 @@ function Success({ appointment, onNavigate }) {
         <Button variant="ghost" onClick={() => onNavigate('home')}>Back to home</Button>
       </div>
     </div>
+  </div>
+}
+
+/**
+ * A5: a fully booked day. The patient can ask to be told when a time opens (for example after a cancellation). Nothing is held:
+ * the first person to book gets the time, through the normal booking rules.
+ */
+function WaitlistOffer({ date, choice, toast }) {
+  const [entry, setEntry] = useState(null), [busy, setBusy] = useState(false), [error, setError] = useState('')
+  const join = async () => {
+    setBusy(true); setError('')
+    const r = await joinWaitlist({ branch_ref: choice.branch.id, service_ref: choice.service.id, dentist_ref: choice.dentist?.id || null, date })
+    setBusy(false)
+    if (!r.ok) return setError(r.kind === 'validation' ? Object.values(r.errors || {})[0]?.[0] || r.message : r.message || 'That did not work. Try again.')
+    setEntry(r.data); toast?.('You’re on the waitlist.', 'success')
+  }
+  const leave = async () => {
+    setBusy(true)
+    const r = await cancelWaitlist(entry.id)
+    setBusy(false)
+    if (r.ok) { setEntry(r.data); toast?.('Removed from the waitlist.', 'success') }
+  }
+  const waiting = entry?.status === 'waiting'
+  return <div className="pp-card pp-waitlist" role="region" aria-label="Waitlist">
+    <h3>{dateLong(date)} is fully booked</h3>
+    {waiting
+      ? <><p>You’re on the waitlist. We’ll email you and show a notice here if a time opens. It’s first come, first served, and no time is held for you.</p>
+        <Button variant="ghost" disabled={busy} onClick={leave}>Leave the waitlist</Button></>
+      : <><p>We can tell you if a time opens on this day, for example after a cancellation. You can still choose another day.</p>
+        {entry?.status === 'cancelled' && <p className="pp-hint">You left the waitlist for this day.</p>}
+        <Button icon="bell" disabled={busy} onClick={join}>{busy ? 'Saving…' : 'Notify me if a time opens'}</Button></>}
+    {error && <p className="pp-error-text" role="alert">{error}</p>}
   </div>
 }
