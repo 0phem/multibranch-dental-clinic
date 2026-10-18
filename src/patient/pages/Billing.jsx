@@ -66,7 +66,7 @@ export function BillingPage({ context, toast }) {
 
   const items = (rows || []).map(view)
   const reviewing = reviewId ? items.find(i => i.id === reviewId) : null
-  if (reviewing) return <div className="pp-page"><ReviewAndPay invoice={reviewing} onBack={() => setReviewId(null)}/></div>
+  if (reviewing) return <div className="pp-page role-patient"><ReviewAndPay invoice={reviewing} onBack={() => setReviewId(null)}/></div>
   const due = items.filter(i => i.status === 'Issued' && Number(i.balance) > 0)
   const balance = due.reduce((s, i) => s + Number(i.balance), 0)
 

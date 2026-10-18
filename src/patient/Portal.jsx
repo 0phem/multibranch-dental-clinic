@@ -47,9 +47,9 @@ export function PatientPortal({ me, store, initialPage = 'home', initialContext 
     case 'book': content = <BookPage prefill={context} onNavigate={navigate} toast={toast} onDone={() => notes.reload()}/>; break
     case 'visits': content = <VisitsPage context={context} onNavigate={navigate} toast={toast}/>; break
     case 'billing': content = <BillingPage context={context} toast={toast}/>; break
-    case 'messages': content = <div className="pp-page pp-legacy"><ServerMessagesPage store={store} role="patient" initial={context}/></div>; break
-    case 'feedback': content = <div className="pp-page pp-legacy"><PatientFeedbackPage store={store}/></div>; break
-    case 'documents': content = <div className="pp-page pp-legacy"><PatientMePage store={store} setPage={() => {}} documentsOnly/></div>; break
+    case 'messages': content = <div className="pp-page pp-legacy role-patient"><ServerMessagesPage store={store} role="patient" initial={context}/></div>; break
+    case 'feedback': content = <div className="pp-page pp-legacy role-patient"><PatientFeedbackPage store={store}/></div>; break
+    case 'documents': content = <div className="pp-page pp-legacy role-patient"><PatientMePage store={store} setPage={() => {}} documentsOnly/></div>; break
     case 'profile': content = <ProfilePage me={me} onNavigate={navigate}/>; break
     case 'security': content = <SecurityPage me={me} onSignedOut={onSignedOut}/>; break
     default: content = <HomePage me={me} onNavigate={navigate}/>
