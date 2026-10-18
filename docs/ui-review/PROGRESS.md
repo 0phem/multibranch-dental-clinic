@@ -94,5 +94,32 @@ Uncommitted work in progress on `feat/auth-messaging-paymongo`, kept here so a d
   - DONE: demo-start.sh `PHP_CLI_SERVER_WORKERS` (default 4; verified 4 workers on a test port; the full-stack check needs a user restart).
   - DONE: branch editing (migration `2026_10_25_000200_add_email_to_branches` on the demo DB; email, coordinates and days open in the Owner form; tests).
   - DONE: new2 journey (welcome screen etc.) replaces docs/ui-review/patient/new-patient/ (15 shots, real branch names); assistant screenshots in docs/ui-review/patient/assistant/ (demo and new patient on phone and desktop, plus the Owner screen); after/ retaken (28) with the real names. The before/ shots keep the old names on purpose (historical evidence).
-- [ ] Step 2 full suites (running)
-- [ ] Step 3 commits; step 4 approval 3 migrations; step 5 defense documents, PDFs, rehearsal; step 6 report
+- [x] **Step 2:** backend 750/750, frontend 850/850, smoke ok, build ok, diff check ok.
+- [x] **Step 3:** 12 commits cb041db..8cbc731 (no .env or keys). Uncommitted on purpose: docs/defense/, scripts/demo-reset.sh.
+- [x] **Step 4:** approval 3 done on dental_clinic (backup 20261015_0132 verified row for row; 4 migrations in batch 7; ClinicSettingsSeeder 11 values; ServiceSeeder 11 descriptions only). Pending: branch email migration, RealBranchSeeder, AssistantAnswerSeeder, closed days. Logged in docs/CLINIC_DB_P3_MIGRATION_LOG.md.
+- Security review note: in AI mode the stream shows text before OutputGuard runs (not active in knowledge mode); recorded as open item.
+- [x] **Step 5:** docs/defense/ (INTERVIEW_EVIDENCE, AUTOMATION_EVIDENCE, OPEN_ITEMS, PANEL_QA, PITCH, DEMO_SCRIPT, REHEARSAL_REPORT; DEMO_SCRIPT.pdf, PANEL_QA.pdf); scripts/demo-reset.sh; rehearsal done (fixes: Review-and-pay styling, demo script branding and PayMongo steps); demo data reset; frontend 850/850, smoke ok, build ok.
+- [x] **Step 6:** reported. Final: backend 750/750 (rerun), frontend 850/850, smoke ok, build ok. Left uncommitted: docs/defense, demo-reset.sh, rehearsal fixes, log and post-defense notes.
+
+---
+# Task 3 (real branch contacts and hours; landing page; consistency checks)
+- [x] **Data model:** migration `2026_10_26_000100_add_weekly_hours_to_branches` (demo DB); `Branch::hoursOnDay/hoursOnDate/weekHours`; `App\Support\BranchHours::summary`.
+- [x] **Rules:** scheduling (`branch-day`, `branch-hours`, `slotsOn`), walk-in hours, the booking API and the public branches API use per-day hours.
+- [x] **Seeders:** RealBranchSeeder phone, email and HOURS (placeholder phones replaced only); BranchSeeder; DemoClinicSeeder Sunday step removed. Demo DB updated.
+- [x] **Assistant:** hours per day, branch phone and email ("no email on file" for b3); the "weekends busier" sentence removed from the hours answer.
+- [x] **demo:check:** FAIL on a missing or placeholder phone or hours; WARN for b3's email and ZIP.
+- [x] **Emails and PDFs:** the branch email in branch messages (none for b3); the clinic email otherwise (`Brand::forEmail`).
+- [x] **Frontend hours:** `hoursSummary`/`openStatus` in patient/format.js; Book shows per-day hours; the Owner per-day hours editor; reference bridge `weeklyHours`; data.js real phones and hours.
+- [x] **Tests:** BranchHoursTest (4), PublicBranchesTest updated, an AssistantKnowledgeTest hours and contacts test; 850 frontend.
+- [ ] Docs (demo script, Q&A, pitch, OPEN_ITEMS)
+- [x] **Landing page:** PublicSite/PublicChrome/PublicLegal/AuthShell/PatientRegister, landing.css, public endpoints services/faq, meta from branding, credits; HMO relabelled ("Less: coverage") in emails, PDFs, PayMongo, Billing, ReviewAndPay; tests public-auth-site (rewritten), landing.test.js, public-locations; smoke updated. 853/853, smoke ok, build ok.
+- [x] Before screenshots in docs/ui-review/landing/before (10).
+- [ ] Consistency checks; verify; commits; report
+
+---
+# Task 4 (module freeze, AS-IS / TO-BE process diagrams, process documentation PDF)
+- Landing task (task 3) still open: waiting for the +land2 email code; its work stays uncommitted until that run finishes.
+- [x] docs/defense/MODULES_FINAL.md (8 Implemented, 9 Partial, 2 Mock only, 6 Planned; ID OCR planned under M1; data retention checked in code).
+- [x] mermaid-cli via npx renders with system Chrome (tested).
+- [ ] Diagram generator, 50 module diagrams plus overview, architecture and hosting; SVG and PNG
+- [ ] SECOND_INTERVIEW_QUESTIONS.md, PROCESS_DOCUMENTATION.pdf, doc updates, checks, commits, report

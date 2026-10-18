@@ -15,6 +15,7 @@ placeholder names "Branch A/B/C" everywhere. In the code they live in one place:
   to sort branches by distance in booking. A Patient's location is used once in the browser request and never stored.
 - If a branch has no coordinates, booking ranks branches by the earliest open time instead (no guessing).
 - **Open item:** branch 3's address has no street and ZIP code. It is kept exactly as given until the clinic confirms it.
-- **Not yet real:** branch opening hours and branch phone numbers are still the project's placeholder values
-  ((02) 8123 1001 to 1003). They are kept until the clinic sends the real ones (docs/defense/OPEN_ITEMS.md). The clinic phone
-  and email in the clinic settings are the ones the clinic published.
+- **Phones, emails and hours (given by the clinic on 2026-10-17):** branch 1 0922 878 7341, danaroxas.dentalclinic@gmail.com;
+  branch 2 0922 878 7341 (same as branch 1, to be confirmed), danaroxasdental@gmail.com; branch 3 0933 867 8725, no email.
+  All branches: Monday to Friday 8:00 AM to 8:00 PM, Saturday 8:00 AM to 5:00 PM, Sunday closed (`RealBranchSeeder::HOURS`,
+  stored per day in `branches.weekly_hours`).
