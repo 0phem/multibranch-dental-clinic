@@ -44,7 +44,7 @@ class ReferenceDataResourceContractTest extends TestCase
         $payload = $response->json('data.0');
 
         $this->assertSame('svc1', $payload['id']);
-        $this->assertSame(['id', 'code', 'name', 'duration_minutes', 'category', 'description', 'status'], array_keys($payload)); // description: general text, never a fee
+        $this->assertSame(['id', 'code', 'name', 'duration_minutes', 'category', 'description', 'status', 'online_booking', 'consultation_service_id'], array_keys($payload)); // description: general text, never a fee
         foreach ([Role::Staff, Role::Dentist, Role::Owner, Role::Patient] as $role) {
             Sanctum::actingAs($this->userWithRole($role));
             $json = json_encode($this->getJson('/api/services')->assertOk()->json());

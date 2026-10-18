@@ -79,9 +79,9 @@ class AssistantKnowledgeTest extends TestCase
             'human' => ['Can I talk to a real person?', 'knowledge_answered', 'front desk', 'contact_front_desk'],
             'hmo' => ['Do you accept HMO?', 'knowledge_answered', 'HMO', null],
             'since' => ['How long has the clinic been operating?', 'knowledge_answered', '1981', null],
-            'brushing' => ['Any tips for brushing my teeth?', 'knowledge_answered', 'fluoride', null],
-            'busy' => ['When is the clinic less busy?', 'knowledge_answered', 'October to February', null],
-            'pay at booking' => ['Do I need to pay when I book?', 'knowledge_answered', 'nothing is charged', null],
+            'brushing' => ['Any tips for brushing my teeth?', 'knowledge_answered', 'can\'t give treatment advice', null],
+            'busy' => ['When is the clinic less busy?', 'knowledge_answered', 'Wednesdays and Thursdays', null],
+            'pay at booking' => ['Do I need to pay when I book?', 'knowledge_answered', 'don\'t pay when you book', null],
             'service named' => ['cleaning', 'knowledge_answered', 'Oral Prophylaxis', 'open_booking'],
             // Filipino and Taglish
             'magkano pasta' => ['Magkano po ang pasta?', 'knowledge_answered', 'Composite Restoration', null],
@@ -95,7 +95,7 @@ class AssistantKnowledgeTest extends TestCase
             'gcash' => ['Pwede ba GCash?', 'knowledge_answered', 'PayMongo', 'open_billing'],
             'nasaan guiguinto' => ['Nasaan ang Guiguinto branch?', 'knowledge_answered', 'Unit 20 GD Plaza, Guiguinto, Bulacan', null],
             'kausap staff' => ['Gusto ko kausapin ang staff', 'knowledge_answered', 'front desk', 'contact_front_desk'],
-            'ngilo' => ['Nangingilo ngipin ko, ano gagawin ko?', 'knowledge_answered', 'dentist should check', null],
+            'ngilo' => ['Nangingilo ngipin ko, ano gagawin ko?', 'knowledge_answered', 'can\'t give treatment advice', null],
             'salamat' => ['Salamat po!', 'knowledge_answered', 'welcome', null],
             // Typos
             'typo appointment' => ['When is my next apointment?', 'knowledge_answered', '{DATE}', null],

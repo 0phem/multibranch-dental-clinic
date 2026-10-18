@@ -14,6 +14,7 @@ use App\Models\AutomationDelivery;
 use App\Models\AutomationSetting;
 use App\Models\Invoice;
 use App\Models\MailDispatch;
+use App\Models\MessageTemplate;
 use App\Models\NoShowFlag;
 use App\Models\Treatment;
 use App\Models\UserNotification;
@@ -45,6 +46,18 @@ class AutomationsTest extends TestCase
         $this->setUpSchedulingWorld(); // frozen at Monday 2026-09-28 10:00 Asia/Manila; branches open 09:00–18:00 every day
         $this->u['patientA']->forceFill(['email' => 'patient.a@mailbox.ph', 'email_verified_at' => now()])->save();
         $this->u['owner']->forceFill(['email' => 'owner@mailbox.ph'])->save();
+        $this->approveWordingAndSwitchOnDefaults();
+    }
+
+    /** The shipped state after the Owner (and, for recall, a Dentist) approved every wording and switched on the default-on automations. */
+    private function approveWordingAndSwitchOnDefaults(): void
+    {
+        foreach (MessageTemplate::all() as $t) {
+            $t->forceFill(['approved_at' => now(), 'approved_by_user_id' => $this->u['owner']->id] + ($t->needs_dentist ? ['dentist_approved_at' => now(), 'dentist_approved_by_user_id' => $this->u['dentist1']->id] : []))->save();
+        }
+        foreach (\App\Services\Automations\AutomationCatalog::definitions() as $key => $d) {
+            if (! \App\Services\Automations\AutomationCatalog::isPolicy($key)) AutomationSetting::whereKey($key)->update(['enabled' => $d[3]]);
+        }
     }
 
     private function at(string $manila): void
@@ -75,8 +88,9 @@ class AutomationsTest extends TestCase
 
     // ---- A1 appointment reminders ------------------------------------------------------------------------------------
 
-    public function test_the_reminder_is_sent_24_hours_before_in_manila_time_once(): void
+    public function test_the_optional_reminder_is_sent_24_hours_before_in_manila_time_once(): void
     {
+        $this->set('appointment_reminders', ['day_before' => true]);
         $appointment = $this->bookWednesdayNine(); // Wed 09:00 Manila = Wed 01:00 UTC
         $this->at('2026-09-29 08:59'); // Tue 00:59 UTC
         $this->runAutomations();
@@ -99,24 +113,29 @@ class AutomationsTest extends TestCase
 
     public function test_the_morning_of_reminder_crosses_midnight_and_the_utc_date(): void
     {
-        $this->set('appointment_reminders', ['morning_of' => true, 'morning_time' => '08:00']);
-        $this->bookWednesdayNine();
-        $this->at('2026-09-29 23:59'); // Tue 15:59 UTC: the lead reminder is due, the morning one is not
+        $this->set('appointment_reminders', ['day_before' => true, 'morning_of' => true, 'morning_time' => '08:00']);
+        $this->actingAsUser('patientA');
+        $this->book(['date' => '2026-09-30', 'start_time' => '11:00'])->assertCreated();
+        $this->at('2026-09-29 23:59'); // Tue 15:59 UTC: the 24-hour reminder is due, the morning one is not
         $this->runAutomations();
         $this->at('2026-09-30 07:59'); // Tue 23:59 UTC
         $this->runAutomations();
-        Mail::assertSent(AppointmentReminderMail::class, fn ($m) => $m->kind === 'lead');
+        Mail::assertSent(AppointmentReminderMail::class, fn ($m) => $m->kind === 'day');
         Mail::assertNotSent(AppointmentReminderMail::class, fn ($m) => $m->kind === 'morning');
 
         $this->at('2026-09-30 08:00'); // Wed 00:00 UTC
         $this->runAutomations();
         Mail::assertSent(AppointmentReminderMail::class, fn ($m) => $m->kind === 'morning' && str_contains($m->render(), 'Your visit is today'));
         Mail::assertSent(AppointmentReminderMail::class, 2);
+        $this->at('2026-09-30 10:00'); // and the 60-minute reminder
+        $this->runAutomations();
+        Mail::assertSent(AppointmentReminderMail::class, 3);
     }
 
     public function test_a_rescheduled_appointment_gets_a_recalculated_reminder_and_the_old_one_is_dropped(): void
     {
         Queue::fake(); // hold the outbox job so the reschedule happens between queueing and sending
+        $this->set('appointment_reminders', ['day_before' => true]);
         $appointment = $this->bookWednesdayNine();
         $this->at('2026-09-29 09:00');
         $this->runAutomations();
@@ -151,6 +170,7 @@ class AutomationsTest extends TestCase
 
     public function test_no_reminder_for_a_visit_booked_within_the_lead_time_or_without_a_verified_email(): void
     {
+        $this->set('appointment_reminders', ['day_before' => true]);
         $this->at('2026-09-29 10:00');
         $this->actingAsUser('patientA');
         $this->book(['date' => '2026-09-30', 'start_time' => '09:00'])->assertCreated(); // 23 hours ahead
@@ -166,9 +186,9 @@ class AutomationsTest extends TestCase
         $this->assertTrue(AutomationDelivery::where('reason', 'email_not_verified')->exists());
     }
 
-    public function test_the_hours_before_setting_is_respected(): void
+    public function test_the_minutes_before_setting_is_respected(): void
     {
-        $this->set('appointment_reminders', ['hours_before' => 2]);
+        $this->set('appointment_reminders', ['lead_minutes' => 120]);
         $this->bookWednesdayNine();
         $this->at('2026-09-30 06:59');
         $this->runAutomations();
@@ -180,8 +200,9 @@ class AutomationsTest extends TestCase
 
     // ---- A2 no-show detection ----------------------------------------------------------------------------------------
 
-    public function test_a_possible_no_show_is_flagged_after_the_grace_period_and_only_a_person_confirms_it(): void
+    public function test_in_ask_mode_a_possible_no_show_is_flagged_at_the_release_time_and_only_a_person_confirms_it(): void
     {
+        $this->set('no_show', ['release_mode' => 'ask', 'release_minutes' => 30, 'rebook_email' => false]);
         $a = $this->existing('A', 'd1', 'b1', 'svc1', '2026-09-28', '11:00');
         $this->at('2026-09-28 11:29');
         $this->runAutomations();
@@ -199,12 +220,12 @@ class AutomationsTest extends TestCase
         $this->postJson("/api/no-show-flags/{$flag->public_id}/confirm")->assertOk()->assertJsonPath('data.status', 'confirmed');
         $this->assertSame('No-show', $a->fresh()->status);
         $this->postJson("/api/no-show-flags/{$flag->public_id}/dismiss")->assertStatus(422);
-        Mail::assertNotSent(NoShowRebookMail::class); // the rebook email is off by default
+        Mail::assertNotSent(NoShowRebookMail::class); // the rebook email was switched off here
     }
 
     public function test_undo_and_late_arrival_clear_the_flag_and_the_rebook_email_is_optional(): void
     {
-        $this->set('no_show', ['rebook_email' => true]);
+        $this->set('no_show', ['release_mode' => 'ask', 'release_minutes' => 30, 'rebook_email' => true]);
         $a = $this->existing('A', 'd1', 'b1', 'svc1', '2026-09-28', '11:00');
         $b = $this->existing('A', 'd1', 'b1', 'svc1', '2026-09-28', '14:00');
         $this->at('2026-09-28 14:30');
@@ -306,7 +327,12 @@ class AutomationsTest extends TestCase
         $this->actingAsUser('staffB1');
         $slot = $blocking[10];
         $this->postJson("/api/appointments/{$slot->public_id}/cancel", ['expected_revision' => 1])->assertOk();
-        $this->runAutomations(['waitlist']);
+        // F3 order: patients booked later that day get the move-up offers first; the waitlist waits for their head start.
+        $this->runAutomations(['fill_slots', 'waitlist']);
+        Mail::assertNotSent(WaitlistOpeningMail::class);
+        $this->assertGreaterThan(0, \App\Models\SlotOffer::count());
+        $this->at('2026-09-28 10:30');
+        $this->runAutomations(['fill_slots', 'waitlist']);
         $this->runAutomations(['waitlist']);
         Mail::assertSent(WaitlistOpeningMail::class, 1);
         Mail::assertSent(WaitlistOpeningMail::class, fn ($m) => $m->hasTo('patient.a@mailbox.ph') && str_contains($m->render(), 'first'));
@@ -357,22 +383,24 @@ class AutomationsTest extends TestCase
         $this->getJson('/api/automations')->assertForbidden();
         $this->actingAsUser('owner');
         $list = $this->getJson('/api/automations')->assertOk();
-        $this->assertSame(['appointment_reminders', 'no_show', 'overdue_invoices', 'recall', 'waitlist', 'owner_summary'], array_column($list->json('data'), 'key'));
+        $this->assertSame(['appointment_reminders', 'no_show', 'fill_slots', 'overdue_invoices', 'recall', 'waitlist', 'owner_summary', 'attendance_policy', 'calendar_load'], array_column($list->json('data'), 'key'));
+        $this->assertSame('R2-09', $list->json('data.0.defaults.sources.lead_minutes'));
+        $this->assertNull($list->json('data.0.defaults.sources.day_before')); // recommended, not confirmed by the clinic
         $this->assertFalse($list->json('data.0.owner_saved'));
         $this->assertFalse($list->json('meta.demo'));
 
-        $this->putJson('/api/automations/appointment_reminders', ['settings' => ['hours_before' => 99], 'expected_revision' => 1])->assertStatus(422);
+        $this->putJson('/api/automations/appointment_reminders', ['settings' => ['lead_minutes' => 999], 'expected_revision' => 1])->assertStatus(422);
         $this->putJson('/api/automations/appointment_reminders', ['settings' => ['typo' => 1], 'expected_revision' => 1])->assertStatus(422);
         $this->putJson('/api/automations/recall', ['settings' => ['rules' => [['category' => 'Nope', 'months' => 6]]], 'expected_revision' => 1])->assertStatus(422);
-        $this->putJson('/api/automations/appointment_reminders', ['enabled' => false, 'settings' => ['hours_before' => 48], 'expected_revision' => 1])->assertOk();
+        $this->putJson('/api/automations/appointment_reminders', ['enabled' => false, 'settings' => ['lead_minutes' => 90], 'expected_revision' => 1])->assertOk();
         $this->putJson('/api/automations/appointment_reminders', ['enabled' => true, 'expected_revision' => 1])->assertStatus(409);
         $audit = AuditLog::where('action', 'automation.settings_updated')->sole();
-        $this->assertEquals(['old' => 24, 'new' => 48], $audit->payload['changes']['settings.hours_before']);
+        $this->assertEquals(['old' => 60, 'new' => 90], $audit->payload['changes']['settings.lead_minutes']);
         $this->assertEquals(['old' => true, 'new' => false], $audit->payload['changes']['enabled']);
         $this->assertSame($this->u['owner']->id, $audit->actor_user_id);
 
         $this->bookWednesdayNine();
-        $this->at('2026-09-29 09:00');
+        $this->at('2026-09-30 08:00');
         $this->runAutomations();
         Mail::assertNotSent(AppointmentReminderMail::class); // switched off
     }
@@ -380,10 +408,11 @@ class AutomationsTest extends TestCase
     public function test_a_test_email_goes_only_to_the_signed_in_owner_and_the_demo_clock_is_refused_outside_the_demo_database(): void
     {
         $this->actingAsUser('owner');
-        foreach (['appointment_reminders', 'no_show', 'overdue_invoices', 'recall', 'waitlist', 'owner_summary'] as $key) {
+        foreach (['appointment_reminders', 'no_show', 'fill_slots', 'overdue_invoices', 'recall', 'waitlist', 'owner_summary'] as $key) {
             $this->postJson("/api/automations/$key/test")->assertOk();
         }
-        foreach ([AppointmentReminderMail::class, NoShowRebookMail::class, InvoiceOverdueMail::class, RecallMail::class, WaitlistOpeningMail::class, OwnerDailySummaryMail::class] as $class) {
+        $this->postJson('/api/message-templates/no_show_rebook/test')->assertOk();
+        foreach ([AppointmentReminderMail::class, \App\Mail\LateCheckMail::class, \App\Mail\MoveUpOfferMail::class, NoShowRebookMail::class, InvoiceOverdueMail::class, RecallMail::class, WaitlistOpeningMail::class, OwnerDailySummaryMail::class] as $class) {
             Mail::assertSent($class, fn ($m) => $m->hasTo('owner@mailbox.ph') && $m->test && str_starts_with($m->envelope()->subject, '[Test]'));
         }
         $this->postJson('/api/automations/demo-run', ['summary' => true])->assertNotFound();

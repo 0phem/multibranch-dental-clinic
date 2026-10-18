@@ -202,15 +202,16 @@ test('an incomplete response is carried as incomplete so the page can refuse to 
 })
 
 // ---- access ----------------------------------------------------------------------------------------------------------------
-test('only Staff may open the Day Calendar; Owner, Dentist and Patient are denied; navigation is hidden in the offline demo', () => {
+test('Staff and the Owner may open the Day Calendar (F6, interview R2-02); Dentist and Patient are denied; navigation is hidden in the offline demo', () => {
   const seedKeys = { persons: 'PERSONS', services: 'SERVICES', branchServices: 'BRANCH_SERVICES', dentistServiceAssignments: 'DENTIST_SERVICE_ASSIGNMENTS', branches: 'BRANCHES', dentists: 'DENTISTS', staff: 'STAFF', patients: 'PATIENTS', users: 'USERS' }
   const seeds = Object.fromEntries(Object.entries(seedKeys).map(([k, n]) => [k, structuredClone(data[`INITIAL_${n}`])]))
   const state = normalizeClinicState({ ...seeds, appointments: [], queue: [], checkIns: [], treatments: [], invoices: [], prescriptions: [], followups: [], hmo: [], conversations: [], inquiries: [], notifications: [], workflowLog: [], audit: [] })
-  assert.equal(canAccessPage(state, sessionForRole('staff', state), 'calendar'), true)
-  for (const role of ['owner', 'dentist', 'patient']) assert.equal(canAccessPage(state, sessionForRole(role, state), 'calendar'), false, role)
-  for (const role of ['owner', 'dentist', 'patient']) assert.equal(data.NAV[role].some(([k]) => k === 'calendar'), false, `${role} navigation`)
+  for (const role of ['staff', 'owner']) assert.equal(canAccessPage(state, sessionForRole(role, state), 'calendar'), true, role)
+  for (const role of ['dentist', 'patient']) assert.equal(canAccessPage(state, sessionForRole(role, state), 'calendar'), false, role)
+  for (const role of ['dentist', 'patient']) assert.equal(data.NAV[role].some(([k]) => k === 'calendar'), false, `${role} navigation`)
   assert.deepEqual(data.NAV.staff.find(([k]) => k === 'calendar'), ['calendar', 'Appointment Calendar'])
-  assert.match(read('src/layout.jsx'), /k!=='calendar'\|\|serverSession/)
+  assert.deepEqual(data.NAV.owner.find(([k]) => k === 'calendar'), ['calendar', 'Appointment Calendar'])
+  assert.match(read('src/layout.jsx'), /\['calendar','closures','hmos','wording'\]\.includes\(k\)\|\|serverSession/)
   assert.match(read('src/App.jsx'), /canAccessPage\(store\.state,store\.session,page\)\?page:'unavailable'/)
 })
 
