@@ -14,6 +14,7 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(\App\Services\Assistant\AssistantProvider::class, \App\Services\Assistant\AnthropicProvider::class);
         // White-label settings: loaded once per request or queue job (reset between jobs), so changes apply without a restart.
         $this->app->scoped(\App\Support\ClinicSettings::class);
+        $this->app->scoped(\App\Services\Closures\ClosureCalendar::class); // F5 closed dates, read once per request or job
     }
 
     /**

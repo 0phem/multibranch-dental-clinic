@@ -102,10 +102,28 @@ class Branch extends Model
         return in_array($isoDay, $days, true) ? ['open' => substr((string) $this->open_time, 0, 5), 'close' => substr((string) $this->close_time, 0, 5)] : null;
     }
 
-    /** Opening hours on a calendar date (Y-m-d, clinic time), or null when closed. */
+    /**
+     * Opening hours on a calendar date (Y-m-d, clinic time), or null when closed: the weekday's hours, unless the Owner closed
+     * that date (F5) for this branch or every branch — fully, or with partial hours inside the usual ones.
+     */
     public function hoursOnDate(string $date): ?array
     {
-        return $this->hoursOnDay(\Carbon\CarbonImmutable::createFromFormat('!Y-m-d', $date, \App\Support\ClinicClock::TIMEZONE)->isoWeekday());
+        $hours = $this->hoursOnDay(\Carbon\CarbonImmutable::createFromFormat('!Y-m-d', $date, \App\Support\ClinicClock::TIMEZONE)->isoWeekday());
+        if ($hours === null || $this->id === null) return $hours;
+        $closure = app(\App\Services\Closures\ClosureCalendar::class)->forDate($this->id, $date);
+        if (! $closure) return $hours;
+        $partial = $closure->partialHours();
+        if (! $partial) return null;
+        $open = max($hours['open'], $partial['open']);
+        $close = min($hours['close'], $partial['close']);
+
+        return $open < $close ? ['open' => $open, 'close' => $close] : null;
+    }
+
+    /** The Owner's closure for this date (F5), if any. */
+    public function closureOn(string $date): ?BranchClosure
+    {
+        return $this->id === null ? null : app(\App\Services\Closures\ClosureCalendar::class)->forDate($this->id, $date);
     }
 
     /** All seven days, Monday first: [isoDay => ['open','close'] | null]. */

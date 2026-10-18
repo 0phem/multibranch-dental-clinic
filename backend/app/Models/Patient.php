@@ -64,6 +64,9 @@ class Patient extends Model
         return [
             'consent' => 'boolean',
             'billing_address' => 'array',
+            'confirmation_required_at' => 'immutable_datetime',
+            'attendance_cleared_at' => 'immutable_datetime',
+            'hmo_member_number' => 'encrypted',
         ];
     }
 
