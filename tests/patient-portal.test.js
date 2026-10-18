@@ -62,9 +62,11 @@ test('shared states: skeleton, empty and error states are accessible and the pil
   assert.match(render(ui.Pill, { children: 'Issued' }), /Payment due/)
 })
 
-test('booking calendar: only available days are buttons that can be chosen; closed, full and past days are disabled', () => {
+test('booking calendar: only available days can be booked; a full day opens the waitlist only when booking passes onFullDay; closed and past days are disabled', () => {
   const source = read('src/patient/BookingCalendar.jsx')
-  assert.match(source, /disabled=\{day\.status !== 'available'\}/)
+  assert.match(source, /disabled=\{day\.status !== 'available' && !\(onFullDay && day\.status === 'full'\)\}/)
+  assert.match(source, /onFullDay = null/) // rescheduling does not pass it, so full days stay disabled there
+  assert.match(source, /day\.status === 'full' \? onFullDay\(day\.date\) : onChange\(day\.date\)/)
   assert.match(source, /'Morning'/); assert.match(source, /'Afternoon'/)
   assert.match(source, /disabled=\{!data\?\.previous_month/); assert.match(source, /disabled=\{!data\?\.next_month/)
 })
