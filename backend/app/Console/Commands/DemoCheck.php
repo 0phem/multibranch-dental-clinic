@@ -307,7 +307,16 @@ class DemoCheck extends Command
         $missing = array_diff(\App\Services\Automations\AutomationCatalog::KEYS, $rows->keys()->all());
         $missing ? $this->result('FAIL', 'Automation setting rows missing: '.implode(', ', $missing), 'Run the migrations (2026_10_27_000100_create_automation_settings_and_deliveries inserts them).')
             : $this->result('PASS', 'Every automation has a setting row ('.$rows->where('enabled', true)->count().' of '.$rows->count().' on)');
-        $stale = $rows->filter(fn ($r) => $r->enabled && (! $r->last_run_at || \Carbon\CarbonImmutable::parse($r->last_run_at)->lt(now()->subMinutes(3))))->keys();
+        // Interview round 2: nothing may send unapproved wording, and no unverified HMO is shown to patients.
+        $unapproved = $rows->filter(fn ($r) => $r->enabled && \App\Services\Automations\MessageTemplates::unapprovedFor($r->key))->keys();
+        $unapproved->isEmpty() ? $this->result('PASS', 'Automations with unapproved wording are off')
+            : $this->result('FAIL', 'On with unapproved wording: '.$unapproved->implode(', '), 'Approve the wording in Administration → Automations, or switch these off.');
+        $leak = collect(\App\Http\Controllers\AcceptedHmoController::publicList())->pluck('name')
+            ->diff(DB::table('accepted_hmos')->where('verified_by_clinic', true)->where('active', true)->pluck('name'));
+        $unverified = DB::table('accepted_hmos')->where('verified_by_clinic', false)->count();
+        $leak->isEmpty() ? $this->result('PASS', "No unverified HMO shown publicly ($unverified waiting for the Owner to verify)")
+            : $this->result('FAIL', 'Unverified HMO shown publicly: '.$leak->implode(', '), 'Only verified HMOs may appear on the website, FAQ and assistant.');
+        $stale = $rows->filter(fn ($r) => ! \App\Services\Automations\AutomationCatalog::isPolicy($r->key) && $r->enabled && (! $r->last_run_at || \Carbon\CarbonImmutable::parse($r->last_run_at)->lt(now()->subMinutes(3))))->keys();
         $stale->isEmpty() ? $this->result('PASS', 'Automations ran in the last 3 minutes')
             : $this->result('FAIL', 'Automations not run recently: '.$stale->implode(', '), 'Start the scheduler (scripts/demo-start.sh), or run once: php artisan automations:run.');
         $timeout = max(60, (int) config('clinic.mail_processing_timeout_seconds', 600));

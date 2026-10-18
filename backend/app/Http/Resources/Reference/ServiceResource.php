@@ -20,6 +20,9 @@ class ServiceResource extends JsonResource
             'category' => $this->category,
             'description' => $this->description,
             'status' => $this->status,
+            // F7 (R2-17): bookable online, consultation first (books the linked consultation instead) or hidden online.
+            'online_booking' => $this->online_booking ?? 'bookable',
+            'consultation_service_id' => $this->consultation_service_id ? \App\Models\Service::whereKey($this->consultation_service_id)->value('legacy_ref') : null,
         ];
     }
 }

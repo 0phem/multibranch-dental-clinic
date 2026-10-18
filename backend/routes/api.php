@@ -53,6 +53,11 @@ Route::get('/branding/logo', [\App\Http\Controllers\BrandingController::class, '
 Route::get('/public/branches', [\App\Http\Controllers\PublicBranchController::class, 'index'])->middleware('throttle:60,1');
 Route::get('/public/services', [\App\Http\Controllers\PublicContentController::class, 'services'])->middleware('throttle:60,1');
 Route::get('/public/faq', [\App\Http\Controllers\PublicContentController::class, 'faq'])->middleware('throttle:60,1');
+// Interview round 2: upcoming closed dates and verified HMOs (landing page), and the one-time email links (no sign-in).
+Route::get('/public/closures', [\App\Http\Controllers\BranchClosureController::class, 'upcoming'])->middleware('throttle:60,1');
+Route::get('/public/hmos', [\App\Http\Controllers\AcceptedHmoController::class, 'publicIndex'])->middleware('throttle:60,1');
+Route::get('/public/respond', [\App\Http\Controllers\AppointmentResponseController::class, 'describe'])->middleware('throttle:30,1');
+Route::post('/public/respond', [\App\Http\Controllers\AppointmentResponseController::class, 'perform'])->middleware('throttle:20,1');
 
 // Public Payment Gateway Webhook (PayMongo HMAC-SHA256 signature verified)
 Route::post('/webhooks/paymongo', [PayMongoController::class, 'webhook']);
@@ -125,8 +130,44 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureAccountAccess::cla
         Route::get('/', [\App\Http\Controllers\AutomationSettingsController::class, 'index']);
         Route::post('/demo-run', [\App\Http\Controllers\AutomationSettingsController::class, 'demo'])->middleware('throttle:20,1');
         Route::put('/{key}', [\App\Http\Controllers\AutomationSettingsController::class, 'update']);
-        Route::post('/{key}/test', [\App\Http\Controllers\AutomationSettingsController::class, 'test'])->middleware('throttle:6,1');
+        Route::post('/{key}/test', [\App\Http\Controllers\AutomationSettingsController::class, 'test'])->middleware('throttle:12,1');
     });
+    // F1 message wording: the Owner edits, previews, tests and approves; a Dentist approves health-related wording (recall).
+    Route::prefix('message-templates')->group(function () {
+        Route::get('/', [\App\Http\Controllers\MessageTemplateController::class, 'index'])->middleware('role:owner,dentist');
+        Route::put('/{key}', [\App\Http\Controllers\MessageTemplateController::class, 'update'])->middleware('role:owner');
+        Route::post('/{key}/approve', [\App\Http\Controllers\MessageTemplateController::class, 'approve'])->middleware('role:owner');
+        Route::post('/{key}/dentist-approve', [\App\Http\Controllers\MessageTemplateController::class, 'dentistApprove'])->middleware('role:dentist');
+        Route::post('/{key}/preview', [\App\Http\Controllers\MessageTemplateController::class, 'preview'])->middleware(['role:owner,dentist', 'throttle:60,1']);
+        Route::post('/{key}/test', [\App\Http\Controllers\MessageTemplateController::class, 'test'])->middleware(['role:owner', 'throttle:12,1']);
+    });
+    // F2–F4 the Check-In page's "today" panel, the same-day undo of a release, walk-ins in a freed time, and clearing the
+    // cancellation-policy flag.
+    Route::get('/front-desk/today', [\App\Http\Controllers\FrontDeskController::class, 'today'])->middleware('role:staff,owner');
+    Route::post('/front-desk/appointments/{appointment}/undo-no-show', [\App\Http\Controllers\FrontDeskController::class, 'undoNoShow'])->middleware('role:staff,owner');
+    Route::post('/slot-openings/{slotOpening}/walk-in', [\App\Http\Controllers\FrontDeskController::class, 'walkIn'])->middleware('role:staff,owner');
+    Route::post('/patients/{patient}/attendance/clear', [\App\Http\Controllers\FrontDeskController::class, 'clearAttendance'])->middleware('role:staff');
+    // F1–F3 patient answers in the app.
+    Route::post('/appointments/{appointment}/on-my-way', [\App\Http\Controllers\AppointmentResponseController::class, 'onMyWay'])->middleware('role:patient');
+    Route::get('/slot-offers/mine', [\App\Http\Controllers\AppointmentResponseController::class, 'offersMine'])->middleware('role:patient');
+    Route::post('/slot-offers/{slotOffer}/accept', [\App\Http\Controllers\AppointmentResponseController::class, 'acceptOffer'])->middleware(['role:patient', 'throttle:20,1']);
+    // F5 closed and holiday dates (Owner manages; Staff see the affected appointments and notify the patients).
+    Route::prefix('branch-closures')->group(function () {
+        Route::get('/', [\App\Http\Controllers\BranchClosureController::class, 'index'])->middleware('role:staff,owner');
+        Route::post('/', [\App\Http\Controllers\BranchClosureController::class, 'store'])->middleware('role:owner');
+        Route::post('/suggest-holidays', [\App\Http\Controllers\BranchClosureController::class, 'suggestHolidays'])->middleware('role:owner');
+        Route::patch('/{branchClosure}', [\App\Http\Controllers\BranchClosureController::class, 'update'])->middleware('role:owner');
+        Route::get('/{branchClosure}/affected', [\App\Http\Controllers\BranchClosureController::class, 'affected'])->middleware('role:staff,owner');
+        Route::post('/{branchClosure}/notify', [\App\Http\Controllers\BranchClosureController::class, 'notify'])->middleware(['role:staff,owner', 'throttle:10,1']);
+    });
+    // F6 calendar load (booked against available minutes per day).
+    Route::get('/calendar/load', [\App\Http\Controllers\CalendarLoadController::class, 'index'])->middleware('role:staff,owner');
+    // F8 accepted HMOs (information only) and the patient's own HMO details.
+    Route::get('/accepted-hmos', [\App\Http\Controllers\AcceptedHmoController::class, 'index'])->middleware('role:owner');
+    Route::post('/accepted-hmos', [\App\Http\Controllers\AcceptedHmoController::class, 'store'])->middleware('role:owner');
+    Route::patch('/accepted-hmos/{acceptedHmo}', [\App\Http\Controllers\AcceptedHmoController::class, 'update'])->middleware('role:owner');
+    Route::match(['get', 'put'], '/me/hmo', [\App\Http\Controllers\AcceptedHmoController::class, 'myProfile'])->middleware('role:patient');
+
     // A2 possible no-shows (front desk). Confirm uses the existing No-show command; the Owner sees every branch.
     Route::prefix('no-show-flags')->middleware('role:staff,owner')->group(function () {
         Route::get('/', [\App\Http\Controllers\NoShowFlagController::class, 'index']);
@@ -197,6 +238,7 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureAccountAccess::cla
     Route::get('/branches/{branch}/services', [BranchController::class, 'servicesForBranch']);
 
     Route::get('/services', [ServiceController::class, 'index']);
+    Route::patch('/services/{service:legacy_ref}/online-booking', [ServiceController::class, 'onlineBooking'])->middleware('role:owner');
 
     // M13 pricing foundation: Owner-confirmed, effective-dated price versions (the only authoritative price source;
     // services.reference_fee_php stays reference/demo data). Owner manages and reads history; Staff may resolve only
@@ -245,7 +287,7 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureAccountAccess::cla
         // The pre-arrival No-show (the Patient did not arrive; no Visit). Check-In and treatment start/completion are
         // Visit commands below — there is no second appointment path for them.
         Route::post('/{appointment}/{command}', [AppointmentController::class, 'transition'])
-            ->whereIn('command', ['no-show'])
+            ->whereIn('command', ['no-show', 'confirm'])
             ->middleware('role:staff,owner');
     });
 
@@ -355,6 +397,7 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureAccountAccess::cla
         Route::get('/', [QueueController::class, 'index'])->middleware('role:staff,dentist,owner');
         Route::get('/{queueEntry}', [QueueController::class, 'show'])->middleware('role:staff,dentist,owner');
         Route::post('/{queueEntry}/priority', [QueueController::class, 'priority'])->middleware('role:staff,owner');
+        Route::post('/{queueEntry}/late-order', [QueueController::class, 'lateOrder'])->middleware('role:staff,owner');
         Route::post('/{queueEntry}/{command}', [QueueController::class, 'transition'])
             ->whereIn('command', ['call', 'ready', 'away', 'return'])
             ->middleware('role:staff,dentist,owner');

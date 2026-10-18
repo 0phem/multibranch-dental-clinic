@@ -279,7 +279,8 @@ class AppointmentController extends Controller
             $date = $day->toDateString();
             if ($date <= $today) { $days[] = ['date' => $date, 'status' => 'past']; continue; }
             if ($isPatient && ($date < $first || $date > $last)) { $days[] = ['date' => $date, 'status' => 'outside']; continue; }
-            if (! SchedulingService::openOn($branch, $date)) { $days[] = ['date' => $date, 'status' => 'closed']; continue; }
+            // F5: an Owner-closed date carries its reason (shown on hover or tap in the booking calendar).
+            if (! SchedulingService::openOn($branch, $date)) { $days[] = ['date' => $date, 'status' => 'closed', 'reason' => $branch->closureOn($date)?->reason ?? ($branch->closureOn($date) ? 'Closed' : null)]; continue; }
             // The calendar needs only open or full: the search stops at the first open slot (the time list loads a day's times).
             $open = ! $pool->isEmpty() && $this->scheduling->slotsOn($base, $date, $pool, $busy, limit: 1) !== [];
             $days[] = ['date' => $date, 'status' => $open ? 'available' : 'full'];

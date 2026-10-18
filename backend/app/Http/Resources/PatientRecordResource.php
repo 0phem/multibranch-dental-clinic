@@ -40,6 +40,12 @@ class PatientRecordResource extends JsonResource
             'emergency_contact' => $this->emergency_contact,
             'preferred_branch' => $this->preferredBranch ? ['id' => $this->preferredBranch->legacy_ref, 'name' => $this->preferredBranch->name] : null,
             'has_portal_account' => $person?->user !== null,
+            // F8: the patient's own HMO details, for the front desk to check at the visit (information only, no claims).
+            'hmo_provider_name' => $this->hmo_provider_name,
+            'hmo_member_number' => $this->hmo_member_number,
+            // F4: online bookings wait for front-desk confirmation until Staff clear this.
+            'confirmation_required' => \App\Services\Automations\AttendancePolicy::needsConfirmation($this->resource),
+            'attendance_strikes' => \App\Services\Automations\AttendancePolicy::strikes($this->resource),
             'revision' => $this->revision,
             'created_at' => $iso($this->created_at),
             'updated_at' => $iso($this->updated_at),
