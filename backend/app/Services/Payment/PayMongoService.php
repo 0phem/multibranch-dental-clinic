@@ -154,7 +154,7 @@ class PayMongoService
             return [$items, 'itemized'];
         }
         $parts = ['Charges '.$this->peso((string) $invoice->gross_amount)];
-        if ((float) $invoice->hmo_coverage_amount > 0) $parts[] = 'HMO coverage -'.$this->peso((string) $invoice->hmo_coverage_amount);
+        if ((float) $invoice->hmo_coverage_amount > 0) $parts[] = 'Less coverage -'.$this->peso((string) $invoice->hmo_coverage_amount);
         if ((float) $invoice->paid_amount > 0) $parts[] = 'Already paid -'.$this->peso((string) $invoice->paid_amount);
         $parts[] = 'Balance due '.$this->peso(number_format($centavos / 100, 2, '.', ''));
 

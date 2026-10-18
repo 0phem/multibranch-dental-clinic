@@ -18,7 +18,7 @@ Invoice number: {!! $invoice->invoice_number !!}
 - {!! $line->service_name !!} ({!! $line->quantity !!} x {!! \App\Support\Brand::money($line->unit_price) !!}): {!! \App\Support\Brand::money($line->line_total) !!}
 @endforeach
 Subtotal: {!! \App\Support\Brand::money($invoice->gross_amount) !!}
-@if ((float) $invoice->hmo_coverage_amount > 0)HMO coverage: -{!! \App\Support\Brand::money($invoice->hmo_coverage_amount) !!}
+@if ((float) $invoice->hmo_coverage_amount > 0)Less coverage: -{!! \App\Support\Brand::money($invoice->hmo_coverage_amount) !!}
 @endif
 Total: {!! \App\Support\Brand::money($invoice->patient_responsibility_amount) !!}
 @if ($bir)

@@ -1,4 +1,4 @@
-{{-- Itemized procedures, comfortable rows, subtotal, optional HMO share and a clear total. --}}
+{{-- Itemized procedures, comfortable rows, subtotal, optional coverage deduction and a clear total. --}}
 @php
     $money = fn ($v) => \App\Support\Brand::money($v);
     $fresh = \App\Support\Brand::design() === 'fresh';
@@ -21,7 +21,7 @@
 </tr>
 @if ((float) $invoice->hmo_coverage_amount > 0)
 <tr>
-    <td class="t-muted" style="padding:4px {{ $fresh ? '18px' : '0' }}; font-size:15px; line-height:22px; color:#5b6b7f;">HMO coverage</td>
+    <td class="t-muted" style="padding:4px {{ $fresh ? '18px' : '0' }}; font-size:15px; line-height:22px; color:#5b6b7f;">Less: coverage</td>
     <td class="t-ink" align="right" style="padding:4px {{ $fresh ? '18px' : '0' }}; font-size:15px; line-height:22px; color:#14283d; text-align:right; white-space:nowrap;">&minus;{{ $money($invoice->hmo_coverage_amount) }}</td>
 </tr>
 @endif

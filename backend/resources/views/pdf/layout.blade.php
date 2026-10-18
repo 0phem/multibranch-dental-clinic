@@ -124,7 +124,7 @@
         @endforeach
         @if ($to === $lines->count())
         <tr class="sum first" id="pdf-totals"><td colspan="2" class="blank"></td><td class="k">Subtotal</td><td class="v">{{ $subtotal }}</td></tr>
-        @if ($hmoShare)<tr class="sum"><td colspan="2" class="blank"></td><td class="k">HMO coverage</td><td class="v">&minus;{{ $hmoShare }}</td></tr>@endif
+        @if ($hmoShare)<tr class="sum"><td colspan="2" class="blank"></td><td class="k">Less: coverage</td><td class="v">&minus;{{ $hmoShare }}</td></tr>@endif
         <tr class="sum total"><td colspan="2" class="blank"></td><td class="k">Total</td><td class="v">{{ $total }}</td></tr>
         <tr class="sum"><td class="blank"></td><td colspan="3" style="padding:6px 0 0 0;"><table class="due"><tr><td style="white-space:nowrap;">@yield('due-label')</td><td style="text-align:right; white-space:nowrap;">@yield('due-amount')</td></tr></table></td></tr>
         <tr class="sum" id="pdf-end"><td colspan="4" style="padding:16px 0 0 0;"><div class="note">@yield('note')</div></td></tr>

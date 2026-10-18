@@ -58,7 +58,7 @@ export function ReviewAndPay({ invoice, onBack }) {
       <ul className="rp-items" aria-label="Itemized charges">
         {invoice.items.map(item => <li key={item.key}><span><b>{item.name}</b><small>{item.quantity} × {money(item.unit)}</small></span><span>{money(item.amount)}</span></li>)}
         <li className="rp-sum"><span>Subtotal</span><span>{money(invoice.total)}</span></li>
-        {hmo && <li className="rp-sum"><span>HMO coverage</span><span>−{money(invoice.hmoCoverage)}</span></li>}
+        {hmo && <li className="rp-sum"><span>Less: coverage</span><span>−{money(invoice.hmoCoverage)}</span></li>}
         <li className="rp-total"><span>Total</span><span>{money(invoice.patientResponsibility ?? invoice.total)}</span></li>
       </ul>
 

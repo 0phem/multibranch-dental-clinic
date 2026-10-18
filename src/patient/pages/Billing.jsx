@@ -86,7 +86,7 @@ export function BillingPage({ context, toast }) {
       {items.map(inv => <li key={inv.id} className={`pp-card pp-invoice pp-fade ${linkId === inv.id ? 'is-focus' : ''}`}>
         <div className="pp-invoice-head"><div><h3>{inv.invoiceNo}</h3><p className="pp-muted">{stamp(inv.date)} · {inv.branch}</p></div><Pill>{inv.status}</Pill></div>
         <ul className="pp-lines" aria-label="Charges">{inv.items.map(l => <li key={l.key}><span>{l.name}<small>{l.quantity} × {money(l.unit)}</small></span><span>{money(l.amount)}</span></li>)}</ul>
-        {Number(inv.hmoCoverage) > 0 && <p className="pp-row"><span>Covered by HMO</span><span>−{money(inv.hmoCoverage)}</span></p>}
+        {Number(inv.hmoCoverage) > 0 && <p className="pp-row"><span>Less: coverage</span><span>−{money(inv.hmoCoverage)}</span></p>}
         <p className="pp-row pp-total"><span>{inv.status === 'Paid' ? 'Paid' : 'To pay'}</span><b>{money(inv.status === 'Paid' ? inv.patientResponsibility ?? inv.total : inv.balance)}</b></p>
         <div className="pp-actions">
           {inv.status === 'Issued' && Number(inv.balance) > 0 && <Button onClick={() => setReviewId(inv.id)}>Review and pay</Button>}
