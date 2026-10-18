@@ -1,0 +1,31 @@
+---
+title: "M17 Patient Messaging: TO-BE (with the system)"
+---
+flowchart TB
+    subgraph L0[" "]
+    direction LR
+      S0["<b>PATIENT</b><br/>Writes in Messages"]:::manual
+    end
+    subgraph L1[" "]
+    direction LR
+      S2["<b>FRONT DESK</b><br/>Replies; it appears live"]:::manual
+    end
+    subgraph L3[" "]
+    direction LR
+      S4["<b>OWNER</b><br/>Cannot read patient conversations<br/><i>System does it</i>"]:::auto
+    end
+    subgraph L4[" "]
+    direction LR
+      S1["<b>SYSTEM</b><br/>Routes it to the right branch front desk<br/><i>System does it</i>"]:::auto
+      S3["<b>SYSTEM</b><br/>Emails a short alert if the patient is away (no text)<br/><i>System does it</i>"]:::auto
+    end
+    S0 --> S1
+    S1 --> S2
+    S2 --> S3
+    S3 --> S4
+    classDef cited fill:#eaf3fd,stroke:#1865ac,color:#142a40,stroke-width:1.5px
+    classDef confirm fill:#fffaf0,stroke:#b26a00,color:#5e3c00,stroke-width:1.5px,stroke-dasharray:6 4
+    classDef auto fill:#e6f5ee,stroke:#0c7f75,color:#0f3d33,stroke-width:1.5px
+    classDef manual fill:#eaf3fd,stroke:#1865ac,color:#142a40,stroke-width:1.5px
+    classDef mock fill:#f3f5f7,stroke:#5a6b7d,color:#3a4e63,stroke-width:1.5px,stroke-dasharray:3 3
+    classDef planned fill:#ffffff,stroke:#5a6b7d,color:#3a4e63,stroke-width:1.5px,stroke-dasharray:6 4

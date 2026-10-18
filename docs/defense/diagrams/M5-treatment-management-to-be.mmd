@@ -1,0 +1,28 @@
+---
+title: "M5 Treatment Management: TO-BE (with the system)"
+---
+flowchart TB
+    subgraph L1[" "]
+    direction LR
+      S0["<b>FRONT DESK</b><br/>Checks the patient in (Visit)"]:::manual
+    end
+    subgraph L2[" "]
+    direction LR
+      S1["<b>DENTIST</b><br/>Starts the treatment for that Visit"]:::manual
+      S2["<b>DENTIST</b><br/>Records the procedures performed and notes"]:::manual
+    end
+    subgraph L4[" "]
+    direction LR
+      S3["<b>SYSTEM</b><br/>Completed treatment is locked<br/><i>System does it</i>"]:::auto
+      S4["<b>SYSTEM</b><br/>Performed procedures go to billing<br/><i>System does it</i>"]:::auto
+    end
+    S0 --> S1
+    S1 --> S2
+    S2 --> S3
+    S3 --> S4
+    classDef cited fill:#eaf3fd,stroke:#1865ac,color:#142a40,stroke-width:1.5px
+    classDef confirm fill:#fffaf0,stroke:#b26a00,color:#5e3c00,stroke-width:1.5px,stroke-dasharray:6 4
+    classDef auto fill:#e6f5ee,stroke:#0c7f75,color:#0f3d33,stroke-width:1.5px
+    classDef manual fill:#eaf3fd,stroke:#1865ac,color:#142a40,stroke-width:1.5px
+    classDef mock fill:#f3f5f7,stroke:#5a6b7d,color:#3a4e63,stroke-width:1.5px,stroke-dasharray:3 3
+    classDef planned fill:#ffffff,stroke:#5a6b7d,color:#3a4e63,stroke-width:1.5px,stroke-dasharray:6 4

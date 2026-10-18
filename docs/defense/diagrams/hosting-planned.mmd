@@ -1,0 +1,24 @@
+---
+title: "Planned hosting (not deployed yet)"
+---
+flowchart LR
+    V["<b>VERCEL</b><br/>React portal<br/><i>Planned</i>"]:::planned
+    subgraph RW[" "]
+      A["<b>RAILWAY</b><br/>Laravel API<br/><i>Planned</i>"]:::planned
+      Q["<b>RAILWAY</b><br/>Queue worker<br/><i>Planned</i>"]:::planned
+      SC["<b>RAILWAY</b><br/>Scheduler<br/><i>Planned</i>"]:::planned
+      R["<b>RAILWAY</b><br/>Reverb<br/><i>Planned</i>"]:::planned
+    end
+    subgraph SB[" "]
+      DB[("<b>SUPABASE</b><br/>PostgreSQL<br/><i>Planned</i>")]:::planned
+      ST["<b>SUPABASE</b><br/>Private file storage<br/><i>Planned</i>"]:::planned
+    end
+    M["Transactional email provider<br/><i>clinic's own domain</i><br/><i>Planned</i>"]:::planned
+    P["PayMongo<br/><i>clinic's own account</i>"]
+    V --> A
+    V <--> R
+    A --> DB
+    A --> ST
+    Q --> M
+    P -->|webhook| A
+    classDef planned fill:#ffffff,stroke:#5a6b7d,color:#3a4e63,stroke-dasharray:6 4

@@ -1,0 +1,1265 @@
+{
+ "modules": [
+  {
+   "n": 1,
+   "base": "M1-user-management",
+   "name": "User Management",
+   "status": "Partial",
+   "errors": "Accounts are created only after the email is proven; no shared logins",
+   "automation": "Event-driven (code and invitation emails), rule-based (role checks)",
+   "as_is": [
+    {
+     "lane": "Owner",
+     "text": "Approves every new employee account",
+     "cite": "PI-01"
+    },
+    {
+     "lane": "System",
+     "text": "New employee receives first login by email invitation",
+     "cite": "PI-02"
+    },
+    {
+     "lane": "Patient",
+     "text": "How a patient account or record starts",
+     "confirm": "Do patients have any online account today, or only a record created by the front desk?"
+    },
+    {
+     "lane": "Front desk",
+     "text": "Forgotten passwords are reset",
+     "confirm": "Who resets a forgotten password in your current software, and how?"
+    }
+   ],
+   "to_be": [
+    {
+     "lane": "Patient",
+     "text": "Fills the Create account form (inline checks)",
+     "kind": "manual"
+    },
+    {
+     "lane": "System",
+     "text": "Emails a 6-digit code",
+     "kind": "auto"
+    },
+    {
+     "lane": "Patient",
+     "text": "Enters the code; signs in (email pre-filled, no auto-login)",
+     "kind": "manual"
+    },
+    {
+     "lane": "Owner",
+     "text": "Invites an employee by email",
+     "kind": "manual"
+    },
+    {
+     "lane": "System",
+     "text": "Invitation email; role checked on every request",
+     "kind": "auto"
+    },
+    {
+     "lane": "Patient",
+     "text": "ID OCR prefills the form (consent, staff verify)",
+     "kind": "planned"
+    }
+   ]
+  },
+  {
+   "n": 2,
+   "base": "M2-branch-management",
+   "name": "Branch Management",
+   "status": "Partial",
+   "errors": "Old or different hours in different places; bookings on closed days",
+   "automation": "Rule-based",
+   "as_is": [
+    {
+     "lane": "Owner",
+     "text": "Decides closures and holidays",
+     "cite": "PI-15"
+    },
+    {
+     "lane": "Owner",
+     "text": "Keeps the same opening hours for all three branches",
+     "cite": "PI-14"
+    },
+    {
+     "lane": "Front desk",
+     "text": "Patients are told about a closure",
+     "confirm": "How are patients told about a closure or holiday today?"
+    }
+   ],
+   "to_be": [
+    {
+     "lane": "Owner",
+     "text": "Edits name, address, phone, email and hours per day",
+     "kind": "manual"
+    },
+    {
+     "lane": "System",
+     "text": "Website, calendar, emails and assistant read the same data",
+     "kind": "auto"
+    },
+    {
+     "lane": "System",
+     "text": "Refuses bookings on closed days and after closing time",
+     "kind": "auto"
+    },
+    {
+     "lane": "Owner",
+     "text": "Holiday and closure calendar",
+     "kind": "planned"
+    }
+   ]
+  },
+  {
+   "n": 3,
+   "base": "M3-work-schedules",
+   "name": "Work Schedules",
+   "status": "Planned",
+   "errors": "Not built yet",
+   "automation": "Planned (rule-based)",
+   "as_is": [
+    {
+     "lane": "Owner",
+     "text": "Decides each Dentist’s work schedule",
+     "cite": "PI-06"
+    },
+    {
+     "lane": "Owner",
+     "text": "Branch assignment changes, no fixed setup",
+     "cite": "PI-05"
+    },
+    {
+     "lane": "Owner",
+     "text": "No fixed minimum number of Dentists per day",
+     "cite": "PI-08"
+    },
+    {
+     "lane": "Front desk",
+     "text": "Staff see the schedule",
+     "confirm": "Where is the weekly schedule written, and how do staff and Dentists see it?"
+    }
+   ],
+   "to_be": [
+    {
+     "lane": "System",
+     "text": "Today: one fixed shift per Dentist is checked when booking",
+     "kind": "auto"
+    },
+    {
+     "lane": "Owner",
+     "text": "Publishes a dated roster per branch",
+     "kind": "planned"
+    },
+    {
+     "lane": "System",
+     "text": "Booking follows the roster and absences",
+     "kind": "planned"
+    },
+    {
+     "lane": "Dentist",
+     "text": "Sees own schedule in the portal",
+     "kind": "planned"
+    }
+   ]
+  },
+  {
+   "n": 4,
+   "base": "M4-patient-records",
+   "name": "Patient Records",
+   "status": "Partial",
+   "errors": "Untracked edits; receipts changing after a name correction",
+   "automation": "Rule-based (audit, name snapshot)",
+   "as_is": [
+    {
+     "lane": "Front desk",
+     "text": "Records and treatment history kept in digital software",
+     "cite": "Q17"
+    },
+    {
+     "lane": "Front desk",
+     "text": "Booking needs the patient’s information",
+     "cite": "Q28"
+    },
+    {
+     "lane": "Front desk",
+     "text": "A wrong name is corrected",
+     "confirm": "How is a wrong patient name corrected today, and who may do it?"
+    }
+   ],
+   "to_be": [
+    {
+     "lane": "Patient",
+     "text": "Sign-up creates the patient record",
+     "kind": "manual"
+    },
+    {
+     "lane": "Front desk",
+     "text": "Edits details; change audited (field names only)",
+     "kind": "manual"
+    },
+    {
+     "lane": "Patient",
+     "text": "Sees a read-only legal name; asks the front desk to correct it",
+     "kind": "manual"
+    },
+    {
+     "lane": "System",
+     "text": "Keeps the name as issued on invoices and receipts",
+     "kind": "auto"
+    },
+    {
+     "lane": "Front desk",
+     "text": "Archive and merge of duplicate records",
+     "kind": "planned"
+    }
+   ]
+  },
+  {
+   "n": 5,
+   "base": "M5-treatment-management",
+   "name": "Treatment Management",
+   "status": "Implemented",
+   "errors": "Treatment changed after completion; charges not matching the work done",
+   "automation": "Rule-based (lock), event-driven (to billing)",
+   "as_is": [
+    {
+     "lane": "Front desk",
+     "text": "Patient is assigned to a Dentist at the lounge",
+     "cite": "Q15"
+    },
+    {
+     "lane": "Front desk",
+     "text": "Staff prepare the equipment",
+     "cite": "Q15"
+    },
+    {
+     "lane": "Dentist",
+     "text": "Treats the patient with the assistant’s help",
+     "cite": "Q27, PI-09"
+    },
+    {
+     "lane": "Dentist",
+     "text": "Treatment decided case by case",
+     "cite": "Q29"
+    },
+    {
+     "lane": "Dentist",
+     "text": "Treatment is recorded",
+     "confirm": "Where does the Dentist record the treatment today, and when?"
+    }
+   ],
+   "to_be": [
+    {
+     "lane": "Front desk",
+     "text": "Checks the patient in (Visit)",
+     "kind": "manual"
+    },
+    {
+     "lane": "Dentist",
+     "text": "Starts the treatment for that Visit",
+     "kind": "manual"
+    },
+    {
+     "lane": "Dentist",
+     "text": "Records the procedures performed and notes",
+     "kind": "manual"
+    },
+    {
+     "lane": "System",
+     "text": "Completed treatment is locked",
+     "kind": "auto"
+    },
+    {
+     "lane": "System",
+     "text": "Performed procedures go to billing",
+     "kind": "auto"
+    }
+   ]
+  },
+  {
+   "n": 6,
+   "base": "M6-appointment-management",
+   "name": "Appointment Management",
+   "status": "Implemented",
+   "errors": "Scheduling conflicts (Q20) are blocked by the database",
+   "automation": "Rule-based (open times, no overlaps), event-driven (emails)",
+   "as_is": [
+    {
+     "lane": "Patient",
+     "text": "Contacts the clinic by phone, SMS, Messenger or email",
+     "cite": "PI-30"
+    },
+    {
+     "lane": "Front desk",
+     "text": "Receptionist books the visit",
+     "cite": "Q27"
+    },
+    {
+     "lane": "Front desk",
+     "text": "Needs patient info, chief complaint, free time and the Dentist schedule",
+     "cite": "Q28"
+    },
+    {
+     "lane": "Front desk",
+     "text": "Scheduling conflicts happen",
+     "cite": "Q20"
+    },
+    {
+     "lane": "Front desk",
+     "text": "Reminds the patient before every appointment",
+     "cite": "PI-31"
+    },
+    {
+     "lane": "Front desk",
+     "text": "Next appointment arranged during payment",
+     "cite": "Q15"
+    }
+   ],
+   "to_be": [
+    {
+     "lane": "Patient",
+     "text": "Books online: service, branch near you, Dentist or any, day, time",
+     "kind": "manual"
+    },
+    {
+     "lane": "System",
+     "text": "Shows only real open times; refuses conflicts",
+     "kind": "auto"
+    },
+    {
+     "lane": "System",
+     "text": "Emails the confirmation",
+     "kind": "auto"
+    },
+    {
+     "lane": "Patient",
+     "text": "Reschedules or cancels in My visits",
+     "kind": "manual"
+    },
+    {
+     "lane": "System",
+     "text": "Emails the change",
+     "kind": "auto"
+    },
+    {
+     "lane": "Front desk",
+     "text": "Books for phone and walk-in patients",
+     "kind": "manual"
+    },
+    {
+     "lane": "System",
+     "text": "Reminder email before the visit",
+     "kind": "planned"
+    }
+   ]
+  },
+  {
+   "n": 7,
+   "base": "M7-ai-chatbot",
+   "name": "AI Chatbot (Clinic Assistant)",
+   "status": "Implemented",
+   "errors": "Routine questions no longer wait for the Owner",
+   "automation": "Rule-based (knowledge matching)",
+   "as_is": [
+    {
+     "lane": "Patient",
+     "text": "Sends questions through Facebook / Messenger",
+     "cite": "PI-42"
+    },
+    {
+     "lane": "Owner",
+     "text": "Usually answers the messages herself",
+     "cite": "PI-43"
+    },
+    {
+     "lane": "Owner",
+     "text": "Wants online messaging automated",
+     "cite": "Q23"
+    }
+   ],
+   "to_be": [
+    {
+     "lane": "Patient",
+     "text": "Asks the Clinic Assistant (English, Filipino, Taglish)",
+     "kind": "manual"
+    },
+    {
+     "lane": "System",
+     "text": "Screens emergencies, medical advice and other people’s data",
+     "kind": "auto"
+    },
+    {
+     "lane": "System",
+     "text": "Answers from the clinic’s answers and live records",
+     "kind": "auto"
+    },
+    {
+     "lane": "Patient",
+     "text": "Unknown? Button to message the front desk",
+     "kind": "manual"
+    },
+    {
+     "lane": "Owner",
+     "text": "Edits and tests the answers",
+     "kind": "manual"
+    },
+    {
+     "lane": "System",
+     "text": "Optional AI mode with the clinic’s own key",
+     "kind": "planned"
+    }
+   ]
+  },
+  {
+   "n": 8,
+   "base": "M8-patient-visits",
+   "name": "Patient Visits",
+   "status": "Partial",
+   "errors": "Arrivals not linked to their booking",
+   "automation": "Rule-based",
+   "as_is": [
+    {
+     "lane": "Front desk",
+     "text": "Receptionist checks the patient in",
+     "cite": "Q27"
+    },
+    {
+     "lane": "Front desk",
+     "text": "Patient is assigned to a Dentist at the lounge",
+     "cite": "Q15"
+    },
+    {
+     "lane": "Dentist",
+     "text": "The available Dentist sees the arriving patient",
+     "cite": "PI-13"
+    },
+    {
+     "lane": "Front desk",
+     "text": "Late arrivals handled case by case",
+     "cite": "PI-21"
+    }
+   ],
+   "to_be": [
+    {
+     "lane": "Front desk",
+     "text": "Checks in a booked patient (Visit created)",
+     "kind": "manual"
+    },
+    {
+     "lane": "Front desk",
+     "text": "Admits a walk-in within today’s hours",
+     "kind": "manual"
+    },
+    {
+     "lane": "System",
+     "text": "Links the Visit to the appointment",
+     "kind": "auto"
+    },
+    {
+     "lane": "Front desk",
+     "text": "Complete Dentist assignment workflow",
+     "kind": "planned"
+    }
+   ]
+  },
+  {
+   "n": 9,
+   "base": "M9-patient-queue",
+   "name": "Patient Queue",
+   "status": "Partial",
+   "errors": "Not measured",
+   "automation": "Rule-based (numbering)",
+   "as_is": [
+    {
+     "lane": "Patient",
+     "text": "Long patient queues",
+     "cite": "Q19"
+    },
+    {
+     "lane": "Patient",
+     "text": "Long waiting time is the top complaint",
+     "cite": "Q21"
+    },
+    {
+     "lane": "Front desk",
+     "text": "Branch is busy when many patients wait",
+     "cite": "PI-24"
+    },
+    {
+     "lane": "Front desk",
+     "text": "The receptionist should know",
+     "cite": "PI-25"
+    },
+    {
+     "lane": "Front desk",
+     "text": "Waiting order is kept",
+     "confirm": "How is the order of waiting patients kept today (list, numbers, memory)?"
+    }
+   ],
+   "to_be": [
+    {
+     "lane": "System",
+     "text": "Gives a queue number at check-in",
+     "kind": "auto"
+    },
+    {
+     "lane": "Front desk",
+     "text": "Calls the next patient; moves states",
+     "kind": "manual"
+    },
+    {
+     "lane": "Dentist",
+     "text": "Sees who is next",
+     "kind": "manual"
+    },
+    {
+     "lane": "Patient",
+     "text": "Live wait-time screen",
+     "kind": "planned"
+    }
+   ]
+  },
+  {
+   "n": 10,
+   "base": "M10-dental-charts",
+   "name": "Dental Charts",
+   "status": "Planned",
+   "errors": "Not built yet",
+   "automation": "Planned",
+   "as_is": [
+    {
+     "lane": "Dentist",
+     "text": "Records kept in digital software",
+     "cite": "Q17"
+    },
+    {
+     "lane": "Dentist",
+     "text": "Tooth findings are charted",
+     "confirm": "Is a tooth chart used today? On paper or in the software?"
+    }
+   ],
+   "to_be": [
+    {
+     "lane": "Dentist",
+     "text": "Records findings per tooth and surface",
+     "kind": "planned"
+    },
+    {
+     "lane": "System",
+     "text": "Keeps every chart revision",
+     "kind": "planned"
+    }
+   ]
+  },
+  {
+   "n": 11,
+   "base": "M11-billing-management",
+   "name": "Billing Management",
+   "status": "Implemented",
+   "errors": "Charges not matching the treatment; edited receipts (database blocks changes)",
+   "automation": "Event-driven (draft, emails), rule-based (immutable charges)",
+   "as_is": [
+    {
+     "lane": "Front desk",
+     "text": "Receptionist handles billing",
+     "cite": "Q27"
+    },
+    {
+     "lane": "Front desk",
+     "text": "Forms from booking to payment are digitized",
+     "cite": "Q16"
+    },
+    {
+     "lane": "Front desk",
+     "text": "Invoice and receipt are made",
+     "confirm": "How is the invoice or receipt made today (software, printed, handwritten)?"
+    }
+   ],
+   "to_be": [
+    {
+     "lane": "System",
+     "text": "Builds a draft invoice from the performed procedures",
+     "kind": "auto"
+    },
+    {
+     "lane": "Front desk",
+     "text": "Reviews and issues the invoice",
+     "kind": "manual"
+    },
+    {
+     "lane": "System",
+     "text": "Emails the invoice with a PDF",
+     "kind": "auto"
+    },
+    {
+     "lane": "Patient",
+     "text": "Pays online or at the counter",
+     "kind": "manual"
+    },
+    {
+     "lane": "System",
+     "text": "Records the payment; emails the receipt PDF",
+     "kind": "auto"
+    }
+   ]
+  },
+  {
+   "n": 12,
+   "base": "M12-treatment-plans",
+   "name": "Treatment Plans",
+   "status": "Planned",
+   "errors": "Not built yet",
+   "automation": "Planned",
+   "as_is": [
+    {
+     "lane": "Dentist",
+     "text": "Treatment decisions made case by case",
+     "cite": "Q29"
+    },
+    {
+     "lane": "Dentist",
+     "text": "Plans and costs are explained",
+     "confirm": "How are multi-visit treatment plans and their costs explained to patients today?"
+    }
+   ],
+   "to_be": [
+    {
+     "lane": "Dentist",
+     "text": "Writes a versioned plan with phases and estimates",
+     "kind": "planned"
+    },
+    {
+     "lane": "Patient",
+     "text": "Accepts or declines the plan",
+     "kind": "planned"
+    }
+   ]
+  },
+  {
+   "n": 13,
+   "base": "M13-services-pricing",
+   "name": "Services and Pricing",
+   "status": "Partial",
+   "errors": "Wrong or outdated prices on invoices",
+   "automation": "Rule-based (effective price)",
+   "as_is": [
+    {
+     "lane": "Owner",
+     "text": "Services offered: general dentistry, orthodontics, oral surgery, X-rays",
+     "cite": "Q1"
+    },
+    {
+     "lane": "Owner",
+     "text": "Typical price ranges per procedure",
+     "cite": "Q12"
+    },
+    {
+     "lane": "Owner",
+     "text": "Prices are set and shared",
+     "confirm": "Who sets or changes prices, and how are staff told?"
+    }
+   ],
+   "to_be": [
+    {
+     "lane": "Owner",
+     "text": "Keeps services and dated price versions",
+     "kind": "manual"
+    },
+    {
+     "lane": "System",
+     "text": "Uses the right price on each invoice line",
+     "kind": "auto"
+    },
+    {
+     "lane": "Patient",
+     "text": "Sees service descriptions, not prices",
+     "kind": "auto"
+    }
+   ]
+  },
+  {
+   "n": 14,
+   "base": "M14-document-management",
+   "name": "Document Management",
+   "status": "Partial",
+   "errors": "Lost or shared files",
+   "automation": "Rule-based",
+   "as_is": [
+    {
+     "lane": "Front desk",
+     "text": "All forms digitized except prescriptions",
+     "cite": "Q16"
+    },
+    {
+     "lane": "Front desk",
+     "text": "IDs and consent forms are stored",
+     "confirm": "Where are patient IDs and consent forms kept today?"
+    }
+   ],
+   "to_be": [
+    {
+     "lane": "Patient",
+     "text": "Uploads a document",
+     "kind": "manual"
+    },
+    {
+     "lane": "System",
+     "text": "Stores it privately; checks the file type",
+     "kind": "auto"
+    },
+    {
+     "lane": "Patient",
+     "text": "Downloads own documents; retracts instead of deleting",
+     "kind": "manual"
+    },
+    {
+     "lane": "System",
+     "text": "Text extraction drafts",
+     "kind": "planned"
+    }
+   ]
+  },
+  {
+   "n": 15,
+   "base": "M15-leave-management",
+   "name": "Leave Management",
+   "status": "Planned",
+   "errors": "Not built yet",
+   "automation": "Planned",
+   "as_is": [
+    {
+     "lane": "Dentist",
+     "text": "Leave is requested",
+     "confirm": "How does a Dentist or staff member ask for leave today, and who approves it?"
+    },
+    {
+     "lane": "Owner",
+     "text": "Cover is found",
+     "confirm": "Who finds cover when someone is on leave, and how are booked patients handled?"
+    }
+   ],
+   "to_be": [
+    {
+     "lane": "Dentist",
+     "text": "Requests leave",
+     "kind": "planned"
+    },
+    {
+     "lane": "System",
+     "text": "Finds eligible cover; invites by email",
+     "kind": "planned"
+    },
+    {
+     "lane": "Owner",
+     "text": "Approves when cover is confirmed",
+     "kind": "planned"
+    }
+   ]
+  },
+  {
+   "n": 16,
+   "base": "M16-patient-inquiries",
+   "name": "Patient Inquiries",
+   "status": "Partial",
+   "errors": "Inquiries forgotten or answered twice",
+   "automation": "Rule-based",
+   "as_is": [
+    {
+     "lane": "Patient",
+     "text": "Sends questions through Facebook / Messenger",
+     "cite": "PI-42"
+    },
+    {
+     "lane": "Owner",
+     "text": "Usually answers them",
+     "cite": "PI-43"
+    }
+   ],
+   "to_be": [
+    {
+     "lane": "Front desk",
+     "text": "Records an inquiry that came from outside",
+     "kind": "manual"
+    },
+    {
+     "lane": "Front desk",
+     "text": "Assigns it and records the outcome",
+     "kind": "manual"
+    },
+    {
+     "lane": "System",
+     "text": "Keeps the history (cannot be edited)",
+     "kind": "auto"
+    },
+    {
+     "lane": "System",
+     "text": "Link to Facebook / Messenger",
+     "kind": "planned"
+    }
+   ]
+  },
+  {
+   "n": 17,
+   "base": "M17-patient-messaging",
+   "name": "Patient Messaging",
+   "status": "Implemented",
+   "errors": "Messages to the wrong person or lost in personal accounts",
+   "automation": "Event-driven (real-time, alert email)",
+   "as_is": [
+    {
+     "lane": "Patient",
+     "text": "Contacted by phone, SMS, Messenger or email",
+     "cite": "PI-30"
+    },
+    {
+     "lane": "Patient",
+     "text": "Questions sent through Facebook / Messenger",
+     "cite": "PI-42"
+    },
+    {
+     "lane": "Owner",
+     "text": "Usually answers them",
+     "cite": "PI-43"
+    }
+   ],
+   "to_be": [
+    {
+     "lane": "Patient",
+     "text": "Writes in Messages",
+     "kind": "manual"
+    },
+    {
+     "lane": "System",
+     "text": "Routes it to the right branch front desk",
+     "kind": "auto"
+    },
+    {
+     "lane": "Front desk",
+     "text": "Replies; it appears live",
+     "kind": "manual"
+    },
+    {
+     "lane": "System",
+     "text": "Emails a short alert if the patient is away (no text)",
+     "kind": "auto"
+    },
+    {
+     "lane": "Owner",
+     "text": "Cannot read patient conversations",
+     "kind": "auto"
+    }
+   ]
+  },
+  {
+   "n": 18,
+   "base": "M18-notifications",
+   "name": "Notifications",
+   "status": "Implemented",
+   "errors": "Missed updates; failed emails are retried",
+   "automation": "Event-driven, scheduled (retries)",
+   "as_is": [
+    {
+     "lane": "Front desk",
+     "text": "Reminds patients before every appointment",
+     "cite": "PI-31"
+    },
+    {
+     "lane": "Patient",
+     "text": "Wants updates when a booking is made or changed",
+     "cite": "PI-29"
+    },
+    {
+     "lane": "Front desk",
+     "text": "Reminders are sent",
+     "confirm": "Who sends reminders today, how far ahead, and by which channel?"
+    }
+   ],
+   "to_be": [
+    {
+     "lane": "System",
+     "text": "Booking, change, invoice, payment or message creates a notification",
+     "kind": "auto"
+    },
+    {
+     "lane": "System",
+     "text": "Writes the email to the outbox",
+     "kind": "auto"
+    },
+    {
+     "lane": "System",
+     "text": "Worker sends; retries up to 4 times",
+     "kind": "auto"
+    },
+    {
+     "lane": "Patient",
+     "text": "Sees the bell; opens the screen",
+     "kind": "manual"
+    },
+    {
+     "lane": "System",
+     "text": "Scheduled reminder before each visit",
+     "kind": "planned"
+    }
+   ]
+  },
+  {
+   "n": 19,
+   "base": "M19-prescriptions",
+   "name": "Prescriptions",
+   "status": "Mock only",
+   "errors": "Not built on the server yet",
+   "automation": "Planned",
+   "as_is": [
+    {
+     "lane": "Dentist",
+     "text": "Prescription is the only form not digitized",
+     "cite": "Q16"
+    },
+    {
+     "lane": "Dentist",
+     "text": "Prescriptions are hand-written and printed",
+     "cite": "PI-38"
+    },
+    {
+     "lane": "Dentist",
+     "text": "Prescription content is set",
+     "confirm": "Who writes and prints prescriptions, and what must appear on them?"
+    }
+   ],
+   "to_be": [
+    {
+     "lane": "System",
+     "text": "Treatment stores \"prescription required\"",
+     "kind": "auto"
+    },
+    {
+     "lane": "Dentist",
+     "text": "Draft prescription in the browser",
+     "kind": "mock"
+    },
+    {
+     "lane": "Dentist",
+     "text": "Authorized prescription saved and printable",
+     "kind": "planned"
+    }
+   ]
+  },
+  {
+   "n": 20,
+   "base": "M20-patient-follow-up",
+   "name": "Patient Follow-Up",
+   "status": "Mock only",
+   "errors": "Not built on the server yet",
+   "automation": "Planned",
+   "as_is": [
+    {
+     "lane": "Front desk",
+     "text": "Next appointment arranged during payment",
+     "cite": "Q15"
+    },
+    {
+     "lane": "Front desk",
+     "text": "Follow-up handled by the receptionist",
+     "cite": "Q27"
+    }
+   ],
+   "to_be": [
+    {
+     "lane": "Dentist",
+     "text": "Records the follow-up recommendation on the treatment",
+     "kind": "manual"
+    },
+    {
+     "lane": "Front desk",
+     "text": "Follow-up task in the browser",
+     "kind": "mock"
+    },
+    {
+     "lane": "System",
+     "text": "Follow-up list and reminder on the server",
+     "kind": "planned"
+    }
+   ]
+  },
+  {
+   "n": 21,
+   "base": "M21-reports-analytics",
+   "name": "Reports and Analytics",
+   "status": "Partial",
+   "errors": "Numbers compiled by hand",
+   "automation": "Rule-based",
+   "as_is": [
+    {
+     "lane": "Owner",
+     "text": "\"Better\" means shorter waits and real-time updates",
+     "cite": "Q32"
+    },
+    {
+     "lane": "Owner",
+     "text": "Numbers are reviewed",
+     "confirm": "Which numbers do you look at today (patients, revenue, waiting), and where?"
+    }
+   ],
+   "to_be": [
+    {
+     "lane": "System",
+     "text": "Computes metrics from the clinic records",
+     "kind": "auto"
+    },
+    {
+     "lane": "Owner",
+     "text": "Views the dashboard",
+     "kind": "manual"
+    },
+    {
+     "lane": "Owner",
+     "text": "Full period and branch filters; exports",
+     "kind": "planned"
+    }
+   ]
+  },
+  {
+   "n": 22,
+   "base": "M22-audit-logs",
+   "name": "Audit Logs",
+   "status": "Implemented",
+   "errors": "Untraceable changes",
+   "automation": "Event-driven",
+   "as_is": [
+    {
+     "lane": "Owner",
+     "text": "Changes are traced",
+     "confirm": "How do you find out today who changed a record or a payment?"
+    }
+   ],
+   "to_be": [
+    {
+     "lane": "System",
+     "text": "Every sign-in, change and payment is logged",
+     "kind": "auto"
+    },
+    {
+     "lane": "System",
+     "text": "The database refuses edits and deletes of the log",
+     "kind": "auto"
+    },
+    {
+     "lane": "Owner",
+     "text": "Searches and exports the trail",
+     "kind": "manual"
+    }
+   ]
+  },
+  {
+   "n": 23,
+   "base": "M23-payment-management",
+   "name": "Payment Management",
+   "status": "Implemented",
+   "errors": "Payments typed by hand; \"paid\" without proof",
+   "automation": "Integration (PayMongo), event-driven (receipt)",
+   "as_is": [
+    {
+     "lane": "Front desk",
+     "text": "Receptionist handles billing",
+     "cite": "Q27"
+    },
+    {
+     "lane": "Front desk",
+     "text": "Payment methods",
+     "confirm": "Which payment methods are accepted today (cash, GCash, card, bank transfer)?"
+    }
+   ],
+   "to_be": [
+    {
+     "lane": "Patient",
+     "text": "Review and pay: PayMongo checkout (GCash, card…)",
+     "kind": "manual"
+    },
+    {
+     "lane": "System",
+     "text": "Verified PayMongo webhook settles the invoice",
+     "kind": "auto"
+    },
+    {
+     "lane": "System",
+     "text": "Emails the Payment Receipt with a PDF",
+     "kind": "auto"
+    },
+    {
+     "lane": "Front desk",
+     "text": "Records cash or counter payments",
+     "kind": "manual"
+    }
+   ]
+  },
+  {
+   "n": 24,
+   "base": "M24-lab-cases",
+   "name": "Lab Cases",
+   "status": "Planned",
+   "errors": "Not built yet",
+   "automation": "Planned",
+   "as_is": [
+    {
+     "lane": "Dentist",
+     "text": "External lab work is tracked manually",
+     "cite": "MC 2026-10-12"
+    },
+    {
+     "lane": "Front desk",
+     "text": "Lab cases are sent and returned",
+     "confirm": "Which labs do you use, how is a case sent and returned, and who keeps track?"
+    }
+   ],
+   "to_be": [
+    {
+     "lane": "Dentist",
+     "text": "Creates a lab case for the patient",
+     "kind": "planned"
+    },
+    {
+     "lane": "Front desk",
+     "text": "Records dispatch and return",
+     "kind": "planned"
+    },
+    {
+     "lane": "Dentist",
+     "text": "Reviews the returned work",
+     "kind": "planned"
+    }
+   ]
+  },
+  {
+   "n": 25,
+   "base": "M25-patient-handovers",
+   "name": "Patient Handovers",
+   "status": "Planned",
+   "errors": "Not built yet",
+   "automation": "Planned",
+   "as_is": [
+    {
+     "lane": "Dentist",
+     "text": "Handovers coordinated informally by calls and messages",
+     "cite": "MC 2026-10-12"
+    },
+    {
+     "lane": "Dentist",
+     "text": "Handover information",
+     "confirm": "What information is passed when a patient moves to another Dentist or branch?"
+    }
+   ],
+   "to_be": [
+    {
+     "lane": "Dentist",
+     "text": "Creates a handover with a care packet",
+     "kind": "planned"
+    },
+    {
+     "lane": "Dentist",
+     "text": "Receiving Dentist acknowledges",
+     "kind": "planned"
+    }
+   ]
+  }
+ ],
+ "overview": {
+  "as_is": [
+   {
+    "lane": "Patient",
+    "text": "Registers",
+    "confirm": "Does a new patient fill in a form before the first visit? On paper or in the software?"
+   },
+   {
+    "lane": "Patient",
+    "text": "Asks for a visit by phone, SMS, Messenger or email",
+    "cite": "PI-30"
+   },
+   {
+    "lane": "Front desk",
+    "text": "Receptionist books",
+    "cite": "Q27"
+   },
+   {
+    "lane": "Front desk",
+    "text": "Reminds before every appointment",
+    "cite": "PI-31"
+   },
+   {
+    "lane": "Front desk",
+    "text": "Patient enters; assigned to a Dentist at the lounge",
+    "cite": "Q15"
+   },
+   {
+    "lane": "Dentist",
+    "text": "Treatment with the assistant",
+    "cite": "Q15, Q27"
+   },
+   {
+    "lane": "Front desk",
+    "text": "Payment; next appointment arranged",
+    "cite": "Q15"
+   },
+   {
+    "lane": "Front desk",
+    "text": "Receipt",
+    "confirm": "What receipt does the patient get today, and how?"
+   },
+   {
+    "lane": "Patient",
+    "text": "Feedback",
+    "confirm": "Do you collect patient feedback today? How?"
+   }
+  ],
+  "to_be": [
+   {
+    "lane": "Patient",
+    "text": "Creates an account; email code",
+    "kind": "manual"
+   },
+   {
+    "lane": "Patient",
+    "text": "Books online (only open times)",
+    "kind": "manual"
+   },
+   {
+    "lane": "System",
+    "text": "Confirmation email",
+    "kind": "auto"
+   },
+   {
+    "lane": "System",
+    "text": "Reminder email",
+    "kind": "planned"
+   },
+   {
+    "lane": "Front desk",
+    "text": "Check-in; queue number",
+    "kind": "manual"
+   },
+   {
+    "lane": "Dentist",
+    "text": "Treatment recorded and locked",
+    "kind": "manual"
+   },
+   {
+    "lane": "System",
+    "text": "Invoice email with PDF",
+    "kind": "auto"
+   },
+   {
+    "lane": "Patient",
+    "text": "Pays online (PayMongo)",
+    "kind": "manual"
+   },
+   {
+    "lane": "System",
+    "text": "Receipt email with PDF",
+    "kind": "auto"
+   },
+   {
+    "lane": "Patient",
+    "text": "Shares feedback in the portal",
+    "kind": "manual"
+   }
+  ]
+ }
+}

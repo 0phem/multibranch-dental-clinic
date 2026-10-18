@@ -1,0 +1,29 @@
+---
+title: "M1 User Management: AS-IS (before)"
+---
+flowchart TB
+    subgraph L0[" "]
+    direction LR
+      S2["<b>PATIENT</b><br/>How a patient account or record starts<br/><i>to confirm with clinic</i>"]:::confirm
+    end
+    subgraph L1[" "]
+    direction LR
+      S3["<b>FRONT DESK</b><br/>Forgotten passwords are reset<br/><i>to confirm with clinic</i>"]:::confirm
+    end
+    subgraph L3[" "]
+    direction LR
+      S0["<b>OWNER</b><br/>Approves every new employee account<br/><i>PI-01</i>"]:::cited
+    end
+    subgraph L4[" "]
+    direction LR
+      S1["<b>SYSTEM</b><br/>New employee receives first login by email invitation<br/><i>PI-02</i>"]:::cited
+    end
+    S0 --> S1
+    S1 -.-> S2
+    S2 -.-> S3
+    classDef cited fill:#eaf3fd,stroke:#1865ac,color:#142a40,stroke-width:1.5px
+    classDef confirm fill:#fffaf0,stroke:#b26a00,color:#5e3c00,stroke-width:1.5px,stroke-dasharray:6 4
+    classDef auto fill:#e6f5ee,stroke:#0c7f75,color:#0f3d33,stroke-width:1.5px
+    classDef manual fill:#eaf3fd,stroke:#1865ac,color:#142a40,stroke-width:1.5px
+    classDef mock fill:#f3f5f7,stroke:#5a6b7d,color:#3a4e63,stroke-width:1.5px,stroke-dasharray:3 3
+    classDef planned fill:#ffffff,stroke:#5a6b7d,color:#3a4e63,stroke-width:1.5px,stroke-dasharray:6 4

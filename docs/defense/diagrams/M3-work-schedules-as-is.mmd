@@ -1,0 +1,23 @@
+---
+title: "M3 Work Schedules: AS-IS (before)"
+---
+flowchart TB
+    subgraph L1[" "]
+    direction LR
+      S3["<b>FRONT DESK</b><br/>Staff see the schedule<br/><i>to confirm with clinic</i>"]:::confirm
+    end
+    subgraph L3[" "]
+    direction LR
+      S0["<b>OWNER</b><br/>Decides each Dentist’s work schedule<br/><i>PI-06</i>"]:::cited
+      S1["<b>OWNER</b><br/>Branch assignment changes, no fixed setup<br/><i>PI-05</i>"]:::cited
+      S2["<b>OWNER</b><br/>No fixed minimum number of Dentists per day<br/><i>PI-08</i>"]:::cited
+    end
+    S0 --> S1
+    S1 --> S2
+    S2 -.-> S3
+    classDef cited fill:#eaf3fd,stroke:#1865ac,color:#142a40,stroke-width:1.5px
+    classDef confirm fill:#fffaf0,stroke:#b26a00,color:#5e3c00,stroke-width:1.5px,stroke-dasharray:6 4
+    classDef auto fill:#e6f5ee,stroke:#0c7f75,color:#0f3d33,stroke-width:1.5px
+    classDef manual fill:#eaf3fd,stroke:#1865ac,color:#142a40,stroke-width:1.5px
+    classDef mock fill:#f3f5f7,stroke:#5a6b7d,color:#3a4e63,stroke-width:1.5px,stroke-dasharray:3 3
+    classDef planned fill:#ffffff,stroke:#5a6b7d,color:#3a4e63,stroke-width:1.5px,stroke-dasharray:6 4
