@@ -1,10 +1,21 @@
 # Pitch: Multi-Branch Dental Clinic Operation System
 
-Every fact below cites its source: Q = first interview, PI = follow-up interview (both verbatim in
-`docs/defense/INTERVIEW_EVIDENCE.md`), or a repository document. No statistic, customer or result is claimed that the system
+Every fact below cites its source: Q = first interview, PI = follow-up interview, R2 = interview round 2 of 2026-10-19 with
+clinic staff (all in `docs/defense/INTERVIEW_EVIDENCE.md`), or a repository document. No statistic, customer or result is claimed that the system
 or the interview cannot show.
 
 ## The problem (what the clinic told us)
+
+**What the staff told us on 2026-10-19 (R2), and our answer:**
+
+| Their pain | Our answer (built and tested) |
+| --- | --- |
+| Each branch has its **own separate database**; a patient who moves branch registers again or staff retype everything (R2-08) | One clinic database for all three branches: one patient record, one booking calendar |
+| New patients fill in a **paper form**, then staff **retype it** "which is tough for us" (about 15 minutes, R2-03, R2-05) | Patients create their own account and record online before the visit (email code); the front desk only checks it |
+| **No-shows and cancellations are "the biggest gap of our system"**: no automatic email (R2-07); a cancellation can leave the clinic idle for an hour (R2-10) | Reminder 60 minutes before (R2-09) with "I'll be there" / "I can't make it"; "Are you on your way?"; release at 15 minutes (R2-10); the freed time is offered to later patients first, then the waitlist, then walk-ins |
+| **Billing is still on paper** (R2-01) | Invoice from the treatment, emailed PDF, online payment, receipt emailed |
+
+Also from the first interviews:
 
 - **Long queues and waiting.** The step that causes the most delays is "Long patient queues" (Q19); the most frequent patient
   complaint is "Long waiting time" (Q21); "better" means "Shorter wait times and more real-time updates in booking and to

@@ -105,11 +105,26 @@ Automations) with a default the clinic has **not** confirmed; every change is au
 | A5 | Waitlist: "Notify me if a time opens" on a full day; earliest waiting patients told when a time opens; nothing held | On; 3 patients | Q20 conflicts, Q21 waiting | same file (cancellation frees a time, expiry, never deleted) |
 | A6 | Owner daily summary per branch: bookings, completed visits, cancellations, possible no-shows, payments, invoices, new accounts; numbers only | On; 8:30 PM | Q32 measurable "better" | same file (send time, Manila day boundary, no patient names) |
 
-Demo: Owner → Automations → **Demo clock** (demo database only) or `php artisan automations:demo --appointment=APT-…`.
+**Interview round 2 (2026-10-19) changed these rows** (tests: `Automations/InterviewRoundTwoTest`, frozen Asia/Manila time):
+
+| # | What changed | Default now | Source |
+| --- | --- | --- | --- |
+| A1 | Reminder **60 minutes before**; 24 h and morning-of optional (off); one-click "I'll be there" / "I can't make it" (signed, single-use, expiring; cancel asks first and frees the time) | 60 min on; 24 h off; morning off | R2-09 (60 min); the rest recommended |
+| A2 → F2 | Late arrivals: "Are you on your way?" at 5 min; Late and end of the dentist's queue at 10 (Staff can restore the place, audited); release at 15 (no-show, freed time, rebook email; same-day undo) or "ask the front desk" | 5 / 10 / 15 min, automatic, rebook on | R2-07 (10), R2-10 (15, automatic); 5 and rebook recommended |
+| F3 (new) | Fill freed times: offers to patients booked later that day (first to accept wins), then waitlist after a 30-minute head start, then walk-ins | 3 offers, 30 min notice, 30 min head start | recommended (R2-10 asked us) |
+| F4 (policy) | Under 24 h = late cancellation; 3 in 6 months = front-desk confirmation; no fees | 24 h / 3 / 6 months | R2-13 (24 h); the rest recommended |
+| A4 | One suggested interval (General Dentistry, 6 months); off until a Dentist approves | off | R2-11 |
+| A6 | Adds late cancellations, late arrivals, released and refilled times | 8:30 PM | R2-11 ("up to us") |
+| All | **Every automation ships off until the Owner approves its email wording** (recall also a Dentist); unapproved wording is never sent | off until approved | R2-09, R2-11 |
+
+Demo: Owner → Automations → **Demo clock** (demo database only): an appointment code for the 60-minute reminder, or today's
+appointment code to release a late patient and offer the time at once; or `php artisan automations:demo --appointment=APT-…`.
 
 ### Not automated (say so if asked)
 - **Reminders by SMS or Messenger** (PI-30): email and in-app only.
-- **Finalizing a no-show**: always a person (policy P4 unresolved).
+- **Finalizing a no-show** in "ask the front desk" mode: a person confirms. In the default automatic mode (R2-10) the release is
+  automatic and the front desk can undo it the same day.
+- **Inventory and low-stock alerts** (R2-11 "we could integrate that"): post-defense roadmap, not built.
 - **HMO contacting** (Q22, Q23): removed from this scope; not automated.
 - **Prescriptions** (Q16, PI-38) and **follow-ups**: browser-local prototypes only.
 

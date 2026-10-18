@@ -4,23 +4,29 @@ title: "M9 Patient Queue: TO-BE (with the system)"
 flowchart TB
     subgraph L0[" "]
     direction LR
-      S3["<b>PATIENT</b><br/>Live wait-time screen<br/><i>Planned</i>"]:::planned
+      S6["<b>PATIENT</b><br/>Live wait-time screen<br/><i>Planned</i>"]:::planned
     end
     subgraph L1[" "]
     direction LR
-      S1["<b>FRONT DESK</b><br/>Calls the next patient; moves states"]:::manual
+      S2["<b>FRONT DESK</b><br/>Restores a late patient’s place with a reason (audited)"]:::manual
+      S3["<b>FRONT DESK</b><br/>Sees today’s freed times for walk-ins"]:::manual
+      S4["<b>FRONT DESK</b><br/>Calls the next patient; moves states"]:::manual
     end
     subgraph L2[" "]
     direction LR
-      S2["<b>DENTIST</b><br/>Sees who is next"]:::manual
+      S5["<b>DENTIST</b><br/>Sees who is next"]:::manual
     end
     subgraph L4[" "]
     direction LR
       S0["<b>SYSTEM</b><br/>Gives a queue number at check-in<br/><i>System does it</i>"]:::auto
+      S1["<b>SYSTEM</b><br/>Late arrival queued after on-time patients (R2-07)<br/><i>System does it</i>"]:::auto
     end
     S0 --> S1
     S1 --> S2
-    S2 -.-> S3
+    S2 --> S3
+    S3 --> S4
+    S4 --> S5
+    S5 -.-> S6
     classDef cited fill:#eaf3fd,stroke:#1865ac,color:#142a40,stroke-width:1.5px
     classDef confirm fill:#fffaf0,stroke:#b26a00,color:#5e3c00,stroke-width:1.5px,stroke-dasharray:6 4
     classDef auto fill:#e6f5ee,stroke:#0c7f75,color:#0f3d33,stroke-width:1.5px

@@ -34,18 +34,27 @@ def module_page(m):
         ('Steps', f'{len(before)} known' + (f' ({len(confirm)} to confirm)' if confirm else ''), f'{len(built)} in the system' + (f' + {len(later)} planned or mock' if later else '')),
         ('Who does it', lanes(before), lanes(built) or 'Nobody yet (planned)'),
         ('Steps the system does by itself', '—', f'{len(autos)}'),
-        ('Estimated time', 'Not measured (no figure in the interview)', 'Not measured'),
+        ('Estimated time', *(m.get('time') or ('Not measured (no figure in the interviews)', 'To be measured in pilot'))),
         ('Errors removed', '—', m['errors']),
         ('Automation type', 'Manual', m['automation']),
     ]
     table = ''.join(f'<tr><th>{E(k)}</th><td>{E(a)}</td><td>{E(b)}</td></tr>' for k, a, b in rows)
+    # A long TO-BE (9+ steps, e.g. M6) gets its own full page so it stays readable when projected.
+    big = len(m['to_be']) >= 9 or len(m['as_is']) >= 8
+    if big:
+        pair = f"<div class=\"single\"><figure><figcaption>AS-IS (before)</figcaption>{svg(m['base'] + '-as-is')}</figure></div>"
+        extra = f"""<section class="page module tall"><header class="mod-head"><h2>M{m['n']} {E(m['name'])}: TO-BE</h2><span class="pill {PILL[m['status']]}">{E(m['status'])}</span></header>
+  <figure><figcaption>TO-BE (with the system)</figcaption>{svg(m['base'] + '-to-be')}</figure></section>"""
+    else:
+        pair = f"""<div class="pair"><figure><figcaption>AS-IS (before)</figcaption>{svg(m['base'] + '-as-is')}</figure>
+  <figure><figcaption>TO-BE (with the system)</figcaption>{svg(m['base'] + '-to-be')}</figure></div>"""
+        extra = ''
     return f"""<section class="page module">
   <header class="mod-head"><h2>M{m['n']} {E(m['name'])}</h2><span class="pill {PILL[m['status']]}">{E(m['status'])}</span></header>
   <p class="sources">AS-IS sources: {E(', '.join(cites)) if cites else 'none in the interview'}{' · dashed amber boxes are to confirm with the clinic (SECOND_INTERVIEW_QUESTIONS.md)' if confirm else ''}</p>
-  <div class="pair"><figure><figcaption>AS-IS (before)</figcaption>{svg(m['base'] + '-as-is')}</figure>
-  <figure><figcaption>TO-BE (with the system)</figcaption>{svg(m['base'] + '-to-be')}</figure></div>
+  {pair}
   <table class="bvn"><thead><tr><th></th><th>Before</th><th>Now</th></tr></thead><tbody>{table}</tbody></table>
-</section>"""
+</section>{extra}"""
 
 
 summary_rows = ''.join(f"<tr><td>M{m['n']}</td><td>{E(m['name'])}</td><td><span class=\"pill {PILL[m['status']]}\">{E(m['status'])}</span></td><td>{E(m['automation'])}</td></tr>" for m in data['modules'])
@@ -78,7 +87,8 @@ figcaption {{ align-self: flex-start; font-weight: 700; color: #124b80; font-siz
 figure .svg {{ width: 100%; display: flex; justify-content: center; }}
 figure svg {{ max-width: 100% !important; max-height: 172mm; width: auto; height: auto; }}
 .wide figure svg {{ max-height: 118mm; }}
-.tall figure svg {{ max-height: 232mm; }}
+.tall figure svg {{ max-height: 245mm; min-width: 70%; }}
+.single figure svg {{ max-height: 150mm; }}
 .arch figure svg {{ max-height: 232mm; min-width: 60%; }}
 .bvn th {{ width: 26%; }} .bvn td {{ width: 37%; }}
 .legend {{ display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 6px 0; font-size: 8.2pt; color: #3a4e63; }}

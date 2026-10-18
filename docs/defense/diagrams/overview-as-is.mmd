@@ -4,21 +4,22 @@ title: "Patient journey: AS-IS (before)"
 flowchart TB
     subgraph L0[" "]
     direction LR
-      S0["<b>PATIENT</b><br/>Registers<br/><i>to confirm with clinic</i>"]:::confirm
-      S1["<b>PATIENT</b><br/>Asks for a visit by phone, SMS, Messenger or email<br/><i>PI-30</i>"]:::cited
-      S8["<b>PATIENT</b><br/>Feedback<br/><i>to confirm with clinic</i>"]:::confirm
+      S0["<b>PATIENT</b><br/>Fills in a paper form on arrival (about 15 min)<br/><i>R2-03, R2-05</i>"]:::cited
+      S2["<b>PATIENT</b><br/>Asks for a visit by phone, SMS, Messenger or email<br/><i>PI-30</i>"]:::cited
+      S9["<b>PATIENT</b><br/>Feedback<br/><i>to confirm with clinic</i>"]:::confirm
     end
     subgraph L1[" "]
     direction LR
-      S2["<b>FRONT DESK</b><br/>Receptionist books<br/><i>Q27</i>"]:::cited
-      S3["<b>FRONT DESK</b><br/>Reminds before every appointment<br/><i>PI-31</i>"]:::cited
-      S4["<b>FRONT DESK</b><br/>Patient enters; assigned to a Dentist at the lounge<br/><i>Q15</i>"]:::cited
-      S6["<b>FRONT DESK</b><br/>Payment; next appointment arranged<br/><i>Q15</i>"]:::cited
-      S7["<b>FRONT DESK</b><br/>Receipt<br/><i>to confirm with clinic</i>"]:::confirm
+      S1["<b>FRONT DESK</b><br/>Retypes it into that branch’s own database<br/><i>R2-03, R2-08</i>"]:::cited
+      S3["<b>FRONT DESK</b><br/>Receptionist books<br/><i>Q27</i>"]:::cited
+      S4["<b>FRONT DESK</b><br/>Reminds before every appointment<br/><i>PI-31</i>"]:::cited
+      S5["<b>FRONT DESK</b><br/>Patient enters; assigned to a Dentist at the lounge<br/><i>Q15</i>"]:::cited
+      S7["<b>FRONT DESK</b><br/>No-shows and cancellations: no automatic email<br/><i>R2-07</i>"]:::cited
+      S8["<b>FRONT DESK</b><br/>Payment on paper; next appointment arranged<br/><i>Q15, R2-01</i>"]:::cited
     end
     subgraph L2[" "]
     direction LR
-      S5["<b>DENTIST</b><br/>Treatment with the assistant<br/><i>Q15, Q27</i>"]:::cited
+      S6["<b>DENTIST</b><br/>Treatment with the assistant<br/><i>Q15, Q27</i>"]:::cited
     end
     S0 --> S1
     S1 --> S2
@@ -26,8 +27,9 @@ flowchart TB
     S3 --> S4
     S4 --> S5
     S5 --> S6
-    S6 -.-> S7
-    S7 -.-> S8
+    S6 --> S7
+    S7 --> S8
+    S8 -.-> S9
     classDef cited fill:#eaf3fd,stroke:#1865ac,color:#142a40,stroke-width:1.5px
     classDef confirm fill:#fffaf0,stroke:#b26a00,color:#5e3c00,stroke-width:1.5px,stroke-dasharray:6 4
     classDef auto fill:#e6f5ee,stroke:#0c7f75,color:#0f3d33,stroke-width:1.5px

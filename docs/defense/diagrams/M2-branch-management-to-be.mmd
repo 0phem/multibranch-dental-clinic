@@ -2,19 +2,24 @@
 title: "M2 Branch Management: TO-BE (with the system)"
 ---
 flowchart TB
+    subgraph L1[" "]
+    direction LR
+      S3["<b>FRONT DESK</b><br/>Sees the appointments still booked; one action emails them a reschedule link"]:::manual
+    end
     subgraph L3[" "]
     direction LR
       S0["<b>OWNER</b><br/>Edits name, address, phone, email and hours per day"]:::manual
-      S3["<b>OWNER</b><br/>Holiday and closure calendar<br/><i>Planned</i>"]:::planned
+      S1["<b>OWNER</b><br/>Closes a date (one or all branches, reason, partial hours)"]:::manual
     end
     subgraph L4[" "]
     direction LR
-      S1["<b>SYSTEM</b><br/>Website, calendar, emails and assistant read the same data<br/><i>System does it</i>"]:::auto
-      S2["<b>SYSTEM</b><br/>Refuses bookings on closed days and after closing time<br/><i>System does it</i>"]:::auto
+      S2["<b>SYSTEM</b><br/>Grays the date out in booking with the reason; website lists closures<br/><i>System does it</i>"]:::auto
+      S4["<b>SYSTEM</b><br/>Suggests Philippine holidays; nothing closes until the Owner confirms<br/><i>System does it</i>"]:::auto
     end
     S0 --> S1
     S1 --> S2
-    S2 -.-> S3
+    S2 --> S3
+    S3 --> S4
     classDef cited fill:#eaf3fd,stroke:#1865ac,color:#142a40,stroke-width:1.5px
     classDef confirm fill:#fffaf0,stroke:#b26a00,color:#5e3c00,stroke-width:1.5px,stroke-dasharray:6 4
     classDef auto fill:#e6f5ee,stroke:#0c7f75,color:#0f3d33,stroke-width:1.5px

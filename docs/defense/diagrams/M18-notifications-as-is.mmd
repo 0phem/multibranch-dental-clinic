@@ -9,10 +9,20 @@ flowchart TB
     subgraph L1[" "]
     direction LR
       S0["<b>FRONT DESK</b><br/>Reminds patients before every appointment<br/><i>PI-31</i>"]:::cited
-      S2["<b>FRONT DESK</b><br/>Reminders are sent<br/><i>to confirm with clinic</i>"]:::confirm
+      S2["<b>FRONT DESK</b><br/>No automatic email for no-shows or cancellations<br/><i>R2-07</i>"]:::cited
+    end
+    subgraph L2[" "]
+    direction LR
+      S4["<b>DENTIST</b><br/>Health-related messages need a dentist’s approval<br/><i>R2-11</i>"]:::cited
+    end
+    subgraph L3[" "]
+    direction LR
+      S3["<b>OWNER</b><br/>Reminder 60 minutes before; the Owner approves the wording<br/><i>R2-09</i>"]:::cited
     end
     S0 --> S1
-    S1 -.-> S2
+    S1 --> S2
+    S2 --> S3
+    S3 --> S4
     classDef cited fill:#eaf3fd,stroke:#1865ac,color:#142a40,stroke-width:1.5px
     classDef confirm fill:#fffaf0,stroke:#b26a00,color:#5e3c00,stroke-width:1.5px,stroke-dasharray:6 4
     classDef auto fill:#e6f5ee,stroke:#0c7f75,color:#0f3d33,stroke-width:1.5px

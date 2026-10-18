@@ -2,11 +2,16 @@
 title: "M8 Patient Visits: AS-IS (before)"
 ---
 flowchart TB
+    subgraph L0[" "]
+    direction LR
+      S3["<b>PATIENT</b><br/>Walk-in signs a paper list; staff add them in the software<br/><i>R2-06</i>"]:::cited
+    end
     subgraph L1[" "]
     direction LR
       S0["<b>FRONT DESK</b><br/>Receptionist checks the patient in<br/><i>Q27</i>"]:::cited
       S1["<b>FRONT DESK</b><br/>Patient is assigned to a Dentist at the lounge<br/><i>Q15</i>"]:::cited
-      S3["<b>FRONT DESK</b><br/>Late arrivals handled case by case<br/><i>PI-21</i>"]:::cited
+      S4["<b>FRONT DESK</b><br/>More than 10 minutes late: end of the queue or rescheduled<br/><i>R2-07</i>"]:::cited
+      S5["<b>FRONT DESK</b><br/>After 15 minutes the appointment is cancelled<br/><i>R2-10</i>"]:::cited
     end
     subgraph L2[" "]
     direction LR
@@ -15,6 +20,8 @@ flowchart TB
     S0 --> S1
     S1 --> S2
     S2 --> S3
+    S3 --> S4
+    S4 --> S5
     classDef cited fill:#eaf3fd,stroke:#1865ac,color:#142a40,stroke-width:1.5px
     classDef confirm fill:#fffaf0,stroke:#b26a00,color:#5e3c00,stroke-width:1.5px,stroke-dasharray:6 4
     classDef auto fill:#e6f5ee,stroke:#0c7f75,color:#0f3d33,stroke-width:1.5px

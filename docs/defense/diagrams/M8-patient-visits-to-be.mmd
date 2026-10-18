@@ -5,14 +5,14 @@ flowchart TB
     subgraph L1[" "]
     direction LR
       S0["<b>FRONT DESK</b><br/>Checks in a booked patient (Visit created)"]:::manual
-      S1["<b>FRONT DESK</b><br/>Admits a walk-in within today’s hours"]:::manual
-      S4["<b>FRONT DESK</b><br/>Confirms the no-show or undoes the flag"]:::manual
+      S4["<b>FRONT DESK</b><br/>Undoes a release the same day if the patient is here"]:::manual
       S5["<b>FRONT DESK</b><br/>Complete Dentist assignment workflow<br/><i>Planned</i>"]:::planned
     end
     subgraph L4[" "]
     direction LR
-      S2["<b>SYSTEM</b><br/>Links the Visit to the appointment<br/><i>System does it</i>"]:::auto
-      S3["<b>SYSTEM</b><br/>No check-in after the grace period: flags a possible no-show<br/><i>System does it</i>"]:::auto
+      S1["<b>SYSTEM</b><br/>+5 min: “Are you on your way?” email and app; reply shown<br/><i>System does it</i>"]:::auto
+      S2["<b>SYSTEM</b><br/>+10 min: Late on the Check-In page<br/><i>System does it</i>"]:::auto
+      S3["<b>SYSTEM</b><br/>+15 min: releases the time, records no-show, rebook email<br/><i>System does it</i>"]:::auto
     end
     S0 --> S1
     S1 --> S2

@@ -2,14 +2,21 @@
 title: "M4 Patient Records: AS-IS (before)"
 ---
 flowchart TB
+    subgraph L0[" "]
+    direction LR
+      S0["<b>PATIENT</b><br/>New patient fills in a paper form on arrival<br/><i>R2-03</i>"]:::cited
+    end
     subgraph L1[" "]
     direction LR
-      S0["<b>FRONT DESK</b><br/>Records and treatment history kept in digital software<br/><i>Q17</i>"]:::cited
-      S1["<b>FRONT DESK</b><br/>Booking needs the patient’s information<br/><i>Q28</i>"]:::cited
-      S2["<b>FRONT DESK</b><br/>A wrong name is corrected<br/><i>to confirm with clinic</i>"]:::confirm
+      S1["<b>FRONT DESK</b><br/>Staff type the paper form into the software<br/><i>R2-03</i>"]:::cited
+      S2["<b>FRONT DESK</b><br/>Returning patient looked up in the branch archive<br/><i>R2-06</i>"]:::cited
+      S3["<b>FRONT DESK</b><br/>Another branch: register again or retype (separate databases)<br/><i>R2-08</i>"]:::cited
+      S4["<b>FRONT DESK</b><br/>A wrong name is corrected<br/><i>to confirm with clinic</i>"]:::confirm
     end
     S0 --> S1
-    S1 -.-> S2
+    S1 --> S2
+    S2 --> S3
+    S3 -.-> S4
     classDef cited fill:#eaf3fd,stroke:#1865ac,color:#142a40,stroke-width:1.5px
     classDef confirm fill:#fffaf0,stroke:#b26a00,color:#5e3c00,stroke-width:1.5px,stroke-dasharray:6 4
     classDef auto fill:#e6f5ee,stroke:#0c7f75,color:#0f3d33,stroke-width:1.5px

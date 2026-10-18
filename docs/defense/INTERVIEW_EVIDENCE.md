@@ -5,10 +5,13 @@ word** from the repository; nothing is paraphrased or added.
 
 - **Q1–Q32**: first interview with Dr. Dana Roxas, clinic owner. Source: `docs/process/CLINIC_INTERVIEW_QA.md`.
 - **PI-xx**: follow-up interview of 2026-10-11 (multiple-choice answers). Source: `docs/FOLLOW_UP_INTERVIEW_AND_POLICY_DEPENDENCY_MAP.md`, section 3A.
+- **R2-xx**: interview round 2 of 2026-10-19, answered by **clinic staff, not the Owner** (Part 3 at the end of this page). Where
+  an answer needs the Owner, it says so and the item is in [`OPEN_ITEMS.md`](OPEN_ITEMS.md).
 
 Notes for the panel:
-- Q16 says forms are **already digitized** ("All forms from booking to payment are digitized"), except prescriptions. We do not
-  claim the clinic is paper-based.
+- Q16 says forms are **already digitized** ("All forms from booking to payment are digitized"), except prescriptions. Round 2
+  (clinic staff) differs: billing is still on paper (R2-01) and new patients fill in a paper form that staff retype (R2-03). We
+  cite both and say the staff answer is the more detailed, more recent one; the Owner has not reconciled them.
 - Q14: the clinic pays "around ₱1,400 per month for software".
 - Q12 gives price ranges; the system does not show prices to patients (prices are confirmed by the clinic).
 
@@ -174,3 +177,36 @@ Notes for the panel:
 | PI-38 | How does the clinic prepare prescriptions today? | C. Both hand-written and printed | PARTIALLY ANSWERED | Both forms are in use | Who types and prints, validity, correction, legal output (TD-13); no inference of any legal rule | Prescription drafts and authorization are **browser-local only**; the server stores just the `prescription_required` flag on the Treatment — no backend prescription record, printable output or OCR |
 
 **Summary of the 20 (rechecked 2026-10-12):** 3 are ANSWERED 2026-10-11 (PI-06, PI-08, PI-32); 17 are PARTIALLY ANSWERED (PI-01, PI-02, PI-05, PI-09, PI-13, PI-14, PI-15, PI-21, PI-24, PI-25, PI-29, PI-30, PI-31, PI-34, PI-38, PI-42, PI-43). The remaining 40 primary and all 113 deferred decisions received no answer in this interview. Section 3A.1 records the clause-by-clause recheck of the eight questions first marked ANSWERED.
+
+---
+
+# Part 3 — Interview round 2 (2026-10-19, respondent: clinic staff)
+
+Answered by a member of the clinic staff, **not the Owner**. Recorded as given to the team; words in quotation marks are the
+respondent's own. "Rather not say", "No", "I don't know" and "The owner isn't here" are kept as answered. Questions answered
+"up to you" are decisions we proposed, listed in [`OPEN_ITEMS.md`](OPEN_ITEMS.md) as pending the Owner's approval.
+
+| ID | Topic | Answer as given | Used for |
+| --- | --- | --- | --- |
+| R2-01 | Current software | The current software handles appointments and patient records only; **billing is still on paper**. The software name was not given (rather not say); no screenshots. | AS-IS M11, pitch |
+| R2-02 | What they like | A visual staff calendar that shows **in advance which days are crowded**, with a patient icon per booking. | F6 staff calendar load |
+| R2-03 | New patients | New patients fill in their information **on paper** on arrival, then staff type it into the system manually ("which is tough for us"). | AS-IS M4/M8, pitch |
+| R2-04 | Online channel | Facebook/Messenger is used for bookings and questions; staff answer. | AS-IS M16/M17 |
+| R2-05 | Durations | New-patient sign-in takes **about 15 minutes**; the procedure takes **about 20–60 minutes** depending on the treatment. | Before vs Now tables |
+| R2-06 | Returning patients and walk-ins | Returning patients are looked up in the system archive; walk-ins sign on paper and staff add them to the list in the system. | AS-IS M4/M8/M9 |
+| R2-07 | No-shows and late patients | No-shows and cancellations are "the biggest gap of our system" because there is no automatic email. A patient **more than 10 minutes late** is put at the **end of the queue** or rescheduled. All of this is staff work. | F2 late limit (10 min), queue rule |
+| R2-08 | Branch databases | Every branch uses the same software but **its own separate database**; there is no central database, so a patient moving to another branch must register again or staff retype the data. | AS-IS M1/M2/M4, pitch |
+| R2-09 | Reminders | Reminder **60 minutes before**; **the Owner approves the wording**. | F1 default, approved wording |
+| R2-10 | Late follow-up | Late patients should be followed up; **after 15 minutes the appointment is cancelled**; a cancellation can leave the clinic idle for an hour. The clinic asked us to suggest a workflow. | F2 release (15 min), F3 |
+| R2-11 | Other automations | Recall reminders: yes. Overdue-invoice reminders and Owner daily summary: yes, details up to us. **Health-related messages need a dentist's approval.** Inventory/low-stock alerts: "we could integrate that". | A3/A4/A6, Dentist approval, roadmap |
+| R2-12 | Privacy | Retention and data-privacy owner: "up to you" (needs the Owner). ID scan: all valid IDs accepted; the image may be deleted after staff verify the ID; the respondent asked about minors without an ID. | Retention proposal, open items |
+| R2-13 | Payments, prices, closures, cancellation | Payments/BIR: "I don't know" (the Owner must answer). The Owner approves prices shown online. Closed and holiday dates should be **grayed out** in booking. Cancellation: **24 hours before**; asked us to recommend a policy. | F4 (24 h), F5 |
+| R2-14 | Contacts | Patient emails: the clinic's own address later, ours for the defense. Branches 1 and 2 **share the same phone (confirmed)**. Branch 3 full address still not given. | Branch data, open items |
+| R2-15 | Demo accounts | Placeholder Filipino names, mostly women on staff, **Dr. Dana Roxas as the Owner**. | F10 |
+| R2-16 | HMO | Yes. A list was given: Avega, InLife iCare, Intellicare, eTiQa, Dental Network partnerships, AXA Health Plans (for qualifying premium dental packages). The list contains web-citation markers, so it **must be verified with the clinic** before patients see it. | F8 (loaded unverified) |
+| R2-17 | Sensitive services | Braces (and other sensitive services) should **not be bookable directly**; patients book the consultation that leads to it, and that consultation is what they pay for. | F7 |
+| R2-18 | Quiet days | The clinic is usually **less busy on Wednesday and Thursday**. | Assistant answer 3 |
+
+**Owner-only answers still open** (the respondent could not answer): payments, PayMongo and BIR; the data protection officer and
+retention periods; approval of message wording; daily opening/closing and cash reporting; the verified HMO list; each dentist's
+real weekly hours.

@@ -9,6 +9,7 @@ flowchart TB
     subgraph L3[" "]
     direction LR
       S0["<b>OWNER</b><br/>Keeps services and dated price versions"]:::manual
+      S3["<b>OWNER</b><br/>Sets each service: bookable, consultation first or not online"]:::manual
     end
     subgraph L4[" "]
     direction LR
@@ -16,6 +17,7 @@ flowchart TB
     end
     S0 --> S1
     S1 --> S2
+    S2 --> S3
     classDef cited fill:#eaf3fd,stroke:#1865ac,color:#142a40,stroke-width:1.5px
     classDef confirm fill:#fffaf0,stroke:#b26a00,color:#5e3c00,stroke-width:1.5px,stroke-dasharray:6 4
     classDef auto fill:#e6f5ee,stroke:#0c7f75,color:#0f3d33,stroke-width:1.5px

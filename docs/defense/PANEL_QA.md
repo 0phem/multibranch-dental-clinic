@@ -201,11 +201,37 @@ moved or paid record is not emailed. Tested in `Automations/AutomationsTest`.
 
 **42. Who can turn it off?**
 Only the Owner, per automation, in Administration → Automations; every switch and setting change is in the audit trail with
-who, the old and the new value. Recall ships off. The values are defaults the clinic has not confirmed yet.
+who, the old and the new value. Since interview round 2 every automation **ships off until the Owner approves the wording** of
+its emails (R2-09), and recall also needs a Dentist (R2-11). Each default says whether it came from the clinic (R2 answer
+number) or is our recommendation.
 
 **43. Is any message sent without human approval?**
-Reminders, overdue-invoice reminders, waitlist openings and the Owner summary are sent automatically once the Owner leaves them
-on: they only repeat facts already in the records (a time, a balance, a count), never clinical content or prices in reminders.
-Nothing that decides about a patient is automatic: a possible no-show is only flagged, and the front desk confirms or undoes it;
-the "We missed you" email is off by default and goes only after that human confirmation.
+No wording is sent that the Owner did not approve; editing the wording clears the approval and switches the automation off.
+The emails only repeat facts already in the records (a time, a balance, a count), never clinical content. One automatic
+decision exists, because the clinic asked for it: after 15 minutes without check-in the time is released (R2-10). It is a
+setting ("release automatically" or "ask the front desk"), and the front desk can undo a release the same day.
 
+**44. What is your late-arrival policy, and who decided it?**
+The clinic gave the numbers and asked us to suggest the flow (R2-07, R2-10). At 5 minutes the patient gets "Are you on your
+way?" (in the app and by email, with "On my way" and "Reschedule"; the reply shows on the Check-In page). At 10 minutes they
+show as Late; if they then check in, they go after the on-time patients in that dentist's queue (R2-07), and Staff can restore
+their place with a reason. At 15 minutes the time is released, recorded as a no-show, and a rebook email goes out (R2-10). Every
+minute is an Owner setting; 5 is our recommendation, 10 and 15 are the clinic's. Tested in `Automations/InterviewRoundTwoTest`.
+
+**45. What happens to a freed slot?**
+It is offered, never held: first to patients booked later the same day at that branch whose service fits ("An earlier time is
+available"); the first to accept gets it through the normal scheduling checks, and the database's no-double-booking constraint
+is the final guard, so two patients accepting at once cannot both get it (the second sees "another patient took this time").
+After a head start the waitlist is told, and the front desk sees the free time for walk-ins. Nobody is moved without accepting,
+and offers expire when the time passes. The Owner summary counts how each freed time was refilled.
+
+**46. Why can't patients book braces directly?**
+The clinic said so (R2-17): braces and other sensitive services start with a consultation, and that consultation is what the
+patient books and pays for. Each service has an Owner setting: bookable, "starts with a consultation" (pointing to the
+consultation service) or not shown online. The server refuses a direct online booking, not only the screen; the front desk can
+still book it.
+
+**47. Do you process HMO claims?**
+No. The clinic accepts some HMOs (R2-16), but the list it sent contained web-citation markers, so it is loaded **not verified**
+and hidden from patients until the Owner confirms each name. Patients may add their HMO provider and member number (stored
+encrypted) for the front desk to check at the visit. There is no coverage calculation and no claim submission in this release.

@@ -6,19 +6,21 @@ flowchart TB
     direction LR
       S0["<b>PATIENT</b><br/>Books online: service, branch near you, Dentist or any, day, time"]:::manual
       S3["<b>PATIENT</b><br/>Reschedules or cancels in My visits"]:::manual
-      S7["<b>PATIENT</b><br/>Full day? #quot;Notify me if a time opens#quot;"]:::manual
     end
     subgraph L1[" "]
     direction LR
       S5["<b>FRONT DESK</b><br/>Books for phone and walk-in patients"]:::manual
+      S10["<b>FRONT DESK</b><br/>Calendar shows each day’s load and crowded days (R2-02)"]:::manual
     end
     subgraph L4[" "]
     direction LR
       S1["<b>SYSTEM</b><br/>Shows only real open times; refuses conflicts<br/><i>System does it</i>"]:::auto
       S2["<b>SYSTEM</b><br/>Emails the confirmation<br/><i>System does it</i>"]:::auto
       S4["<b>SYSTEM</b><br/>Emails the change<br/><i>System does it</i>"]:::auto
-      S6["<b>SYSTEM</b><br/>Reminder email 24 h before (Owner setting); recalculated on reschedule<br/><i>System does it</i>"]:::auto
-      S8["<b>SYSTEM</b><br/>Cancellation frees a time: emails the earliest waiting patients<br/><i>System does it</i>"]:::auto
+      S6["<b>SYSTEM</b><br/>Reminder 60 min before (R2-09) with I’ll be there / I can’t make it<br/><i>System does it</i>"]:::auto
+      S7["<b>SYSTEM</b><br/>Freed time: offered to later patients first; first to accept moves up<br/><i>System does it</i>"]:::auto
+      S8["<b>SYSTEM</b><br/>Then the waitlist, then walk-ins at the front desk<br/><i>System does it</i>"]:::auto
+      S9["<b>SYSTEM</b><br/>Braces and surgery start with a consultation (R2-17)<br/><i>System does it</i>"]:::auto
     end
     S0 --> S1
     S1 --> S2
@@ -28,6 +30,8 @@ flowchart TB
     S5 --> S6
     S6 --> S7
     S7 --> S8
+    S8 --> S9
+    S9 --> S10
     classDef cited fill:#eaf3fd,stroke:#1865ac,color:#142a40,stroke-width:1.5px
     classDef confirm fill:#fffaf0,stroke:#b26a00,color:#5e3c00,stroke-width:1.5px,stroke-dasharray:6 4
     classDef auto fill:#e6f5ee,stroke:#0c7f75,color:#0f3d33,stroke-width:1.5px

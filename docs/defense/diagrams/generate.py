@@ -119,7 +119,7 @@ def main():
             with open(os.path.join(HERE, f'{base}-{view}.mmd'), 'w') as f:
                 f.write(flow(title, steps, view))
             written.append(f'{base}-{view}.mmd')
-        index.append({'n': m['n'], 'base': base, 'name': m['name'], 'status': m['status'], 'errors': m['errors'], 'automation': m['automation'],
+        index.append({'n': m['n'], 'base': base, 'name': m['name'], 'status': m['status'], 'errors': m['errors'], 'automation': m['automation'], 'time': m.get('time'),
                       'as_is': m['as_is'], 'to_be': m['to_be']})
     for name, title, steps, view in (('overview-as-is', 'Patient journey: AS-IS (before)', OVERVIEW_AS_IS, 'as-is'),
                                      ('overview-to-be', 'Patient journey: TO-BE (with the system)', OVERVIEW_TO_BE, 'to-be')):

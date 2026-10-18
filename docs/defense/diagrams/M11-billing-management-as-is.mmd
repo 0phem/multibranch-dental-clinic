@@ -5,11 +5,9 @@ flowchart TB
     subgraph L1[" "]
     direction LR
       S0["<b>FRONT DESK</b><br/>Receptionist handles billing<br/><i>Q27</i>"]:::cited
-      S1["<b>FRONT DESK</b><br/>Forms from booking to payment are digitized<br/><i>Q16</i>"]:::cited
-      S2["<b>FRONT DESK</b><br/>Invoice and receipt are made<br/><i>to confirm with clinic</i>"]:::confirm
+      S1["<b>FRONT DESK</b><br/>Billing is still on paper (the software does appointments and records only)<br/><i>R2-01</i>"]:::cited
     end
     S0 --> S1
-    S1 -.-> S2
     classDef cited fill:#eaf3fd,stroke:#1865ac,color:#142a40,stroke-width:1.5px
     classDef confirm fill:#fffaf0,stroke:#b26a00,color:#5e3c00,stroke-width:1.5px,stroke-dasharray:6 4
     classDef auto fill:#e6f5ee,stroke:#0c7f75,color:#0f3d33,stroke-width:1.5px
