@@ -40,17 +40,17 @@ final class QueueService
      * entry numbered in its branch + Dentist + clinic-day queue; a Visit without one gets none (decision Q4). Any failure
      * propagates, so the whole arrival (appointment + Visit + queue entry) rolls back together.
      */
-    public function enqueue(User $actor, Visit $visit): ?QueueEntry
+    public function enqueue(User $actor, Visit $visit, bool $late = false): ?QueueEntry
     {
         if ($visit->responsible_dentist_profile_id === null) {
             return null;
         }
         [$queueId, $number] = $this->allocate($visit->branch_id, $visit->responsible_dentist_profile_id, $visit->clinic_date->format('Y-m-d'));
         $entry = QueueEntry::create([
-            'visit_id' => $visit->id, 'dentist_queue_id' => $queueId, 'queue_number' => $number, 'status' => 'Waiting', 'priority' => 'Normal',
+            'visit_id' => $visit->id, 'dentist_queue_id' => $queueId, 'queue_number' => $number, 'status' => 'Waiting', 'priority' => 'Normal', 'late_arrival' => $late,
             'revision' => 1, 'created_by_user_id' => $actor->id, 'updated_by_user_id' => $actor->id,
         ]);
-        $this->history($entry, $actor, 'queue.entered', null, null);
+        $this->history($entry, $actor, $late ? 'queue.entered_late' : 'queue.entered', null, null);
 
         return $entry;
     }
@@ -142,8 +142,30 @@ final class QueueService
     }
 
     /**
+     * F2: Staff restore a late arrival's normal place in the queue (an override of R2-07), with a required reason. Audited.
+     */
+    public function restoreOrder(User $actor, QueueEntry $entry, string $reason, int $expectedRevision, string $key): JsonResponse
+    {
+        $payload = ['entry' => $entry->id, 'expected_revision' => $expectedRevision, 'reason' => $reason];
+
+        return $this->idempotent($actor, $key, 'queue.late_order', $payload, function () use ($actor, $entry, $reason, $expectedRevision) {
+            [$visit, $current] = $this->lock($entry);
+            if (! $current->late_arrival) {
+                return $current;
+            }
+            $this->assertCurrent($current, $visit, $expectedRevision);
+            $current->update(['late_arrival' => false, 'revision' => $current->revision + 1, 'updated_by_user_id' => $actor->id]);
+            $this->history($current, $actor, 'queue.late_order_restored', $current->status, $current->priority, $reason);
+            app(\App\Services\Audit\AuditService::class)->recordAdministrative('queue.late_order_restored', $actor, $current, ['reason' => $reason]);
+
+            return $current;
+        });
+    }
+
+    /**
      * Server-computed positions for the given Dentist queues: only Waiting / Called / Treatment Ready hold a place,
-     * ordered by priority (Urgent, Priority, Normal), then the Visit's exact arrival time, then the unique queue number.
+     * ordered by priority (Urgent, Priority, Normal), then on-time before late arrivals (R2-07), then the Visit's exact arrival
+     * time, then the unique queue number.
      *
      * @param  list<int>  $dentistQueueIds
      * @return array<int,int> queue_entries.id => position
@@ -157,7 +179,7 @@ final class QueueService
         $rows = DB::select(
             "SELECT q.id, ROW_NUMBER() OVER (
                  PARTITION BY q.dentist_queue_id
-                 ORDER BY CASE q.priority WHEN 'Urgent' THEN 0 WHEN 'Priority' THEN 1 ELSE 2 END, v.arrived_at, q.queue_number
+                 ORDER BY CASE q.priority WHEN 'Urgent' THEN 0 WHEN 'Priority' THEN 1 ELSE 2 END, q.late_arrival, v.arrived_at, q.queue_number
              ) AS position
              FROM queue_entries q JOIN visits v ON v.id = q.visit_id
              WHERE q.dentist_queue_id IN ({$placeholders}) AND q.status IN ('Waiting','Called','Treatment Ready')",
@@ -237,7 +259,7 @@ final class QueueService
         }
     }
 
-    private function history(QueueEntry $entry, User $actor, string $event, ?string $from, ?string $fromPriority): void
+    private function history(QueueEntry $entry, User $actor, string $event, ?string $from, ?string $fromPriority, ?string $reason = null): void
     {
         QueueEntryHistory::create([
             'queue_entry_id' => $entry->id,
@@ -246,7 +268,7 @@ final class QueueService
             'to_status' => $entry->status,
             'from_priority' => $fromPriority,
             'to_priority' => $entry->priority,
-            'priority_reason' => $event === 'queue.priority_changed' ? $entry->priority_reason : null,
+            'priority_reason' => $reason ?? ($event === 'queue.priority_changed' ? $entry->priority_reason : null),
             'revision' => $entry->revision,
             'actor_user_id' => $actor->id,
             'actor_role' => $actor->role->value,

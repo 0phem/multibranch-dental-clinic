@@ -21,7 +21,14 @@ class WaitlistOpeningMail extends AutomationMail
 
     public function envelope(): Envelope
     {
-        return new Envelope(subject: $this->subjectLine('A time opened on '.$this->day()->format('M j').' - '.Brand::name()));
+        return new Envelope(subject: $this->w()['subject']);
+    }
+
+    private function w(): array
+    {
+        $e = $this->entry;
+
+        return $this->wording('waitlist_opening', ['first_name' => $e->patient?->person?->first_name ?: 'there', 'branch' => $e->branch?->name ?? 'the clinic', 'date' => $this->day()->format('l, F j')]);
     }
 
     public function content(): Content
@@ -30,7 +37,7 @@ class WaitlistOpeningMail extends AutomationMail
 
         return new Content(view: 'emails.waitlist-opening', text: 'emails.waitlist-opening-text', with: [
             'entry' => $e, 'branch' => $e->branch, 'day' => $this->day(), 'test' => $this->test, 'subjectLine' => $this->envelope()->subject,
-            'firstName' => $e->patient?->person?->first_name ?: 'there', 'bookUrl' => Brand::pageUrl('book'),
+            'firstName' => $e->patient?->person?->first_name ?: 'there', 'bookUrl' => Brand::pageUrl('book'), 'paragraphs' => $this->w()['paragraphs'],
             'dentist' => $e->dentist?->person ? 'Dr. '.$e->dentist->person->first_name.' '.$e->dentist->person->last_name : null,
         ]);
     }

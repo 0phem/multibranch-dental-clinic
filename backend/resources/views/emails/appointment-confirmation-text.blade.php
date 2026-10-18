@@ -19,4 +19,6 @@ Status: {!! $appointment->status !!}
 
 View in your patient portal: {!! \App\Support\Brand::forEmail()['portal_url'] !!}
 Need to reschedule? Manage your appointment in your patient portal or call your clinic branch.
+@if ($policy = \App\Services\Automations\AttendancePolicy::summary()){!! $policy !!}
+@endif
 @endsection

@@ -27,11 +27,16 @@ class AutomationSettingsController extends Controller
         $stats = AutomationLog::lastSevenDays();
         $rows = AutomationSetting::all()->keyBy('key');
         $data = [];
-        foreach (AutomationCatalog::definitions() as $key => [$name, $module, $description, $defaultOn, $defaults]) {
+        $templates = \App\Models\MessageTemplate::all()->keyBy('key');
+        foreach (AutomationCatalog::definitions() as $key => [$name, $module, $description, $defaultOn, $defaults, $sources]) {
             $row = $rows[$key] ?? null;
             $data[] = ['key' => $key, 'name' => $name, 'module' => $module, 'description' => $description,
+                'kind' => AutomationCatalog::isPolicy($key) ? 'policy' : 'automation',
                 'enabled' => (bool) $row?->enabled, 'settings' => $row?->settings ?? $defaults, 'revision' => $row?->revision,
-                'defaults' => ['enabled' => $defaultOn, 'settings' => $defaults],
+                // Where each default came from: an interview R2 answer number, or null = recommended, not confirmed by the clinic.
+                'defaults' => ['enabled' => $defaultOn, 'settings' => $defaults, 'sources' => $sources],
+                'templates' => array_map(fn ($k) => ['key' => $k, 'name' => \App\Services\Automations\MessageTemplates::NAMES[$k], 'approved' => (bool) $templates[$k]?->isApproved(),
+                    'needs_dentist' => (bool) $templates[$k]?->needs_dentist], AutomationCatalog::TEMPLATES[$key] ?? []),
                 // A value is "confirmed" only once an Owner saved this automation; until then it is the shipped default.
                 'owner_saved' => $row?->updated_by_user_id !== null,
                 'last_run_at' => $row?->last_run_at?->toIso8601String(), 'missing' => $row === null, 'last_7_days' => $stats[$key]];
@@ -45,6 +50,12 @@ class AutomationSettingsController extends Controller
         abort_unless(in_array($key, AutomationCatalog::KEYS, true), 404);
         $data = $request->validate(['enabled' => ['sometimes', 'boolean'], 'settings' => ['sometimes', 'array'], 'expected_revision' => ['required', 'integer']]);
         $settings = array_key_exists('settings', $data) ? AutomationCatalog::validate($key, $data['settings']) : null;
+        // F1 (R2-09): an automation that sends email is switched on only with the Owner's approved wording.
+        if (($data['enabled'] ?? false) && ($missing = \App\Services\Automations\MessageTemplates::unapprovedFor($key))) {
+            $names = implode(', ', array_map(fn ($k) => \App\Services\Automations\MessageTemplates::NAMES[$k], $missing));
+
+            return response()->json(['message' => "Approve the wording first: $names.", 'code' => 'wording_not_approved', 'errors' => ['enabled' => ["Approve the wording first: $names."]]], 422);
+        }
         $row = DB::transaction(function () use ($key, $data, $settings, $request) {
             $row = AutomationSetting::whereKey($key)->lockForUpdate()->firstOrFail();
             if ($row->revision !== (int) $data['expected_revision']) return null;
@@ -57,6 +68,12 @@ class AutomationSettingsController extends Controller
                 if (($old['settings'][$field] ?? null) !== $value) $changes["settings.$field"] = ['old' => $old['settings'][$field] ?? null, 'new' => $value];
             }
             if ($changes) {
+                // The Dentist approved the recall wording together with its intervals: new intervals need a new approval.
+                if ($key === 'recall' && isset($changes['settings.rules'])) {
+                    \App\Services\Automations\MessageTemplates::clearDentistApproval('recall_due', $request->user());
+                    $row->enabled = false;
+                    if ($old['enabled']) $changes['enabled'] = ['old' => true, 'new' => false];
+                }
                 $row->revision++;
                 $row->updated_by_user_id = $request->user()->id;
                 $row->save();
@@ -83,8 +100,9 @@ class AutomationSettingsController extends Controller
     public function demo(Request $request): JsonResponse
     {
         abort_unless(DemoMode::active(), 404);
-        $data = $request->validate(['appointment_code' => ['nullable', 'string', 'max:40'], 'invoice_number' => ['nullable', 'string', 'max:40'], 'summary' => ['sometimes', 'boolean']]);
-        $result = app(DemoClock::class)->run($data['appointment_code'] ?? null, $data['invoice_number'] ?? null, (bool) ($data['summary'] ?? false));
+        $data = $request->validate(['appointment_code' => ['nullable', 'string', 'max:40'], 'invoice_number' => ['nullable', 'string', 'max:40'], 'summary' => ['sometimes', 'boolean'],
+            'late_code' => ['nullable', 'string', 'max:40']]);
+        $result = app(DemoClock::class)->run($data['appointment_code'] ?? null, $data['invoice_number'] ?? null, (bool) ($data['summary'] ?? false), $data['late_code'] ?? null);
         app(AuditService::class)->recordAdministrative('automation.demo_clock', $request->user(), null, ['automations' => array_keys($result)]);
 
         return response()->json(['data' => $result]);

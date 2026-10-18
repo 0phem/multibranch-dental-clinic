@@ -57,8 +57,8 @@ final class VisitService
             if (! in_array($current->status, ['Pending', 'Confirmed'], true)) {
                 throw VisitCommandException::rule('invalid_transition', "An appointment that is {$current->status} cannot be checked in.", 'status');
             }
-            // Existing approved rule: only today's appointments (Asia/Manila business date). The earliest-arrival and
-            // late-arrival windows remain unresolved clinic policies (P3/P4) and are not invented here.
+            // Existing approved rule: only today's appointments (Asia/Manila business date). The earliest-arrival window remains
+            // an unresolved clinic policy (P3). Late arrival (R2-07): see the queue entry below.
             if (ClinicClock::local($current->starts_at)->toDateString() !== ClinicClock::today()) {
                 throw VisitCommandException::rule('not_today', 'Only today’s appointments can be checked in.', 'status');
             }
@@ -68,13 +68,16 @@ final class VisitService
             $current->update(['status' => 'Checked In', 'revision' => $current->revision + 1, 'updated_by_user_id' => $actor->id]);
             $this->appointments->record($current, $actor, 'appointment.checked_in', $from);
 
+            // R2-07: a patient more than the late limit past the start goes to the end of that Dentist's queue (F2 setting).
+            $lateSettings = \App\Services\Automations\NoShowDetection::settings();
+            $late = $lateSettings !== null && ClinicClock::now()->greaterThan(\Carbon\CarbonImmutable::instance($current->starts_at)->addMinutes((int) $lateSettings['late_minutes']));
             $visit = $this->open($actor, [
                 'patient_id' => $current->patient_id,
                 'branch_id' => $current->branch_id,
                 'appointment_id' => $current->id,
                 'source' => 'appointment',
                 'responsible_dentist_profile_id' => $current->dentist_profile_id,
-            ]);
+            ], $late);
 
             return [$visit, 201];
         });
@@ -181,7 +184,7 @@ final class VisitService
         }
     }
 
-    private function open(User $actor, array $attributes): Visit
+    private function open(User $actor, array $attributes, bool $late = false): Visit
     {
         $now = ClinicClock::now();
         $visit = Visit::create($attributes + [
@@ -195,7 +198,7 @@ final class VisitService
         ]);
         $this->history($visit, $actor, 'visit.checked_in', null);
         // M9: a Visit with a responsible Dentist enters that Dentist's queue in this same transaction.
-        $this->queue->enqueue($actor, $visit);
+        $this->queue->enqueue($actor, $visit, $late);
 
         return $visit;
     }

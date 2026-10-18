@@ -8,8 +8,10 @@ A time opened on {!! $day->format('l, F j') !!}
 
 Hi {!! $firstName !!},
 
-You asked us to tell you when a time opens on this day. Times go to whoever books first and we can't hold one for you, so book soon if you still want it.
+@foreach ($paragraphs as $paragraph)
+{!! $paragraph !!}
 
+@endforeach
 Date: {!! $day->format('F j, Y (l)') !!}
 @if ($branch)Clinic branch: {!! $branch->name !!}
 @endif

@@ -17,16 +17,21 @@ class OwnerDailySummaryMail extends AutomationMail
 
     public function envelope(): Envelope
     {
+        return new Envelope(subject: $this->w()['subject']);
+    }
+
+    private function w(): array
+    {
         $day = CarbonImmutable::createFromFormat('!Y-m-d', $this->date, ClinicClock::TIMEZONE);
 
-        return new Envelope(subject: $this->subjectLine('Daily summary for '.$day->format('D, M j').' - '.Brand::name()));
+        return $this->wording('owner_daily_summary', ['first_name' => $this->owner->person?->first_name ?: 'there', 'date' => $day->format('l, F j, Y')]);
     }
 
     public function content(): Content
     {
         return new Content(view: 'emails.owner-summary', text: 'emails.owner-summary-text', with: OwnerSummaryData::forDate($this->date) + [
             'day' => CarbonImmutable::createFromFormat('!Y-m-d', $this->date, ClinicClock::TIMEZONE), 'test' => $this->test,
-            'subjectLine' => $this->envelope()->subject, 'firstName' => $this->owner->person?->first_name ?: 'there', 'reportsUrl' => Brand::pageUrl('reports'),
+            'subjectLine' => $this->envelope()->subject, 'firstName' => $this->owner->person?->first_name ?: 'there', 'reportsUrl' => Brand::pageUrl('reports'), 'paragraphs' => $this->w()['paragraphs'],
         ]);
     }
 }

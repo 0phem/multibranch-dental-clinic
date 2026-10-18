@@ -8,8 +8,10 @@ We missed you
 
 Hi {!! $firstName !!},
 
-We didn't see you at your visit on {!! $start->format('F j') !!}{!! $appointment->branch ? ' at '.$appointment->branch->name : '' !!}. When you're ready, choose a new time that suits you.
+@foreach ($paragraphs as $paragraph)
+{!! $paragraph !!}
 
+@endforeach
 Book a new time: {!! $bookUrl !!}
 If this is a mistake, please call the branch and we'll sort it out.
 @endsection

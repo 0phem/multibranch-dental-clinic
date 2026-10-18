@@ -98,6 +98,37 @@ class NotificationCenter
         $this->write($user, 'waitlist_opening', 'A time opened on '.$day, implode(' · ', array_filter([$entry->service?->name, $entry->branch?->name, 'first come, first served'])), 'book', null, $dedupe);
     }
 
+    /** F2: "Are you on your way?" — the visit page shows the "On my way" and "Reschedule" buttons. */
+    public function lateCheck(Appointment $appointment, string $dedupe): void
+    {
+        $user = $appointment->patient?->user;
+        if (! $user) return;
+        $appointment->loadMissing('branch');
+        $this->write($user, 'late_check', 'Are you on your way?', 'Your visit was at '.ClinicClock::local($appointment->starts_at)->format('g:i A').' · '.($appointment->branch?->name ?? 'the clinic'),
+            'visits', $appointment->public_id, $dedupe);
+    }
+
+    /** F3: "An earlier time is available" — accepted from My visits or the email link. */
+    public function moveUpOffer(\App\Models\SlotOffer $offer, string $dedupe): void
+    {
+        $appointment = $offer->appointment;
+        $user = $appointment?->patient?->user;
+        if (! $user) return;
+        $appointment->loadMissing('branch');
+        $this->write($user, 'move_up_offer', 'An earlier time is available', ClinicClock::local($offer->opening->starts_at)->format('D, M j, g:i A').' instead of '.ClinicClock::local($appointment->starts_at)->format('g:i A').' · first to accept gets it',
+            'visits', $appointment->public_id, $dedupe);
+    }
+
+    /** F5: the branch closed a date that has this appointment (it was not cancelled). */
+    public function closureNotice(Appointment $appointment, string $dedupe): void
+    {
+        $user = $appointment->patient?->user;
+        if (! $user) return;
+        $appointment->loadMissing('branch');
+        $this->write($user, 'closure_notice', 'Please choose a new time', ($appointment->branch?->name ?? 'The branch').' will be closed on '.ClinicClock::local($appointment->starts_at)->format('D, M j'),
+            'visits', $appointment->public_id, $dedupe);
+    }
+
     private function write(User $user, string $kind, string $title, ?string $body, ?string $page, ?string $targetId, string $dedupe): void
     {
         try {

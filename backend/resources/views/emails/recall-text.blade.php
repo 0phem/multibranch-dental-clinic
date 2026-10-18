@@ -8,7 +8,9 @@ Time for your check-up
 
 Hi {!! $firstName !!},
 
-It has been a while since your last visit{!! $branch ? ' at '.$branch->name : '' !!}. Book your next visit at a time that suits you.
+@foreach ($paragraphs as $paragraph)
+{!! $paragraph !!}
 
+@endforeach
 Book a visit: {!! $bookUrl !!}
 @endsection

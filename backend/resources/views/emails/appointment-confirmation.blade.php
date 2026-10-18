@@ -23,4 +23,7 @@
     ]])
     @include('emails.v2.partials.button', ['url' => \App\Support\Brand::forEmail()['portal_url'], 'label' => 'View in your patient portal'])
     <p class="t-muted" style="margin:0 0 8px; font-size:14px; line-height:21px; color:#5b6b7f;">Need to reschedule? Manage your appointment in your patient portal or call your clinic branch.</p>
+    {{-- F4: the clinic's cancellation policy, as the Owner set it (shown only while it is switched on). --}}
+    @if ($policy = \App\Services\Automations\AttendancePolicy::summary())<p class="t-muted" style="margin:0 0 8px; font-size:14px; line-height:21px; color:#5b6b7f;">{{ $policy }}</p>@endif
+    @if ($appointment->status === 'Pending')<p style="margin:0 0 8px;">The front desk will confirm this booking.</p>@endif
 @endsection

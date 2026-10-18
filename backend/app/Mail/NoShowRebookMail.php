@@ -15,7 +15,16 @@ class NoShowRebookMail extends AutomationMail
 
     public function envelope(): Envelope
     {
-        return new Envelope(subject: $this->subjectLine('We missed you - book a new time - '.Brand::name()));
+        return new Envelope(subject: $this->w()['subject']);
+    }
+
+    private function w(): array
+    {
+        $a = $this->appointment;
+        $start = ClinicClock::local($a->starts_at);
+
+        return $this->wording('no_show_rebook', ['first_name' => $a->patient?->person?->first_name ?: 'there', 'branch' => $a->branch?->name ?? 'the clinic',
+            'date' => $start->format('F j'), 'time' => $start->format('g:i A')]);
     }
 
     public function content(): Content
@@ -24,7 +33,7 @@ class NoShowRebookMail extends AutomationMail
 
         return new Content(view: 'emails.no-show-rebook', text: 'emails.no-show-rebook-text', with: [
             'appointment' => $this->appointment, 'start' => $start, 'test' => $this->test, 'subjectLine' => $this->envelope()->subject,
-            'firstName' => $this->appointment->patient?->person?->first_name ?: 'there', 'bookUrl' => Brand::pageUrl('book'),
+            'firstName' => $this->appointment->patient?->person?->first_name ?: 'there', 'bookUrl' => Brand::pageUrl('book'), 'paragraphs' => $this->w()['paragraphs'],
         ]);
     }
 }

@@ -9,12 +9,16 @@
     @include('emails.partials-test-banner')
     @include('emails.v2.partials.heading', ['text' => 'Daily summary'])
     <p style="margin:0 0 4px;">Hi {{ $firstName }},</p>
-    <p style="margin:0 0 6px;">Here are today’s numbers for {{ $day->format('l, F j, Y') }}, per branch.</p>
+    @include('emails.v2.partials.message', ['paragraphs' => $paragraphs])
     @foreach ($branches as $b)
         @include('emails.v2.partials.details', ['title' => $b['name'].($b['open'] ? '' : ' (closed)'), 'rows' => [
             ['Appointments booked', (string) $b['booked']],
             ['Visits completed', (string) $b['completed']],
             ['Appointments cancelled', (string) $b['cancelled']],
+            ['Late cancellations', (string) $b['late_cancellations']],
+            ['Late arrivals', (string) $b['late_arrivals']],
+            ['Times released (not checked in)', (string) $b['released']],
+            ['Freed times refilled', 'move-up '.$b['refilled']['move_up'].' · waitlist '.$b['refilled']['waitlist'].' · walk-in '.$b['refilled']['walk_in'].' · booking '.$b['refilled']['booking']],
             ['Possible no-shows flagged', (string) $b['possible_no_shows']],
             ['Payments received', $b['payments_count'].' · '.$m($b['payments_total'])],
             ['Invoices issued today', $b['issued_count'].' · '.$m($b['issued_total'])],

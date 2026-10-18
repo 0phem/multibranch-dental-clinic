@@ -12,7 +12,7 @@ use Carbon\CarbonImmutable;
 /**
  * A5 (M6). Every minute: entries for a date that has passed (Asia/Manila) expire; for each branch, service, Dentist choice and
  * day that has waiting patients, if the patient booking rules now find at least one open time (for example after a
- * cancellation), the earliest `notify_count` waiting patients (first come, first served) get an email and an in-app notice.
+ * cancellation) and the move-up offers for it had their head start (F3), the earliest `notify_count` waiting patients (first come, first served) get an email and an in-app notice.
  * No time is held: the patient books through the normal booking command, whose no-double-booking guard still decides.
  */
 final class WaitlistOpenings implements AutomationJob
@@ -47,8 +47,13 @@ final class WaitlistOpenings implements AutomationJob
         $groups = WaitlistEntry::where('status', 'waiting')->with(['patient.user', 'patient.person', 'branch', 'service', 'dentist.person'])
             ->orderBy('created_at')->orderBy('id')->get()
             ->groupBy(fn (WaitlistEntry $e) => implode(':', [$e->branch_id, $e->service_id, $e->dentist_profile_id ?? 'any', $e->dateString()]));
+        // F3 order: while move-up offers for a freed time on that day still have their head start, the waitlist waits.
+        $held = ! AutomationCatalog::setting('fill_slots')?->enabled ? collect() : \App\Models\SlotOpening::where('status', 'open')->where(fn ($q) => $q->whereNull('waitlist_at')->orWhere('waitlist_at', '>', $now->toIso8601String()))
+            ->get(['branch_id', 'clinic_date'])->map(fn ($o) => $o->branch_id.':'.$o->dateString())->flip();
         foreach ($groups as $entries) {
-            if (! $this->hasOpening($entries->first(), $now)) continue;
+            $first = $entries->first();
+            if ($held->has($first->branch_id.':'.$first->dateString())) continue;
+            if (! $this->hasOpening($first, $now)) continue;
             foreach ($entries->take((int) $settings['notify_count']) as $entry) {
                 $entry->update(['status' => 'notified', 'notified_at' => $now, 'closed_at' => $now]);
                 $key = self::key($entry);

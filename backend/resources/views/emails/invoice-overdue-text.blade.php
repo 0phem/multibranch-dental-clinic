@@ -8,13 +8,14 @@ A reminder about your invoice
 
 Hi {!! $firstName !!},
 
-Invoice {!! $invoice->invoice_number !!}{!! $branch ? ' from '.$branch->name : '' !!} still has a balance.
+@foreach ($paragraphs as $paragraph)
+{!! $paragraph !!}
 
+@endforeach
 Invoice number: {!! $invoice->invoice_number !!}
 @if ($issuedOn)Issued on: {!! $issuedOn !!}
 @endif
 Balance: {!! $balance !!}
 
 Pay online: {!! $payUrl !!}
-You can also pay at the clinic front desk. Already paid? Thank you, you can ignore this email.
 @endsection

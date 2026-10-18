@@ -19,16 +19,25 @@ final class DemoClock
 {
     public function __construct(private readonly AutomationRunner $runner, private readonly MailOutbox $outbox) {}
 
-    public function run(?string $appointmentCode, ?string $invoiceNumber, bool $summary): array
+    public function run(?string $appointmentCode, ?string $invoiceNumber, bool $summary, ?string $lateCode = null): array
     {
         if (! DemoMode::active()) throw new \RuntimeException('The demo clock runs only on the demo database.');
         $done = [];
         if ($appointmentCode) {
             $a = Appointment::where('appointment_code', $appointmentCode)->firstOrFail();
-            $hours = (int) (AutomationCatalog::setting('appointment_reminders')?->settings['hours_before'] ?? 24);
-            $at = CarbonImmutable::instance($a->starts_at)->subHours($hours)->addMinute();
+            $minutes = (int) (AutomationCatalog::setting('appointment_reminders')?->settings['lead_minutes'] ?? 60);
+            $at = CarbonImmutable::instance($a->starts_at)->subMinutes($minutes)->addMinute();
             $done['appointment_reminders'] = ['simulated_now' => ClinicClock::local($at)->toIso8601String()]
-                + ($this->runner->run($at, ['appointment_reminders'], ['appointment_id' => $a->id, 'ignore_lead_rule' => true])['appointment_reminders'] ?? []);
+                + ($this->runner->run($at, ['appointment_reminders'], ['appointment_id' => $a->id, 'ignore_lead_rule' => true, 'kind' => 'lead'])['appointment_reminders'] ?? []);
+        }
+        if ($lateCode) {
+            // F2: as if the patient were still not checked in just after the release time (a same-day appointment), then offer
+            // the freed time to patients booked later that day (F3) at once.
+            $a = Appointment::where('appointment_code', $lateCode)->firstOrFail();
+            $release = (int) (AutomationCatalog::setting('no_show')?->settings['release_minutes'] ?? 15);
+            $at = CarbonImmutable::instance($a->starts_at)->addMinutes($release)->addMinute();
+            $done['no_show'] = ['simulated_now' => ClinicClock::local($at)->toIso8601String()] + ($this->runner->run($at, ['no_show'], ['appointment_id' => $a->id])['no_show'] ?? []);
+            $done['fill_slots'] = ['simulated_now' => ClinicClock::now()->toIso8601String()] + ($this->runner->run(null, ['fill_slots'])['fill_slots'] ?? []);
         }
         if ($invoiceNumber) {
             $i = Invoice::where('invoice_number', $invoiceNumber)->with('branch')->firstOrFail();

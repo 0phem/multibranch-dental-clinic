@@ -8,6 +8,6 @@
     @include('emails.partials-test-banner')
     @include('emails.v2.partials.heading', ['text' => 'Time for your check-up'])
     <p style="margin:0 0 4px;">Hi {{ $firstName }},</p>
-    <p style="margin:0 0 18px;">It has been a while since your last visit{{ $branch ? ' at '.$branch->name : '' }}. Book your next visit at a time that suits you.</p>
+    @include('emails.v2.partials.message', ['paragraphs' => $paragraphs])
     @include('emails.v2.partials.button', ['url' => $bookUrl, 'label' => 'Book a visit'])
 @endsection

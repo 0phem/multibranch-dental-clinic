@@ -78,6 +78,15 @@ class QueueController extends Controller
             (int) $request->validated('expected_revision'), $this->idempotencyKey($request, true));
     }
 
+    /** F2: restore a late arrival's normal place (Staff override of R2-07, reason required, audited). */
+    public function lateOrder(Request $request, QueueEntry $queueEntry): JsonResponse
+    {
+        Gate::authorize('operate', $queueEntry);
+        $data = $request->validate(['reason' => ['required', 'string', 'min:3', 'max:300'], 'expected_revision' => ['required', 'integer']]);
+
+        return $this->queue->restoreOrder($request->user(), $queueEntry, trim($data['reason']), (int) $data['expected_revision'], $this->idempotencyKey($request, true));
+    }
+
     /** The authenticated Patient's own current queue state (identity from the session; no Patient id is accepted). */
     public function mine(Request $request): JsonResponse
     {

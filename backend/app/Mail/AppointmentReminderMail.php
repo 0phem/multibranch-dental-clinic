@@ -5,7 +5,9 @@ namespace App\Mail;
 use App\Models\Appointment;
 use App\Support\Brand;
 use App\Support\ClinicClock;
+use App\Support\ActionLink;
 use App\Support\Ics;
+use Carbon\CarbonImmutable;
 use Illuminate\Mail\Mailables\Attachment;
 use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
@@ -19,7 +21,25 @@ class AppointmentReminderMail extends AutomationMail
     {
         $start = ClinicClock::local($this->appointment->starts_at);
 
-        return new Envelope(subject: $this->subjectLine('Reminder: your visit on '.$start->format('M j').' at '.$start->format('g:i A').' - '.Brand::name()));
+        return new Envelope(subject: $this->w()['subject']);
+    }
+
+    /** The Owner-approved wording (F1) for this appointment. */
+    private function w(): array
+    {
+        $a = $this->appointment;
+        $start = ClinicClock::local($a->starts_at);
+
+        return $this->wording('appointment_reminder', ['first_name' => $a->patient?->person?->first_name ?: 'there', 'branch' => $a->branch?->name ?? 'the clinic',
+            'date' => $start->format('M j'), 'time' => $start->format('g:i A')]);
+    }
+
+    /** One-click answers (F1): signed, single-use, valid until the visit starts. */
+    private function link(string $purpose): string
+    {
+        $a = $this->appointment;
+
+        return ActionLink::url(ActionLink::make($purpose, (string) $a->public_id, (int) $a->revision, CarbonImmutable::instance($a->starts_at), $this->kind));
     }
 
     public function content(): Content
@@ -35,6 +55,7 @@ class AppointmentReminderMail extends AutomationMail
             'firstName' => $a->patient?->person?->first_name ?: 'there',
             'hours' => $hours && ClinicClock::validTime($hours['open']) && ClinicClock::validTime($hours['close']) ? \App\Support\BranchHours::time($hours['open']).' to '.\App\Support\BranchHours::time($hours['close']) : null,
             'phone' => $a->branch?->phone, 'manageUrl' => Brand::appointmentUrl((string) $a->public_id),
+            'paragraphs' => $this->w()['paragraphs'], 'attendUrl' => $this->link('attend'), 'cantUrl' => $this->link('cant_make_it'),
         ]);
     }
 

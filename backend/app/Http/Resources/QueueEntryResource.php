@@ -25,6 +25,7 @@ class QueueEntryResource extends JsonResource
             'status' => $this->status,
             'priority' => $this->priority,
             'priority_reason' => $this->priority_reason,
+            'late_arrival' => (bool) $this->late_arrival,
             'queue_number' => $this->queue_number,
             'position' => $this->getAttribute('position'),
             'revision' => $this->revision,

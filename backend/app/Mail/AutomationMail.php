@@ -23,8 +23,31 @@ abstract class AutomationMail extends Mailable
         return $this;
     }
 
+    /** An unsaved edit (subject, body) rendered by the Owner's preview instead of the saved wording. */
+    public ?array $draft = null;
+
+    public function withDraft(?array $draft): static
+    {
+        $this->draft = $draft;
+
+        return $this;
+    }
+
     protected function subjectLine(string $subject): string
     {
         return ($this->test ? '[Test] ' : '').$subject;
+    }
+
+    /**
+     * The Owner-approved wording of this email (F1, R2-09) with its placeholders filled in.
+     *
+     * @return array{subject:string, paragraphs:list<string>}
+     */
+    protected function wording(string $key, array $vars): array
+    {
+        $w = \App\Services\Automations\MessageTemplates::render($key, $vars, $this->draft);
+        $w['subject'] = $this->subjectLine($w['subject'].' - '.\App\Support\Brand::name());
+
+        return $w;
     }
 }

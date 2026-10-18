@@ -15,7 +15,15 @@ class InvoiceOverdueMail extends AutomationMail
 
     public function envelope(): Envelope
     {
-        return new Envelope(subject: $this->subjectLine('Reminder: invoice '.$this->invoice->invoice_number.' is unpaid - '.Brand::name()));
+        return new Envelope(subject: $this->w()['subject']);
+    }
+
+    private function w(): array
+    {
+        $i = $this->invoice;
+
+        return $this->wording('invoice_overdue', ['first_name' => $i->patient?->person?->first_name ?: 'there', 'branch' => $i->branch?->name ?? 'the clinic',
+            'invoice_number' => $i->invoice_number, 'balance' => Brand::money($i->balance())]);
     }
 
     public function content(): Content
@@ -25,7 +33,7 @@ class InvoiceOverdueMail extends AutomationMail
         return new Content(view: 'emails.invoice-overdue', text: 'emails.invoice-overdue-text', with: [
             'invoice' => $i, 'branch' => $i->branch, 'test' => $this->test, 'subjectLine' => $this->envelope()->subject,
             'firstName' => $i->patient?->person?->first_name ?: 'there', 'balance' => Brand::money($i->balance()),
-            'issuedOn' => $i->issued_at ? ClinicClock::local($i->issued_at)->format('F j, Y') : null, 'payUrl' => Brand::invoiceUrl((string) $i->public_id),
+            'issuedOn' => $i->issued_at ? ClinicClock::local($i->issued_at)->format('F j, Y') : null, 'payUrl' => Brand::invoiceUrl((string) $i->public_id), 'paragraphs' => $this->w()['paragraphs'],
         ]);
     }
 }

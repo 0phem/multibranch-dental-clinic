@@ -9,10 +9,11 @@ use App\Support\ClinicClock;
 use Carbon\CarbonImmutable;
 
 /**
- * A1 (M6/M18, PI-31: the front desk reminds every patient today). One email `hours_before` the visit and, when switched on, a
- * second one on the morning of the visit at `morning_time` (Asia/Manila). The key holds the appointment REVISION, so a
- * rescheduled appointment gets a new, recalculated reminder and the outbox drops the old one as superseded; a cancelled, past
- * or checked-in appointment gets none.
+ * A1 (M6/M18). One email `lead_minutes` before the visit (60 by default: interview R2-09), and when switched on, one 24 hours
+ * before ("day_before") and one on the morning of the visit at `morning_time` (Asia/Manila). Each carries one-click "I'll be
+ * there" and "I can't make it" links (F1). The key holds the appointment REVISION, so a rescheduled appointment gets a new,
+ * recalculated reminder and the outbox drops the old one as superseded; a cancelled, past or checked-in appointment gets none.
+ * A reminder is skipped when the current booking was made after its send time (the confirmation email covers it).
  */
 final class AppointmentReminders implements AutomationJob
 {
@@ -25,26 +26,35 @@ final class AppointmentReminders implements AutomationJob
 
     public function run(CarbonImmutable $now, array $settings, array $options = []): array
     {
-        $lead = (int) $settings['hours_before'];
         $local = ClinicClock::local($now);
         $today = $local->toDateString();
         $morningAt = ClinicClock::at($today, $settings['morning_time']);
-        // Due now or earlier: the lead reminder of visits starting within `lead` hours, and today's morning-of reminder.
-        $horizon = max($now->addHours($lead), $local->endOfDay());
+        // kind => minutes before the start
+        $leads = ['lead' => (int) $settings['lead_minutes']] + ($settings['day_before'] ? ['day' => 24 * 60] : []);
+        $horizon = max($now->addMinutes(max($leads)), $local->endOfDay());
         $query = Appointment::query()->whereIn('status', ['Pending', 'Confirmed'])
             ->where('starts_at', '>', $now->toIso8601String())->where('starts_at', '<=', $horizon->toIso8601String())
             ->whereDoesntHave('visit')->with(['patient.person', 'patient.user', 'branch'])->orderBy('starts_at');
         if (! empty($options['appointment_id'])) $query->whereKey($options['appointment_id']);
+        $only = $options['kind'] ?? null;
         $counts = ['sent' => 0, 'skipped' => 0];
 
         foreach ($query->get() as $appointment) {
             $start = CarbonImmutable::instance($appointment->starts_at);
             $bookedAt = $this->bookedAt($appointment);
-            if ($start->subHours($lead)->lessThanOrEqualTo($now)) {
-                $tooLate = $start->diffInMinutes($bookedAt, true) < $lead * 60 && empty($options['ignore_lead_rule']);
-                $this->remind($appointment, 'lead', $tooLate ? 'booked_within_lead_time' : null, $counts);
+            foreach ($leads as $kind => $minutes) {
+                if ($only && $only !== $kind) continue;
+                $sendAt = $start->subMinutes($minutes);
+                // The 24-hour reminder is not sent once the shorter one is due (it would arrive at the same time).
+                if ($kind === 'day' && $start->subMinutes($leads['lead'])->lessThanOrEqualTo($now)) continue;
+                if ($sendAt->lessThanOrEqualTo($now)) {
+                    $tooLate = $bookedAt->greaterThan($sendAt) && empty($options['ignore_lead_rule']);
+                    $this->remind($appointment, $kind, $tooLate ? 'booked_within_lead_time' : null, $counts);
+                }
             }
-            if ($settings['morning_of'] && ClinicClock::local($start)->toDateString() === $today && $now->greaterThanOrEqualTo($morningAt) && $start->greaterThan($morningAt)) {
+            // The morning reminder is skipped when the shorter reminder is due by then anyway (two emails at once).
+            if (! $only && $settings['morning_of'] && ClinicClock::local($start)->toDateString() === $today && $now->greaterThanOrEqualTo($morningAt) && $start->greaterThan($morningAt)
+                && $start->subMinutes($leads['lead'])->greaterThan($morningAt)) {
                 $this->remind($appointment, 'morning', $bookedAt->greaterThanOrEqualTo($morningAt) && empty($options['ignore_lead_rule']) ? 'booked_after_morning_reminder' : null, $counts);
             }
         }

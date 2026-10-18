@@ -42,6 +42,11 @@ final class AppointmentService
 
         return $this->idempotent($actor, $key, 'appointment.create', $payload, function () use ($actor, $patient, $branch, $service, $dentist, $input) {
             $isPatient = $actor->role === Role::Patient;
+            // F7 (R2-17): a consultation-first or hidden service is not booked online; the front desk still can.
+            if ($isPatient && ($service->online_booking ?? 'bookable') !== 'bookable') {
+                throw AppointmentCommandException::rule('service_not_bookable_online', $service->online_booking === 'consultation_first'
+                    ? 'This service starts with a consultation. Please book the consultation instead.' : 'This service cannot be booked online. Please message the front desk.', 'service_ref');
+            }
             $request = new SlotRequest($patient, $branch, $service, $dentist, $input['date'], $input['start_time'], $isPatient);
 
             if ($dentist) {
@@ -70,7 +75,8 @@ final class AppointmentService
                 'starts_at' => $result->startsAt,
                 'ends_at' => $result->endsAt,
                 'duration_minutes' => $result->duration,
-                'status' => 'Confirmed',
+                // F4: a patient over the late-cancellation/no-show limit books as Pending until the front desk confirms.
+                'status' => $isPatient && \App\Services\Automations\AttendancePolicy::needsConfirmation($patient) ? 'Pending' : 'Confirmed',
                 'source' => $isPatient ? 'patient_portal' : 'front_desk',
                 'assignment_method' => $method,
                 'assignment_rule_version' => $method === 'auto' ? SchedulingService::RULE_VERSION : null,
@@ -80,6 +86,7 @@ final class AppointmentService
                 'updated_by_user_id' => $actor->id,
             ]);
             $this->record($appointment, $actor, 'appointment.created', null);
+            \App\Services\Automations\FillFreedSlots::claimByBooking($appointment);
 
             $this->notifyPatient($appointment, $actor, 'appointment_confirmation');
 
@@ -122,6 +129,7 @@ final class AppointmentService
                 'updated_by_user_id' => $actor->id,
             ]);
             $this->record($current, $actor, 'appointment.rescheduled', $from);
+            \App\Services\Automations\FillFreedSlots::claimByBooking($current);
             $this->notifyPatient($current, $actor, 'appointment_rescheduled');
 
             return [$current, 200];
@@ -154,13 +162,19 @@ final class AppointmentService
             }
 
             $from = $current->status;
+            // F4 (R2-13): the Patient's own cancellation less than the policy's hours before the visit is a late cancellation.
+            $late = $actor->role === Role::Patient && \App\Services\Automations\AttendancePolicy::isLate(\Carbon\CarbonImmutable::instance($current->starts_at), $now);
             $current->update([
                 'status' => 'Cancelled',
                 'cancelled_at' => $now,
+                'late_cancellation' => $late,
                 'revision' => $current->revision + 1,
                 'updated_by_user_id' => $actor->id,
             ]);
             $this->record($current, $actor, 'appointment.cancelled', $from);
+            if ($late) \App\Services\Automations\AttendancePolicy::recordStrike($current->patient);
+            // F3: the time is free now; it is offered to patients booked later that day, then to the waitlist.
+            \App\Services\Automations\FillFreedSlots::open($current, ($input['source'] ?? null) === 'cant_make_it' ? 'cant_make_it' : 'cancelled', $now);
             $this->notifyPatient($current, $actor, 'appointment_cancelled');
 
             return [$current, 200];
@@ -206,11 +220,8 @@ final class AppointmentService
             if (! in_array($current->status, $from, true)) {
                 throw AppointmentCommandException::rule('invalid_transition', "An appointment that is {$current->status} cannot move to {$to}.", 'status');
             }
-            if ($current->visit()->exists()) {
-                throw AppointmentCommandException::rule('appointment_admitted', 'This patient has already checked in, so the appointment can’t be marked No-show.', 'status');
-            }
-            if (ClinicClock::local($current->starts_at)->toDateString() !== ClinicClock::today()) {
-                throw AppointmentCommandException::rule('not_today', 'Only today’s appointments can be marked No-show.', 'status');
+            if ($command === 'no-show') {
+                $this->assertNoShowAllowed($current);
             }
 
             $previous = $current->status;
@@ -220,6 +231,7 @@ final class AppointmentService
                 'updated_by_user_id' => $actor->id,
             ]);
             $this->record($current, $actor, $event, $previous);
+            if ($command === 'no-show') $this->afterNoShow($current);
 
             return [$current, 200];
         });
@@ -228,7 +240,90 @@ final class AppointmentService
     /** command => [allowed source statuses, target status, history event] */
     public const TRANSITIONS = [
         'no-show' => [['Pending', 'Confirmed'], 'No-show', 'appointment.no_show'],
+        // F4: the front desk confirms an online booking that waited for confirmation.
+        'confirm' => [['Pending'], 'Confirmed', 'appointment.confirmed'],
     ];
+
+    private function assertNoShowAllowed(Appointment $current): void
+    {
+        if ($current->visit()->exists()) {
+            throw AppointmentCommandException::rule('appointment_admitted', 'This patient has already checked in, so the appointment can’t be marked No-show.', 'status');
+        }
+        if (ClinicClock::local($current->starts_at)->toDateString() !== ClinicClock::today()) {
+            throw AppointmentCommandException::rule('not_today', 'Only today’s appointments can be marked No-show.', 'status');
+        }
+    }
+
+    /** A recorded no-show frees the rest of the time (F3) and counts toward the cancellation policy (F4). */
+    private function afterNoShow(Appointment $appointment): void
+    {
+        \App\Services\Automations\FillFreedSlots::open($appointment, 'released');
+        \App\Services\Automations\AttendancePolicy::recordStrike($appointment->patient);
+    }
+
+    /**
+     * F2 (R2-10): the scheduler releases an appointment still not checked in at the release time: it becomes No-show with no
+     * person as actor (history actor "system"), and its time is freed. Same rules as the front desk's No-show command.
+     */
+    public function releaseLate(Appointment $appointment, int $expectedRevision): ?Appointment
+    {
+        return \Illuminate\Support\Facades\DB::transaction(function () use ($appointment, $expectedRevision) {
+            $current = Appointment::whereKey($appointment->id)->lockForUpdate()->firstOrFail();
+            if ($current->revision !== $expectedRevision || ! in_array($current->status, ['Pending', 'Confirmed'], true)) return null;
+            if ($current->visit()->exists() || ClinicClock::local($current->starts_at)->toDateString() !== ClinicClock::today()) return null;
+            $previous = $current->status;
+            $current->update(['status' => 'No-show', 'revision' => $current->revision + 1, 'updated_by_user_id' => null]);
+            $this->record($current, null, 'appointment.no_show_released', $previous);
+            $this->afterNoShow($current);
+
+            return $current;
+        });
+    }
+
+    /**
+     * F2: the front desk undoes a same-day release or No-show (the patient is here after all). Back to Confirmed only if the time
+     * is still free: when it was given to another patient, the exclusion constraint refuses and the front desk books anew.
+     */
+    public function undoNoShow(User $actor, Appointment $appointment, int $expectedRevision): JsonResponse
+    {
+        return $this->idempotent($actor, null, 'appointment.undo_no_show', ['appointment' => $appointment->id, 'expected_revision' => $expectedRevision], function () use ($actor, $appointment, $expectedRevision) {
+            $current = Appointment::whereKey($appointment->id)->lockForUpdate()->firstOrFail();
+            if ($current->revision !== $expectedRevision) throw AppointmentCommandException::staleRevision();
+            if ($current->status !== 'No-show') throw AppointmentCommandException::rule('invalid_transition', 'Only a No-show can be undone.', 'status');
+            if (ClinicClock::local($current->starts_at)->toDateString() !== ClinicClock::today()) {
+                throw AppointmentCommandException::rule('not_today', 'A No-show can be undone only on the same day.', 'status');
+            }
+            $busy = $this->scheduling->busyBetween(\Carbon\CarbonImmutable::instance($current->starts_at), \Carbon\CarbonImmutable::instance($current->ends_at), [$current->dentist_profile_id], $current->patient_id, $current->id);
+            if ($busy->isNotEmpty()) {
+                throw AppointmentCommandException::rule('time_taken', 'This time was already given to another patient. Check the patient in as a walk-in or book a new time.', 'status');
+            }
+            \App\Services\Automations\FillFreedSlots::withdraw($current);
+            $current->update(['status' => 'Confirmed', 'revision' => $current->revision + 1, 'updated_by_user_id' => $actor->id]);
+            $this->record($current, $actor, 'appointment.no_show_undone', 'No-show');
+
+            return [$current, 200];
+        });
+    }
+
+    /**
+     * F3: the patient accepted an earlier time offer. The caller (FillFreedSlots::accept) holds the opening and appointment locks
+     * inside its transaction. Validated with the front-desk rules (same-day times are allowed) for the freed Dentist.
+     */
+    public function moveUp(User $actor, Appointment $current, \App\Models\SlotOpening $opening): Appointment
+    {
+        $start = ClinicClock::local($opening->starts_at);
+        $request = new SlotRequest($current->patient, $current->branch, $current->service, $opening->dentist, $start->toDateString(), $start->format('H:i'), false, $current->id);
+        $result = $this->scheduling->evaluate($request);
+        if (! $result->valid) throw AppointmentCommandException::invalidSchedule($result->failures());
+        if ($result->endsAt->greaterThan($opening->ends_at)) throw AppointmentCommandException::rule('offer_too_short', 'Your visit does not fit in this earlier time.', 'offer');
+        $from = $current->status;
+        $current->update(['starts_at' => $result->startsAt, 'ends_at' => $result->endsAt, 'duration_minutes' => $result->duration,
+            'dentist_profile_id' => $opening->dentist_profile_id, 'revision' => $current->revision + 1, 'updated_by_user_id' => $actor->id]);
+        $this->record($current, $actor, 'appointment.moved_up', $from);
+        $this->notifyPatient($current, $actor, 'appointment_rescheduled');
+
+        return $current;
+    }
 
     /** Up to five valid start times on the requested date (src/logic.js alternatives). */
     private function alternatives(SlotRequest $request, ?DentistProfile $dentist): array
@@ -242,7 +337,7 @@ final class AppointmentService
     }
 
     /** Appends appointment history; also used by VisitService when a Visit command moves the linked appointment. */
-    public function record(Appointment $appointment, User $actor, string $event, ?string $from): void
+    public function record(Appointment $appointment, ?User $actor, string $event, ?string $from): void
     {
         AppointmentHistory::create([
             'appointment_id' => $appointment->id,
@@ -254,8 +349,8 @@ final class AppointmentService
             'dentist_profile_id' => $appointment->dentist_profile_id,
             'starts_at' => $appointment->starts_at,
             'ends_at' => $appointment->ends_at,
-            'actor_user_id' => $actor->id,
-            'actor_role' => $actor->role->value,
+            'actor_user_id' => $actor?->id,
+            'actor_role' => $actor?->role->value ?? 'system',
             'assignment_rule_version' => $appointment->assignment_rule_version,
             'occurred_at' => ClinicClock::now(),
         ]);

@@ -13,7 +13,8 @@ use Illuminate\Support\Facades\DB;
  * A4 (M20/M18). For each Owner rule "category → months": a patient whose LATEST completed visit in that service category is
  * at least that many months old (Asia/Manila calendar months) and who has no upcoming appointment gets one "time for your
  * check-up" email. The key is that visit, so it is sent at most once per interval; a newer visit starts a new interval. Sent
- * only while the visit's branch is open. Ships off with no rules: the clinic has not given any.
+ * only while the visit's branch is open. Ships off, with one SUGGESTED rule (General Dentistry, 6 months): the Dentist approves the
+ * wording and the intervals together before it can be switched on (R2-11).
  */
 final class RecallReminders implements AutomationJob
 {

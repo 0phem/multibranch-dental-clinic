@@ -9,7 +9,7 @@
     <p style="margin:0 0 14px;">@include('emails.v2.partials.badge', ['tone' => 'paid', 'text' => 'Time available'])</p>
     @include('emails.v2.partials.heading', ['text' => 'A time opened on '.$day->format('l, F j')])
     <p style="margin:0 0 4px;">Hi {{ $firstName }},</p>
-    <p style="margin:0 0 18px;">You asked us to tell you when a time opens on this day. Times go to whoever books first and we can’t hold one for you, so book soon if you still want it.</p>
+    @include('emails.v2.partials.message', ['paragraphs' => $paragraphs])
     @include('emails.v2.partials.details', ['title' => 'What you asked for', 'rows' => [
         ['Date', $day->format('F j, Y (l)')],
         ['Clinic branch', $branch?->name],

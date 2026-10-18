@@ -32,7 +32,13 @@ class MailOutbox
 {
     public const PURPOSES = ['appointment_confirmation', 'appointment_rescheduled', 'appointment_cancelled', 'payment_receipt', 'invoice_issued', 'message_alert',
         // Scheduled automations (App\Services\Automations): re-checked against the record just before sending.
-        'appointment_reminder', 'no_show_rebook', 'invoice_overdue', 'recall_due', 'waitlist_opening', 'owner_daily_summary'];
+        'appointment_reminder', 'no_show_rebook', 'invoice_overdue', 'recall_due', 'waitlist_opening', 'owner_daily_summary',
+        // Interview round 2 (F2, F3, F5).
+        'late_check', 'move_up_offer', 'closure_notice'];
+
+    /** Purposes whose wording the Owner approves (F1): an email whose wording lost its approval before sending is not sent. */
+    private const APPROVED_WORDING = ['appointment_reminder', 'no_show_rebook', 'invoice_overdue', 'recall_due', 'waitlist_opening', 'owner_daily_summary',
+        'late_check', 'move_up_offer', 'closure_notice'];
 
     public function __construct(private readonly MailDispatcher $dispatcher) {}
 
@@ -131,6 +137,16 @@ class MailOutbox
      */
     private function render(MailDispatch $dispatch): array
     {
+        if (in_array($dispatch->purpose, self::APPROVED_WORDING, true) && ! \App\Services\Automations\MessageTemplates::approved($dispatch->purpose)) return [null, null, true, null];
+        if ($dispatch->subject_type === 'slotoffer' && $dispatch->purpose === 'move_up_offer') {
+            $offer = \App\Models\SlotOffer::where('public_id', $dispatch->subject_public_id)->with(['opening', 'appointment.patient.user', 'appointment.patient.person', 'appointment.branch'])->first();
+            // Taken, expired or the appointment changed: the offer is no longer true.
+            if (! $offer || $offer->status !== 'offered' || $offer->opening?->status !== 'open' || $offer->opening->starts_at->lessThanOrEqualTo(now())
+                || $offer->appointment?->revision !== $offer->appointment_revision) return [null, $offer, true, null];
+            [$user, $reason] = \App\Services\Automations\Recipient::patient($offer->appointment->patient);
+
+            return [new \App\Mail\MoveUpOfferMail($offer), $offer->appointment, false, $reason ? null : $user?->email];
+        }
         if ($dispatch->subject_type === 'appointment') {
             $appointment = Appointment::where('public_id', $dispatch->subject_public_id)->with(['patient.person', 'branch', 'service', 'dentist.person'])->first();
             if (! $appointment) return [null, null, true, null];
@@ -141,7 +157,26 @@ class MailOutbox
                 if (! in_array($appointment->status, ['Pending', 'Confirmed'], true) || $appointment->starts_at->lessThanOrEqualTo(now()) || $appointment->visit()->exists()) return [null, $appointment, true, null];
                 [$user, $reason] = \App\Services\Automations\Recipient::patient($appointment->patient);
 
-                return [new \App\Mail\AppointmentReminderMail($appointment, str_ends_with($dispatch->dedupe_key, ':morning') ? 'morning' : 'lead'), $appointment, false, $reason ? null : $user?->email];
+                return [new \App\Mail\AppointmentReminderMail($appointment, substr(strrchr($dispatch->dedupe_key, ':'), 1) ?: 'lead'), $appointment, false, $reason ? null : $user?->email];
+            }
+            if ($dispatch->purpose === 'late_check') {
+                $settings = \App\Services\Automations\NoShowDetection::settings();
+                $release = (int) ($settings['release_minutes'] ?? 15);
+                // Checked in, cancelled, already answered "On my way", or past the release time: no question.
+                if (! in_array($appointment->status, ['Pending', 'Confirmed'], true) || $appointment->visit()->exists()
+                    || \App\Models\AppointmentResponse::where('appointment_id', $appointment->id)->where('appointment_revision', $appointment->revision)->where('response', 'on_my_way')->exists()
+                    || now()->greaterThanOrEqualTo(\Carbon\CarbonImmutable::instance($appointment->starts_at)->addMinutes($release))) return [null, $appointment, true, null];
+                [$user, $reason] = \App\Services\Automations\Recipient::patient($appointment->patient);
+
+                return [new \App\Mail\LateCheckMail($appointment, $release), $appointment, false, $reason ? null : $user?->email];
+            }
+            if ($dispatch->purpose === 'closure_notice') {
+                // Already moved or cancelled, or the closure was removed: no notice.
+                $closure = $appointment->branch?->closureOn(\App\Support\ClinicClock::local($appointment->starts_at)->toDateString());
+                if (! in_array($appointment->status, ['Pending', 'Confirmed'], true) || ! $closure || $appointment->starts_at->lessThanOrEqualTo(now())) return [null, $appointment, true, null];
+                [$user, $reason] = \App\Services\Automations\Recipient::patient($appointment->patient);
+
+                return [new \App\Mail\ClosureNoticeMail($appointment, $closure->reason), $appointment, false, $reason ? null : $user?->email];
             }
             if ($dispatch->purpose === 'no_show_rebook') {
                 // Already booked again (or the No-show was not kept): the invitation is not needed.

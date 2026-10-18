@@ -14,14 +14,19 @@ class RecallMail extends AutomationMail
 
     public function envelope(): Envelope
     {
-        return new Envelope(subject: $this->subjectLine('Time for your check-up - '.Brand::name()));
+        return new Envelope(subject: $this->w()['subject']);
+    }
+
+    private function w(): array
+    {
+        return $this->wording('recall_due', ['first_name' => $this->visit->patient?->person?->first_name ?: 'there', 'branch' => $this->visit->branch?->name ?? 'the clinic']);
     }
 
     public function content(): Content
     {
         return new Content(view: 'emails.recall', text: 'emails.recall-text', with: [
             'branch' => $this->visit->branch, 'test' => $this->test, 'subjectLine' => $this->envelope()->subject,
-            'firstName' => $this->visit->patient?->person?->first_name ?: 'there', 'bookUrl' => Brand::pageUrl('book'),
+            'firstName' => $this->visit->patient?->person?->first_name ?: 'there', 'bookUrl' => Brand::pageUrl('book'), 'paragraphs' => $this->w()['paragraphs'],
         ]);
     }
 }

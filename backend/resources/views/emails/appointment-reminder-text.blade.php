@@ -8,8 +8,10 @@ Your visit is {!! $when !!}
 
 Hi {!! $firstName !!},
 
-This is a friendly reminder of your dental appointment.
+@foreach ($paragraphs as $paragraph)
+{!! $paragraph !!}
 
+@endforeach
 Reference: {!! $appointment->appointment_code !!}
 @if ($appointment->branch)Clinic branch: {!! $appointment->branch->name !!}
 @endif
@@ -22,6 +24,8 @@ Time: {!! $start->format('g:i A') !!}
 @if ($hours)Branch hours that day: {!! $hours !!}
 @endif
 
-Reschedule or cancel: {!! $manageUrl !!}
-Can't make it? Reschedule or cancel in your patient portal, or call the branch. A calendar file is attached.
+I'll be there: {!! $attendUrl !!}
+I can't make it (asks you to confirm, then frees the time): {!! $cantUrl !!}
+Reschedule instead: {!! $manageUrl !!}
+Each link works once. A calendar file is attached.
 @endsection

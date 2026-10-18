@@ -52,7 +52,7 @@ class AppointmentPolicy
      */
     public function transition(User $user, Appointment $appointment, string $command): bool
     {
-        return $command === 'no-show' && in_array($user->role, [Role::Staff, Role::Owner], true) && $this->view($user, $appointment);
+        return in_array($command, ['no-show', 'confirm'], true) && in_array($user->role, [Role::Staff, Role::Owner], true) && $this->view($user, $appointment);
     }
 
     private function staffScope(User $user, int $branchId): bool
