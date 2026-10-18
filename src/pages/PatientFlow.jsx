@@ -9,6 +9,7 @@ import { bookableBranches } from './Scheduling.jsx'
 
 import { clinicDate } from '../clock.js'
 import { PatientQueuePage } from './PatientVisits.jsx'
+import { PossibleNoShows } from './PossibleNoShows.jsx'
 import { QueueByBranch, QueueStatusCounts, useQueueVisibility } from './QueueCounts.jsx'
 import { encounterContext, inScope, isActiveQueue, isTodayQueue, sessionForRole } from '../contracts.js'
 
@@ -91,6 +92,7 @@ export function CheckInPage({ store }) {
 
   return <>
     <PageHeader kicker="Front desk" title="Patient check-in" text="Confirm arrival and move the patient into the live queue. Arrivals are recorded by the clinic server; no repeated registration is needed for an existing patient."/>
+    <PossibleNoShows toast={toast} onChanged={()=>flow?.refresh()}/>
     <AppointmentsLoadNotice store={store}/>
     <div className="checkin-shell">
       <div className="checkin-mode"><button className={mode==='scheduled'?'active':''} onClick={()=>setMode('scheduled')}><Icon name="calendar" size={18}/>Scheduled</button><button className={mode==='walkin'?'active':''} onClick={()=>setMode('walkin')}><Icon name="user" size={18}/>Walk-in</button></div>
