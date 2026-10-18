@@ -66,6 +66,7 @@ class DemoClinicSeeder extends Seeder
         }
         $this->call(RealBranchSeeder::class); // the clinic's real branch names, addresses, contacts, hours and map coordinates
         $this->call(AssistantAnswerSeeder::class); // the assistant's draft answers (from facts in the repository)
+        $this->call(InterviewRoundTwoDemoSeeder::class); // R2: consultation-first services, unverified HMOs, demo names
         if (Person::where('email', self::PATIENTS[0][2])->exists()) {
             $this->command?->warn('DemoClinicSeeder already ran on this database; demo data unchanged (real branch names, contacts and opening hours checked).');
 
@@ -79,7 +80,7 @@ class DemoClinicSeeder extends Seeder
 
         // Realistic names for the demo Dentist and the demo Patient (their sign-in emails do not change).
         $dentistUser = User::where('person_id', $dentist->person_id)->first();
-        Person::whereKey($dentist->person_id)->update(['first_name' => 'Rafael', 'last_name' => 'Santiago']);
+        Person::whereKey($dentist->person_id)->update(['first_name' => 'Camille', 'last_name' => 'Santiago']);
         $demoPatientUser->person->update(['first_name' => 'Bea', 'last_name' => 'Villanueva']);
 
         $patients = [];

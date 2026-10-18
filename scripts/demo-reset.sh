@@ -21,6 +21,6 @@ cd "$BACKEND"
 echo "== Rebuilding $DB_DATABASE"
 php artisan migrate:fresh --force --no-interaction >/dev/null
 php artisan db:seed --force --no-interaction >/dev/null
-php artisan db:seed --class=DemoClinicSeeder --force --no-interaction | grep -E "Demo clinic ready|Real branch|Assistant answers" || true
+php artisan db:seed --class=DemoClinicSeeder --force --no-interaction | grep -E "Demo clinic ready|Real branch|Assistant answers|Interview round 2" || true
 if [ -n "${DEMO_PATIENT_EMAIL:-}" ]; then "$ROOT/scripts/payment-test.sh" patient-email "$DEMO_PATIENT_EMAIL"; fi
 echo "== Demo reset done. Reload the browser and sign in again."
