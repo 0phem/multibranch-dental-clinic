@@ -151,8 +151,10 @@ final class SchedulingService
 
         $start = $validTime ? ClinicClock::minutes($r->startTime) : null;
         $end = $start !== null && $duration > 0 ? $start + $duration : null;
-        $check('branch-hours', 'Within branch operating hours', $branch && $end !== null
-            && $start >= ClinicClock::minutes($branch->open_time) && $end <= ClinicClock::minutes($branch->close_time));
+        // That day's own opening hours (weekday, Saturday and Sunday hours differ; a closed day has none).
+        $dayHours = $branch && $validDate ? $branch->hoursOnDate($r->date) : null;
+        $check('branch-hours', 'Within branch operating hours', $dayHours !== null && $end !== null
+            && $start >= ClinicClock::minutes($dayHours['open']) && $end <= ClinicClock::minutes($dayHours['close']));
         $check('dentist-shift', 'Within dentist shift', $dentist && $end !== null
             && $start >= ClinicClock::minutes($dentist->shift_start) && $end <= ClinicClock::minutes($dentist->shift_end));
 
@@ -222,10 +224,12 @@ final class SchedulingService
             $busy = $this->busyBetween($dayStart, $dayStart->addDay(), $pool->pluck('id')->all(), $base->patient?->id, $base->ignoreAppointmentId);
         }
         $grid = $base->patientRules ? self::PATIENT_GRID_MINUTES : self::STAFF_GRID_MINUTES;
-        $open = ClinicClock::minutes($branch->open_time);
+        $hours = $branch->hoursOnDate($date);
+        $open = ClinicClock::minutes($hours['open']);
+        $close = ClinicClock::minutes($hours['close']);
         $firstStart = (int) (ceil($open / $grid) * $grid);
         $slots = [];
-        for ($m = $firstStart; $m + $duration <= ClinicClock::minutes($branch->close_time) && count($slots) < $limit; $m += $grid) {
+        for ($m = $firstStart; $m + $duration <= $close && count($slots) < $limit; $m += $grid) {
             $time = ClinicClock::time($m);
             $choice = $this->assignDentist($base->at($date, $time), $pool, $busy, $now);
             if ($choice) {
@@ -300,10 +304,7 @@ final class SchedulingService
     /** True when the branch takes appointments on this clinic date (its opening days; NULL = every day). */
     public static function openOn(Branch $branch, string $date): bool
     {
-        $days = $branch->operating_days;
-        if (! is_array($days) || $days === []) return true;
-
-        return in_array(CarbonImmutable::createFromFormat('!Y-m-d', $date, ClinicClock::TIMEZONE)->isoWeekday(), array_map('intval', $days), true);
+        return $branch->hoursOnDate($date) !== null;
     }
 
     public static function haversineKm(float $lat1, float $lng1, float $lat2, float $lng2): float

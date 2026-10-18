@@ -6,9 +6,9 @@ use App\Models\Branch;
 use Illuminate\Http\JsonResponse;
 
 /**
- * GET /api/public/branches — the clinic's open branches for the public website (no sign-in): name, address and the approximate
- * map coordinates. The website keeps no branch list of its own, so the Owner's changes appear everywhere at once.
- * Phone numbers and hours are not included: they are not confirmed by the clinic yet (docs/BRANCH_LOCATIONS.md).
+ * GET /api/public/branches — the clinic's open branches for the public website (no sign-in): name, address, the approximate map
+ * coordinates, phone, email (when the clinic gave one) and opening hours per weekday. The website keeps no branch list of its
+ * own, so the Owner's changes appear everywhere at once.
  */
 class PublicBranchController extends Controller
 {
@@ -19,6 +19,7 @@ class PublicBranchController extends Controller
         return response()->json(['data' => $branches->map(fn (Branch $b, int $i) => [
             'id' => $b->legacy_ref, 'number' => sprintf('%02d', $i + 1), 'name' => $b->name, 'address' => $b->address, 'city' => $b->city,
             'latitude' => $b->latitude !== null ? (float) $b->latitude : null, 'longitude' => $b->longitude !== null ? (float) $b->longitude : null,
+            'phone' => $b->phone ?: null, 'email' => $b->email ?: null, 'weekly_hours' => $b->weekHours(),
         ])->all()]);
     }
 }

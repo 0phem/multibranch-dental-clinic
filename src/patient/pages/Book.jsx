@@ -4,7 +4,7 @@ import { bookingBranchOptions, bookingDentistOptions, listServices } from '../..
 import { commandKey, createAppointment } from '../../appointments-api.js'
 import { clinic } from '../../clinic-config.js'
 import { BookingCalendar, TimeSlots } from '../BookingCalendar.jsx'
-import { dateLong, downloadIcs, time12 } from '../format.js'
+import { dateLong, downloadIcs, hoursSummary, time12 } from '../format.js'
 import { EmptyState, ErrorState, PageHead, Skeleton, useLoad } from '../ui.jsx'
 
 const STEPS = ['Service', 'Branch', 'Dentist', 'Date', 'Time', 'Review']
@@ -130,7 +130,7 @@ function BranchStep({ service, value, preferred, onPick }) {
     <span className="pp-option-body">
       {highlight && <span className="pp-badge">Recommended · {b.reason}</span>}
       <b>{b.name}</b><small>{b.address}</small>
-      <em><Icon name="clock" size={14}/> {time12(b.open_time)} – {time12(b.close_time)}{b.distance_km != null ? ` · ${b.distance_km} km away` : ''}</em>
+      <em><Icon name="clock" size={14}/> {hoursSummary(b.weekly_hours) || `${time12(b.open_time)} – ${time12(b.close_time)}`}{b.distance_km != null ? ` · ${b.distance_km} km away` : ''}</em>
       <em>{b.earliest ? `Earliest: ${b.earliest.label}` : 'No open time in the next month'}</em>
     </span>
   </button>

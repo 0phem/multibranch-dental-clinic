@@ -184,7 +184,7 @@ final class KnowledgeAssistant
             'changes' => $this->reply('Open My visits, choose the appointment, then Reschedule (pick a new day and time) or Cancel. The change is confirmed right away and you’ll get an email. If you need help, message the front desk.', [['type' => 'open_visits', 'label' => 'Open My visits'], $desk]),
             'payment' => $this->payment(),
             'account' => $this->reply('When you create an account, we email you a 6-digit code that is valid for '.(int) config('clinic.otp_ttl_minutes', 10).' minutes. Enter it to verify your email, then sign in with your email and password. No code? Check your spam folder, then use Resend code (after a minute). Forgot your password? Choose “Forgot password?” on the sign-in page and we’ll email you a code to set a new one.', [$desk]),
-            'contact' => $this->contact(),
+            'contact' => $this->contact($entities['branch'] ?? null),
             'thanks' => $this->reply('You’re welcome! Anything else I can help with?', []),
             'hello' => ['suggestions' => $this->common()] + $this->reply('Hello! I can help with our services, branches and hours, booking, and your own appointments and balance. What would you like to know?', []),
             default => $this->reply('The front desk can help you with that.', [$desk]),
@@ -232,7 +232,7 @@ final class KnowledgeAssistant
     {
         $list = $branch ? collect([$branch]) : $this->openBranches();
         if ($list->isEmpty()) return $this->reply('Branch details are not available right now. The front desk can help.', [['type' => 'contact_front_desk', 'label' => 'Message the front desk']]);
-        $lines = $list->map(fn (Branch $b) => "{$b->name}: {$b->address}".($b->latitude !== null ? " (map: https://www.google.com/maps?q={$b->latitude},{$b->longitude})" : ''))->implode('. ');
+        $lines = $list->map(fn (Branch $b) => "{$b->name}: {$b->address}".($b->phone ? ", phone {$b->phone}" : '').($b->latitude !== null ? " (map: https://www.google.com/maps?q={$b->latitude},{$b->longitude})" : ''))->implode('. ');
         $intro = $branch ? '' : 'We have '.$list->count().' branches. ';
 
         return $this->reply($intro.$lines.'.', [$this->bookAction($branch ? ['branch' => $branch] : [])]);
@@ -246,19 +246,20 @@ final class KnowledgeAssistant
         if (in_array('holiday', $words, true)) {
             return $this->reply('Holiday schedules are not in my information. Please message the front desk to check a specific date.', [['type' => 'contact_front_desk', 'label' => 'Message the front desk']]);
         }
-        $lines = $list->map(function (Branch $b) use ($day, $words) {
-            $open = $this->openDays($b);
-            $hours = $this->time($b->open_time).' to '.$this->time($b->close_time);
-            if ($day) return "{$b->name}: ".(in_array($day, $open, true) ? 'open on '.self::DAYS[$day]." ({$hours})" : 'closed on '.self::DAYS[$day]);
-            if (in_array('weekend', $words, true)) {
-                return "{$b->name}: Saturday ".(in_array(6, $open, true) ? "open ({$hours})" : 'closed').', Sunday '.(in_array(7, $open, true) ? "open ({$hours})" : 'closed');
-            }
-            $closed = array_values(array_diff(array_keys(self::DAYS), $open));
+        $describe = function (Branch $b) use ($day, $words) {
+            $span = fn (?array $h, int $d) => $h ? 'open on '.self::DAYS[$d].', '.$this->time($h['open']).' to '.$this->time($h['close']) : 'closed on '.self::DAYS[$d];
+            if ($day) return $span($b->hoursOnDay($day), $day);
+            if (in_array('weekend', $words, true)) return $span($b->hoursOnDay(6), 6).'; '.$span($b->hoursOnDay(7), 7);
 
-            return "{$b->name}: {$hours}, ".($closed ? 'closed on '.implode(' and ', array_map(fn ($d) => self::DAYS[$d], $closed)) : 'open every day');
-        })->implode('. ');
+            return \App\Support\BranchHours::summary($b);
+        };
+        $texts = $list->mapWithKeys(fn (Branch $b) => [$b->name => $describe($b)]);
+        // The same hours everywhere are said once; otherwise branch by branch.
+        $answer = $texts->count() > 1 && $texts->unique()->count() === 1
+            ? 'All '.$texts->count().' branches: '.$texts->first().'.'
+            : $texts->map(fn ($text, $name) => "{$name}: {$text}")->implode('. ').'.';
 
-        return $this->reply($lines.'. Weekends are usually busier, so booking ahead helps.', [$this->bookAction($branch ? ['branch' => $branch] : [])]);
+        return $this->reply($answer, [$this->bookAction($branch ? ['branch' => $branch] : [])]);
     }
 
     private function payment(): array
@@ -269,12 +270,20 @@ final class KnowledgeAssistant
         return $this->reply("Nothing is paid when you book. After your visit the clinic issues your invoice; you can pay {$online}, or at the clinic. When the payment is confirmed, your Payment Receipt is emailed with a PDF and is also in Billing.", [['type' => 'open_billing', 'label' => 'Open Billing']]);
     }
 
-    private function contact(): array
+    private function contact(?Branch $branch = null): array
     {
-        $b = Brand::forEmail();
-        $ways = array_filter([$b['phone'] ? "call {$b['phone']}" : null, $b['email'] ? "email {$b['email']}" : null]);
+        $desk = ['type' => 'contact_front_desk', 'label' => 'Message the front desk'];
+        $line = fn (Branch $b) => "{$b->name}: ".($b->phone ? "call {$b->phone}" : 'no phone on file').', '.($b->email ? "email {$b->email}" : 'no email on file');
+        $list = $branch ? collect([$branch]) : $this->openBranches();
+        if ($list->isEmpty()) {
+            $c = Brand::forEmail();
+            $ways = array_filter([$c['phone'] ? "call {$c['phone']}" : null, $c['email'] ? "email {$c['email']}" : null]);
 
-        return $this->reply('You can message the front desk here and a staff member will reply'.($ways ? ', or '.implode(' or ', $ways) : '').'.', [['type' => 'contact_front_desk', 'label' => 'Message the front desk']]);
+            return $this->reply('You can message the front desk here and a staff member will reply'.($ways ? ', or '.implode(' or ', $ways) : '').'.', [$desk]);
+        }
+        $text = $list->map($line)->implode('. ').'.';
+
+        return $this->reply('You can message the front desk here and a staff member will reply. '.$text, [$desk]);
     }
 
     /** The service and branch a message mentions (real records only). */
@@ -369,11 +378,6 @@ final class KnowledgeAssistant
     private function openBranches(): Collection
     {
         return $this->branches ??= Branch::where('status', 'Open')->orderBy('legacy_ref')->get();
-    }
-
-    private function openDays(Branch $b): array
-    {
-        return is_array($b->operating_days) && $b->operating_days ? array_map('intval', $b->operating_days) : array_keys(self::DAYS);
     }
 
     private function time($value): string

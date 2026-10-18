@@ -45,6 +45,7 @@ class DemoCheck extends Command
         $this->webhook($webhooks, $tunnel);
         $this->demoData();
         $this->placeholderBranches();
+        $this->branchContacts();
         $this->assistant();
         $this->queue();
 
@@ -223,6 +224,24 @@ class DemoCheck extends Command
         $found
             ? $this->result('FAIL', 'Placeholder branch names remain', implode(', ', array_slice($found, 0, 6)).'. Replace them with the real branch names (RealBranchSeeder::REAL).')
             : $this->result('PASS', 'Real branch names everywhere (no "Branch A/B/C")');
+    }
+
+    /** Every open branch needs a real phone and per-day hours (FAIL); a missing email or a ZIP-less address is a WARN (open items). */
+    private function branchContacts(): void
+    {
+        try {
+            $branches = \App\Models\Branch::where('status', 'Open')->orderBy('legacy_ref')->get();
+        } catch (\Throwable) {
+            $this->result('FAIL', 'Branches could not be read');
+
+            return;
+        }
+        $missing = $branches->filter(fn ($b) => ! $b->phone || in_array($b->phone, \Database\Seeders\RealBranchSeeder::PLACEHOLDER_PHONES, true) || ! is_array($b->weekly_hours) || ! $b->weekly_hours);
+        $missing->isNotEmpty()
+            ? $this->result('FAIL', 'Branch phone or opening hours missing or placeholder: '.$missing->pluck('name')->implode(', '), 'Enter the clinic\'s phone and hours in Administration → Branches, or run the RealBranchSeeder on the demo database.')
+            : $this->result('PASS', 'Every branch has a real phone and opening hours ('.$branches->count().')');
+        foreach ($branches->filter(fn ($b) => ! $b->email) as $b) $this->result('WARN', "{$b->name}: no email on file", 'Open item: ask the clinic for this branch\'s email (it is hidden wherever an email would show).');
+        foreach ($branches->filter(fn ($b) => ! preg_match('/\b\d{4}\b/', (string) $b->address)) as $b) $this->result('WARN', "{$b->name}: address has no ZIP code (shown as given)", 'Open item: ask the clinic for the full street, barangay and ZIP code.');
     }
 
     private function demoData(): void

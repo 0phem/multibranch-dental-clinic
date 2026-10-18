@@ -150,7 +150,7 @@ final class VisitService
 
         if ($branch->status !== 'Open') {
             $fail('branch-open', 'The branch is open');
-        } elseif (! $within($branch->open_time, $branch->close_time)) {
+        } elseif (! ($today = $branch->hoursOnDate(ClinicClock::today())) || ! $within($today['open'], $today['close'])) {
             $fail('branch-hours', 'The branch is within its operating hours');
         }
         if ($service) {

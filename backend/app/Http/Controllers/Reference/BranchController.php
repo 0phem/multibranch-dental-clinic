@@ -35,6 +35,34 @@ class BranchController extends Controller
                     throw ValidationException::withMessages(['close_time' => 'Closing time must be after opening time.']);
                 }
             }
+            if (array_key_exists('weekly_hours', $data) && $data['weekly_hours'] !== null) {
+                $week = [];
+                foreach ($data['weekly_hours'] as $day => $hours) {
+                    if (! in_array((string) $day, ['1', '2', '3', '4', '5', '6', '7'], true)) {
+                        throw ValidationException::withMessages(['weekly_hours' => 'Use the weekdays 1 (Monday) to 7 (Sunday).']);
+                    }
+                    if ($hours['close'] <= $hours['open']) {
+                        throw ValidationException::withMessages(["weekly_hours.{$day}.close" => 'Closing time must be after opening time.']);
+                    }
+                    $week[(string) $day] = ['open' => $hours['open'], 'close' => $hours['close']];
+                }
+                ksort($week);
+                // The older single fields stay consistent: open days, earliest opening and latest closing.
+                $data['weekly_hours'] = $week;
+                $data['operating_days'] = array_map('intval', array_keys($week));
+                $data['open_time'] = min(array_column($week, 'open'));
+                $data['close_time'] = max(array_column($week, 'close'));
+            }
+            elseif (array_key_exists('operating_days', $data) && ! array_key_exists('weekly_hours', $data) && is_array($current->weekly_hours) && $current->weekly_hours) {
+                // Only the open days changed: keep each remaining day's hours; a newly opened day gets the branch's usual hours.
+                $days = $data['operating_days'] ?: [1, 2, 3, 4, 5, 6, 7];
+                $week = [];
+                foreach ($days as $day) {
+                    $week[(string) $day] = $current->weekly_hours[(string) $day] ?? ['open' => substr((string) ($data['open_time'] ?? $current->open_time), 0, 5), 'close' => substr((string) ($data['close_time'] ?? $current->close_time), 0, 5)];
+                }
+                ksort($week);
+                $data['weekly_hours'] = $week;
+            }
             $current->fill($data);
             $changed = array_keys($current->getDirty());
             if ($changed) {

@@ -29,6 +29,8 @@ class BranchResource extends JsonResource
             'longitude' => $this->longitude !== null ? (float) $this->longitude : null,
             // ISO weekdays (1 = Monday … 7 = Sunday) the branch takes appointments; null = every day.
             'operating_days' => $this->operating_days,
+            // Opening hours per ISO weekday (null = closed), from the one source every rule and screen uses.
+            'weekly_hours' => (object) $this->weekHours(), // an object keyed "1" (Monday) to "7" (Sunday), never a list
         ];
     }
 }

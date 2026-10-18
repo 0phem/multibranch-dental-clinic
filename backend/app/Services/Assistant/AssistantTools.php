@@ -21,8 +21,6 @@ use Carbon\CarbonImmutable;
  */
 final class AssistantTools
 {
-    private const DAY_NAMES = [1 => 'Monday', 2 => 'Tuesday', 3 => 'Wednesday', 4 => 'Thursday', 5 => 'Friday', 6 => 'Saturday', 7 => 'Sunday'];
-
     /** @var list<array{type:string, service?:string, branch?:string, label:string}> */
     public array $actions = [];
 
@@ -41,7 +39,7 @@ final class AssistantTools
 
         return [
             ['name' => 'list_services', 'description' => 'The clinic\'s active services: name, category, short description and typical duration. Prices are not available.', 'input_schema' => $none],
-            ['name' => 'list_branches', 'description' => 'The clinic\'s open branches: name, address, opening hours and the days they take appointments, plus the clinic\'s contact phone and email.', 'input_schema' => $none],
+            ['name' => 'list_branches', 'description' => 'The clinic\'s open branches: name, address, phone, email (or none on file), opening hours per day, plus the clinic\'s main contact.', 'input_schema' => $none],
             ['name' => 'search_clinic_answers', 'description' => 'The clinic\'s own written answers (about the clinic, HMO, payment, dental-care tips and more) that match a question. Use them word for word; if none match, offer the front desk.',
                 'input_schema' => ['type' => 'object', 'properties' => ['question' => ['type' => 'string']], 'required' => ['question']]],
             ['name' => 'find_available_slots', 'description' => 'The earliest bookable appointment times for a service, optionally at one branch and from a date (YYYY-MM-DD). Read-only: it books nothing.',
@@ -83,8 +81,9 @@ final class AssistantTools
     {
         return ['branches' => Branch::where('status', 'Open')->orderBy('name')->get()->map(fn (Branch $b) => [
             'name' => $b->name, 'address' => $b->address, 'city' => $b->city,
-            'hours' => ClinicClock::at(ClinicClock::today(), substr((string) $b->open_time, 0, 5))->format('g:i A').' to '.ClinicClock::at(ClinicClock::today(), substr((string) $b->close_time, 0, 5))->format('g:i A'),
-            'appointment_days' => is_array($b->operating_days) && $b->operating_days ? implode(', ', array_map(fn ($d) => self::DAY_NAMES[(int) $d] ?? '', $b->operating_days)) : 'Every day',
+            // The clinic's real contacts (given 2026-10-17); a branch without an email has none on file.
+            'phone' => $b->phone ?: null, 'email' => $b->email ?: 'none on file',
+            'hours' => \App\Support\BranchHours::summary($b),
         ])->values()->all(), 'clinic_phone' => Brand::forEmail()['phone'], 'clinic_email' => Brand::forEmail()['email']];
     }
 

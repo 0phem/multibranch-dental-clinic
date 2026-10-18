@@ -225,7 +225,7 @@ class AppointmentController extends Controller
             'branches' => $ranked->map(fn ($o) => [
                 'id' => $o['branch']->legacy_ref, 'name' => $o['branch']->name, 'address' => $o['branch']->address, 'city' => $o['branch']->city,
                 'open_time' => substr((string) $o['branch']->open_time, 0, 5), 'close_time' => substr((string) $o['branch']->close_time, 0, 5),
-                'operating_days' => $o['branch']->operating_days, 'distance_km' => $o['distance_km'],
+                'operating_days' => $o['branch']->operating_days, 'weekly_hours' => $o['branch']->weekHours(), 'distance_km' => $o['distance_km'],
                 'earliest' => $o['earliest'] ? ['date' => $o['earliest']['date'], 'start_time' => $o['earliest']['start_time'], 'label' => $when($o['earliest'])] : null,
                 'recommended' => $recommended !== null && $o['branch']->is($recommended['branch']),
                 'reason' => $recommended !== null && $o['branch']->is($recommended['branch'])
@@ -290,7 +290,7 @@ class AppointmentController extends Controller
             'previous_month' => $start->subMonth()->format('Y-m') >= substr($first, 0, 7) ? $start->subMonth()->format('Y-m') : null,
             'next_month' => $start->addMonth()->format('Y-m') <= substr($last, 0, 7) ? $start->addMonth()->format('Y-m') : null,
             'branch' => ['id' => $branch->legacy_ref, 'name' => $branch->name, 'open_time' => substr((string) $branch->open_time, 0, 5),
-                'close_time' => substr((string) $branch->close_time, 0, 5), 'operating_days' => $branch->operating_days],
+                'close_time' => substr((string) $branch->close_time, 0, 5), 'operating_days' => $branch->operating_days, 'weekly_hours' => $branch->weekHours()],
             'days' => $days,
         ]]);
     }

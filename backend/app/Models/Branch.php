@@ -51,6 +51,7 @@ class Branch extends Model
         'latitude',
         'longitude',
         'operating_days',
+        'weekly_hours',
     ];
 
     protected function casts(): array
@@ -60,6 +61,7 @@ class Branch extends Model
             'latitude' => 'decimal:7',
             'longitude' => 'decimal:7',
             'operating_days' => 'array',
+            'weekly_hours' => 'array',
         ];
     }
 
@@ -81,5 +83,37 @@ class Branch extends Model
     public function dentistBranches(): HasMany
     {
         return $this->hasMany(DentistBranch::class);
+    }
+
+    /**
+     * Opening hours on an ISO weekday (1 = Monday … 7 = Sunday) as ['open' => 'HH:MM', 'close' => 'HH:MM'], or null when the branch
+     * is closed that day. Per-day `weekly_hours` win; without them, the single open_time/close_time applies on `operating_days`
+     * (empty = every day). This is the one place every screen, email and rule reads branch hours from.
+     */
+    public function hoursOnDay(int $isoDay): ?array
+    {
+        if (is_array($this->weekly_hours) && $this->weekly_hours) {
+            $day = $this->weekly_hours[(string) $isoDay] ?? $this->weekly_hours[$isoDay] ?? null;
+
+            return is_array($day) && isset($day['open'], $day['close']) ? ['open' => substr((string) $day['open'], 0, 5), 'close' => substr((string) $day['close'], 0, 5)] : null;
+        }
+        $days = is_array($this->operating_days) && $this->operating_days ? array_map('intval', $this->operating_days) : [1, 2, 3, 4, 5, 6, 7];
+
+        return in_array($isoDay, $days, true) ? ['open' => substr((string) $this->open_time, 0, 5), 'close' => substr((string) $this->close_time, 0, 5)] : null;
+    }
+
+    /** Opening hours on a calendar date (Y-m-d, clinic time), or null when closed. */
+    public function hoursOnDate(string $date): ?array
+    {
+        return $this->hoursOnDay(\Carbon\CarbonImmutable::createFromFormat('!Y-m-d', $date, \App\Support\ClinicClock::TIMEZONE)->isoWeekday());
+    }
+
+    /** All seven days, Monday first: [isoDay => ['open','close'] | null]. */
+    public function weekHours(): array
+    {
+        $week = [];
+        foreach (range(1, 7) as $day) $week[$day] = $this->hoursOnDay($day);
+
+        return $week;
     }
 }

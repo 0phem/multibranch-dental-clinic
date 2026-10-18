@@ -20,6 +20,7 @@ export function mapBranch(row) {
     ...(row.email !== undefined ? { email: row.email || '' } : {}),
     ...(row.latitude !== undefined ? { latitude: row.latitude, longitude: row.longitude } : {}),
     ...(row.operating_days !== undefined ? { operatingDays: Array.isArray(row.operating_days) ? row.operating_days : null } : {}),
+    ...(row.weekly_hours !== undefined ? { weeklyHours: row.weekly_hours && typeof row.weekly_hours === 'object' ? row.weekly_hours : null } : {}),
     ...(row.public_id ? { publicId: row.public_id } : {}),
     ...(row.operating_data_status ? { operatingDataStatus: row.operating_data_status } : {}),
   }
@@ -125,8 +126,12 @@ export async function syncBranchUpdate(legacyRef, form) {
     const coordinate = value => (value === '' || value === null || value === undefined ? null : Number(value))
     payload.latitude = coordinate(form.latitude); payload.longitude = coordinate(form.longitude)
   }
-  // Days open (1 = Monday … 7 = Sunday); every day open is sent as null ("every day").
-  if (form.operatingDays !== undefined) payload.operating_days = Array.isArray(form.operatingDays) && form.operatingDays.length && form.operatingDays.length < 7 ? [...form.operatingDays].sort() : null
+  // Opening hours per ISO weekday; a closed day (null) is left out. The server keeps open_time/close_time/operating_days in step.
+  if (form.weeklyHours && typeof form.weeklyHours === 'object') {
+    const week = {}
+    for (const [day, h] of Object.entries(form.weeklyHours)) if (h && h.open && h.close) week[String(day)] = { open: String(h.open).slice(0, 5), close: String(h.close).slice(0, 5) }
+    if (Object.keys(week).length) payload.weekly_hours = week
+  }
 
   const result = await api.updateBranch(legacyRef, payload)
   if (!result.ok) return result

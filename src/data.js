@@ -114,9 +114,9 @@ export const INITIAL_DENTIST_SERVICE_ASSIGNMENTS = [
 ]
 
 export const INITIAL_BRANCHES = [
-  { id:'b1', branchCode:'BRC-A', name:'Dr. Dana Roxas Dental Clinic', city:'Bocaue', address:'#37, MacArthur Hwy, Bocaue, 3018 Bulacan', open:'09:00', close:'18:00', status:'Open', threshold:80, services:['General Dentistry','Orthodontics','Oral Surgery'], phone:'(02) 8123 1001' },
-  { id:'b2', branchCode:'BRC-B', name:'Roxas - Cardinal Dental Center', city:'Bocaue', address:'67 MacArthur Hwy, Wakas, Bocaue, 3018 Bulacan', open:'09:00', close:'18:00', status:'Open', threshold:80, services:['General Dentistry','Pediatric Dentistry','Teeth Whitening'], phone:'(02) 8123 1002' },
-  { id:'b3', branchCode:'BRC-C', name:'Roxas Dental Clinic Guiguinto', city:'Guiguinto', address:'Unit 20 GD Plaza, Guiguinto, Bulacan', open:'10:00', close:'19:00', status:'Open', threshold:75, services:['General Dentistry','TMD / Orofacial Pain','Dental Implant'], phone:'(02) 8123 1003' },
+  { id:'b1', branchCode:'BRC-A', name:'Dr. Dana Roxas Dental Clinic', city:'Bocaue', address:'#37, MacArthur Hwy, Bocaue, 3018 Bulacan', open:'08:00', close:'20:00', status:'Open', threshold:80, services:['General Dentistry','Orthodontics','Oral Surgery'], phone:'0922 878 7341' },
+  { id:'b2', branchCode:'BRC-B', name:'Roxas - Cardinal Dental Center', city:'Bocaue', address:'67 MacArthur Hwy, Wakas, Bocaue, 3018 Bulacan', open:'08:00', close:'20:00', status:'Open', threshold:80, services:['General Dentistry','Pediatric Dentistry','Teeth Whitening'], phone:'0922 878 7341' },
+  { id:'b3', branchCode:'BRC-C', name:'Roxas Dental Clinic Guiguinto', city:'Guiguinto', address:'Unit 20 GD Plaza, Guiguinto, Bulacan', open:'08:00', close:'20:00', status:'Open', threshold:75, services:['General Dentistry','TMD / Orofacial Pain','Dental Implant'], phone:'0933 867 8725' },
 ]
 
 export const INITIAL_DENTISTS = [

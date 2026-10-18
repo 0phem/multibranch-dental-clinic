@@ -37,6 +37,11 @@ class UpdateBranchRequest extends FormRequest
             // Days the branch takes appointments (ISO weekday 1 = Monday … 7 = Sunday); null = every day.
             'operating_days' => ['sometimes', 'nullable', 'array', 'min:1', 'max:7'],
             'operating_days.*' => ['integer', 'between:1,7', 'distinct'],
+            // Per-day hours: {"1": {"open": "08:00", "close": "20:00"}, …}; a weekday left out is closed. At least one open day.
+            'weekly_hours' => ['sometimes', 'nullable', 'array', 'min:1', 'max:7'],
+            'weekly_hours.*' => ['array:open,close'],
+            'weekly_hours.*.open' => ['required', 'date_format:H:i'],
+            'weekly_hours.*.close' => ['required', 'date_format:H:i'],
 
             // legacy_ref/id are never client-mutable (legacy_ref is bridge-internal only). Coordinates are Owner-editable since
             // 2026-10-14 (real branches; docs/BRANCH_LOCATIONS.md) and validated above.

@@ -56,3 +56,43 @@ export function downloadIcs(appointment, name = 'appointment.ics') {
   document.body.appendChild(a); a.click(); a.remove()
   setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
+
+// Branch opening hours (weekly_hours from the API: {"1": {open, close} | null, …, "7": …}; ISO weekdays, null = closed).
+const SHORT_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+const LONG_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+const dayHours = (weekly, iso) => { const h = weekly?.[String(iso)] ?? weekly?.[iso]; return h && h.open && h.close ? { open: String(h.open).slice(0, 5), close: String(h.close).slice(0, 5) } : null }
+
+/** "Mon–Fri 8:00 AM – 8:00 PM · Sat 8:00 AM – 5:00 PM · Sun closed" (days with the same hours grouped). Empty when unknown. */
+export function hoursSummary(weekly, { long = false } = {}) {
+  if (!weekly || typeof weekly !== 'object') return ''
+  const names = long ? LONG_DAYS : SHORT_DAYS
+  const groups = []
+  for (let d = 1; d <= 7; d++) {
+    const h = dayHours(weekly, d)
+    const label = h ? `${time12(h.open)} – ${time12(h.close)}` : 'closed'
+    const last = groups[groups.length - 1]
+    if (last && last.label === label && last.to === d - 1) last.to = d
+    else groups.push({ from: d, to: d, label })
+  }
+  return groups.map(g => `${g.from === g.to ? names[g.from - 1] : `${names[g.from - 1]}–${names[g.to - 1]}`} ${g.label}`).join(' · ')
+}
+
+/** Day of week (ISO) and "HH:MM" now in Asia/Manila. */
+export function manilaNow(now = new Date()) {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: TZ, weekday: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(now).map(p => [p.type, p.value]))
+  return { iso: SHORT_DAYS.indexOf(parts.weekday) + 1, time: `${parts.hour}:${parts.minute}` }
+}
+
+/** {open, label, today}: "Open now · until 8:00 PM", or "Closed · opens Mon 8:00 AM", computed in Asia/Manila. */
+export function openStatus(weekly, now = new Date()) {
+  if (!weekly || typeof weekly !== 'object') return { open: false, label: '', today: null }
+  const { iso, time } = manilaNow(now)
+  const today = dayHours(weekly, iso)
+  if (today && time >= today.open && time < today.close) return { open: true, label: `Open now · until ${time12(today.close)}`, today }
+  if (today && time < today.open) return { open: false, label: `Closed · opens today ${time12(today.open)}`, today }
+  for (let i = 1; i <= 7; i++) {
+    const d = ((iso - 1 + i) % 7) + 1, h = dayHours(weekly, d)
+    if (h) return { open: false, label: `Closed · opens ${i === 1 ? 'tomorrow' : SHORT_DAYS[d - 1]} ${time12(h.open)}`, today }
+  }
+  return { open: false, label: 'Closed', today }
+}

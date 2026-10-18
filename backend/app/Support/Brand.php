@@ -48,7 +48,9 @@ final class Brand
             'subtitle' => self::text('subtitle'),
             'address' => self::text('address'),
             'phone' => self::text('phone'),
-            'email' => self::text('email'),
+            // For a message about one branch, that branch's own email (none on file = no email line); otherwise the clinic's.
+            'email' => $branch ? ($branch->email ?: null) : self::text('email'),
+            'clinic_email' => self::text('email'),
             'branch_name' => $branch?->name,
             'branch_address' => $branch?->address,
             'branch_phone' => $branch?->phone,

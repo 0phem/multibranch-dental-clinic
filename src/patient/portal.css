@@ -340,3 +340,9 @@
 .pp-ai-suggest { margin-top: 8px; } .pp-ai-suggest .pp-chip { min-width: 0; text-align: left; font-weight: 600; }
 .pp-card form.aa-test-form { display: flex; max-width: none; }
 @media (max-width: 520px) { .aa-toolbar .pp-tabs button { font-size: .8125rem; padding: 0 4px; } }
+/* Owner: per-day opening hours editor */
+.hours-editor { display: grid; gap: 6px; }
+.hours-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; min-height: 44px; padding: 4px 10px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
+.hours-day { width: 92px; font-weight: 650; color: var(--ink); }
+.hours-closed { display: inline-flex; align-items: center; gap: 6px; color: var(--text); }
+.hours-row input[type=time] { min-height: 38px; padding: 0 8px; border: 1px solid var(--line-strong); border-radius: 10px; }
