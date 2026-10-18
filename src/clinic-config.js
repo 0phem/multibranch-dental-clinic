@@ -40,18 +40,26 @@ export function applyBranding(data) {
 
 let publicApiBase = 'http://localhost:8000'
 
-/** The open branches for the public website, from the clinic records. {ok, branches} — never a built-in list. */
-export async function loadPublicBranches(timeoutMs = 6000) {
-  if (typeof fetch !== 'function') return { ok: false, branches: [] }
+/** GET a public (no sign-in) list from the clinic server: {ok, rows}. Never a built-in fallback list. */
+export async function loadPublicList(path, timeoutMs = 6000) {
+  if (typeof fetch !== 'function') return { ok: false, rows: [] }
   const controller = typeof AbortController === 'function' ? new AbortController() : null
   const timer = setTimeout(() => controller?.abort(), timeoutMs)
   try {
-    const response = await fetch(`${publicApiBase.replace(/\/$/, '')}/api/public/branches`, { headers: { Accept: 'application/json' }, signal: controller?.signal })
+    const response = await fetch(`${publicApiBase.replace(/\/$/, '')}/api/public/${path}`, { headers: { Accept: 'application/json' }, signal: controller?.signal })
     const rows = response.ok ? (await response.json())?.data : null
-    if (!Array.isArray(rows)) return { ok: false, branches: [] }
-    return { ok: true, branches: rows.filter(b => b && typeof b.name === 'string' && typeof b.address === 'string').map(b => ({ id: String(b.id), number: String(b.number || ''), name: b.name, address: b.address,
-      latitude: typeof b.latitude === 'number' ? b.latitude : null, longitude: typeof b.longitude === 'number' ? b.longitude : null })) }
-  } catch { return { ok: false, branches: [] } } finally { clearTimeout(timer) }
+    return Array.isArray(rows) ? { ok: true, rows } : { ok: false, rows: [] }
+  } catch { return { ok: false, rows: [] } } finally { clearTimeout(timer) }
+}
+
+/** The open branches for the public website, from the clinic records. {ok, branches} — never a built-in list. */
+export async function loadPublicBranches(timeoutMs = 6000) {
+  const { ok, rows } = await loadPublicList('branches', timeoutMs)
+  if (!ok) return { ok: false, branches: [] }
+  const text = value => (typeof value === 'string' && value.trim() ? value.trim() : null)
+  return { ok: true, branches: rows.filter(b => b && typeof b.name === 'string' && typeof b.address === 'string').map(b => ({ id: String(b.id), number: String(b.number || ''), name: b.name, address: b.address,
+    latitude: typeof b.latitude === 'number' ? b.latitude : null, longitude: typeof b.longitude === 'number' ? b.longitude : null,
+    phone: text(b.phone), email: text(b.email), weeklyHours: b.weekly_hours && typeof b.weekly_hours === 'object' && !Array.isArray(b.weekly_hours) ? b.weekly_hours : null })) }
 }
 
 /** Fetches the public branding once at startup; never blocks the app for more than `timeoutMs`. */
@@ -64,6 +72,26 @@ export async function loadBranding(apiBase, timeoutMs = 2500) {
     const response = await fetch(`${apiBase.replace(/\/$/, '')}/api/branding`, { headers: { Accept: 'application/json' }, credentials: 'include', signal: controller?.signal })
     if (response.ok) applyBranding((await response.json())?.data)
   } catch { /* offline or slow: the fallback stays */ } finally { clearTimeout(timer) }
-  if (typeof document !== 'undefined') document.title = clinic.name
+  if (typeof document !== 'undefined') applyDocumentMeta()
   return clinic
+}
+
+/** Title, description, Open Graph tags and favicon from the branding settings (index.html holds only a generic fallback). */
+export function applyDocumentMeta(doc = typeof document !== 'undefined' ? document : null) {
+  if (!doc) return
+  const description = `Book visits, pay online and message ${clinic.name} in one place.`
+  const logo = /^https?:/.test(clinic.logo) ? clinic.logo : `${doc.location?.origin || ''}${clinic.logo}`
+  doc.title = clinic.name
+  const meta = (attr, key, content) => {
+    let el = doc.head.querySelector(`meta[${attr}="${key}"]`)
+    if (!el) { el = doc.createElement('meta'); el.setAttribute(attr, key); doc.head.appendChild(el) }
+    el.setAttribute('content', content)
+  }
+  meta('name', 'description', description)
+  meta('property', 'og:type', 'website')
+  meta('property', 'og:title', clinic.name)
+  meta('property', 'og:description', description)
+  meta('property', 'og:image', logo)
+  const icon = doc.head.querySelector('link[rel="icon"]')
+  if (icon) icon.setAttribute('href', clinic.logo)
 }

@@ -5,6 +5,7 @@ import { ClinicProvider, useClinic } from './store.jsx'
 import { Brand, Login, Shell, ToastStack } from './layout.jsx'
 import { EmailVerification } from './pages/EmailVerification.jsx'
 import { PublicSite } from './pages/PublicSite.jsx'
+import { PublicLegal } from './pages/PublicLegal.jsx'
 import { publicViewFromHash, publicSections } from './public-route.js'
 import { ChunkBoundary, StartupLoading } from './StartupLoading.jsx'
 import { AuthShell } from './pages/AuthShell.jsx'
@@ -272,6 +273,7 @@ function AppBody() {
       ?<EmailVerification email={verification?.email} initialResendAvailableAt={verification?.resendAvailableAt} onVerify={verifyRegistration} onResend={resendRegistration} onBack={()=>{setVerification(null);setShowRegister(false)}}/>
       :showRegister
       ?<ChunkBoundary><Suspense fallback={<AuthShell><StartupLoading compact label="Opening registration…"/></AuthShell>}><PatientRegister onRegister={register} onCancel={()=>{setAuthError('');setShowRegister(false)}}/></Suspense></ChunkBoundary>
+      :publicView==='privacy'||publicView==='terms'?<PublicLegal kind={publicView}/>
       :publicView==='home'?<PublicSite/>
       :<Login key={signInNotice?.email||'login'} initialEmail={signInNotice?.email} notice={signInNotice?.message} onLogin={login} onShowRegister={()=>{setAuthError('');setShowRegister(true)}} onForgotPassword={()=>{setAuthError('');window.location.hash='forgot-password';setPublicView('forgot')}}/>}
     <ToastStack toasts={store.toasts}/>

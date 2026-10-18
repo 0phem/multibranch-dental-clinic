@@ -51,6 +51,8 @@ Route::get('/branding', [\App\Http\Controllers\BrandingController::class, 'show'
 Route::get('/branding/logo', [\App\Http\Controllers\BrandingController::class, 'logo']);
 // Public website: the open branches (name, address, map coordinates). Read-only, no personal data.
 Route::get('/public/branches', [\App\Http\Controllers\PublicBranchController::class, 'index'])->middleware('throttle:60,1');
+Route::get('/public/services', [\App\Http\Controllers\PublicContentController::class, 'services'])->middleware('throttle:60,1');
+Route::get('/public/faq', [\App\Http\Controllers\PublicContentController::class, 'faq'])->middleware('throttle:60,1');
 
 // Public Payment Gateway Webhook (PayMongo HMAC-SHA256 signature verified)
 Route::post('/webhooks/paymongo', [PayMongoController::class, 'webhook']);

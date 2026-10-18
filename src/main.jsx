@@ -7,6 +7,7 @@ import './patient.css'
 import './public-site.css'
 import './polish.css'
 import './patient/portal.css'
+import './landing.css'
 
 import { loadBranding } from './clinic-config.js'
 

@@ -1,62 +1,216 @@
-import React, { useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { Icon } from '../components.jsx'
 import { clinic } from '../clinic-config.js'
-import { PublicHeader, PublicFooter } from './PublicChrome.jsx'
-import { PublicLocations } from './PublicLocations.jsx'
+import { hoursSummary, openStatus } from '../patient/format.js'
+import { PublicFooter, PublicHeader } from './PublicChrome.jsx'
+import { LocationMap } from './PublicLocations.jsx'
+import { directionsUrl, telHref, usePublicData } from './public-data.js'
 
-function Actions({light=false}) {
-  return <div className={`site-actions ${light?'is-light':''}`}><a className="site-button" href="#create-account">Create Patient Account <Icon name="arrow" size={18}/></a><a className="site-button secondary" href="#sign-in">Sign In</a></div>
+// The public landing page. Every clinic fact comes from the clinic server: the name and logo from the branding settings,
+// branches (contacts and hours) from GET /api/public/branches, services from GET /api/public/services, and the FAQ from the
+// assistant answers the clinic has confirmed (GET /api/public/faq). Product copy describes what the portal really does.
+// No statistics, testimonials, prices, partner logos or photos of people.
+
+/** Reveal-on-scroll: only adds motion when the browser supports it and the visitor has not asked for reduced motion. */
+function useReveal() {
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('IntersectionObserver' in window)) return undefined
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return undefined
+    const root = document.querySelector('.lp-site')
+    root?.classList.add('lp-motion')
+    const observer = new IntersectionObserver(entries => entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('is-visible'); observer.unobserve(e.target) } }), { rootMargin: '0px 0px -8% 0px' })
+    root?.querySelectorAll('.lp-reveal').forEach(el => observer.observe(el))
+    return () => observer.disconnect()
+  })
 }
 
-function PreviewFrame({children,compact=false}) {
-  return <div className={`portal-preview ${compact?'compact':''}`}><div className="preview-browser"><span aria-hidden="true"><i/><i/><i/></span><span>Patient Portal</span><Icon name="shield" size={14}/></div>{children}</div>
+/** A calm illustration drawn for this project (own work, docs/CREDITS.md): a phone with a booking calendar and a message. */
+function HeroIllustration() {
+  return <svg className="lp-hero-art" viewBox="0 0 440 400" width="440" height="400" role="img" aria-label="Illustration of booking a dental visit on a phone">
+    <defs>
+      <linearGradient id="lpSky" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#eaf3fd"/><stop offset="1" stopColor="#eaf5f2"/></linearGradient>
+      <linearGradient id="lpBrand" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stopColor="#1865ac"/><stop offset="1" stopColor="#0c9b8e"/></linearGradient>
+    </defs>
+    <circle cx="230" cy="200" r="178" fill="url(#lpSky)"/>
+    <circle cx="370" cy="70" r="26" fill="#d9eef9"/><circle cx="70" cy="320" r="18" fill="#d6efe9"/>
+    <rect x="140" y="40" width="170" height="320" rx="28" fill="#ffffff" stroke="#cfe0ec" strokeWidth="3"/>
+    <rect x="156" y="66" width="138" height="34" rx="10" fill="url(#lpBrand)"/>
+    <circle cx="176" cy="83" r="9" fill="#ffffff" opacity=".9"/><rect x="192" y="77" width="72" height="12" rx="6" fill="#ffffff" opacity=".85"/>
+    {Array.from({ length: 4 }, (_, row) => Array.from({ length: 5 }, (_, col) => {
+      const on = (row === 1 && col === 2) || (row === 2 && col === 3)
+      return <rect key={`${row}-${col}`} x={160 + col * 26} y={116 + row * 26} width="20" height="20" rx="6" fill={on ? '#1865ac' : row === 3 && col > 2 ? '#f1f5f8' : '#eaf2fb'}/>
+    }))}
+    <rect x="160" y="226" width="130" height="30" rx="10" fill="#eaf5f2"/><rect x="172" y="237" width="64" height="8" rx="4" fill="#0c9b8e"/>
+    <rect x="160" y="266" width="62" height="26" rx="9" fill="#ffffff" stroke="#cfe0ec" strokeWidth="2"/><rect x="228" y="266" width="62" height="26" rx="9" fill="#1865ac"/>
+    <rect x="160" y="306" width="130" height="34" rx="12" fill="url(#lpBrand)"/><rect x="194" y="319" width="62" height="8" rx="4" fill="#ffffff"/>
+    <g transform="translate(286 232)"><rect width="128" height="62" rx="18" fill="#ffffff" stroke="#cfe0ec" strokeWidth="3"/><rect x="16" y="18" width="80" height="8" rx="4" fill="#9fb8cc"/><rect x="16" y="34" width="56" height="8" rx="4" fill="#cfdde8"/><path d="M28 60 l-10 18 l26 -18z" fill="#ffffff"/></g>
+    <g transform="translate(48 120)"><rect width="104" height="104" rx="26" fill="#ffffff" stroke="#cfe0ec" strokeWidth="3"/>
+      <path d="M52 30c-9-7-27-6-29 9-1 9 3 16 6 24 3 9 3 19 9 19 5 0 5-12 9-12h10c4 0 4 12 9 12 6 0 6-10 9-19 3-8 7-15 6-24-2-15-20-16-29-9z" fill="#eaf3fd" stroke="#1865ac" strokeWidth="3.5" strokeLinejoin="round"/></g>
+  </svg>
 }
 
-function AppointmentPreview() {
-  return <div className="preview-appointment"><div className="preview-calendar"><Icon name="calendar" size={30}/><span>Your visit</span></div><div><small>UPCOMING APPOINTMENT</small><h4>Dental consultation</h4><p>View your confirmed date, time, and clinic details.</p><span className="preview-tag">Appointment details</span></div></div>
-}
-
-function HeroPreview() {
-  return <figure className="site-hero-visual"><div className="hero-preview-backdrop"/><PreviewFrame>
-    <div className="preview-dashboard"><div className="preview-side" aria-hidden="true"><img src={clinic.logo} alt="" width="36" height="36"/>{['home','calendar','receipt','user'].map((icon,i)=><span className={i===0?'active':''} key={icon}><Icon name={icon} size={18}/></span>)}</div>
-    <div className="preview-dashboard-main"><div className="preview-greeting"><div><small>YOUR PATIENT PORTAL</small><h3>A clearer view of your care.</h3></div><span className="preview-avatar"><Icon name="user" size={18}/></span></div>
-      <AppointmentPreview/>
-      <div className="preview-mini-grid"><div><Icon name="receipt"/><b>Receipts & payments</b><span>Your financial history</span></div><div><Icon name="file"/><b>Documents & consent</b><span>Your records in one place</span></div></div>
-      <div className="preview-update"><span><Icon name="message" size={19}/></span><div><b>Stay connected with the clinic</b><p>Find messages and updates in your portal.</p></div></div>
-    </div></div>
-  </PreviewFrame><figcaption>Illustrative preview · no Patient information shown</figcaption></figure>
-}
-
-const features=[
-  ['calendar','Appointments','Plan your next visit','Find available appointment options and keep track of your scheduled visits.'],
-  ['user','Patient information','Keep your details together','View the Patient information available to your account and keep contact details organized.'],
-  ['receipt','Billing & receipts','Understand your visit’s billing','Review your invoices, recorded payments, and receipts in one place.'],
-  ['file','Documents & consents','Know what’s on file','Access your documents and consent records through your Patient profile.'],
-  ['shield','HMO information','Follow your coverage request','See applicable HMO case details, requirements, and recorded coverage information.'],
-  ['message','Clinic communication','Keep the conversation connected','Find clinic messages and account updates alongside your other Patient information.'],
+const STEPS = [
+  ['user', 'Create your account', 'Sign up with your email. We send a 6-digit code to confirm it is yours.'],
+  ['calendar', 'Book a visit', 'Choose a service, a branch near you and a time on the calendar. Only real open times are shown.'],
+  ['message', 'Stay in touch', 'Get an email confirmation, and message the front desk of your branch from the portal.'],
+  ['receipt', 'Pay online', 'After your visit, pay your invoice online through PayMongo (for example GCash or card) and get your receipt by email.'],
 ]
-const previewTabs=[['visits','Appointments'],['records','Documents & HMO'],['billing','Billing & receipts']]
+
+const FEATURES = [
+  ['calendar', 'Online booking', 'Book, reschedule or cancel from your phone, with only the times that are really open.'],
+  ['mail', 'Email updates', 'Your booking confirmation and any changes arrive in your inbox.'],
+  ['lock', 'Secure messaging', 'Chat with the clinic front desk; only you and the clinic staff in your conversation can read it.'],
+  ['wallet', 'Online payment with receipt', 'Pay securely through PayMongo and receive your receipt as a PDF by email.'],
+]
+
+// Shown only until the clinic confirms its own answers (Administration → Assistant answers). Each line describes how the
+// portal really works; no clinic fact (hours, prices, policies) is stated here.
+const PORTAL_FAQ = [
+  ['How do I create an account?', 'Choose “Create account”, fill in your details and the email you use. We send a 6-digit code to that email; enter it, then sign in with your email and password.'],
+  ['How do I book a visit?', 'After signing in, choose “Book a visit”, pick the service, a branch and a day on the calendar, then a time. Only open times are shown, and nothing is charged when you book.'],
+  ['How do I pay?', 'After your visit the clinic sends your invoice. Open Billing in the portal and pay online through PayMongo (for example GCash or card), or pay at the clinic. Your receipt is emailed to you.'],
+  ['How do I message the clinic?', 'Open Messages in the portal and write to the front desk of your branch. They reply in the same conversation.'],
+]
 
 export function PublicSite() {
-  const [preview,setPreview]=useState('visits')
-  return <div className="public-site"><PublicHeader/><main id="public-main" tabIndex={-1}>
-    <section id="home" className="site-hero"><div className="site-container site-hero-grid"><div className="site-hero-copy"><span className="site-eyebrow">{clinic.city} · Patient Portal</span><h1>Care that connects.<br/><em>Even between visits.</em></h1><p>A simpler way to stay connected with {clinic.name}. Manage appointments, find your records, and follow clinic updates in one place.</p><Actions/><a className="site-text-link" href="#portal">Take a look inside your portal <Icon name="arrow" size={17}/></a><div className="site-hero-note"><Icon name="shield" size={17}/><span>Email-verified accounts. Access to your own information.</span></div></div><HeroPreview/></div></section>
-    <div className="site-capability-strip"><div className="site-container">{[['calendar','Appointments'],['file','Patient records'],['receipt','Billing & receipts'],['message','Clinic communication']].map(([icon,label])=><span key={label}><Icon name={icon}/>{label}</span>)}</div></div>
+  useReveal()
+  return <div className="lp-site public-site">
+    <PublicHeader/>
+    <main id="public-main" tabIndex={-1}>
+      <Hero/>
+      <HowItWorks/>
+      <Services/>
+      <Branches/>
+      <Features/>
+      <Faq/>
+      <Emergency/>
+    </main>
+    <PublicFooter/>
+  </div>
+}
 
-    <section id="about" className="site-section"><div className="site-container site-about-grid"><div className="site-about-visual"><span className="site-eyebrow">Your clinic, connected</span><div className="about-clinic-mark"><img src={clinic.logo} alt="" width="80" height="80"/><h3>{clinic.nameLine}<span>{clinic.subtitle}</span></h3><p>{clinic.city}</p></div><div className="about-connected"><span><Icon name="calendar"/>Your visits</span><span><Icon name="file"/>Your information</span><span><Icon name="message"/>Your conversations</span></div></div><div className="site-section-copy"><span className="site-eyebrow">About the clinic portal</span><h2>A familiar clinic.<br/>A more connected experience.</h2><p>{clinic.name} brings appointments, relevant Patient information, billing, documents, and communication together through a single digital portal.</p><p>Find the details you need before your visit and return to the information available to you afterward. The clinic remains your point of contact for questions about your care.</p><a className="site-text-link" href="#contact">Get in touch with the clinic <Icon name="arrow" size={17}/></a></div></div></section>
+function Hero() {
+  return <section id="home" className="lp-hero" aria-labelledby="lp-hero-title">
+    <div className="lp-container lp-hero-grid">
+      <div className="lp-hero-copy">
+        <p className="lp-eyebrow">{clinic.name}</p>
+        <h1 id="lp-hero-title">Your dental visits, <span>simpler online.</span></h1>
+        <p className="lp-lead">Book a visit at the branch near you, pay your invoice online and message the clinic, all in one place.</p>
+        <div className="lp-cta">
+          <a className="lp-btn lp-btn-primary lp-btn-lg" href="#create-account"><Icon name="plusCalendar" size={20}/>Book a visit</a>
+          <a className="lp-btn lp-btn-soft lp-btn-lg" href="#branches"><Icon name="pin" size={20}/>See branches</a>
+        </div>
+        <p className="lp-hero-note"><Icon name="lock" size={16}/> Free to sign up. Nothing is charged when you book.</p>
+      </div>
+      <div className="lp-hero-visual"><HeroIllustration/></div>
+    </div>
+  </section>
+}
 
-    <section id="features" className="site-section site-features"><div className="site-container"><div className="site-section-heading"><div><span className="site-eyebrow">Made for your clinic experience</span><h2>Less searching.<br/>More clarity.</h2></div><p>From planning a visit to finding a receipt, your Patient Portal keeps everyday clinic tasks within reach.</p></div><div className="site-feature-grid">{features.map(([icon,label,title,copy],i)=><article className={`site-feature feature-${i}`} key={label}><span className="site-feature-icon"><Icon name={icon} size={25}/></span><span className="site-feature-label">{label}</span><h3>{title}</h3><p>{copy}</p>{i===0&&<div className="feature-visit-visual" aria-hidden="true"><span>Plan</span><i/><span>Confirm</span><i/><span>Visit</span></div>}{i===2&&<div className="feature-receipt-visual" aria-hidden="true"><Icon name="receipt"/><span>Invoice → Payment → Receipt</span></div>}</article>)}</div></div></section>
+function HowItWorks() {
+  return <section id="how-it-works" className="lp-section" aria-labelledby="lp-how-title">
+    <div className="lp-container">
+      <div className="lp-heading lp-reveal"><p className="lp-eyebrow">How it works</p><h2 id="lp-how-title">From booking to receipt in four steps</h2></div>
+      <ol className="lp-steps">{STEPS.map(([icon, title, text], i) => <li key={title} className="lp-card lp-step lp-reveal">
+        <span className="lp-step-icon" aria-hidden="true"><Icon name={icon} size={22}/></span>
+        <span className="lp-step-number">Step {i + 1}</span><h3>{title}</h3><p>{text}</p>
+      </li>)}</ol>
+    </div>
+  </section>
+}
 
-    <section id="portal" className="site-section site-product"><div className="site-container site-product-grid"><div className="site-section-copy"><span className="site-eyebrow">Inside your Patient Portal</span><h2>The details that matter,<br/>all together.</h2><p>A clear view of your appointments and the information available to your account. Explore a preview of the portal below.</p><div role="tablist" aria-label="Patient portal preview" className="site-preview-tabs">{previewTabs.map(([id,label])=><button key={id} id={`tab-${id}`} type="button" role="tab" aria-selected={preview===id} aria-controls="portal-preview-panel" tabIndex={preview===id?0:-1} onKeyDown={event=>{if(['ArrowDown','ArrowRight','ArrowUp','ArrowLeft'].includes(event.key)){event.preventDefault();const delta=['ArrowDown','ArrowRight'].includes(event.key)?1:-1;const next=previewTabs[(previewTabs.findIndex(x=>x[0]===id)+delta+previewTabs.length)%previewTabs.length][0];setPreview(next);document.getElementById(`tab-${next}`)?.focus()}}} onClick={()=>setPreview(id)}><span>{label}</span><Icon name="arrow" size={17}/></button>)}</div><a href="#create-account" className="site-text-link">Create your Patient account <Icon name="arrow" size={17}/></a></div>
-      <div className="site-product-visual" role="tabpanel" id="portal-preview-panel" aria-labelledby={`tab-${preview}`} tabIndex={0}><PreviewFrame compact><div className="product-preview-body"><span className="site-eyebrow">Illustrative portal preview</span>{preview==='visits'?<><h3>Your visits, at a glance.</h3><AppointmentPreview/><div className="preview-list-row"><Icon name="calendar"/><div><b>Appointment history</b><p>Return to details from previous visits.</p></div></div><div className="preview-list-row"><Icon name="bell"/><div><b>Clinic updates</b><p>See updates relevant to your account.</p></div></div></>:preview==='records'?<><h3>Your information, organized.</h3>{[['file','Documents','Find documents you have shared with the clinic.'],['checkin','Consents & agreements','Review consent records on file.'],['shield','HMO coverage','Follow case status and requirements.']].map(([icon,title,copy])=><div className="preview-list-row" key={title}><Icon name={icon}/><div><b>{title}</b><p>{copy}</p></div></div>)}</>:<><h3>A clear record of your billing.</h3><div className="preview-billing-summary"><Icon name="wallet" size={28}/><div><b>Receipts & Payments</b><p>Review your Patient responsibility and recorded payment history.</p></div></div><div className="preview-list-row"><Icon name="receipt"/><div><b>Invoices</b><p>Visit charges and applicable coverage.</p></div></div><div className="preview-list-row"><Icon name="checkin"/><div><b>Receipts</b><p>Evidence of your recorded payments.</p></div></div></>}<p className="preview-disclaimer">Preview only. Your portal shows information linked to your account.</p></div></PreviewFrame></div></div></section>
+function Services() {
+  const { status, rows } = usePublicData('services')
+  const [category, setCategory] = useState('')
+  const categories = useMemo(() => [...new Set(rows.map(s => s.category || 'Other'))], [rows])
+  const shown = rows.filter(s => !category || (s.category || 'Other') === category)
+  return <section id="services" className="lp-section lp-tint" aria-labelledby="lp-services-title">
+    <div className="lp-container">
+      <div className="lp-heading lp-reveal"><p className="lp-eyebrow">Services</p><h2 id="lp-services-title">Care you can book online</h2><p>Prices are confirmed by the clinic; you receive your invoice after your visit.</p></div>
+      {status === 'loading' && <div className="lp-grid-3" role="status" aria-label="Loading services">{[0, 1, 2].map(i => <div key={i} className="lp-card lp-skeleton"><span/><span/><span/></div>)}</div>}
+      {status === 'error' && <p className="lp-fallback">The list of services can’t be shown right now. Create an account to see what you can book, or call <a href={telHref(clinic.phoneDisplay)}>{clinic.phoneDisplay}</a>.</p>}
+      {status === 'ready' && !rows.length && <p className="lp-fallback">No services are open for online booking yet. Please contact the clinic.</p>}
+      {categories.length > 1 && <div className="lp-chips" role="group" aria-label="Filter services by category">
+        {['', ...categories].map(c => <button key={c || 'all'} type="button" className={`lp-chip ${category === c ? 'is-active' : ''}`} aria-pressed={category === c} onClick={() => setCategory(c)}>{c || 'All'}</button>)}
+      </div>}
+      {status === 'ready' && <ul className="lp-grid-3">{shown.map(s => <li key={s.id} className="lp-card lp-service">
+        <div className="lp-service-top"><span className="lp-service-icon" aria-hidden="true"><Icon name="tooth" size={22}/></span><span className="lp-tag">{s.category || 'Other'}</span></div>
+        <h3>{s.name}</h3>
+        {s.description && <p>{s.description}</p>}
+        <p className="lp-muted"><Icon name="clock" size={14}/> About {s.duration_minutes} minutes</p>
+        <a className="lp-link" href="#create-account" aria-label={`Book ${s.name}`}>Book this <Icon name="arrow" size={16}/></a>
+      </li>)}</ul>}
+    </div>
+  </section>
+}
 
-    <section className="site-section site-how"><div className="site-container"><div className="site-centered-heading"><span className="site-eyebrow">Getting started</span><h2>A few simple steps.<br/>A more connected visit.</h2></div><ol className="site-steps">{[['Create your account','Enter your details and an email address you can access.'],['Verify your email','Use the verification code sent to your email address.'],['Enter your portal','Sign in to the information available to your account.'],['Manage your visits','Explore appointment options and stay in touch with the clinic.']].map(([title,copy],i)=><li key={title}><span className="site-step-number">0{i+1}</span><h3>{title}</h3><p>{copy}</p></li>)}</ol></div></section>
+export function BranchCard({ branch, now }) {
+  const status = openStatus(branch.weeklyHours, now)
+  return <li className="lp-card lp-branch lp-reveal">
+    <div className="lp-branch-head"><span className="lp-branch-number" aria-hidden="true">{branch.number}</span>
+      <div><h3>{branch.name}</h3>{status.label && <span className={`lp-status ${status.open ? 'is-open' : 'is-closed'}`}>{status.label}</span>}</div></div>
+    <address>
+      <span><Icon name="pin" size={16}/>{branch.address}</span>
+      {branch.phone && <a href={telHref(branch.phone)}><Icon name="phone" size={16}/>{branch.phone}</a>}
+      {branch.email && <a href={`mailto:${branch.email}`}><Icon name="mail" size={16}/>{branch.email}</a>}
+    </address>
+    {branch.weeklyHours && <p className="lp-hours"><Icon name="clock" size={16}/><span>{hoursSummary(branch.weeklyHours)}</span></p>}
+    <a className="lp-btn lp-btn-soft lp-btn-block" href={directionsUrl(branch)} target="_blank" rel="noreferrer">Get directions<span className="sr-only"> to {branch.name} (opens Google Maps)</span></a>
+  </li>
+}
 
-    <section className="site-section site-trust"><div className="site-container site-trust-grid"><div><span className="site-eyebrow">A considered approach to access</span><h2>Your account.<br/>Your Patient information.</h2><p>Simple to use, with account checks built into the way you enter the portal.</p></div><div className="site-trust-points">{[['shield','Email verification','Your email must be verified before normal Patient Portal access.'],['user','Patient-specific access','Sign in to view information linked to your own Patient account.'],['message','Connected with your clinic','Appointments, billing, documents, and messages share one portal.']].map(([icon,title,copy])=><article key={title}><Icon name={icon} size={24}/><div><h3>{title}</h3><p>{copy}</p></div></article>)}</div></div></section>
+function Branches() {
+  const { status, rows } = usePublicData('branches')
+  const [now, setNow] = useState(() => new Date())
+  useEffect(() => { const t = setInterval(() => setNow(new Date()), 60000); return () => clearInterval(t) }, [])
+  return <section id="branches" className="lp-section" aria-labelledby="lp-branches-title">
+    <div className="lp-container">
+      <div className="lp-heading lp-reveal"><p className="lp-eyebrow">Branches</p><h2 id="lp-branches-title">Find the branch near you</h2><p>Opening status is shown in Philippine time.</p></div>
+      {status === 'loading' && <div className="lp-grid-3" role="status" aria-label="Loading branches">{[0, 1, 2].map(i => <div key={i} className="lp-card lp-skeleton"><span/><span/><span/></div>)}</div>}
+      {status === 'error' && <p className="lp-fallback">Our branches can’t be shown right now. Call <a href={telHref(clinic.phoneDisplay)}>{clinic.phoneDisplay}</a> or email <a href={`mailto:${clinic.email}`}>{clinic.email}</a> and we’ll help you find the nearest clinic.</p>}
+      {status === 'ready' && <ul className="lp-grid-3">{rows.map(b => <BranchCard key={b.id} branch={b} now={now}/>)}</ul>}
+      {status === 'ready' && rows.some(b => b.latitude != null) && <div className="lp-map lp-reveal"><LocationMap branches={rows}/></div>}
+    </div>
+  </section>
+}
 
-    <section className="site-cta"><div className="site-container"><div><span className="site-eyebrow">Your next step</span><h2>Ready to manage your<br/>dental visits online?</h2><p>Your Patient Portal starts with a verified email and your own account.</p></div><Actions light/></div></section>
+function Features() {
+  return <section id="features" className="lp-section lp-tint" aria-labelledby="lp-features-title">
+    <div className="lp-container">
+      <div className="lp-heading lp-reveal"><p className="lp-eyebrow">Why patients like it</p><h2 id="lp-features-title">Everything for your visit, in your pocket</h2></div>
+      <ul className="lp-grid-4">{FEATURES.map(([icon, title, text]) => <li key={title} className="lp-card lp-feature lp-reveal">
+        <span className="lp-step-icon" aria-hidden="true"><Icon name={icon} size={22}/></span><h3>{title}</h3><p>{text}</p>
+      </li>)}</ul>
+    </div>
+  </section>
+}
 
-    <PublicLocations/>
-    <section id="contact" className="site-section site-contact"><div className="site-container"><div className="site-section-heading"><div><span className="site-eyebrow">Contact</span><h2>Let’s stay connected.</h2></div><p>For questions about the clinic or help with your Patient Portal, get in touch directly.</p></div><div className="site-contact-grid"><div className="site-contact-clinic"><span className="site-contact-icon"><Icon name="building" size={28}/></span><h3>{clinic.name}</h3><p>{clinic.city}</p><span className="site-location-label">{clinic.locationLabel}</span></div><a className="site-contact-method" href={`tel:${clinic.phoneE164}`}><span className="site-eyebrow">Call the clinic</span><strong>{clinic.phoneDisplay}</strong><span>Start a phone call <Icon name="arrow" size={18}/></span></a><a className="site-contact-method" href={`mailto:${clinic.email}`}><span className="site-eyebrow">Email the clinic</span><strong>{clinic.email}</strong><span>Write an email <Icon name="arrow" size={18}/></span></a></div></div></section>
-  </main><PublicFooter/></div>
+function Faq() {
+  const { status, rows } = usePublicData('faq')
+  const items = status === 'ready' && rows.length ? rows.map(r => [r.question, r.answer]) : PORTAL_FAQ
+  return <section id="faq" className="lp-section" aria-labelledby="lp-faq-title">
+    <div className="lp-container lp-narrow">
+      <div className="lp-heading lp-reveal"><p className="lp-eyebrow">FAQ</p><h2 id="lp-faq-title">Questions patients ask</h2></div>
+      <div className="lp-faq">{items.map(([q, a], i) => <details key={q} className="lp-card lp-reveal" open={i === 0}>
+        <summary><span>{q}</span><Icon name="chevron" size={18}/></summary><p>{a}</p>
+      </details>)}</div>
+    </div>
+  </section>
+}
+
+function Emergency() {
+  const { rows } = usePublicData('branches')
+  const phones = rows.filter(b => b.phone)
+  return <section className="lp-emergency" aria-labelledby="lp-emergency-title">
+    <div className="lp-container lp-emergency-inner">
+      <Icon name="alert" size={24}/>
+      <div>
+        <h2 id="lp-emergency-title">In an emergency</h2>
+        <p>If you have severe pain, swelling, bleeding or an injury, call the clinic or go to the nearest emergency room.</p>
+        <p className="lp-emergency-phones">{phones.length
+          ? phones.map(b => <a key={b.id} href={telHref(b.phone)}><b>{b.name}</b> {b.phone}</a>)
+          : <a href={telHref(clinic.phoneDisplay)}><b>{clinic.name}</b> {clinic.phoneDisplay}</a>}</p>
+      </div>
+    </div>
+  </section>
 }
