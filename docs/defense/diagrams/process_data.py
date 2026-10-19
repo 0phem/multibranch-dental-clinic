@@ -34,7 +34,7 @@ MODULES = [
                T('Patient', 'Optional: scans an ID on the phone to prefill name and birth date'),
                T('System', 'Reads it on the device; photo and ID number never kept', 'auto'),
                T('System', 'Emails a 6-digit code', 'auto'),
-               T('Patient', 'Counter patient claims an online account later (email code)'),
+               T('Patient', 'Counter patient claims an online account: staff-issued one-time link after the ID check, password set with the emailed code'),
                T('Owner', 'Invites an employee by email'),
                T('System', 'Invitation email; role checked on every request', 'auto')],
      'time': ('About 15 minutes for a new patient’s paper sign-in (R2-05)', 'To be measured in pilot'),

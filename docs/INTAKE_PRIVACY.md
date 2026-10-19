@@ -53,9 +53,29 @@ The public page never shows whether a record exists.
 - Under 18 (computed in Asia/Manila) cannot self-register; a parent or guardian registers them as a dependent.
 - A dependent needs no ID or email; the guardian's ID is the one checked in person.
 - The guardian books, receives reminders, gets invoices and pays for the dependent; consent is recorded per dependent.
-- At 18 the guardian or the clinic can invite the dependent to claim their own account (email code). When they activate it,
-  every guardian link ends and the guardian loses access (audited). History stays with the patient.
+- At 18 the guardian or the clinic can invite the dependent to claim their own account: a one-time link goes to the
+  dependent's own email (set by the guardian or staff). Only when the dependent activates it does every guardian link end and
+  the guardian lose access (audited). History stays with the patient.
 - Staff can link an existing child record to a guardian (audited).
+
+## Claiming an online account
+
+Why: a record created at the counter, or a dependent who turns 18, may later want to sign in. The claim must never let
+someone who only knows a name and birth date take over the record.
+
+- **Self-service** works only for a record that already has an email: the claimant types that email and the birth date, and
+  the 6-digit code goes only to the email stored on the record. A different email, or a wrong birth date, gets exactly the
+  same answer (same body, status and amount of work) and nothing is sent.
+- **A record without an email** can be claimed only through staff: they check the ID in person, choose "Offer online
+  account", and confirm the patient's email with them. A one-time link is emailed (works once, expires after 24 hours by
+  default, Owner setting `claim_link_hours`); only the link's hash is stored. Audited with who and when.
+- **No password is taken until the code is entered.** The password is chosen together with the emailed code, so only the
+  person who reads that inbox sets it. Until then the account holds a random unusable password and cannot sign in; sign-up
+  verification, resend and password reset ignore it (the same neutral answer as an invalid code).
+- **Limits:** per IP, per email and per record; 5 wrong tries kill a code; no new code inside the 60-second cooldown; a daily
+  cap per email. All silent (no enumeration).
+- **Audit:** claim started, claim completed, claim blocked (expired or used link, record limit). Never a code, a password or
+  a birth date.
 
 ## Open questions for the Owner and DPO
 

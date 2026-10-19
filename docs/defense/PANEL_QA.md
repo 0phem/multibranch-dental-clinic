@@ -260,3 +260,10 @@ R2-08: each branch had its own database, so patients re-registered when they mov
 counter registration becomes a patient, staff see possible matches from any branch (same name and birth date plus the same phone
 or email) as "Record found from Branch X" and choose "Use this record" or create a new one. Nothing is merged automatically,
 and the public page never reveals whether a record exists.
+
+**52. What stops someone taking over my record?**
+Knowing your name and birth date is not enough. The claim code goes only to the email already on your record, never to an
+address the claimant types, and the answer looks the same whether or not anything matched. If your record has no email, only
+the front desk can offer you an online account, after checking your ID in person and confirming your email with you; the link
+works once and expires. Your password is chosen together with the emailed code, so nobody who can't read your inbox can set it.
+Codes die after 5 wrong tries and every claim is audited. `Intake/IntakeTest` (claim tests).

@@ -61,7 +61,7 @@
     },
     {
      "lane": "Patient",
-     "text": "Counter patient claims an online account later (email code)",
+     "text": "Counter patient claims an online account: staff-issued one-time link after the ID check, password set with the emailed code",
      "kind": "manual"
     },
     {
