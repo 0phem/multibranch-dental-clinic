@@ -88,7 +88,7 @@ class Appointment extends Model
     {
         return match ($user->role->value) {
             'owner' => $query,
-            'patient' => $query->where('patient_id', $user->patient?->id ?? 0),
+            'patient' => $query->whereIn('patient_id', \App\Services\Intake\Guardianship::patientIdsFor($user) ?: [0]),
             'staff' => $query->whereIn('branch_id', UserBranchScope::select('branch_id')->where('user_id', $user->id)),
             'dentist' => $query->whereHas('dentist', fn (Builder $q) => $q->where('person_id', $user->person_id)),
         };

@@ -67,6 +67,7 @@ class Patient extends Model
             'confirmation_required_at' => 'immutable_datetime',
             'attendance_cleared_at' => 'immutable_datetime',
             'hmo_member_number' => 'encrypted',
+            'id_verified_at' => 'immutable_datetime',
         ];
     }
 
@@ -83,5 +84,29 @@ class Patient extends Model
     public function user(): HasOneThrough
     {
         return $this->hasOneThrough(User::class, Person::class, 'id', 'person_id', 'person_id', 'id');
+    }
+
+    /** Active guardian links where this patient is the dependent (intake, R2-12). */
+    public function guardianLinks(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(PatientGuardian::class, 'dependent_patient_id')->where('status', 'active');
+    }
+
+    /** Active links where this patient is the guardian. */
+    public function dependentLinks(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(PatientGuardian::class, 'guardian_patient_id')->where('status', 'active');
+    }
+
+    /**
+     * Who receives this patient's emails and in-app notices: their own account, or — for a dependent without one — the first
+     * active guardian's account (the guardian books, is reminded and pays for them).
+     */
+    public function contactUser(): ?User
+    {
+        if ($this->user) return $this->user;
+        $link = $this->guardianLinks()->with('guardian.user')->orderBy('id')->first();
+
+        return $link?->guardian?->user;
     }
 }

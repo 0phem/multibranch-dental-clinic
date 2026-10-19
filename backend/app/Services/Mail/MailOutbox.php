@@ -189,7 +189,7 @@ class MailOutbox
                 ? new AppointmentConfirmationMail($appointment)
                 : new AppointmentChangedMail($appointment, $dispatch->purpose === 'appointment_cancelled' ? 'cancelled' : 'rescheduled');
 
-            return [$mail, $appointment, false, $appointment->patient?->user?->email];
+            return [$mail, $appointment, false, $appointment->patient?->contactUser()?->email];
         }
         if ($dispatch->subject_type === 'conversation') {
             // M17 offline alert (no message text). subject_revision is the internal id of the message that triggered it: if the Patient
@@ -207,7 +207,7 @@ class MailOutbox
             if (! $receipt) return [null, null, true, null];
             $patient = $receipt->invoice?->patient;
 
-            return [new PaymentReceiptMail($receipt->invoice, $receipt), $receipt->invoice, false, $patient?->user?->email ?? $patient?->person?->email];
+            return [new PaymentReceiptMail($receipt->invoice, $receipt), $receipt->invoice, false, $patient?->contactUser()?->email ?? $patient?->person?->email];
         }
         if ($dispatch->subject_type === 'invoice' && $dispatch->purpose === 'invoice_overdue') {
             $invoice = \App\Models\Invoice::where('public_id', $dispatch->subject_public_id)->with(['patient.person', 'patient.user', 'branch'])->first();
@@ -244,7 +244,7 @@ class MailOutbox
             if (! $invoice || $invoice->status !== 'Issued') return [null, $invoice, true, null];
             $patient = $invoice->patient;
 
-            return [new \App\Mail\InvoiceMail($invoice), $invoice, false, $patient?->user?->email ?? $patient?->person?->email];
+            return [new \App\Mail\InvoiceMail($invoice), $invoice, false, $patient?->contactUser()?->email ?? $patient?->person?->email];
         }
 
         return [null, null, true, null];

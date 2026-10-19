@@ -191,7 +191,7 @@ final class AppointmentService
     {
         try {
             app(\App\Services\Mail\MailOutbox::class)->queue($purpose, "$purpose:{$appointment->public_id}:r{$appointment->revision}",
-                $appointment, $appointment->revision, $appointment->patient?->user, $actor);
+                $appointment, $appointment->revision, $appointment->patient?->contactUser(), $actor);
         } catch (\Throwable $e) {
             report($e); // written inside a savepoint: a failure is reported and the appointment change still commits
         }

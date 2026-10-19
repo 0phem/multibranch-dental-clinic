@@ -26,7 +26,8 @@ class PayMongoController extends Controller
     private function mayPay($user, Invoice $invoice): bool
     {
         return match ($user->role) {
-            Role::Patient => $user->patient !== null && $user->patient->id === $invoice->patient_id,
+            // A guardian pays for a dependent (intake, R2-12).
+            Role::Patient => $user->patient !== null && in_array($invoice->patient_id, \App\Services\Intake\Guardianship::patientIdsFor($user), true),
             Role::Staff => UserBranchScope::where('user_id', $user->id)->where('branch_id', $invoice->branch_id)->exists(),
             default => false, // Owner and Dentist: no payment initiation
         };

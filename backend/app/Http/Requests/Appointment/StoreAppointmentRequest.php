@@ -28,6 +28,8 @@ class StoreAppointmentRequest extends FormRequest
             // Staff/Owner name the Patient by public_id (never the bigint or patient_code). A Patient's own booking is
             // always derived from the authenticated identity, so any Patient identifier they send is refused.
             'patient_id' => $patient ? ['prohibited'] : ['required', 'string', 'exists:patients,public_id'],
+            // A guardian books for a dependent (intake, R2-12); checked in the controller.
+            'for_patient_id' => $patient ? ['nullable', 'string', 'max:40'] : ['prohibited'],
             // A Patient may prefer a Dentist (optional; "Any available" keeps the automatic assignment). The scheduling rules still
             // check that the Dentist works at the branch, does the service and is free.
             'dentist_ref' => ['nullable', 'string', 'exists:dentist_profiles,legacy_ref'],

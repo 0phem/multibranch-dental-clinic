@@ -45,6 +45,8 @@ class EmailVerificationController extends Controller
 
             $user->forceFill(['email_verified_at' => now()])->save();
             app(\App\Services\Audit\AuditService::class)->recordAuth('account.email_verified', $user);
+            // A dependent who claimed their own account: every guardian loses access now (audited).
+            \App\Services\Intake\Guardianship::onOwnAccountVerified($user);
             return ['user' => $user];
         });
 

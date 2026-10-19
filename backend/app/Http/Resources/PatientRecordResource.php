@@ -46,6 +46,13 @@ class PatientRecordResource extends JsonResource
             // F4: online bookings wait for front-desk confirmation until Staff clear this.
             'confirmation_required' => \App\Services\Automations\AttendancePolicy::needsConfirmation($this->resource),
             'attendance_strikes' => \App\Services\Automations\AttendancePolicy::strikes($this->resource),
+            // Intake (R2-03, R2-12): how the record was registered, the in-person ID check (type, who, when; never the number) and,
+            // for a minor or dependent, the guardian(s).
+            'registration_source' => $this->registration_source,
+            'id_check' => $this->id_verified_at ? ['type' => $this->id_type, 'last4' => $this->id_last4, 'at' => $iso($this->id_verified_at),
+                'by' => \App\Models\User::find($this->id_verified_by_user_id)?->person?->fullName()] : null,
+            'minor' => \App\Services\Intake\Guardianship::isMinor($person?->date_of_birth?->toDateString()),
+            'guardians' => $this->guardianLinks()->with('guardian.person')->get()->map(fn ($l) => ['id' => $l->guardian?->public_id, 'name' => $l->guardian?->person?->fullName(), 'relationship' => $l->relationship])->values(),
             'revision' => $this->revision,
             'created_at' => $iso($this->created_at),
             'updated_at' => $iso($this->updated_at),

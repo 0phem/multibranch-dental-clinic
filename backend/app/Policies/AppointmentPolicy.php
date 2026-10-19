@@ -18,7 +18,8 @@ class AppointmentPolicy
     {
         return match ($user->role) {
             Role::Owner => true,
-            Role::Patient => $user->patient !== null && $appointment->patient_id === $user->patient->id,
+            // A patient sees their own appointments and their active dependents' (guardian, intake R2-12).
+            Role::Patient => $user->patient !== null && in_array($appointment->patient_id, \App\Services\Intake\Guardianship::patientIdsFor($user), true),
             Role::Staff => $this->staffScope($user, $appointment->branch_id),
             Role::Dentist => $appointment->dentist?->person_id === $user->person_id,
         };

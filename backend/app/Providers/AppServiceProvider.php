@@ -22,6 +22,15 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        // Counter registration (public, no sign-in): per IP and per device (a random id the page keeps; IP alone is shared by a
+        // clinic's guest Wi-Fi). Plus a daily cap per device.
+        \Illuminate\Support\Facades\RateLimiter::for('intake', function ($request) {
+            $device = substr(preg_replace('/[^A-Za-z0-9-]/', '', (string) $request->header('X-Device-Id')), 0, 64) ?: 'none';
+
+            return [\Illuminate\Cache\RateLimiting\Limit::perMinute(10)->by('intake-ip:'.$request->ip()),
+                \Illuminate\Cache\RateLimiting\Limit::perMinute(4)->by('intake-dev:'.$device.'|'.$request->ip()),
+                \Illuminate\Cache\RateLimiting\Limit::perDay(20)->by('intake-day:'.$device.'|'.$request->ip())];
+        });
         \Illuminate\Support\Facades\RateLimiter::for('m1-login', function ($request) {
             $email = $request->input('email');
             $email = is_string($email) ? strtolower(trim($email)) : '';

@@ -54,6 +54,10 @@ Route::get('/public/branches', [\App\Http\Controllers\PublicBranchController::cl
 Route::get('/public/services', [\App\Http\Controllers\PublicContentController::class, 'services'])->middleware('throttle:60,1');
 Route::get('/public/faq', [\App\Http\Controllers\PublicContentController::class, 'faq'])->middleware('throttle:60,1');
 // Interview round 2: upcoming closed dates and verified HMOs (landing page), and the one-time email links (no sign-in).
+// Registration intake (counter QR and kiosk, no sign-in): the branch page, and the form (today's front-desk code + rate limits).
+Route::get('/public/intake/{branchRef}', [\App\Http\Controllers\IntakeController::class, 'branch'])->middleware('throttle:60,1');
+Route::post('/public/intake', [\App\Http\Controllers\IntakeController::class, 'submit'])->middleware('throttle:intake');
+Route::post('/account/claim', [\App\Http\Controllers\Auth\AccountClaimController::class, 'store'])->middleware('throttle:m1-otp');
 Route::get('/public/closures', [\App\Http\Controllers\BranchClosureController::class, 'upcoming'])->middleware('throttle:60,1');
 Route::get('/public/hmos', [\App\Http\Controllers\AcceptedHmoController::class, 'publicIndex'])->middleware('throttle:60,1');
 Route::get('/public/respond', [\App\Http\Controllers\AppointmentResponseController::class, 'describe'])->middleware('throttle:30,1');
@@ -132,6 +136,21 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureAccountAccess::cla
         Route::put('/{key}', [\App\Http\Controllers\AutomationSettingsController::class, 'update']);
         Route::post('/{key}/test', [\App\Http\Controllers\AutomationSettingsController::class, 'test'])->middleware('throttle:12,1');
     });
+    // Registration intake: patients join today's queue with the counter code; Staff confirm registrations and check IDs.
+    Route::post('/intake/join', [\App\Http\Controllers\IntakeController::class, 'accountJoin'])->middleware(['role:patient', 'throttle:intake']);
+    Route::get('/intake/code', [\App\Http\Controllers\IntakeController::class, 'code'])->middleware('role:staff,owner');
+    Route::post('/intake/code/refresh', [\App\Http\Controllers\IntakeController::class, 'refreshCode'])->middleware('role:staff,owner');
+    Route::get('/intake/submissions', [\App\Http\Controllers\IntakeController::class, 'pending'])->middleware('role:staff,owner');
+    Route::post('/intake/submissions/{intakeSubmission}/confirm', [\App\Http\Controllers\IntakeController::class, 'confirm'])->middleware('role:staff,owner');
+    Route::post('/intake/submissions/{intakeSubmission}/cancel', [\App\Http\Controllers\IntakeController::class, 'cancel'])->middleware('role:staff,owner');
+    Route::post('/patients/{patient}/verify-id', [\App\Http\Controllers\IntakeController::class, 'verifyId'])->middleware('role:staff');
+    Route::get('/branches/{branch}/poster', [\App\Http\Controllers\BranchPosterController::class, 'show'])->middleware('role:staff,owner');
+    // Parents and guardians (dependents), account-claim invites, Staff linking.
+    Route::get('/me/dependents', [\App\Http\Controllers\GuardianController::class, 'mine'])->middleware('role:patient');
+    Route::post('/me/dependents', [\App\Http\Controllers\GuardianController::class, 'add'])->middleware(['role:patient', 'throttle:20,1']);
+    Route::post('/patients/{patient}/claim-invite', [\App\Http\Controllers\GuardianController::class, 'invite'])->middleware(['role:patient,staff,owner', 'throttle:6,1']);
+    Route::post('/patients/{patient}/guardians', [\App\Http\Controllers\GuardianController::class, 'link'])->middleware('role:staff');
+
     // F1 message wording: the Owner edits, previews, tests and approves; a Dentist approves health-related wording (recall).
     Route::prefix('message-templates')->group(function () {
         Route::get('/', [\App\Http\Controllers\MessageTemplateController::class, 'index'])->middleware('role:owner,dentist');

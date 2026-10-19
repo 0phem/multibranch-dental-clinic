@@ -80,6 +80,11 @@ class AppointmentController extends Controller
         $patient = $user->role === Role::Patient
             ? $user->patient
             : Patient::where('public_id', $request->validated('patient_id'))->firstOrFail();
+        if ($user->role === Role::Patient && ($for = $request->validated('for_patient_id'))) {
+            $dependent = Patient::where('public_id', $for)->first();
+            abort_unless(\App\Services\Intake\Guardianship::canActFor($user, $dependent), 403, 'You can book only for yourself or your dependents.');
+            $patient = $dependent;
+        }
         $dentistRef = $request->validated('dentist_ref');
 
         return $this->appointments->create(

@@ -64,3 +64,14 @@ Artisan::command('mail:send-test {email}', function (string $email) {
 
     return $result['status'] === 'failed' ? 1 : 0;
 })->purpose('Send one diagnostic email and print the recorded M18 outcome');
+
+// Registration intake: a counter registration not confirmed on its day expires, and its form data is removed (data minimization).
+Artisan::command('intake:expire', function () {
+    $n = 0;
+    foreach (\App\Models\IntakeSubmission::where('status', 'pending')->where('created_at', '<', \App\Support\ClinicClock::at(\App\Support\ClinicClock::today(), '00:00')->toIso8601String())->get() as $s) {
+        $s->update(['status' => 'expired', 'data' => $s->channel === 'account' ? null : ['expired' => true]]);
+        $n++;
+    }
+    $this->info("$n registration(s) expired.");
+})->purpose('Expire unconfirmed counter registrations from earlier days');
+\Illuminate\Support\Facades\Schedule::command('intake:expire')->hourly()->withoutOverlapping();

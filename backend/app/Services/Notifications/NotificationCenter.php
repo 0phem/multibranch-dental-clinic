@@ -25,7 +25,7 @@ class NotificationCenter
     public function appointment(Appointment $appointment, string $purpose): void
     {
         [$kind, $title] = self::APPOINTMENT_KINDS[$purpose] ?? [null, null];
-        $user = $appointment->patient?->user;
+        $user = $appointment->patient?->contactUser();
         if (! $kind || ! $user) return;
         $appointment->loadMissing(['service', 'branch']);
         $when = ClinicClock::local($appointment->starts_at)->format('M j, g:i A');
@@ -35,7 +35,7 @@ class NotificationCenter
 
     public function invoiceIssued(Invoice $invoice): void
     {
-        $user = $invoice->patient?->user;
+        $user = $invoice->patient?->contactUser();
         if (! $user) return;
         $this->write($user, 'invoice_issued', "New invoice {$invoice->invoice_number}", 'Amount due '.Brand::money($invoice->balance()), 'billing', $invoice->public_id,
             "invoice_issued:{$invoice->public_id}");
@@ -43,7 +43,7 @@ class NotificationCenter
 
     public function paymentReceived(Invoice $invoice, Receipt $receipt): void
     {
-        $user = $invoice->patient?->user;
+        $user = $invoice->patient?->contactUser();
         if (! $user) return;
         $this->write($user, 'payment_received', 'Payment received', Brand::money($receipt->amount)." for {$invoice->invoice_number} · Receipt {$receipt->receipt_number}",
             'billing', $invoice->public_id, "payment_received:{$receipt->public_id}");
@@ -61,7 +61,7 @@ class NotificationCenter
     /** Scheduled automations: written when the automation acts, with the same key as its email (once per event). */
     public function appointmentReminder(Appointment $appointment, string $dedupe): void
     {
-        $user = $appointment->patient?->user;
+        $user = $appointment->patient?->contactUser();
         if (! $user) return;
         $appointment->loadMissing(['service', 'branch']);
         $when = ClinicClock::local($appointment->starts_at)->format('D, M j, g:i A');
@@ -70,28 +70,28 @@ class NotificationCenter
 
     public function noShowRebook(Appointment $appointment, string $dedupe): void
     {
-        $user = $appointment->patient?->user;
+        $user = $appointment->patient?->contactUser();
         if (! $user) return;
         $this->write($user, 'no_show_rebook', 'We missed you', 'Book a new time that suits you', 'book', $appointment->public_id, $dedupe);
     }
 
     public function invoiceOverdue(Invoice $invoice, string $dedupe): void
     {
-        $user = $invoice->patient?->user;
+        $user = $invoice->patient?->contactUser();
         if (! $user) return;
         $this->write($user, 'invoice_overdue', "Invoice {$invoice->invoice_number} is still unpaid", 'Balance '.Brand::money($invoice->balance()), 'billing', $invoice->public_id, $dedupe);
     }
 
     public function recallDue(\App\Models\Visit $visit, string $category, string $dedupe): void
     {
-        $user = $visit->patient?->user;
+        $user = $visit->patient?->contactUser();
         if (! $user) return;
         $this->write($user, 'recall_due', 'Time for your check-up', 'Book your next visit when it suits you', 'book', null, $dedupe);
     }
 
     public function waitlistOpening(\App\Models\WaitlistEntry $entry, string $dedupe): void
     {
-        $user = $entry->patient?->user;
+        $user = $entry->patient?->contactUser();
         if (! $user) return;
         $entry->loadMissing(['branch', 'service']);
         $day = \Carbon\CarbonImmutable::createFromFormat('!Y-m-d', $entry->dateString(), ClinicClock::TIMEZONE)->format('D, M j');
@@ -101,7 +101,7 @@ class NotificationCenter
     /** F2: "Are you on your way?" — the visit page shows the "On my way" and "Reschedule" buttons. */
     public function lateCheck(Appointment $appointment, string $dedupe): void
     {
-        $user = $appointment->patient?->user;
+        $user = $appointment->patient?->contactUser();
         if (! $user) return;
         $appointment->loadMissing('branch');
         $this->write($user, 'late_check', 'Are you on your way?', 'Your visit was at '.ClinicClock::local($appointment->starts_at)->format('g:i A').' · '.($appointment->branch?->name ?? 'the clinic'),
@@ -122,7 +122,7 @@ class NotificationCenter
     /** F5: the branch closed a date that has this appointment (it was not cancelled). */
     public function closureNotice(Appointment $appointment, string $dedupe): void
     {
-        $user = $appointment->patient?->user;
+        $user = $appointment->patient?->contactUser();
         if (! $user) return;
         $appointment->loadMissing('branch');
         $this->write($user, 'closure_notice', 'Please choose a new time', ($appointment->branch?->name ?? 'The branch').' will be closed on '.ClinicClock::local($appointment->starts_at)->format('D, M j'),
