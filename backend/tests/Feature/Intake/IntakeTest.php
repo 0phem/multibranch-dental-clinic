@@ -158,10 +158,11 @@ class IntakeTest extends TestCase
         $this->postJson("/api/patients/$adult/claim-invite", ['email' => 'kai@mailbox.ph'])->assertOk();
         $adultAppt = $this->book(['for_patient_id' => $adult, 'date' => '2026-10-01', 'start_time' => '10:00'])->assertCreated()->json('data.id');
         $this->app['auth']->forgetGuards();
-        $this->postJson('/api/account/claim', ['email' => 'kai@mailbox.ph', 'date_of_birth' => '2008-01-01', 'password' => 'Secret123', 'password_confirmation' => 'Secret123'])->assertCreated();
+        $this->postJson('/api/account/claim', ['email' => 'kai@mailbox.ph', 'date_of_birth' => '2008-01-01', 'password' => 'Secret123'])->assertStatus(422); // no password yet
+        $this->postJson('/api/account/claim', ['email' => 'kai@mailbox.ph', 'date_of_birth' => '2008-01-01'])->assertCreated();
         $code = null;
         Mail::assertSent(OneTimeCodeMail::class, function (OneTimeCodeMail $m) use (&$code) { if ($m->hasTo('kai@mailbox.ph')) $code = $m->code; return (bool) $code; });
-        $this->postJson('/api/register/verify', ['email' => 'kai@mailbox.ph', 'otp' => $code])->assertOk();
+        $this->postJson('/api/account/claim/verify', ['email' => 'kai@mailbox.ph', 'otp' => $code, 'password' => 'Secret123', 'password_confirmation' => 'Secret123'])->assertOk();
         $this->assertSame('ended', PatientGuardian::whereHas('dependent', fn ($q) => $q->where('public_id', $adult))->sole()->status);
         $this->assertTrue(AuditLog::where('action', 'patient.guardian_access_ended')->exists());
         $this->actingAsUser('patientA');
@@ -249,19 +250,20 @@ class IntakeTest extends TestCase
         $this->assertSame($this->d['d1']->id, \App\Models\Visit::where('appointment_id', $booking->id)->sole()->responsible_dentist_profile_id);
     }
 
-    public function test_an_earlier_unverified_claim_cannot_lock_out_the_real_owner(): void
+    public function test_only_the_person_who_reads_the_emailed_code_sets_the_claimed_account_password(): void
     {
         $this->p['B']->person->update(['email' => 'owner.of.record@mailbox.ph', 'date_of_birth' => '1980-02-02']);
         $this->u['patientB']->forceDelete(); // a record registered at the counter: no account yet
-        $claim = fn (string $password) => $this->postJson('/api/account/claim', ['email' => 'owner.of.record@mailbox.ph', 'date_of_birth' => '1980-02-02', 'password' => $password, 'password_confirmation' => $password])->assertCreated();
-        $claim('Attacker123');
-        $this->postJson('/api/login', ['email' => 'owner.of.record@mailbox.ph', 'password' => 'Attacker123'])->assertStatus(422); // unverified: no sign-in
-        $this->travel(2)->minutes(); // past the resend cooldown
-        $claim('RealOwner123');
+        $claim = fn () => $this->postJson('/api/account/claim', ['email' => 'owner.of.record@mailbox.ph', 'date_of_birth' => '1980-02-02'])->assertCreated();
+        $claim(); // someone else starts the claim first: it holds no password they chose, and they cannot read the code
+        $this->postJson('/api/login', ['email' => 'owner.of.record@mailbox.ph', 'password' => 'Attacker123'])->assertStatus(422);
+        $this->travel(2)->minutes();
+        $claim(); // the real owner asks again (a fresh code)
         $code = null;
         Mail::assertSent(OneTimeCodeMail::class, function (OneTimeCodeMail $m) use (&$code) { if ($m->hasTo('owner.of.record@mailbox.ph')) $code = $m->code; return true; });
-        $this->postJson('/api/register/verify', ['email' => 'owner.of.record@mailbox.ph', 'otp' => $code])->assertOk();
-        $this->postJson('/api/login', ['email' => 'owner.of.record@mailbox.ph', 'password' => 'Attacker123'])->assertStatus(422);
+        $this->postJson('/api/account/claim/verify', ['email' => 'owner.of.record@mailbox.ph', 'otp' => '000000', 'password' => 'Attacker123', 'password_confirmation' => 'Attacker123'])->assertStatus(422);
+        $this->postJson('/api/account/claim/verify', ['email' => 'owner.of.record@mailbox.ph', 'otp' => $code, 'password' => 'RealOwner123', 'password_confirmation' => 'RealOwner123'])->assertOk();
+        $this->postJson('/api/account/claim/verify', ['email' => 'owner.of.record@mailbox.ph', 'otp' => $code, 'password' => 'Attacker123', 'password_confirmation' => 'Attacker123'])->assertStatus(422); // once only
         $this->postJson('/api/login', ['email' => 'owner.of.record@mailbox.ph', 'password' => 'RealOwner123'])->assertOk();
     }
 }

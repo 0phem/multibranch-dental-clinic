@@ -58,6 +58,7 @@ Route::get('/public/faq', [\App\Http\Controllers\PublicContentController::class,
 Route::get('/public/intake/{branchRef}', [\App\Http\Controllers\IntakeController::class, 'branch'])->middleware('throttle:60,1');
 Route::post('/public/intake', [\App\Http\Controllers\IntakeController::class, 'submit'])->middleware('throttle:intake');
 Route::post('/account/claim', [\App\Http\Controllers\Auth\AccountClaimController::class, 'store'])->middleware('throttle:m1-otp');
+Route::post('/account/claim/verify', [\App\Http\Controllers\Auth\AccountClaimController::class, 'verify'])->middleware('throttle:m1-otp');
 Route::get('/public/closures', [\App\Http\Controllers\BranchClosureController::class, 'upcoming'])->middleware('throttle:60,1');
 Route::get('/public/hmos', [\App\Http\Controllers\AcceptedHmoController::class, 'publicIndex'])->middleware('throttle:60,1');
 Route::get('/public/respond', [\App\Http\Controllers\AppointmentResponseController::class, 'describe'])->middleware('throttle:30,1');

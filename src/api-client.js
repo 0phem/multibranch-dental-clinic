@@ -521,6 +521,7 @@ export function intakeBranch(ref) { return request(`/api/public/intake/${enc(ref
 export function submitIntake(body) { return request('/api/public/intake', { method: 'POST', body: JSON.stringify(body), headers: { 'X-Device-Id': deviceId() } }) }
 export function joinQueueWithAccount(body) { return request('/api/intake/join', { method: 'POST', body: JSON.stringify(body), headers: { 'X-Device-Id': deviceId() } }) }
 export function claimAccount(body) { return json('/api/account/claim', 'POST', body) }
+export function verifyClaim(body) { return json('/api/account/claim/verify', 'POST', body) }
 // Staff: today's counter code, pending registrations, confirm or cancel, the in-person ID check, the branch poster.
 export function intakeCode(branchRef) { return request(`/api/intake/code${branchRef ? `?branch_ref=${enc(branchRef)}` : ''}`) }
 export function refreshIntakeCode(branchRef) { return json('/api/intake/code/refresh', 'POST', branchRef ? { branch_ref: branchRef } : {}) }

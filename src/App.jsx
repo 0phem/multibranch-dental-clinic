@@ -219,14 +219,7 @@ function AppBody() {
   }
 
   const resendRegistration=async email=>api.resendRegistrationEmail(email)
-  // Claim an online account for an existing clinic record: the same 6-digit email code step as registration.
-  const claimAccount=async form=>{
-    const result=await api.claimAccount(form)
-    if(!result.ok)return result
-    setVerification({email:result.data.email,resendAvailableAt:result.data.resend_available_at})
-    window.history.replaceState(null,'','#verify-email');setPublicView('login')
-    return {ok:true}
-  }
+
 
   const signedOut=()=>{
     stopRealtime() // M17: no socket keeps listening for the previous account
@@ -297,7 +290,7 @@ function AppBody() {
       ?<EmailVerification email={verification?.email} initialResendAvailableAt={verification?.resendAvailableAt} onVerify={verifyRegistration} onResend={resendRegistration} onBack={()=>{setVerification(null);setShowRegister(false)}}/>
       :showRegister
       ?<ChunkBoundary><Suspense fallback={<AuthShell><StartupLoading compact label="Opening registration…"/></AuthShell>}><PatientRegister onRegister={register} onCancel={()=>{setAuthError('');setShowRegister(false)}}/></Suspense></ChunkBoundary>
-      :publicView==='claim'?<ClaimAccount onClaim={claimAccount}/>
+      :publicView==='claim'?<ClaimAccount/>
       :publicView==='privacy'||publicView==='terms'?<PublicLegal kind={publicView}/>
       :publicView==='home'?<PublicSite/>
       :<Login key={signInNotice?.email||'login'} initialEmail={signInNotice?.email} notice={signInNotice?.message} onLogin={login} onShowRegister={()=>{setAuthError('');setShowRegister(true)}} onForgotPassword={()=>{setAuthError('');window.location.hash='forgot-password';setPublicView('forgot')}}/>}
