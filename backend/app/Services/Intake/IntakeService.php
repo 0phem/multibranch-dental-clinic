@@ -162,14 +162,14 @@ final class IntakeService
     }
 
     /**
-     * "Any available": the Dentist who can do the service at this branch, is on shift now and has the fewest patients waiting in
+     * "Any available": the Dentist who can do the service at this branch, is working at this branch now (M3 schedule, not on leave) and has the fewest patients waiting in
      * today's queue (ties: lowest profile id). Null when nobody is eligible (the walk-in is then admitted without a queue).
      */
     public function shortestQueue(Branch $branch, Service $service): ?DentistProfile
     {
-        $now = ClinicClock::now()->format('H:i');
-        $eligible = app(\App\Services\Scheduling\SchedulingService::class)->eligibleDentists($branch, $service)
-            ->filter(fn (DentistProfile $d) => substr((string) $d->shift_start, 0, 5) <= $now && $now < substr((string) $d->shift_end, 0, 5));
+        $scheduling = app(\App\Services\Scheduling\SchedulingService::class);
+        // Working now at this branch: M3 schedule and not on approved leave (M15).
+        $eligible = $scheduling->eligibleDentists($branch, $service)->filter(fn (DentistProfile $d) => $scheduling->work()->workingNow($d, $branch));
         if ($eligible->isEmpty()) return null;
         $waiting = DB::table('queue_entries as q')->join('dentist_queues as dq', 'dq.id', '=', 'q.dentist_queue_id')
             ->where('dq.branch_id', $branch->id)->where('dq.clinic_date', ClinicClock::today())->whereIn('q.status', ['Waiting', 'Called', 'Treatment Ready'])

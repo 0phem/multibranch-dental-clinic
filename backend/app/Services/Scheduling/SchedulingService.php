@@ -22,6 +22,7 @@ use Illuminate\Support\Collection;
 //   start times on the hour. Duration stays service-specific.
 // - Staff/Owner: no Patient window; not in the past; start times on a 30-minute boundary (the step the current
 //   Staff slot picker offers — src/logic.js availableSlots).
+// - Dentist time: M3 work schedules and M15 approved leave (WorkSchedules); no shift is hard-coded.
 // - Branch opening days: branches.operating_days (ISO weekdays) set by the Owner; NULL = every day (the interview, Q10, says
 //   weekends are busier, so no weekday is closed by default). Holiday/one-off closures: none exist yet, none are invented.
 final class SchedulingService
@@ -36,6 +37,14 @@ final class SchedulingService
     // long-lived instance never serves a stale branch-service assignment.
     /** @var array<string, BranchService|null> */
     private array $branchServices = [];
+
+    private ?WorkSchedules $work = null;
+
+    /** M3: the work-schedule source every check, search and capacity count uses (memo per search). */
+    public function work(): WorkSchedules
+    {
+        return $this->work ??= new WorkSchedules;
+    }
 
     /** @return array{0:string,1:string} first and last Patient-bookable dates, inclusive */
     public function patientWindow(?CarbonImmutable $now = null): array
@@ -155,8 +164,10 @@ final class SchedulingService
         $dayHours = $branch && $validDate ? $branch->hoursOnDate($r->date) : null;
         $check('branch-hours', 'Within branch operating hours', $dayHours !== null && $end !== null
             && $start >= ClinicClock::minutes($dayHours['open']) && $end <= ClinicClock::minutes($dayHours['close']));
-        $check('dentist-shift', 'Within dentist shift', $dentist && $end !== null
-            && $start >= ClinicClock::minutes($dentist->shift_start) && $end <= ClinicClock::minutes($dentist->shift_end));
+        // M3/M15: branch hours ∩ the dentist's schedule (weekly, or that date's exception) − break, then approved leave.
+        $scheduled = $dentist && $branch && $validDate && $end !== null && $this->work()->fits($dentist, $branch, $r->date, $start, $end, false);
+        $check('dentist-shift', 'Within the dentist\'s work schedule', $scheduled);
+        $check('dentist-leave', 'Dentist is not on leave', ! ($dentist && $validDate && $end !== null && $this->work()->onLeave($dentist, $r->date, $start, $end)));
 
         $startsAt = $endsAt = null;
         $dentistConflict = $patientConflict = false;
@@ -290,6 +301,7 @@ final class SchedulingService
     {
         if ($busy === null) {
             $this->branchServices = [];
+            $this->work?->flush();
         }
     }
 

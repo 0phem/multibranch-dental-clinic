@@ -129,6 +129,28 @@ class NotificationCenter
             'visits', $appointment->public_id, $dedupe);
     }
 
+    /** M3/M15: the dentist is no longer available at this visit's time (not cancelled). */
+    public function dentistUnavailable(Appointment $appointment, string $dedupe): void
+    {
+        $user = $appointment->patient?->contactUser();
+        if (! $user) return;
+        $appointment->loadMissing('branch');
+        $this->write($user, 'dentist_unavailable', 'Please choose a new time', 'Your dentist is not available on '.ClinicClock::local($appointment->starts_at)->format('D, M j \a\t g:i A').'. Your visit was not cancelled.',
+            'visits', $appointment->public_id, $dedupe);
+    }
+
+    /** M15/M25 staff notices (no private note, no clinical text): leave to the approver and back, a handover to the receiving side. */
+    public function staffNotice(User $user, string $kind, string $title, ?string $body, string $page, ?string $targetId, string $dedupe): void
+    {
+        $this->write($user, $kind, $title, $body, $page, $targetId, $dedupe);
+    }
+
+    /** M25: the patient is told, neutrally, that their record was shared with the receiving branch (no clinical text). */
+    public function recordShared(User $user, string $branchName, string $dedupe): void
+    {
+        $this->write($user, 'record_shared', 'Your record was shared', "Your patient record was shared with $branchName so they can continue your care.", 'visits', null, $dedupe);
+    }
+
     private function write(User $user, string $kind, string $title, ?string $body, ?string $page, ?string $targetId, string $dedupe): void
     {
         try {

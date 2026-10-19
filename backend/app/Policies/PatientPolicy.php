@@ -62,10 +62,12 @@ class PatientPolicy
         return UserBranchScope::where('user_id', $user->id)->exists();
     }
 
-    /** An appointment or Visit of this Patient in a branch the Staff account is authorized for (the M6/M8 read scopes). */
+    /** An appointment or Visit of this Patient in a branch the Staff account is authorized for (the M6/M8 read scopes), or an open M25 handover to it. */
     private function hasScopedRecord(User $user, Patient $patient): bool
     {
         return Appointment::visibleTo($user)->where('patient_id', $patient->id)->exists()
-            || Visit::visibleTo($user)->where('patient_id', $patient->id)->exists();
+            || Visit::visibleTo($user)->where('patient_id', $patient->id)->exists()
+            // M25: an open handover to one of the account's branches (awaiting acknowledgement, or acknowledged within the Owner's days).
+            || \App\Models\PatientHandover::grantsProfileAccess($user, $patient);
     }
 }

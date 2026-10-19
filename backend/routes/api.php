@@ -173,6 +173,36 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureAccountAccess::cla
     Route::get('/slot-offers/mine', [\App\Http\Controllers\AppointmentResponseController::class, 'offersMine'])->middleware('role:patient');
     Route::post('/slot-offers/{slotOffer}/accept', [\App\Http\Controllers\AppointmentResponseController::class, 'acceptOffer'])->middleware(['role:patient', 'throttle:20,1']);
     // F5 closed and holiday dates (Owner manages; Staff see the affected appointments and notify the patients).
+    // M3 Work Schedules: Owner (all branches), front desk (their branches, when allowed), dentist (own, read-only).
+    Route::prefix('work-schedules')->group(function () {
+        Route::get('/', [\App\Http\Controllers\WorkScheduleController::class, 'index'])->middleware('role:staff,owner,dentist');
+        Route::put('/{dentistProfile}/weekly', [\App\Http\Controllers\WorkScheduleController::class, 'weekly'])->middleware(['role:staff,owner', 'throttle:60,1']);
+        Route::post('/{dentistProfile}/from-profile', [\App\Http\Controllers\WorkScheduleController::class, 'fromProfile'])->middleware(['role:staff,owner', 'throttle:20,1']);
+        Route::post('/{dentistProfile}/exceptions', [\App\Http\Controllers\WorkScheduleController::class, 'addException'])->middleware(['role:staff,owner', 'throttle:30,1']);
+        Route::get('/{dentistProfile}/affected', [\App\Http\Controllers\WorkScheduleController::class, 'affected'])->middleware('role:staff,owner,dentist');
+        Route::post('/{dentistProfile}/notify', [\App\Http\Controllers\WorkScheduleController::class, 'notify'])->middleware(['role:staff,owner', 'throttle:10,1']);
+    });
+    // M15 Leave Management: dentists and staff request; the Owner (or the branch front desk, when allowed) decides.
+    Route::prefix('leave')->group(function () {
+        Route::get('/mine', [\App\Http\Controllers\LeaveController::class, 'mine'])->middleware('role:staff,dentist');
+        Route::post('/', [\App\Http\Controllers\LeaveController::class, 'store'])->middleware(['role:staff,dentist', 'throttle:20,1']);
+        Route::get('/', [\App\Http\Controllers\LeaveController::class, 'index'])->middleware('role:staff,owner');
+        Route::get('/calendar', [\App\Http\Controllers\LeaveController::class, 'calendar'])->middleware('role:staff,owner,dentist');
+        Route::get('/{leaveRequest}/conflicts', [\App\Http\Controllers\LeaveController::class, 'conflicts'])->middleware('role:staff,owner,dentist');
+        Route::post('/{leaveRequest}/decide', [\App\Http\Controllers\LeaveController::class, 'decide'])->middleware(['role:staff,owner', 'throttle:30,1']);
+        Route::post('/{leaveRequest}/cancel', [\App\Http\Controllers\LeaveController::class, 'cancel'])->middleware(['role:staff,owner,dentist', 'throttle:30,1']);
+        Route::post('/{leaveRequest}/notify', [\App\Http\Controllers\LeaveController::class, 'notify'])->middleware(['role:staff,owner', 'throttle:10,1']);
+    });
+    // M25 Patient Handovers: sending side creates; the receiving front desk and dentist acknowledge; Owner sees metadata only.
+    Route::prefix('handovers')->group(function () {
+        Route::get('/', [\App\Http\Controllers\HandoverController::class, 'index'])->middleware('role:staff,dentist,owner');
+        Route::post('/', [\App\Http\Controllers\HandoverController::class, 'store'])->middleware(['role:staff,dentist', 'throttle:20,1']);
+        Route::post('/request', [\App\Http\Controllers\HandoverController::class, 'requestOne'])->middleware(['role:staff', 'throttle:10,1']);
+        Route::get('/{patientHandover}', [\App\Http\Controllers\HandoverController::class, 'show'])->middleware('role:staff,dentist,owner');
+        Route::post('/{patientHandover}/acknowledge', [\App\Http\Controllers\HandoverController::class, 'acknowledge'])->middleware(['role:staff,dentist', 'throttle:30,1']);
+        Route::post('/{patientHandover}/cancel', [\App\Http\Controllers\HandoverController::class, 'cancel'])->middleware(['role:staff,dentist', 'throttle:30,1']);
+    });
+    Route::patch('/work-schedule-exceptions/{dentistScheduleException}', [\App\Http\Controllers\WorkScheduleController::class, 'changeException'])->middleware(['role:staff,owner', 'throttle:30,1']);
     Route::prefix('branch-closures')->group(function () {
         Route::get('/', [\App\Http\Controllers\BranchClosureController::class, 'index'])->middleware('role:staff,owner');
         Route::post('/', [\App\Http\Controllers\BranchClosureController::class, 'store'])->middleware('role:owner');

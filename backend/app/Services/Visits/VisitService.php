@@ -169,8 +169,8 @@ final class VisitService
             } elseif (! $this->scheduling->eligibleDentists($branch, $service)->contains('id', $dentist->id)) {
                 $fail('dentist-eligible', 'The Dentist works at this branch, is authorized for this service and is available');
             }
-            if (! $within($dentist->shift_start, $dentist->shift_end)) {
-                $fail('dentist-shift', 'The Dentist is within their shift');
+            if (! $this->scheduling->work()->workingNow($dentist, $branch)) {
+                $fail('dentist-shift', 'The Dentist is working at this branch now (work schedule, not on leave)');
             }
         }
 

@@ -6,6 +6,7 @@ use App\Models\Appointment;
 use App\Models\Branch;
 use App\Models\UserBranchScope;
 use App\Services\Automations\AutomationCatalog;
+use App\Services\Scheduling\WorkSchedules;
 use App\Support\ClinicClock;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
@@ -15,10 +16,11 @@ use Illuminate\Validation\ValidationException;
 /**
  * F6 calendar load (R2-02: the clinic likes a calendar that shows in advance which days are crowded). For each day of a range
  * and branch: booked minutes (appointments not cancelled and not no-show) against available minutes (each available Dentist
- * assigned to the branch, their shift inside that day's branch hours), as a percentage, plus closed days with the reason.
- * A day above the Owner's threshold is "crowded". Staff see their branches; the Owner one branch or all of them.
- * Capacity is an ESTIMATE: the dentists' real weekly hours are an open Owner question (OPEN_ITEMS item 3), so each Dentist's
- * profile shift is used, and in the day total a Dentist assigned to several branches is counted once (their longest window).
+ * assigned to the branch: their M3 work schedule inside that day's branch hours, minus breaks and approved M15 leave), as a
+ * percentage, plus closed days with the reason. A day above the Owner's threshold is "crowded". Staff see their branches; the
+ * Owner one branch or all of them. A Dentist with a weekly schedule is counted with their real hours at each branch (schedules
+ * never overlap). A Dentist with no weekly schedule yet uses their profile hours, counted once a day (their longest window),
+ * and only then is capacity marked as estimated.
  */
 class CalendarLoadController extends Controller
 {
@@ -51,8 +53,8 @@ class CalendarLoadController extends Controller
                 $hours = $branch->hoursOnDate($date);
                 $closure = $branch->closureOn($date);
                 $list = $booked->get($branch->id.':'.$date, collect());
-                $minutesByDentist = $hours ? $this->capacity($branch, $hours) : [];
-                foreach ($minutesByDentist as $id => $m) $perDentist[$id] = max($perDentist[$id] ?? 0, $m);
+                $minutesByDentist = $hours ? $this->capacity($branch, $date) : [];
+                foreach ($minutesByDentist as $id => $m) $perDentist[$id] = isset($this->profileHours[$id]) ? max($perDentist[$id] ?? 0, $m) : ($perDentist[$id] ?? 0) + $m;
                 $capacity = array_sum($minutesByDentist);
                 $minutes = (int) $list->sum('duration_minutes');
                 $allClosed = $allClosed && $hours === null;
@@ -67,20 +69,27 @@ class CalendarLoadController extends Controller
                 'percent' => $percent, 'crowded' => $percent !== null && $percent >= $threshold];
         }
 
-        return response()->json(['data' => ['days' => $days, 'crowded_percent' => $threshold, 'capacity_estimated' => true,
-            'capacity_note' => 'Capacity is estimated: dentists’ real weekly hours not yet provided.', 'branches' => $branches->map(fn ($b) => ['id' => $b->legacy_ref, 'name' => $b->name])->values()]]);
+        $estimated = $this->profileHours !== [];
+
+        return response()->json(['data' => ['days' => $days, 'crowded_percent' => $threshold, 'capacity_estimated' => $estimated,
+            'capacity_note' => $estimated ? 'Capacity is estimated for '.count($this->profileHours).' dentist(s) without a weekly work schedule yet (their profile hours are used).' : null, 'branches' => $branches->map(fn ($b) => ['id' => $b->legacy_ref, 'name' => $b->name])->values()]]);
     }
 
-    /** @return array<int,int> dentist id => minutes they can see patients there that day (their shift inside the branch hours) */
-    private function capacity(Branch $branch, array $hours): array
+    /** @var array<int,true> dentists counted with their profile hours (no weekly schedule yet) */
+    private array $profileHours = [];
+
+    private ?WorkSchedules $work = null;
+
+    /** @return array<int,int> dentist id => minutes they can see patients there that day (M3 schedule ∩ branch hours − leave) */
+    private function capacity(Branch $branch, string $date): array
     {
-        $open = ClinicClock::minutes($hours['open']);
-        $close = ClinicClock::minutes($hours['close']);
+        $this->work ??= new WorkSchedules;
         $out = [];
         foreach ($branch->dentistBranches as $link) {
             $d = $link->dentistProfile;
-            if (! $d?->available || ! $d->shift_start || ! $d->shift_end) continue;
-            $out[$d->id] = max(0, min($close, ClinicClock::minutes(substr((string) $d->shift_end, 0, 5))) - max($open, ClinicClock::minutes(substr((string) $d->shift_start, 0, 5))));
+            if (! $d?->available) continue;
+            if ($this->work->usesProfileHours($d)) $this->profileHours[$d->id] = true;
+            $out[$d->id] = $this->work->minutes($d, $branch, $date);
         }
 
         return $out;

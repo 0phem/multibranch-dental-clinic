@@ -288,7 +288,11 @@ class AppointmentController extends Controller
             if (! SchedulingService::openOn($branch, $date)) { $days[] = ['date' => $date, 'status' => 'closed', 'reason' => $branch->closureOn($date)?->reason ?? ($branch->closureOn($date) ? 'Closed' : null)]; continue; }
             // The calendar needs only open or full: the search stops at the first open slot (the time list loads a day's times).
             $open = ! $pool->isEmpty() && $this->scheduling->slotsOn($base, $date, $pool, $busy, limit: 1) !== [];
-            $days[] = ['date' => $date, 'status' => $open ? 'available' : 'full'];
+            // M3/M15: nobody in the pool works that day (day off, leave or no hours) is not "fully booked": a waitlist cannot help.
+            // The reason never says why a dentist is away.
+            $working = $open || $pool->contains(fn ($d) => $this->scheduling->work()->windows($d, $branch, $date) !== []);
+            $days[] = $working ? ['date' => $date, 'status' => $open ? 'available' : 'full']
+                : ['date' => $date, 'status' => 'off', 'reason' => $pool->count() === 1 ? 'The dentist is not working this day.' : 'No dentist for this service is working this day.'];
         }
 
         return response()->json(['data' => [

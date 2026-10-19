@@ -34,11 +34,15 @@ class MailOutbox
         // Scheduled automations (App\Services\Automations): re-checked against the record just before sending.
         'appointment_reminder', 'no_show_rebook', 'invoice_overdue', 'recall_due', 'waitlist_opening', 'owner_daily_summary',
         // Interview round 2 (F2, F3, F5).
-        'late_check', 'move_up_offer', 'closure_notice'];
+        'late_check', 'move_up_offer', 'closure_notice',
+        // M3/M15: the dentist is no longer available at the visit's time.
+        'dentist_unavailable_notice',
+        // M15: a leave request to an approver, and the decision back to the requester.
+        'leave_requested', 'leave_decided'];
 
     /** Purposes whose wording the Owner approves (F1): an email whose wording lost its approval before sending is not sent. */
     private const APPROVED_WORDING = ['appointment_reminder', 'no_show_rebook', 'invoice_overdue', 'recall_due', 'waitlist_opening', 'owner_daily_summary',
-        'late_check', 'move_up_offer', 'closure_notice'];
+        'late_check', 'move_up_offer', 'closure_notice', 'dentist_unavailable_notice', 'leave_requested', 'leave_decided'];
 
     public function __construct(private readonly MailDispatcher $dispatcher) {}
 
@@ -147,6 +151,16 @@ class MailOutbox
 
             return [new \App\Mail\MoveUpOfferMail($offer), $offer->appointment, false, $reason ? null : $user?->email];
         }
+        if ($dispatch->subject_type === 'leaverequest') {
+            // A request already decided, or a decision changed again (cancelled), is not emailed. The address is resolved now.
+            $leave = \App\Models\LeaveRequest::where('public_id', $dispatch->subject_public_id)->with('requester.person')->first();
+            $recipient = $dispatch->recipient;
+            if (! $leave || ! $recipient || $recipient->account_status !== 'Active') return [null, $leave, true, null];
+            if ($dispatch->purpose === 'leave_requested' && $leave->status !== 'Pending') return [null, $leave, true, null];
+            if ($dispatch->purpose === 'leave_decided' && ! in_array($leave->status, ['Approved', 'Declined'], true)) return [null, $leave, true, null];
+
+            return [new \App\Mail\LeaveMail($leave, $dispatch->purpose, $recipient->person?->first_name), $leave, false, $recipient->email];
+        }
         if ($dispatch->subject_type === 'appointment') {
             $appointment = Appointment::where('public_id', $dispatch->subject_public_id)->with(['patient.person', 'branch', 'service', 'dentist.person'])->first();
             if (! $appointment) return [null, null, true, null];
@@ -177,6 +191,14 @@ class MailOutbox
                 [$user, $reason] = \App\Services\Automations\Recipient::patient($appointment->patient);
 
                 return [new \App\Mail\ClosureNoticeMail($appointment, $closure->reason), $appointment, false, $reason ? null : $user?->email];
+            }
+            if ($dispatch->purpose === 'dentist_unavailable_notice') {
+                // Already moved, cancelled or in the past, or the dentist is available again (schedule restored, leave cancelled): no notice.
+                if (! in_array($appointment->status, ['Pending', 'Confirmed'], true) || $appointment->starts_at->lessThanOrEqualTo(now()) || ! $appointment->dentist
+                    || ! \App\Services\Scheduling\ScheduleNotices::stillAffected($appointment)) return [null, $appointment, true, null];
+                [$user, $reason] = \App\Services\Automations\Recipient::patient($appointment->patient);
+
+                return [new \App\Mail\DentistUnavailableMail($appointment), $appointment, false, $reason ? null : $user?->email];
             }
             if ($dispatch->purpose === 'no_show_rebook') {
                 // Already booked again (or the No-show was not kept): the invitation is not needed.

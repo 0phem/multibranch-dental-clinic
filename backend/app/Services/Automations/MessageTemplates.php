@@ -37,6 +37,12 @@ final class MessageTemplates
             "Here are the numbers for {date}, per branch.", false],
         'closure_notice' => ['Your visit on {date}: the branch will be closed',
             "{branch} will be closed on {date}. Your {time} appointment has not been cancelled.\n\nPlease choose a new time with the button below, or contact the branch.", false],
+        'dentist_unavailable_notice' => ['Your visit on {date}: please choose a new time',
+            "Your dentist is no longer available at {time} on {date} at {branch}. Your appointment has not been cancelled.\n\nPlease choose a new time with the button below, or contact the branch.", false],
+        'leave_requested' => ['Leave request from {name}',
+            "{name} asked for leave from {from} to {to}.\n\nOpen Leave requests in the clinic system to approve or decline it.", false],
+        'leave_decided' => ['Your leave request: {status}',
+            "Your leave request from {from} to {to} was {status}.\n\nOpen My leave in the clinic system for the details.", false],
     ];
 
     /** Placeholders each template may use (a typo is refused instead of being sent as "{fist_name}"). */
@@ -50,12 +56,16 @@ final class MessageTemplates
         'waitlist_opening' => ['first_name', 'clinic', 'branch', 'date'],
         'owner_daily_summary' => ['first_name', 'clinic', 'date'],
         'closure_notice' => ['first_name', 'clinic', 'branch', 'date', 'time'],
+        'dentist_unavailable_notice' => ['first_name', 'clinic', 'branch', 'date', 'time'],
+        'leave_requested' => ['first_name', 'clinic', 'name', 'from', 'to'],
+        'leave_decided' => ['first_name', 'clinic', 'from', 'to', 'status'],
     ];
 
     public const NAMES = [
         'appointment_reminder' => 'Appointment reminder', 'late_check' => '"Are you on your way?"', 'no_show_rebook' => 'Released: rebook invitation',
         'move_up_offer' => '"An earlier time is available"', 'invoice_overdue' => 'Overdue invoice reminder', 'recall_due' => 'Recall reminder',
         'waitlist_opening' => 'Waitlist: a time opened', 'owner_daily_summary' => 'Owner daily summary', 'closure_notice' => 'Closed date: please reschedule',
+        'dentist_unavailable_notice' => 'Dentist unavailable: please reschedule', 'leave_requested' => 'Leave request (to the approver)', 'leave_decided' => 'Leave decision (to the requester)',
     ];
 
     public static function find(string $key): ?MessageTemplate

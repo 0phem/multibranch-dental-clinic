@@ -67,6 +67,7 @@ class DemoClinicSeeder extends Seeder
         $this->call(RealBranchSeeder::class); // the clinic's real branch names, addresses, contacts, hours and map coordinates
         $this->call(AssistantAnswerSeeder::class); // the assistant's draft answers (from facts in the repository)
         $this->call(InterviewRoundTwoDemoSeeder::class); // R2: consultation-first services, unverified HMOs, demo names
+        $this->call(WorkScheduleDemoSeeder::class); // M3: demo weekly schedules, labelled "demo schedule, not confirmed by the clinic"
         if (Person::where('email', self::PATIENTS[0][2])->exists()) {
             $this->command?->warn('DemoClinicSeeder already ran on this database; demo data unchanged (real branch names, contacts and opening hours checked).');
 
