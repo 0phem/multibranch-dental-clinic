@@ -69,7 +69,7 @@ test('demo reset keeps the worker, scheduler and Reverb alive and reloads their 
   const reset = read('scripts/demo-reset.sh'), start = read('scripts/demo-start.sh')
   assert.match(start, /supervise worker php artisan queue:work/); assert.match(start, /CACHE_STORE=file "\$@"/) // a restart loop, file cache
   assert.match(reset, /CACHE_STORE=file php artisan queue:restart/); assert.match(reset, /CACHE_STORE=file php artisan reverb:restart/)
-  assert.match(reset, /fallback worker php artisan queue:work/); assert.match(reset, /worker, scheduler and Reverb are running/)
+  assert.match(reset, /fallback worker queue:work php artisan queue:work/); assert.match(reset, /up "$name" || supervised "$name" "$pattern"/) // never a duplicate; assert.match(reset, /worker, scheduler and Reverb are running/)
   assert.ok(reset.indexOf('HAD_WORKER=1') < reset.indexOf('migrate:fresh'), 'records what was running before the rebuild')
 })
 
@@ -77,7 +77,19 @@ test('account claim: a one-time link route, the code goes to the stored email, t
   assert.equal(publicViewFromHash('#claim-account/' + 'a'.repeat(48)), 'claim')
   const claim = read('src/pages/ClaimAccount.jsx'), staff = read('src/pages/CounterIntake.jsx')
   assert.match(claim, /claimAccount\(\{ email: form\.email, date_of_birth: form\.date_of_birth \}\)/) // no password at step 1
-  assert.match(claim, /verifyClaim\(\{ email: form\.email, otp: form\.otp, password: form\.password/)
+  assert.match(claim, /verifyClaim\(\{ \.\.\.\(token \? \{ token \} : \{ email: form\.email \}\), otp: form\.otp, password: form\.password/) // the link names the account
+  assert.match(read('src/App.jsx'), /ClaimAccount onVerified=\{email=>\{setSignInNotice\(\{email,message:'Your account is verified\. Please sign in\.'\}\)/)
   assert.match(claim, /claimAccount\(\{ token \}\)/)
   assert.match(staff, /Offer online account/); assert.match(staff, /Confirm the patient’s email with them/)
+})
+
+test('walkthrough fixes: no sign-in on a shared kiosk, honest invite outcome, a dependent named on success', () => {
+  const join = read('src/pages/Join.jsx'), family = read('src/patient/pages/Family.jsx'), book = read('src/patient/pages/Book.jsx')
+  assert.match(join, /kiosk \? <p className="join-choice is-note">/) // the kiosk offers no sign-in
+  assert.match(join, /r\.kind === 'not_found' \? 'invalid' : 'offline'/)
+  assert.doesNotMatch(family, /window\.prompt/)
+  assert.match(family, /r\.data\?\.status === 'transport_accepted'/)
+  assert.match(book, /\$\{forName\} is booked!/)
+  assert.match(read('src/pages/Clinical.jsx'), /<IdCheck patientId=\{patient\.id\}/) // offer an account from the patient record
+  assert.match(read('src/pages/CounterIntake.jsx'), /Under 18: no online account of their own/)
 })

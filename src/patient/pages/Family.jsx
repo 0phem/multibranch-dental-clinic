@@ -9,6 +9,7 @@ import { addDependent, inviteToClaim, myDependents } from '../../api-client.js'
 export function Family() {
   const [rows, setRows] = useState(null), [adding, setAdding] = useState(false), [note, setNote] = useState(''), [busy, setBusy] = useState(false)
   const [form, setForm] = useState({ first_name: '', last_name: '', date_of_birth: '', relationship: 'Child', consent: false })
+  const [inviting, setInviting] = useState(null), [inviteEmail, setInviteEmail] = useState('')
   const load = () => myDependents().then(r => { if (r.ok) setRows(r.data || []) })
   useEffect(() => { load() }, [])
   if (!rows) return null
@@ -20,17 +21,26 @@ export function Family() {
     if (!r.ok) return setNote((r.kind === 'validation' ? Object.values(r.errors || {})[0]?.[0] : r.message) || 'Not saved.')
     setAdding(false); setForm({ first_name: '', last_name: '', date_of_birth: '', relationship: 'Child', consent: false }); load()
   }
-  const invite = async d => {
-    const email = window.prompt(`Email for ${d.first_name}'s own account:`)
-    if (!email) return
-    const r = await inviteToClaim(d.id, email)
-    setNote(r.ok ? `Invitation sent to ${email}. Once ${d.first_name} activates the account, you no longer manage their record.` : (r.kind === 'validation' ? Object.values(r.errors || {})[0]?.[0] : r.message))
+  const invite = async (e, d) => {
+    e.preventDefault()
+    setBusy(true); setNote('')
+    const r = await inviteToClaim(d.id, inviteEmail)
+    setBusy(false)
+    if (!r.ok) return setNote((r.kind === 'validation' ? Object.values(r.errors || {})[0]?.[0] : r.message) || 'Not sent.')
+    setInviting(null); setInviteEmail('')
+    // The email may be suppressed (a test address) or fail: say what the server reports, not "sent".
+    const outcome = r.data?.status === 'transport_accepted' ? `A one-time link was emailed to ${inviteEmail}. It works once and expires.` : `${r.data?.message || 'The email was not sent.'} Check the email address and try again.`
+    setNote(`${outcome} You keep managing ${d.first_name}’s record until they activate their own account.`)
   }
   return <section className="pp-card pp-fade" aria-labelledby="pp-family">
     <p className="pp-eyebrow" id="pp-family">Family</p>
     <p className="pp-hint">Children or others in your care. You can book, get reminders and pay for them. They need no ID or email; your ID is the one checked at the clinic.</p>
-    {rows.length > 0 && <ul className="pp-family-list">{rows.map(d => <li key={d.id}><b>{d.name}</b> · {d.relationship}{d.minor ? ` · ${d.age} years old` : ''}
-      {!d.minor && !d.has_account && <button type="button" className="link-button" onClick={() => invite(d)}>Invite to their own account</button>}</li>)}</ul>}
+    {rows.length > 0 && <ul className="pp-family-list">{rows.map(d => <li key={d.id}><span><b>{d.name}</b> · {d.relationship}{d.age !== null && d.age !== undefined ? ` · ${d.age} years old` : ''}</span>
+      {!d.minor && !d.has_account && inviting !== d.id && <button type="button" className="link-button" onClick={() => { setInviting(d.id); setInviteEmail(''); setNote('') }}>Invite to their own account</button>}
+      {inviting === d.id && <form className="pp-family-invite" onSubmit={e => invite(e, d)}>
+        <Field label={`${d.first_name}’s own email`} hint="We email a one-time link there. Only they can then set the password."><input type="email" autoComplete="off" required value={inviteEmail} onChange={e => setInviteEmail(e.target.value)}/></Field>
+        <div className="pp-row-actions"><Button type="submit" size="sm" disabled={busy || !inviteEmail}>{busy ? 'Sending…' : 'Send the link'}</Button><button type="button" className="link-button" onClick={() => setInviting(null)}>Cancel</button></div>
+      </form>}</li>)}</ul>}
     {adding ? <form onSubmit={add} className="pp-form">
       <Field label="First name" required><input value={form.first_name} onChange={e => setForm(f => ({ ...f, first_name: e.target.value }))}/></Field>
       <Field label="Last name" required><input value={form.last_name} onChange={e => setForm(f => ({ ...f, last_name: e.target.value }))}/></Field>

@@ -9,9 +9,12 @@ const age = dob => { if (!dob) return null; const b = new Date(`${dob}T00:00:00Z
 
 /** Front desk: today's counter code (for the patients' phones and the kiosk), the poster, and the kiosk link. */
 export function CounterCode({ toast = () => {} }) {
-  const [data, setData] = useState(null), [busy, setBusy] = useState(false)
-  useEffect(() => { intakeCode().then(r => { if (r.ok) setData(r.data) }) }, [])
-  if (!data) return null
+  const [data, setData] = useState(null), [busy, setBusy] = useState(false), [failed, setFailed] = useState(null), [attempt, setAttempt] = useState(0)
+  useEffect(() => { setFailed(null); intakeCode().then(r => { if (r.ok) setData(r.data); else setFailed(r.kind) }) }, [attempt])
+  if (failed === 'forbidden') return null // no counter for this account (for example no branch assigned)
+  if (!data) return <Card className="ci-code" title="Counter registration">
+    {failed ? <p role="alert">Today’s code could not be loaded. <button type="button" className="link-button" onClick={() => setAttempt(a => a + 1)}>Try again</button></p>
+      : <p className="au-muted" role="status">Loading today’s code…</p>}</Card>
   const refresh = async () => {
     setBusy(true)
     const r = await refreshIntakeCode(data.branch.id)
@@ -124,16 +127,16 @@ const ID_TYPES = { philid: 'PhilID / ePhilID', drivers_license: 'Driver’s lice
  * once, expires). This is the only way a record registered without an email gets an online account.
  */
 function OfferAccount({ patientId, email: stored, toast }) {
-  const [open, setOpen] = useState(false), [email, setEmail] = useState(stored || ''), [busy, setBusy] = useState(false), [sent, setSent] = useState(false)
-  if (sent) return <p className="au-muted">Online account offered: a one-time link was emailed.</p>
+  const [open, setOpen] = useState(false), [email, setEmail] = useState(stored || ''), [busy, setBusy] = useState(false), [sent, setSent] = useState(null)
+  if (sent) return <p className="au-muted" role="status">Online account offered. {sent}</p>
   if (!open) return <Button size="sm" variant="soft" onClick={() => setOpen(true)}>Offer online account</Button>
   const go = async () => {
     setBusy(true)
     const r = await offerOnlineAccount(patientId, { email })
     setBusy(false)
     if (!r.ok) return toast(firstError(r), 'warning')
-    setSent(true)
-    toast(r.data?.message || 'A one-time link was emailed.', 'success')
+    setSent(r.data?.message || '')
+    toast(r.data?.message || 'Online account offered.', r.data?.status === 'transport_accepted' ? 'success' : 'warning')
   }
   return <div className="au-actions"><label className="sr-only" htmlFor={`offer-${patientId}`}>Patient’s email (confirm it with them)</label>
     <input id={`offer-${patientId}`} type="email" placeholder="Confirm the patient’s email with them" value={email} onChange={e => setEmail(e.target.value)}/>
@@ -146,7 +149,9 @@ export function IdCheck({ patientId, toast = () => {} }) {
   if (!record) return null
   const minor = record.minor ? <p className="fd-badge is-late">Minor{record.guardians?.length ? `: guardian ${record.guardians.map(g => g.name).join(', ')}` : ': no guardian linked yet'}</p> : null
   if (record.id_check) return <div className="ci-idcheck">{minor}<p className="au-muted">ID checked: {ID_TYPES[record.id_check.type] || record.id_check.type}{record.id_check.by ? ` by ${record.id_check.by}` : ''}.</p>
-    {!record.has_online_account && !record.minor && <OfferAccount patientId={patientId} email={record.email} toast={toast}/>}</div>
+    {!record.has_online_account && (record.minor
+      ? <p className="au-muted">Under 18: no online account of their own. Their guardian’s account books and pays for them; they can claim their own account at 18.</p>
+      : <OfferAccount patientId={patientId} email={record.email} toast={toast}/>)}</div>
   const go = async () => {
     setBusy(true)
     const r = await verifyPatientId(patientId, { id_type: type })

@@ -290,7 +290,7 @@ function AppBody() {
       ?<EmailVerification email={verification?.email} initialResendAvailableAt={verification?.resendAvailableAt} onVerify={verifyRegistration} onResend={resendRegistration} onBack={()=>{setVerification(null);setShowRegister(false)}}/>
       :showRegister
       ?<ChunkBoundary><Suspense fallback={<AuthShell><StartupLoading compact label="Opening registration…"/></AuthShell>}><PatientRegister onRegister={register} onCancel={()=>{setAuthError('');setShowRegister(false)}}/></Suspense></ChunkBoundary>
-      :publicView==='claim'?<ClaimAccount/>
+      :publicView==='claim'?<ClaimAccount onVerified={email=>{setSignInNotice({email,message:'Your account is verified. Please sign in.'});window.history.replaceState(null,'','#sign-in');setPublicView('login')}}/>
       :publicView==='privacy'||publicView==='terms'?<PublicLegal kind={publicView}/>
       :publicView==='home'?<PublicSite/>
       :<Login key={signInNotice?.email||'login'} initialEmail={signInNotice?.email} notice={signInNotice?.message} onLogin={login} onShowRegister={()=>{setAuthError('');setShowRegister(true)}} onForgotPassword={()=>{setAuthError('');window.location.hash='forgot-password';setPublicView('forgot')}}/>}

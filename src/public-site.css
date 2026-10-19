@@ -424,6 +424,7 @@ html:has(.public-site), html:has(.public-auth) { scroll-behavior:smooth; scroll-
 .public-auth .join-choice { display:grid; gap:4px; justify-items:start; text-align:left; padding:16px; border:1px solid #cfe0ec; border-radius:16px; background:#fff; cursor:pointer; min-height:88px; font:inherit; color:#14283d; }
 .public-auth .join-choice b { font-size:1.1rem; }
 .public-auth .join-choice small { color:#5b6b7f; }
+.public-auth .join-choice.is-note { cursor:default; margin:0; background:#f6f9fc; border-style:dashed; }
 .public-auth .join-choice:focus-visible { outline:3px solid #1865ac; outline-offset:2px; }
 .public-auth .join-form { display:grid; gap:12px; }
 .public-auth .join-fieldset { border:1px solid #e1eaf1; border-radius:14px; padding:10px 12px; display:grid; gap:8px; min-width:0; }

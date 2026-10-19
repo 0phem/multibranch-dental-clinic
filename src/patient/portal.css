@@ -368,4 +368,7 @@
 .pp-for select { min-height:44px; border-radius:10px; padding:0 10px; }
 .pp-for-who { margin:0; font-weight:700; color:#0b5e55; }
 .pp-family-list { list-style:none; margin:8px 0; padding:0; display:grid; gap:8px; }
+.pp-family-list li { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:4px 12px; overflow-wrap:anywhere; }
+.pp-family-invite { flex-basis:100%; display:grid; gap:8px; }
+.pp-row-actions { display:flex; flex-wrap:wrap; align-items:center; gap:12px; }
 .join-card { margin-bottom:16px; }

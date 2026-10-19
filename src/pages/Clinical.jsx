@@ -3,6 +3,7 @@ import { ROLE_INFO } from '../data.js'
 import { Button, Card, Field, Modal, Notice, PageHeader, Status, Table, Tabs } from '../components.jsx'
 import { dateLabel, dentistName, displayTime, patientName } from '../logic.js'
 import { AppointmentForm } from './Scheduling.jsx'
+import { IdCheck } from './CounterIntake.jsx'
 import { PatientPrescriptionsPage } from './PatientCare.jsx'
 import { PatientFollowupsPage } from './PatientVisits.jsx'
 
@@ -223,6 +224,7 @@ function StaffPatientSummary({ patient, role, branches, toast }) {
       {counts&&<div className="span-2"><Notice tone="info" title="Linked records">{[['appointments','appointments'],['visits','visits'],['treatments','treatments'],['invoices','invoices'],['hmo_cases','HMO cases']].map(([key,label])=>`${counts[key]} ${label}`).join(' • ')}{index.limit&&Object.values(counts).some(n=>n>=index.limit)?` (showing up to ${index.limit} per list)`:''}. These records are kept in their own modules and open from the tabs above.</Notice></div>}
       {problem&&<div className="span-2"><Notice tone={problem.tone} title={problem.conflict?'Record changed':undefined}>{problem.message}{problem.conflict&&<> <Button size="sm" variant="ghost" onClick={()=>setAttempt(attempt+1)}>Reload record</Button></>}</Notice></div>}
       {editable&&<Button className="span-2" disabled={saving} onClick={save}>{saving?'Saving…':'Save changes'}</Button>}
+      {editable&&<div className="span-2"><IdCheck patientId={patient.id} toast={toast}/></div>}
     </div>
   </Card>
 }

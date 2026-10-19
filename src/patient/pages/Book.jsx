@@ -37,7 +37,7 @@ export function BookPage({ prefill = null, onDone, onNavigate, toast }) {
   const set = patch => setChoice(c => ({ ...c, ...patch }))
   const go = n => setStep(Math.max(0, Math.min(STEPS.length - 1, n)))
 
-  if (done) return <Success appointment={done} onNavigate={onNavigate}/>
+  if (done) return <Success appointment={done} forName={forPerson?.first_name || null} onNavigate={onNavigate}/>
 
   return <div className="pp-page pp-book">
     <PageHead eyebrow="Book a visit" title="Book an appointment" text="Only real open times are shown. Nothing is charged when you book."/>
@@ -202,7 +202,7 @@ function Review({ choice, forPerson, onEdit, onBooked }) {
   </>
 }
 
-function Success({ appointment, onNavigate }) {
+function Success({ appointment, forName = null, onNavigate }) {
   const ics = () => downloadIcs({ id: appointment.id, service: appointment.serviceName || appointment.service?.name, branchName: appointment.branchName || appointment.branch?.name,
     branchAddress: appointment.branchAddress, dentist: appointment.dentistName || appointment.dentist?.name, startsAt: appointment.startsAt || appointment.starts_at,
     endsAt: appointment.endsAt || appointment.ends_at, clinicName: clinic.name })
@@ -210,9 +210,9 @@ function Success({ appointment, onNavigate }) {
   return <div className="pp-page pp-success pp-fade">
     <div className="pp-card pp-success-card">
       <span className="pp-success-mark" aria-hidden="true"><Icon name="check" size={34}/></span>
-      <h1>You’re booked!</h1>
+      <h1>{forName ? `${forName} is booked!` : 'You’re booked!'}</h1>
       <p className="pp-lead">{appointment.serviceName || appointment.service?.name} on <b>{dateLong(date)}</b> at <b>{time12(start)}</b>, {appointment.branchName || appointment.branch?.name}.</p>
-      <p className="pp-hint">A confirmation email is on its way. You’ll receive your invoice after your visit and can pay online in Billing.</p>
+      <p className="pp-hint">{forName ? `The confirmation email, reminders and ${forName}’s invoice come to you, and you can pay online in Billing.` : 'A confirmation email is on its way. You’ll receive your invoice after your visit and can pay online in Billing.'}</p>
       <div className="pp-actions">
         <Button icon="download" variant="soft" onClick={ics}>Add to calendar</Button>
         <Button onClick={() => onNavigate('visits')}>View my visits</Button>

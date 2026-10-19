@@ -33,7 +33,16 @@ export function JoinPage({ hash, signedInPatient = false }) {
   const [done, setDone] = useState(null)
   const [resetKey, setResetKey] = useState(0)
   const kiosk = link?.mode === 'kiosk'
-  useEffect(() => { if (!link) return; intakeBranch(link.branch).then(r => (r.ok ? setBranch(r.data) : setError('This branch link is not valid. Ask the front desk.'))) }, [link?.branch])
+  const [attempt, setAttempt] = useState(0)
+  useEffect(() => {
+    if (!link) return
+    setError('')
+    intakeBranch(link.branch).then(r => {
+      if (r.ok) return setBranch(r.data)
+      // A missing branch is a bad link; anything else (offline, server busy) can be retried.
+      setError(r.kind === 'not_found' ? 'invalid' : 'offline')
+    })
+  }, [link?.branch, attempt])
   // Kiosk: 60 seconds without a touch → back to the start, with nothing left on screen.
   useEffect(() => {
     if (!kiosk) return undefined
@@ -48,12 +57,16 @@ export function JoinPage({ hash, signedInPatient = false }) {
   return <AuthShell><div className={`auth-form join-page ${kiosk ? 'is-kiosk' : ''}`} key={resetKey} aria-live="polite">
     <div className="login-copy-wrap"><div className="eyebrow">{branch ? branch.name : 'Clinic'}{kiosk ? ' · Kiosk' : ''}</div>
       <h1>{done ? 'You’re registered' : step === 'new' ? 'Register at the counter' : 'Welcome'}</h1></div>
-    {error && <Notice tone="warning" title="Unavailable">{error}</Notice>}
-    {done ? <Done result={done} kiosk={kiosk} onAgain={() => { setDone(null); setStep('choose'); setResetKey(k => k + 1) }}/>
+    {error === 'invalid' ? <Notice tone="warning" title="Link not recognised">This branch link is not valid. Scan the code on the counter poster again, or ask the front desk.</Notice>
+      : error ? <Notice tone="warning" title="Can’t reach the clinic">Check the phone’s internet connection. <button type="button" className="link-button" onClick={() => setAttempt(a => a + 1)}>Try again</button></Notice>
+      : !branch ? <p className="login-copy" role="status">Loading…</p>
+      : done ? <Done result={done} kiosk={kiosk} onAgain={() => { setDone(null); setStep('choose'); setResetKey(k => k + 1) }}/>
       : step === 'choose' ? <div className="join-choices">
-        <button type="button" className="join-choice" onClick={() => setStep('new')}><Icon name="user" size={26}/><b>I’m new here</b><small>Fill in your details on this phone instead of the paper form.</small></button>
-        <button type="button" className="join-choice" onClick={() => { try { sessionStorage.setItem('join-branch', link.branch) } catch { /* private mode */ } window.location.hash = 'sign-in' }}>
-          <Icon name="lock" size={26}/><b>I have an account</b><small>Sign in, then join today’s queue.</small></button>
+        <button type="button" className="join-choice" onClick={() => setStep('new')}><Icon name="user" size={26}/><b>I’m new here</b><small>Fill in your details on this {kiosk ? 'tablet' : 'phone'} instead of the paper form.</small></button>
+        {/* Nobody signs in on a shared tablet: the idle reset clears the form, not a signed-in session. */}
+        {kiosk ? <p className="join-choice is-note"><Icon name="lock" size={26}/><b>I have an account</b><small>Scan the poster at the counter with your own phone and sign in there, or tell the front desk.</small></p>
+          : <button type="button" className="join-choice" onClick={() => { try { sessionStorage.setItem('join-branch', link.branch) } catch { /* private mode */ } window.location.hash = 'sign-in' }}>
+            <Icon name="lock" size={26}/><b>I have an account</b><small>Sign in, then join today’s queue.</small></button>}
         {kiosk && <p className="login-copy">This tablet clears itself after 60 seconds.</p>}
       </div>
       : step === 'account' ? <AccountJoin branch={link.branch} code={link.code} onDone={setDone}/>
