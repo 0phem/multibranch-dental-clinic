@@ -72,8 +72,11 @@ someone who only knows a name and birth date take over the record.
 - **No password is taken until the code is entered.** The password is chosen together with the emailed code, so only the
   person who reads that inbox sets it. Until then the account holds a random unusable password and cannot sign in; sign-up
   verification, resend and password reset ignore it (the same neutral answer as an invalid code).
+- **A guardian** can set a dependent's email only when none is on file; changing an email already on the record needs staff
+  (in-person ID check, audited), so a guardian cannot point an adult dependent's claim at their own inbox.
 - **Limits:** per IP, per email and per record; 5 wrong tries kill a code; no new code inside the 60-second cooldown; a daily
-  cap per email. All silent (no enumeration).
+  cap per email. All silent (no enumeration). The per-record cap applies to self-service only and the verify cap is per email
+  and IP, so someone spamming with the owner's details cannot block a staff link or the owner's own attempts.
 - **Audit:** claim started, claim completed, claim blocked (expired or used link, record limit). Never a code, a password or
   a birth date.
 

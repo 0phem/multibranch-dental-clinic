@@ -28,6 +28,12 @@ final class AccountClaims
         if ((Guardianship::age($patient->person?->date_of_birth?->toDateString()) ?? 0) < Guardianship::ADULT_AGE) {
             throw ValidationException::withMessages(['email' => ['Only a patient of 18 or older can have their own account.']]);
         }
+        // A guardian may set the email only when none is on file; changing an email already on the record needs staff, who check
+        // the ID in person (audited). Otherwise a guardian could point an adult dependent's claim at an inbox they control.
+        $stored = Str::lower(trim((string) $patient->person?->email));
+        if ($kind === 'guardian' && $stored !== '' && $stored !== $email) {
+            throw ValidationException::withMessages(['email' => ['This record already has an email. Ask the front desk to change it.']]);
+        }
         if ($patient->user?->email_verified_at) throw ValidationException::withMessages(['email' => ['This patient already has an online account.']]);
         if (Person::whereRaw('lower(email) = ?', [$email])->where('id', '<>', $patient->person_id)->exists() || User::withTrashed()->where('email', $email)->where('person_id', '<>', $patient->person_id)->exists()) {
             throw ValidationException::withMessages(['email' => ['This email is already used by another record.']]);

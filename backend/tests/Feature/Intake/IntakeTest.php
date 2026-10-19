@@ -327,6 +327,7 @@ class IntakeTest extends TestCase
         // A second record: a link expires after the Owner's setting (24 hours by default).
         [$otherUser, $other] = $this->patient('PAT-0009');
         $otherUser->forceDelete();
+        $other->person->update(['date_of_birth' => '1985-04-04']); // an adult (the factory date is random)
         $this->p['X'] = $other;
         $this->existing('X', 'd1', 'b1', 'svc1', '2026-09-21', '11:00', 30, 'Completed');
         $this->flushSession();
@@ -366,5 +367,32 @@ class IntakeTest extends TestCase
         $audit = AuditLog::where('action', 'like', 'account.claim%')->get()->map(fn ($a) => json_encode($a->payload))->implode(' ');
         $this->assertNotSame('', $audit);
         foreach ([$code, 'Owner1234', '1980-02-02', '1980'] as $secret) $this->assertStringNotContainsString($secret, $audit);
+    }
+
+    public function test_spamming_self_service_cannot_block_a_staff_link_and_staff_not_a_guardian_change_a_stored_email(): void
+    {
+        $record = $this->counterRecord('owner.of.record@mailbox.ph');
+        $this->existing('B', 'd1', 'b1', 'svc1', '2026-09-21', '10:00', 30, 'Completed');
+        // A guardian cannot point an adult dependent's claim at another inbox when an email is on file.
+        \App\Services\Intake\Guardianship::link($record, $this->p['A'], 'Parent', $this->u['staffB1'], null);
+        $this->actingAsUser('patientA');
+        $this->postJson("/api/patients/{$record->public_id}/claim-invite", ['email' => 'guardian.inbox@mailbox.ph'])->assertStatus(422)->assertJsonValidationErrors('email');
+        $this->assertSame('owner.of.record@mailbox.ph', $record->person->fresh()->email);
+        $this->app['auth']->forgetGuards();
+        foreach (range(1, 7) as $i) { // more than the per-record cap, from someone who knows the email and birth date
+            $this->travel(2)->minutes();
+            $this->withServerVariables(['REMOTE_ADDR' => "10.0.0.$i"])->postJson('/api/account/claim', ['email' => 'owner.of.record@mailbox.ph', 'date_of_birth' => '1980-02-02']);
+        }
+        $this->assertTrue(AuditLog::where('action', 'account.claim_blocked')->exists());
+        $this->actingAsUser('staffB1');
+        $this->postJson("/api/patients/{$record->public_id}/offer-account", ['email' => 'owner.of.record@mailbox.ph', 'id_type' => 'philid'])->assertOk();
+        $token = null;
+        Mail::assertSent(\App\Mail\AccountClaimInviteMail::class, function ($m) use (&$token) { $token = $m->token; return true; });
+        $this->app['auth']->forgetGuards();
+        $this->travel(2)->minutes();
+        $before = Mail::sent(OneTimeCodeMail::class)->count();
+        $this->withServerVariables(['REMOTE_ADDR' => '10.9.9.9'])->postJson('/api/account/claim', ['token' => $token])->assertCreated();
+        $this->assertSame($before + 1, Mail::sent(OneTimeCodeMail::class)->count()); // the link still sends a code
+
     }
 }

@@ -87,13 +87,15 @@ class AccountClaimController extends Controller
     {
         $user = $person->user;
         if ($user && ($user->email_verified_at || $user->trashed() || ! $user->pending_claim || $user->email !== $email)) return 0; // already an account
+        // The per-record cap applies to self-service only: a staff or guardian link is already proof, so someone spamming the
+        // record's email and birth date cannot lock the owner out of a link they were given.
         $recordKey = 'claim-record:'.$person->id;
-        if (RateLimiter::tooManyAttempts($recordKey, self::PER_RECORD_PER_HOUR)) {
+        if ($channel === 'self_service' && RateLimiter::tooManyAttempts($recordKey, self::PER_RECORD_PER_HOUR)) {
             app(AuditService::class)->record(['action' => 'account.claim_blocked', 'category' => 'security', 'severity' => 'warning', 'actor' => null, 'target' => $person->patient, 'payload' => ['reason' => 'record_limit']]);
 
             return 0;
         }
-        RateLimiter::hit($recordKey, 3600);
+        if ($channel === 'self_service') RateLimiter::hit($recordKey, 3600);
         $hashes = 0;
         if (! $user) {
             if (User::withTrashed()->where('email', $email)->exists()) return 0;
@@ -114,7 +116,8 @@ class AccountClaimController extends Controller
         $data = $request->validate(['email' => ['required', 'email:rfc', 'max:255'], 'otp' => ['required', 'digits:6'],
             'password' => ['required', 'string', 'max:72', 'confirmed', Password::min(8)->letters()->numbers()]]);
         $email = Str::lower(trim($data['email']));
-        $emailKey = 'claim-verify:'.hash('sha256', $email);
+        // Per email AND IP: wrong codes from someone else's network cannot lock the owner out (each code still dies after 5 tries).
+        $emailKey = 'claim-verify:'.hash('sha256', $email.'|'.$request->ip());
         if (RateLimiter::tooManyAttempts($emailKey, 10)) {
             Hash::check($data['otp'], '$2y$12$H5ntb6FLY.qFGr/Rba08b.Dt0raoSs2QEEhzAIt5grrYJ3L8/f/q2');
 
