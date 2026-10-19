@@ -72,3 +72,12 @@ test('demo reset keeps the worker, scheduler and Reverb alive and reloads their 
   assert.match(reset, /fallback worker php artisan queue:work/); assert.match(reset, /worker, scheduler and Reverb are running/)
   assert.ok(reset.indexOf('HAD_WORKER=1') < reset.indexOf('migrate:fresh'), 'records what was running before the rebuild')
 })
+
+test('account claim: a one-time link route, the code goes to the stored email, the password only with the code', () => {
+  assert.equal(publicViewFromHash('#claim-account/' + 'a'.repeat(48)), 'claim')
+  const claim = read('src/pages/ClaimAccount.jsx'), staff = read('src/pages/CounterIntake.jsx')
+  assert.match(claim, /claimAccount\(\{ email: form\.email, date_of_birth: form\.date_of_birth \}\)/) // no password at step 1
+  assert.match(claim, /verifyClaim\(\{ email: form\.email, otp: form\.otp, password: form\.password/)
+  assert.match(claim, /claimAccount\(\{ token \}\)/)
+  assert.match(staff, /Offer online account/); assert.match(staff, /Confirm the patient’s email with them/)
+})

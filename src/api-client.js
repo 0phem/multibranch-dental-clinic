@@ -528,6 +528,7 @@ export function refreshIntakeCode(branchRef) { return json('/api/intake/code/ref
 export function pendingIntake() { return request('/api/intake/submissions') }
 export function confirmIntake(id, body) { return json(`/api/intake/submissions/${enc(id)}/confirm`, 'POST', body) }
 export function cancelIntake(id) { return json(`/api/intake/submissions/${enc(id)}/cancel`, 'POST') }
+export function offerOnlineAccount(patientId, body) { return json(`/api/patients/${enc(patientId)}/offer-account`, 'POST', body) }
 export function verifyPatientId(patientId, body) { return json(`/api/patients/${enc(patientId)}/verify-id`, 'POST', body) }
 export function branchPosterUrl(branchRef) { return `${apiBase()}/api/branches/${enc(branchRef)}/poster` }
 // Parents and guardians.

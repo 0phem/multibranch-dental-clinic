@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { Button, Card, Field, Modal } from '../components.jsx'
 import { dentistName } from '../logic.js'
-import { branchPosterUrl, cancelIntake, confirmIntake, getPatientRecord, intakeCode, pendingIntake, refreshIntakeCode, verifyPatientId } from '../api-client.js'
+import { branchPosterUrl, cancelIntake, confirmIntake, getPatientRecord, intakeCode, pendingIntake, offerOnlineAccount, refreshIntakeCode, verifyPatientId } from '../api-client.js'
 
 const firstError = r => (r.kind === 'validation' ? Object.values(r.errors || {})[0]?.[0] || r.message : r.message) || 'That did not work. Refresh and try again.'
 const FIELDS = [['first_name', 'First name'], ['last_name', 'Last name'], ['date_of_birth', 'Date of birth', 'date'], ['sex', 'Sex'], ['phone', 'Mobile'], ['email', 'Email'], ['address', 'Address']]
@@ -119,12 +119,34 @@ function ReviewDialog({ row, idTypes, toast, onClose, onDone, store }) {
 const ID_TYPES = { philid: 'PhilID / ePhilID', drivers_license: 'Driver’s license', umid: 'UMID', passport: 'Passport', postal: 'Postal ID', prc: 'PRC ID', voters: 'Voter’s ID', senior: 'Senior citizen ID', other: 'Other valid ID' }
 
 /** One click at Check-In: the patient's physical ID was checked (first visit). Only the type, who and when are saved. */
+/**
+ * "Offer online account": after the ID check, staff confirm the patient's email with them and a one-time link is emailed (works
+ * once, expires). This is the only way a record registered without an email gets an online account.
+ */
+function OfferAccount({ patientId, email: stored, toast }) {
+  const [open, setOpen] = useState(false), [email, setEmail] = useState(stored || ''), [busy, setBusy] = useState(false), [sent, setSent] = useState(false)
+  if (sent) return <p className="au-muted">Online account offered: a one-time link was emailed.</p>
+  if (!open) return <Button size="sm" variant="soft" onClick={() => setOpen(true)}>Offer online account</Button>
+  const go = async () => {
+    setBusy(true)
+    const r = await offerOnlineAccount(patientId, { email })
+    setBusy(false)
+    if (!r.ok) return toast(firstError(r), 'warning')
+    setSent(true)
+    toast(r.data?.message || 'A one-time link was emailed.', 'success')
+  }
+  return <div className="au-actions"><label className="sr-only" htmlFor={`offer-${patientId}`}>Patient’s email (confirm it with them)</label>
+    <input id={`offer-${patientId}`} type="email" placeholder="Confirm the patient’s email with them" value={email} onChange={e => setEmail(e.target.value)}/>
+    <Button size="sm" disabled={busy || !email} onClick={go}>Email a one-time link</Button></div>
+}
+
 export function IdCheck({ patientId, toast = () => {} }) {
   const [record, setRecord] = useState(null), [type, setType] = useState('philid'), [busy, setBusy] = useState(false)
   useEffect(() => { setRecord(null); getPatientRecord(patientId).then(r => { if (r.ok) setRecord(r.data) }) }, [patientId])
   if (!record) return null
   const minor = record.minor ? <p className="fd-badge is-late">Minor{record.guardians?.length ? `: guardian ${record.guardians.map(g => g.name).join(', ')}` : ': no guardian linked yet'}</p> : null
-  if (record.id_check) return <div className="ci-idcheck">{minor}<p className="au-muted">ID checked: {ID_TYPES[record.id_check.type] || record.id_check.type}{record.id_check.by ? ` by ${record.id_check.by}` : ''}.</p></div>
+  if (record.id_check) return <div className="ci-idcheck">{minor}<p className="au-muted">ID checked: {ID_TYPES[record.id_check.type] || record.id_check.type}{record.id_check.by ? ` by ${record.id_check.by}` : ''}.</p>
+    {!record.has_online_account && !record.minor && <OfferAccount patientId={patientId} email={record.email} toast={toast}/>}</div>
   const go = async () => {
     setBusy(true)
     const r = await verifyPatientId(patientId, { id_type: type })
