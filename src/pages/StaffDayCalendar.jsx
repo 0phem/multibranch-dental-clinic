@@ -124,7 +124,7 @@ export function StaffDayCalendar({ store }) {
     if (!sessionKey || !loadParams?.from || !loadParams?.to) return undefined
     let live = true
     calendarLoad({ from: loadParams.from, to: loadParams.to, branch_ref: loadParams.branch || undefined }).then(r => {
-      if (live && r.ok) setLoad({ key: loadParams.key, crowded: r.data.crowded_percent, days: Object.fromEntries((r.data.days || []).map(d => [d.date, d])) })
+      if (live && r.ok) setLoad({ key: loadParams.key, crowded: r.data.crowded_percent, note: r.data.capacity_note || null, days: Object.fromEntries((r.data.days || []).map(d => [d.date, d])) })
     })
     return () => { live = false }
   }, [sessionKey, loadParams?.key])
@@ -174,8 +174,8 @@ export function StaffDayCalendar({ store }) {
       </div>
     </Card>
 
-    {view !== 'day' && <p className="daycal-legend" aria-label="Load legend"><span className="daycal-load is-free"><i/>0% free</span><span className="daycal-load is-light"><i/>under 50%</span><span className="daycal-load is-busy"><i/>50% or more</span><span className="daycal-load is-crowded"><i/>{load.crowded}% or more: crowded</span><span className="daycal-load is-closed"><i/>Closed</span><small>Booked minutes against the dentists’ hours at the branch.</small></p>}
-    {view === 'day' && <p className="daycal-legend"><LoadBadge day={loadOf(date)} crowded={load.crowded}/></p>}
+    {view !== 'day' && <p className="daycal-legend" aria-label="Load legend"><span className="daycal-load is-free"><i/>0% free</span><span className="daycal-load is-light"><i/>under 50%</span><span className="daycal-load is-busy"><i/>50% or more</span><span className="daycal-load is-crowded"><i/>{load.crowded}% or more: crowded</span><span className="daycal-load is-closed"><i/>Closed</span><small>Booked minutes against the dentists’ hours at the branch.</small>{load.note && <small className="daycal-estimate" role="note">{load.note}</small>}</p>}
+    {view === 'day' && <p className="daycal-legend"><LoadBadge day={loadOf(date)} crowded={load.crowded}/>{load.note && <small className="daycal-estimate" role="note">{load.note}</small>}</p>}
     <h2 id="daycal-heading" className="daycal-heading" tabIndex={-1}>{periodTitle(view, date)}{containsToday && <span className="daycal-today"> · {view === 'day' ? 'Today' : view === 'week' ? 'This week' : 'This month'}</span>}</h2>
 
     {status === 'loading' && <Notice tone="info" title="Loading appointments">Reading this {nounOf}’s appointments from the clinic server…</Notice>}

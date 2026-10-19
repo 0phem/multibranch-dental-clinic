@@ -70,7 +70,7 @@ final class AutomationLog
             ->where('d.created_at', '>=', now()->subDays(7)->toIso8601String())
             ->selectRaw("d.automation,
                 count(*) filter (where d.outcome = 'queued' and m.status in ('transport_accepted','logged_only')) as sent,
-                count(*) filter (where d.outcome = 'skipped' or m.status = 'superseded') as skipped,
+                count(*) filter (where d.outcome = 'skipped' or m.status in ('superseded','suppressed')) as skipped,
                 count(*) filter (where m.status = 'failed') as failed,
                 count(*) filter (where m.status in ('pending','processing','retry_scheduled')) as pending,
                 count(*) filter (where d.outcome = 'flagged') as flagged,

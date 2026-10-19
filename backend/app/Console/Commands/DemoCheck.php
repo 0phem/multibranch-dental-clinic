@@ -86,14 +86,16 @@ class DemoCheck extends Command
         ($code = $http("$api/up")) === 200 ? $this->result('PASS', "API answers at $api") : $this->result('FAIL', "API at $api/up answered ".($code ?? 'nothing'), 'Start it: scripts/demo-start.sh (or scripts/payment-test.sh api).');
         $frontend = rtrim((string) config('app.frontend_url'), '/');
         ($code = $http($frontend)) === 200 ? $this->result('PASS', "Frontend answers at $frontend") : $this->result('FAIL', "Frontend at $frontend answered ".($code ?? 'nothing'), 'Start it: scripts/demo-start.sh (or npm run dev).');
-        $running('/artisan queue:work/') ? $this->result('PASS', 'Queue worker running') : $this->result('FAIL', 'No queue worker', 'Emails are not sent without it: scripts/demo-start.sh (or scripts/payment-test.sh worker).');
+        $running('/artisan queue:work/') ? $this->result('PASS', 'Queue worker running') : $this->result('FAIL', 'Queue worker is DOWN: emails are not sent',
+            'Fix: scripts/demo-start.sh (or, next to a running demo: cd backend && DB_DATABASE=dental_clinic_demo CACHE_STORE=file php artisan queue:work --queue=mail,default).');
         // The scheduled automations (reminders, no-shows, overdue invoices, summary) and email retries run only with the scheduler.
         $running('/artisan schedule:(work|run)/') ? $this->result('PASS', 'Scheduler running (automations, retries and due emails)') : $this->result('FAIL', 'No scheduler', 'Reminders and the other automations do not run without it: scripts/demo-start.sh starts `php artisan schedule:work`.');
         if (config('broadcasting.default') === 'reverb') {
             $host = (string) config('reverb.servers.reverb.host', '127.0.0.1');
             $port = (int) config('reverb.servers.reverb.port', 8080);
             $socket = @fsockopen($host === '0.0.0.0' ? '127.0.0.1' : $host, $port, $errno, $errstr, 2);
-            $socket ? $this->result('PASS', "Reverb (live messages) listening on port $port") : $this->result('WARN', "Reverb not listening on port $port", 'Messages still work by polling; for live updates start scripts/demo-start.sh (php artisan reverb:start).');
+            $socket ? $this->result('PASS', "Reverb (live messages) listening on port $port") : $this->result('FAIL', "Reverb is DOWN (nothing listening on port $port): no live messages",
+                "Fix: scripts/demo-start.sh (or, next to a running demo: cd backend && DB_DATABASE=dental_clinic_demo CACHE_STORE=file php artisan reverb:start --port=$port).");
             if ($socket) fclose($socket);
         }
     }

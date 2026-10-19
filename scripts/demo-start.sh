@@ -70,9 +70,14 @@ echo "== Starting (Ctrl+C stops everything)"
 # does not hold up the others.
 export PHP_CLI_SERVER_WORKERS="${API_WORKERS:-4}"
 run api "$BACKEND/public" php -S "localhost:$API_PORT" ../vendor/laravel/framework/src/Illuminate/Foundation/resources/server.php
-run worker "$BACKEND" php artisan queue:work --queue=mail,default
-run scheduler "$BACKEND" php artisan schedule:work
-run reverb "$BACKEND" php artisan reverb:start --port="$REVERB_PORT"
+# The worker, scheduler and Reverb read their restart signal from a FILE cache (CACHE_STORE=file), not the database cache:
+# scripts/demo-reset.sh rebuilds the database (dropping the cache table), which used to stop them. Each one runs in a small
+# loop, so `queue:restart` / `reverb:restart` (sent by demo-reset.sh) reloads the new code instead of ending the process.
+supervise() { local name="$1"; shift; while :; do CACHE_STORE=file "$@"; echo "[$name] exited ($?); restarting in 1 s"; sleep 1; done; }
+export -f supervise
+run worker "$BACKEND" bash -c 'supervise worker php artisan queue:work --queue=mail,default'
+run scheduler "$BACKEND" bash -c 'supervise scheduler php artisan schedule:work'
+run reverb "$BACKEND" bash -c "supervise reverb php artisan reverb:start --port=$REVERB_PORT"
 run web "$ROOT" npm run dev -- --port "$WEB_PORT" --strictPort
 if [ -n "${NGROK_DOMAIN:-}" ]; then
   if command -v ngrok >/dev/null 2>&1; then run tunnel "$ROOT" ngrok http --url="$NGROK_DOMAIN" "$API_PORT" --log=stdout --log-level=warn

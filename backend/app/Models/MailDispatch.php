@@ -12,7 +12,7 @@ class MailDispatch extends Model
 {
     use HasUlids;
 
-    public const TERMINAL = ['logged_only', 'transport_accepted', 'failed', 'superseded'];
+    public const TERMINAL = ['logged_only', 'transport_accepted', 'failed', 'superseded', 'suppressed'];
 
     // timestamptz columns: always write the offset, so an instant never shifts with the PHP/session time zone.
     protected $dateFormat = 'Y-m-d H:i:sP';

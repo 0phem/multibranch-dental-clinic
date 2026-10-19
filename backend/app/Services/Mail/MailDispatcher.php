@@ -19,6 +19,7 @@ use Illuminate\Support\Facades\Mail;
  *                       inbox delivery is NOT confirmed.
  *   logged_only         the mailer is log/array: the message was recorded locally and NOT sent to anyone.
  *   failed              the transport raised an error; nothing is known to have been sent.
+ *   suppressed          a reserved or fake test address (example.test, .invalid…): not handed to a real transport.
  *
  * Messages are sent synchronously (no queue worker runs yet — TD-24). Audit evidence records purpose, outcome and
  * transport name only: never the address, subject, link, token or body.
@@ -56,6 +57,11 @@ class MailDispatcher
     {
         $mailer = (string) config('mail.default');
         $kind = $this->transportKind();
+        // Mail guard: a reserved or fake domain (example.test, example.com, .test, .invalid, .localhost) is never handed to a real
+        // transport. Demo and test accounts use them; a real provider would only bounce them (and may flag the sender).
+        if ($kind !== 'local' && ! \App\Services\Automations\Recipient::deliverable($to)) {
+            return ['status' => 'suppressed', 'mailer' => $mailer, 'transport_kind' => $kind, 'error_class' => null];
+        }
         try {
             // The From name follows the white-label sender name (the address stays the configured, authenticated sender).
             if (! $mail->from) $mail->from((string) config('mail.from.address'), \App\Support\Brand::senderName());
@@ -143,6 +149,7 @@ class MailDispatcher
     public static function describe(string $status, string $kind): string
     {
         return match ($status) {
+            'suppressed' => 'Not sent: the address is a reserved test address (suppressed).',
             'logged_only' => 'Recorded in the local mail log only. No email was sent to the recipient (the mail transport is not configured for delivery).',
             'transport_accepted' => $kind === 'real'
                 ? 'Accepted by the mail transport. Delivery to the recipient’s inbox is not confirmed.'
