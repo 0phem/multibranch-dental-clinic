@@ -121,6 +121,12 @@ class HandoverController extends Controller
         $patient = Patient::where('public_id', $data['patient_id'])->firstOrFail();
         $mine = UserBranchScope::where('user_id', $user->id)->pluck('branch_id')->all();
         abort_if($mine === [], 403);
+        // Only from the duplicate guard: the patient must be a possible match of a registration waiting at one of my branches.
+        // Otherwise the answer would tell any front desk where an arbitrary patient was treated.
+        $intake = app(\App\Services\Intake\IntakeService::class);
+        $matched = \App\Models\IntakeSubmission::where('status', 'pending')->whereIn('branch_id', $mine)->get()
+            ->contains(fn ($s) => $intake->duplicates((array) ($s->data['self'] ?? []))->contains(fn ($d) => $d['patient']->id === $patient->id));
+        abort_unless($matched, 404);
         // The branch that has the record: the one named, else the patient's latest visit or appointment branch.
         $from = ! empty($data['from_branch_ref']) ? Branch::where('legacy_ref', $data['from_branch_ref'])->first()
             : Branch::find(Visit::where('patient_id', $patient->id)->latest('id')->value('branch_id') ?? Appointment::where('patient_id', $patient->id)->latest('starts_at')->value('branch_id'));
@@ -133,7 +139,7 @@ class HandoverController extends Controller
         }
         app(AuditService::class)->recordAdministrative('handover.requested', $user, $patient, ['from' => $from->legacy_ref, 'to' => $myBranch->legacy_ref]);
 
-        return response()->json(['data' => ['asked' => $askers->count(), 'branch' => $from->name]]);
+        return response()->json(['data' => ['asked' => $askers->count(), 'branch' => $from->name]]); // the branch was already shown as "Record found from
     }
 
     // ---- rules --------------------------------------------------------------------------------------------------------
@@ -154,7 +160,10 @@ class HandoverController extends Controller
     private function maySend(User $user, Patient $patient, Branch $from, ?DentistProfile $dentist): bool
     {
         return match ($user->role->value) {
-            'staff' => UserBranchScope::where('user_id', $user->id)->where('branch_id', $from->id)->exists() && $user->can('viewProfile', $patient),
+            // A real appointment or visit at the sending branch: access that came from another handover cannot be passed on, so a
+            // grant can never be chained or renewed by the receiving side.
+            'staff' => UserBranchScope::where('user_id', $user->id)->where('branch_id', $from->id)->exists()
+                && (Appointment::where('patient_id', $patient->id)->where('branch_id', $from->id)->exists() || Visit::where('patient_id', $patient->id)->where('branch_id', $from->id)->exists()),
             // The treating dentist: an appointment or visit of this patient with them at that branch.
             'dentist' => $dentist !== null && $dentist->branches()->where('branches.id', $from->id)->exists()
                 && (Appointment::where('patient_id', $patient->id)->where('dentist_profile_id', $dentist->id)->where('branch_id', $from->id)->exists()

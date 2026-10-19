@@ -284,7 +284,7 @@ choose a new time, in wording the Owner approved. Every change is audited with t
 
 **55. Who sees a handover?**
 M25. The sending side (the front desk or the treating dentist) and the receiving side (the receiving branch's front desk and the
-receiving dentist). The receiving front desk gets the patient's record through the normal branch rule while the handover is
-open and for 60 days after it is acknowledged (an Owner setting); the receiving dentist sees the handover itself. The Owner sees
+receiving dentist). The receiving front desk gets the patient's record through the normal branch rule for 60 days (an Owner
+setting) from sending or from acknowledgement, and cannot pass it on to a third branch; the receiving dentist sees the handover itself. The Owner sees
 only who, when, from and to. The patient is told neutrally that the record was shared, without clinical text. Every create,
 read by the receiving side and acknowledgement is audited, and the audit holds no clinical text. `Staffing/HandoverTest`.

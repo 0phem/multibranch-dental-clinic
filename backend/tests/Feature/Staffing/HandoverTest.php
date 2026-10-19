@@ -119,13 +119,35 @@ class HandoverTest extends TestCase
         PatientHandover::query()->delete();
     }
 
-    public function test_request_handover_from_the_duplicate_guard_asks_the_branch_that_has_the_record(): void
+    public function test_request_handover_works_only_from_the_duplicate_guard_and_asks_the_branch_that_has_the_record(): void
     {
+        $this->actingAsUser('staffB2');
+        $this->postJson('/api/handovers/request', ['patient_id' => $this->p['A']->public_id])->assertNotFound(); // no pending match: nothing revealed
+
+        // A registration waiting at b2 that matches patient A (same name, birth date and phone).
+        $person = $this->p['A']->person;
+        $person->update(['date_of_birth' => '1985-03-03', 'phone' => '+639175550111']);
+        $this->app['auth']->forgetGuards();
+        $this->withHeaders(['X-Device-Id' => 'counter-b2'])->postJson('/api/public/intake', ['branch_ref' => 'b2', 'code' => \App\Services\Intake\JoinCodes::current($this->b['b2'])->code,
+            'consent' => true, 'join_queue' => false, 'channel' => 'phone', 'self' => ['first_name' => $person->first_name, 'last_name' => $person->last_name, 'date_of_birth' => '1985-03-03',
+            'phone' => '0917 555 0111', 'email' => null, 'emergency_contact' => ['name' => 'Someone', 'phone' => '0917 555 0112']]])->assertCreated();
+
         $this->actingAsUser('staffB2');
         $this->postJson('/api/handovers/request', ['patient_id' => $this->p['A']->public_id])->assertOk()->assertJsonPath('data.branch', 'Branch B1');
         $this->assertTrue(UserNotification::where('user_id', $this->u['staffB1']->id)->where('kind', 'handover_received')->exists());
         $this->assertTrue(AuditLog::where('action', 'handover.requested')->exists());
+    }
+
+    public function test_a_granted_branch_cannot_pass_the_record_on_and_an_unacknowledged_grant_also_expires(): void
+    {
+        $b3 = $this->branch('b3');
         $this->actingAsUser('staffB1');
-        $this->postJson('/api/handovers/request', ['patient_id' => $this->p['A']->public_id])->assertStatus(422); // nothing to ask: it is theirs
+        $this->send()->assertCreated();
+        // b2 now sees the full record through the handover, but has no visit there: it cannot hand it on (no chaining, no renewal).
+        $this->assertSame('full', $this->access('staffB2'));
+        $this->postJson('/api/handovers', ['patient_id' => $this->p['A']->public_id, 'from_branch_ref' => 'b2', 'to_branch_ref' => 'b3', 'summary' => 'Forwarding'])->assertForbidden();
+        // Never acknowledged: the grant ends after the Owner's days from sending (60 by default).
+        $this->travel(61)->days();
+        $this->assertSame('identity', $this->access('staffB2'));
     }
 }

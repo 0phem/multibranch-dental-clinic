@@ -41,7 +41,7 @@ class PatientHandover extends Model
 
     /**
      * True when an open handover gives this Staff account's branch the patient's full profile: it waits for acknowledgement, or was
-     * acknowledged within the Owner's number of days (staffing.handover_access_days, default 60). Used by PatientPolicy only.
+     * acknowledged within the Owner's number of days (an unacknowledged one: that many days from sending) (staffing.handover_access_days, default 60). Used by PatientPolicy only.
      */
     public static function grantsProfileAccess(User $user, Patient $patient): bool
     {
@@ -49,7 +49,9 @@ class PatientHandover extends Model
         $days = (int) (\App\Services\Automations\AutomationCatalog::setting('staffing')?->settings['handover_access_days'] ?? 60);
 
         return self::where('patient_id', $patient->id)->whereIn('to_branch_id', \App\Models\UserBranchScope::select('branch_id')->where('user_id', $user->id))
-            ->where(fn ($q) => $q->where('status', 'Sent')->orWhere(fn ($a) => $a->where('status', 'Acknowledged')->where('acknowledged_at', '>', now()->subDays($days)->toIso8601String())))
+            // Bounded either way: an unacknowledged handover grants the same number of days from when it was sent.
+            ->where(fn ($q) => $q->where(fn ($s) => $s->where('status', 'Sent')->where('created_at', '>', now()->subDays($days)->toIso8601String()))
+                ->orWhere(fn ($a) => $a->where('status', 'Acknowledged')->where('acknowledged_at', '>', now()->subDays($days)->toIso8601String())))
             ->exists();
     }
 }
