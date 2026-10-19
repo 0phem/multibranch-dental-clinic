@@ -5,23 +5,25 @@ flowchart TB
     subgraph L0[" "]
     direction LR
       S0["<b>PATIENT</b><br/>Fills the Create account form (inline checks)"]:::manual
-      S2["<b>PATIENT</b><br/>Enters the code; signs in (email pre-filled, no auto-login)"]:::manual
-      S5["<b>PATIENT</b><br/>ID OCR prefills the form (consent, staff verify)<br/><i>Planned</i>"]:::planned
+      S1["<b>PATIENT</b><br/>Optional: scans an ID on the phone to prefill name and birth date"]:::manual
+      S4["<b>PATIENT</b><br/>Counter patient claims an online account later (email code)"]:::manual
     end
     subgraph L3[" "]
     direction LR
-      S3["<b>OWNER</b><br/>Invites an employee by email"]:::manual
+      S5["<b>OWNER</b><br/>Invites an employee by email"]:::manual
     end
     subgraph L4[" "]
     direction LR
-      S1["<b>SYSTEM</b><br/>Emails a 6-digit code<br/><i>System does it</i>"]:::auto
-      S4["<b>SYSTEM</b><br/>Invitation email; role checked on every request<br/><i>System does it</i>"]:::auto
+      S2["<b>SYSTEM</b><br/>Reads it on the device; photo and ID number never kept<br/><i>System does it</i>"]:::auto
+      S3["<b>SYSTEM</b><br/>Emails a 6-digit code<br/><i>System does it</i>"]:::auto
+      S6["<b>SYSTEM</b><br/>Invitation email; role checked on every request<br/><i>System does it</i>"]:::auto
     end
     S0 --> S1
     S1 --> S2
     S2 --> S3
     S3 --> S4
-    S4 -.-> S5
+    S4 --> S5
+    S5 --> S6
     classDef cited fill:#eaf3fd,stroke:#1865ac,color:#142a40,stroke-width:1.5px
     classDef confirm fill:#fffaf0,stroke:#b26a00,color:#5e3c00,stroke-width:1.5px,stroke-dasharray:6 4
     classDef auto fill:#e6f5ee,stroke:#0c7f75,color:#0f3d33,stroke-width:1.5px

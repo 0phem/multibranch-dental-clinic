@@ -235,3 +235,28 @@ still book it.
 No. The clinic accepts some HMOs (R2-16), but the list it sent contained web-citation markers, so it is loaded **not verified**
 and hidden from patients until the Owner confirms each name. Patients may add their HMO provider and member number (stored
 encrypted) for the front desk to check at the visit. There is no coverage calculation and no claim submission in this release.
+
+**48. Where does the ID photo go?**
+Nowhere. "Scan your ID" is optional and needs consent first. The photo is read in the patient's own browser (the PhilID QR
+code, a passport's machine-readable lines, or on-device OCR whose files the clinic site serves itself) and cleared right after.
+Only the name and birth date fill the form, highlighted for the patient to check. No image and no ID number is uploaded or
+stored; the server even refuses those fields. A test searches every table, the log and the email outbox after a scan-and-register
+run and finds nothing. Staff check the physical ID once and we store only the ID type, who checked it and when.
+
+**49. What about minors?**
+A patient under 18 (computed in Philippine time) cannot self-register: a parent or guardian adds them as a dependent, in the
+counter form or the portal, with consent recorded per dependent. The child needs no ID or email; the guardian's ID is the one
+checked. The guardian books, is reminded and pays for the child ("Booking for: Me / Ana"). Staff see "Minor: guardian [name]".
+At 18 the guardian or the clinic invites the child to claim their own account; once they verify it, the guardian's access ends
+(audited) and the history stays with the patient.
+
+**50. What stops someone joining the queue from home?**
+Joining today's queue needs the code shown on the front-desk screen. It changes every clinic day and staff can refresh it at
+any time (the old one stops working). The public endpoint is rate-limited per IP and per device, and every registration still
+waits for staff to check the ID before the patient is admitted. The poster's QR only opens the form; it carries no code.
+
+**51. How do you avoid duplicate patients across branches?**
+R2-08: each branch had its own database, so patients re-registered when they moved. Now there is one shared record. Before a
+counter registration becomes a patient, staff see possible matches from any branch (same name and birth date plus the same phone
+or email) as "Record found from Branch X" and choose "Use this record" or create a new one. Nothing is merged automatically,
+and the public page never reveals whether a record exists.

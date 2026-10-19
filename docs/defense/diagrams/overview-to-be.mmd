@@ -4,26 +4,27 @@ title: "Patient journey: TO-BE (with the system)"
 flowchart TB
     subgraph L0[" "]
     direction LR
-      S0["<b>PATIENT</b><br/>Creates an account; email code"]:::manual
-      S1["<b>PATIENT</b><br/>Books online (only open times)"]:::manual
-      S8["<b>PATIENT</b><br/>Pays online (PayMongo)"]:::manual
-      S10["<b>PATIENT</b><br/>Shares feedback in the portal"]:::manual
+      S0["<b>PATIENT</b><br/>At the counter: scans the QR, registers on the phone (no paper)"]:::manual
+      S2["<b>PATIENT</b><br/>Books online (only open times)"]:::manual
+      S9["<b>PATIENT</b><br/>Pays online (PayMongo)"]:::manual
+      S11["<b>PATIENT</b><br/>Shares feedback in the portal"]:::manual
     end
     subgraph L1[" "]
     direction LR
-      S5["<b>FRONT DESK</b><br/>Check-in; queue number"]:::manual
+      S1["<b>FRONT DESK</b><br/>Checks the ID once; confirms instead of retyping"]:::manual
+      S6["<b>FRONT DESK</b><br/>Check-in; queue number"]:::manual
     end
     subgraph L2[" "]
     direction LR
-      S6["<b>DENTIST</b><br/>Treatment recorded and locked"]:::manual
+      S7["<b>DENTIST</b><br/>Treatment recorded and locked"]:::manual
     end
     subgraph L4[" "]
     direction LR
-      S2["<b>SYSTEM</b><br/>Confirmation email<br/><i>System does it</i>"]:::auto
-      S3["<b>SYSTEM</b><br/>Reminder 60 min before; I’ll be there / can’t make it<br/><i>System does it</i>"]:::auto
-      S4["<b>SYSTEM</b><br/>Late? Asked, then released; time offered to others<br/><i>System does it</i>"]:::auto
-      S7["<b>SYSTEM</b><br/>Invoice email with PDF<br/><i>System does it</i>"]:::auto
-      S9["<b>SYSTEM</b><br/>Receipt email with PDF<br/><i>System does it</i>"]:::auto
+      S3["<b>SYSTEM</b><br/>Confirmation email<br/><i>System does it</i>"]:::auto
+      S4["<b>SYSTEM</b><br/>Reminder 60 min before; I’ll be there / can’t make it<br/><i>System does it</i>"]:::auto
+      S5["<b>SYSTEM</b><br/>Late? Asked, then released; time offered to others<br/><i>System does it</i>"]:::auto
+      S8["<b>SYSTEM</b><br/>Invoice email with PDF<br/><i>System does it</i>"]:::auto
+      S10["<b>SYSTEM</b><br/>Receipt email with PDF<br/><i>System does it</i>"]:::auto
     end
     S0 --> S1
     S1 --> S2
@@ -35,6 +36,7 @@ flowchart TB
     S7 --> S8
     S8 --> S9
     S9 --> S10
+    S10 --> S11
     classDef cited fill:#eaf3fd,stroke:#1865ac,color:#142a40,stroke-width:1.5px
     classDef confirm fill:#fffaf0,stroke:#b26a00,color:#5e3c00,stroke-width:1.5px,stroke-dasharray:6 4
     classDef auto fill:#e6f5ee,stroke:#0c7f75,color:#0f3d33,stroke-width:1.5px

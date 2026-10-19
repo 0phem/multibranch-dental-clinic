@@ -4,24 +4,30 @@ title: "M4 Patient Records: TO-BE (with the system)"
 flowchart TB
     subgraph L0[" "]
     direction LR
-      S0["<b>PATIENT</b><br/>Sign-up creates the patient record"]:::manual
-      S2["<b>PATIENT</b><br/>Sees a read-only legal name; asks the front desk to correct it"]:::manual
-      S4["<b>PATIENT</b><br/>Adds own HMO provider and member number (checked at the visit)"]:::manual
+      S0["<b>PATIENT</b><br/>Scans the counter QR; fills the form on own phone (or kiosk)"]:::manual
+      S3["<b>PATIENT</b><br/>Guardian adds a child or dependent (consent per person)"]:::manual
+      S5["<b>PATIENT</b><br/>Sees a read-only legal name; asks the front desk to correct it"]:::manual
+      S7["<b>PATIENT</b><br/>Adds own HMO provider and member number (checked at the visit)"]:::manual
     end
     subgraph L1[" "]
     direction LR
-      S1["<b>FRONT DESK</b><br/>Edits details; change audited (field names only)"]:::manual
-      S5["<b>FRONT DESK</b><br/>Archive and merge of duplicate records<br/><i>Planned</i>"]:::planned
+      S2["<b>FRONT DESK</b><br/>Checks the ID; confirms or corrects (audited) instead of typing"]:::manual
+      S4["<b>FRONT DESK</b><br/>Edits details; change audited (field names only)"]:::manual
+      S8["<b>FRONT DESK</b><br/>Archive and merge of duplicate records<br/><i>Planned</i>"]:::planned
     end
     subgraph L4[" "]
     direction LR
-      S3["<b>SYSTEM</b><br/>Keeps the name as issued on invoices and receipts<br/><i>System does it</i>"]:::auto
+      S1["<b>SYSTEM</b><br/>Finds a possible existing record from any branch<br/><i>System does it</i>"]:::auto
+      S6["<b>SYSTEM</b><br/>Keeps the name as issued on invoices and receipts<br/><i>System does it</i>"]:::auto
     end
     S0 --> S1
     S1 --> S2
     S2 --> S3
     S3 --> S4
-    S4 -.-> S5
+    S4 --> S5
+    S5 --> S6
+    S6 --> S7
+    S7 -.-> S8
     classDef cited fill:#eaf3fd,stroke:#1865ac,color:#142a40,stroke-width:1.5px
     classDef confirm fill:#fffaf0,stroke:#b26a00,color:#5e3c00,stroke-width:1.5px,stroke-dasharray:6 4
     classDef auto fill:#e6f5ee,stroke:#0c7f75,color:#0f3d33,stroke-width:1.5px

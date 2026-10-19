@@ -45,13 +45,23 @@
      "kind": "manual"
     },
     {
+     "lane": "Patient",
+     "text": "Optional: scans an ID on the phone to prefill name and birth date",
+     "kind": "manual"
+    },
+    {
+     "lane": "System",
+     "text": "Reads it on the device; photo and ID number never kept",
+     "kind": "auto"
+    },
+    {
      "lane": "System",
      "text": "Emails a 6-digit code",
      "kind": "auto"
     },
     {
      "lane": "Patient",
-     "text": "Enters the code; signs in (email pre-filled, no auto-login)",
+     "text": "Counter patient claims an online account later (email code)",
      "kind": "manual"
     },
     {
@@ -63,11 +73,6 @@
      "lane": "System",
      "text": "Invitation email; role checked on every request",
      "kind": "auto"
-    },
-    {
-     "lane": "Patient",
-     "text": "ID OCR prefills the form (consent, staff verify)",
-     "kind": "planned"
     }
    ]
   },
@@ -191,7 +196,7 @@
    "automation": "Rule-based (audit, name snapshot)",
    "time": [
     "About 15 minutes of paper sign-in, then retyping (R2-03, R2-05)",
-    "To be measured in pilot"
+    "Phone self-registration plus a staff check: to be measured in pilot"
    ],
    "as_is": [
     {
@@ -223,7 +228,22 @@
    "to_be": [
     {
      "lane": "Patient",
-     "text": "Sign-up creates the patient record",
+     "text": "Scans the counter QR; fills the form on own phone (or kiosk)",
+     "kind": "manual"
+    },
+    {
+     "lane": "System",
+     "text": "Finds a possible existing record from any branch",
+     "kind": "auto"
+    },
+    {
+     "lane": "Front desk",
+     "text": "Checks the ID; confirms or corrects (audited) instead of typing",
+     "kind": "manual"
+    },
+    {
+     "lane": "Patient",
+     "text": "Guardian adds a child or dependent (consent per person)",
      "kind": "manual"
     },
     {
@@ -497,7 +517,7 @@
    "automation": "Rule-based, scheduled (no-show flag; a person decides)",
    "time": [
     "About 15 minutes for a new patient’s sign-in (R2-05)",
-    "To be measured in pilot"
+    "Phone self-registration plus a staff check: to be measured in pilot"
    ],
    "as_is": [
     {
@@ -532,6 +552,16 @@
     }
    ],
    "to_be": [
+    {
+     "lane": "Patient",
+     "text": "Walk-in: registers on the phone and joins today’s queue with the counter code",
+     "kind": "manual"
+    },
+    {
+     "lane": "Front desk",
+     "text": "Sees “Self-registered: verify ID”; checks the ID; confirms",
+     "kind": "manual"
+    },
     {
      "lane": "Front desk",
      "text": "Checks in a booked patient (Visit created)",
@@ -1402,7 +1432,12 @@
   "to_be": [
    {
     "lane": "Patient",
-    "text": "Creates an account; email code",
+    "text": "At the counter: scans the QR, registers on the phone (no paper)",
+    "kind": "manual"
+   },
+   {
+    "lane": "Front desk",
+    "text": "Checks the ID once; confirms instead of retyping",
     "kind": "manual"
    },
    {
