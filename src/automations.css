@@ -86,3 +86,12 @@
 .daycal-avatar { display:inline-grid; place-items:center; width:22px; height:22px; border-radius:50%; color:#fff; font-size:.66rem; font-weight:800; flex:none; }
 .daycal-chip { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
 .daycal-chip-name small { font-weight:500; color:#5b6b7f; }
+.daycal-estimate { flex-basis:100%; color:#7a4700; font-weight:600; }
+
+/* Intake at the front desk */
+.ci-code-label { margin:0; color:#5b6b7f; font-weight:700; }
+.ci-code-value { margin:2px 0 6px; font-size:2.4rem; font-weight:900; letter-spacing:.18em; color:#124b80; }
+.ci-dupes { border:2px solid #e0a63a; border-radius:12px; padding:10px 12px; background:#fff8e6; margin-bottom:12px; display:grid; gap:6px; }
+.ci-dupe { display:flex; gap:8px; align-items:flex-start; min-height:36px; }
+.ci-fields { display:grid; grid-template-columns:repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap:8px 12px; }
+.ci-id { display:grid; gap:6px; margin-top:12px; }

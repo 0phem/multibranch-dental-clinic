@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { Button, Icon, Modal } from '../../components.jsx'
-import { acceptSlotOffer, listAppointments, mySlotOffers, sayOnMyWay } from '../../api-client.js'
+import { acceptSlotOffer, listAppointments, myDependents, mySlotOffers, sayOnMyWay } from '../../api-client.js'
 import { cancelAppointment, commandKey, rescheduleAppointment } from '../../appointments-api.js'
 import { clinic } from '../../clinic-config.js'
 import { BookingCalendar, TimeSlots } from '../BookingCalendar.jsx'
@@ -14,6 +14,8 @@ export function VisitsPage({ context, onNavigate, toast }) {
   const today = todayManila()
   const list = useLoad(() => listAppointments({ from: addDays(today, -90), to: addDays(today, 92), per_page: 100 }), [today])
   const [tab, setTab] = useState('upcoming')
+  const family = useLoad(() => myDependents(), [])
+  const forName = a => (family.data || []).find(d => d.id === a.patient?.id)?.first_name
   const [action, setAction] = useState(null) // {kind: 'cancel'|'reschedule', appointment}
   const { upcoming, past } = splitAppointments(list.data)
   const focusId = context?.appointmentId || context?.id || null
@@ -41,6 +43,7 @@ export function VisitsPage({ context, onNavigate, toast }) {
         <div className="pp-visit-date" aria-hidden="true"><b>{Number(a.date.slice(8))}</b><span>{new Date(`${a.date}T00:00:00Z`).toLocaleDateString('en-PH', { month: 'short', timeZone: 'UTC' })}</span></div>
         <div className="pp-visit-body">
           <h3>{a.service?.name}</h3>
+          {forName(a) && <p className="pp-for-who">For {forName(a)}</p>}
           <p>{dateLong(a.date)} · {time12(a.start_time)} – {time12(a.end_time)}</p>
           <p className="pp-muted"><Icon name="pin" size={14}/> {a.branch?.name}{a.dentist?.name ? ` · ${a.dentist.name}` : ''}</p>
           <p className="pp-muted">Ref. {a.code} <Pill>{a.status}</Pill></p>

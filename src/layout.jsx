@@ -71,6 +71,7 @@ export function Login({ onLogin, onShowRegister, onForgotPassword, initialEmail 
         <Field label="Email" required><input type="email" autoComplete="email" value={email} onChange={e=>{setEmail(e.target.value);setError('')}}/></Field>
         <div ref={passwordWrap}><PasswordField label="Password" autoComplete="current-password" value={password} onChange={e=>{setPassword(e.target.value);setError('')}}/></div>
         {onForgotPassword&&<p className="login-forgot"><button type="button" className="text-link" onClick={onForgotPassword}>Forgot password?</button></p>}
+        <p className="login-forgot"><a className="text-link" href="#claim-account">Registered at the clinic? Claim your online account</a></p>
         {error&&<Notice tone="warning" title="Couldn’t sign in">{error}</Notice>}
         <Button type="submit" className="login-button" icon="arrow" disabled={submitting}>{submitting?'Signing in…':'Sign in'}</Button>
       </form>

@@ -12,6 +12,8 @@ import { AuthShell } from './pages/AuthShell.jsx'
 import { AcceptInvitation } from './pages/AcceptInvitation.jsx'
 import { PasswordReset } from './pages/PasswordReset.jsx'
 import { RespondLink } from './pages/RespondLink.jsx'
+import { ClaimAccount } from './pages/ClaimAccount.jsx'
+const JoinPage=lazy(()=>import('./pages/Join.jsx').then(m=>({default:m.JoinPage})))
 import { stopRealtime } from './realtime.js'
 import { bootstrapSession } from './session-bootstrap.js'
 import { clearInvoiceLinkFromUrl, readInvoiceLink, rememberInvoiceLink, takeInvoiceLink } from './invoice-link.js'
@@ -217,6 +219,14 @@ function AppBody() {
   }
 
   const resendRegistration=async email=>api.resendRegistrationEmail(email)
+  // Claim an online account for an existing clinic record: the same 6-digit email code step as registration.
+  const claimAccount=async form=>{
+    const result=await api.claimAccount(form)
+    if(!result.ok)return result
+    setVerification({email:result.data.email,resendAvailableAt:result.data.resend_available_at})
+    window.history.replaceState(null,'','#verify-email');setPublicView('login')
+    return {ok:true}
+  }
 
   const signedOut=()=>{
     stopRealtime() // M17: no socket keeps listening for the previous account
@@ -271,6 +281,8 @@ function AppBody() {
   if(publicView==='respond')return <RespondLink hash={typeof window==='undefined'?'':window.location.hash}/>
   if(authPhase==='checking')return <AuthChecking/>
   if(authPhase==='error'&&publicView!=='home')return <AuthUnavailable onRetry={checkSession}/>
+  // Counter registration (poster QR) and the front-desk kiosk: public, also for a signed-in patient (who joins with their account).
+  if(publicView==='join'||publicView==='kiosk')return <ChunkBoundary><Suspense fallback={<AuthShell><StartupLoading compact label="Opening registration…"/></AuthShell>}><JoinPage hash={window.location.hash} signedInPatient={role==='patient'&&publicView==='join'}/></Suspense></ChunkBoundary>
 
   const storageWarnings=Object.values(store.persistenceErrors||{})
   if(storageWarnings.some(message=>message.includes('could not be read')))return <Notice title="Saved workspace needs recovery">{storageWarnings.join(' ')}</Notice>
@@ -285,6 +297,7 @@ function AppBody() {
       ?<EmailVerification email={verification?.email} initialResendAvailableAt={verification?.resendAvailableAt} onVerify={verifyRegistration} onResend={resendRegistration} onBack={()=>{setVerification(null);setShowRegister(false)}}/>
       :showRegister
       ?<ChunkBoundary><Suspense fallback={<AuthShell><StartupLoading compact label="Opening registration…"/></AuthShell>}><PatientRegister onRegister={register} onCancel={()=>{setAuthError('');setShowRegister(false)}}/></Suspense></ChunkBoundary>
+      :publicView==='claim'?<ClaimAccount onClaim={claimAccount}/>
       :publicView==='privacy'||publicView==='terms'?<PublicLegal kind={publicView}/>
       :publicView==='home'?<PublicSite/>
       :<Login key={signInNotice?.email||'login'} initialEmail={signInNotice?.email} notice={signInNotice?.message} onLogin={login} onShowRegister={()=>{setAuthError('');setShowRegister(true)}} onForgotPassword={()=>{setAuthError('');window.location.hash='forgot-password';setPublicView('forgot')}}/>}

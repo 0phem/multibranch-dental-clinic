@@ -3,6 +3,7 @@ import { Button, Icon } from '../../components.jsx'
 import { listAppointments, myBillingInvoices } from '../../api-client.js'
 import { dateLong, greeting, money, splitAppointments, time12, todayManila } from '../format.js'
 import { EmptyState, ErrorState, Pill, Skeleton, useLoad } from '../ui.jsx'
+import { JoinQueueCard } from '../../pages/JoinQueueCard.jsx'
 
 const addDays = (date, n) => { const d = new Date(`${date}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10) }
 
@@ -21,6 +22,7 @@ export function HomePage({ me, onNavigate }) {
   return <div className="pp-page pp-home">
     <header className="pp-hello pp-fade"><p className="pp-eyebrow">{greeting()}</p><h1>{first ? `Hi, ${first}` : 'Welcome'}</h1></header>
 
+    <JoinQueueCard/>
     {visits.status === 'loading' && <Skeleton lines={4} label="Loading your next visit"/>}
     {visits.status === 'error' && <ErrorState text={visits.error} onRetry={visits.reload}/>}
     {isNew && <EmptyState icon="calendar" title="No appointments yet. Book your first visit." text="Choose a service, a branch near you and a time that suits you. Nothing is charged when you book.">

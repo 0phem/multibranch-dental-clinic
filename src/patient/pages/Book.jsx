@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Button, Icon } from '../../components.jsx'
-import { bookingBranchOptions, bookingDentistOptions, cancelWaitlist, joinWaitlist, listServices, publicFaq } from '../../api-client.js'
+import { bookingBranchOptions, bookingDentistOptions, cancelWaitlist, joinWaitlist, listServices, myDependents, publicFaq } from '../../api-client.js'
 import { commandKey, createAppointment } from '../../appointments-api.js'
 import { clinic } from '../../clinic-config.js'
 import { BookingCalendar, TimeSlots } from '../BookingCalendar.jsx'
@@ -20,6 +20,10 @@ export function BookPage({ prefill = null, onDone, onNavigate, toast }) {
   useEffect(() => { setFullDay(null) }, [step, choice.branch?.id, choice.service?.id, choice.dentist?.id])
   const [done, setDone] = useState(null)
   const services = useLoad(() => listServices(), [])
+  // A guardian books for a dependent (intake, R2-12): "Booking for: Me / Ana (daughter)".
+  const family = useLoad(() => myDependents(), [])
+  const [forId, setForId] = useState(prefill?.forPatientId || 'self')
+  const forPerson = forId === 'self' ? null : (family.data || []).find(d => d.id === forId)
   const headRef = useRef(null)
   useEffect(() => { headRef.current?.focus({ preventScroll: false }) }, [step])
 
@@ -37,6 +41,10 @@ export function BookPage({ prefill = null, onDone, onNavigate, toast }) {
 
   return <div className="pp-page pp-book">
     <PageHead eyebrow="Book a visit" title="Book an appointment" text="Only real open times are shown. Nothing is charged when you book."/>
+    {(family.data || []).length > 0 && <label className="pp-for"><span>Booking for</span>
+      <select value={forId} onChange={e => setForId(e.target.value)} aria-label="Booking for">
+        <option value="self">Me</option>{(family.data || []).map(d => <option key={d.id} value={d.id}>{d.first_name} ({d.relationship.toLowerCase()})</option>)}
+      </select></label>}
     <ol className="pp-steps" aria-label="Booking progress">
       {STEPS.map((label, i) => <li key={label} className={i < step ? 'is-done' : i === step ? 'is-current' : ''} aria-current={i === step ? 'step' : undefined}>
         <span className="pp-step-dot">{i < step ? <Icon name="check" size={14}/> : i + 1}</span><span className="pp-step-label">{label}</span>
@@ -59,7 +67,7 @@ export function BookPage({ prefill = null, onDone, onNavigate, toast }) {
         <p className="pp-hint">{dateLong(choice.date)} at {choice.branch.name}</p>
         <TimeSlots branchId={choice.branch.id} serviceId={choice.service.id} dentistId={choice.dentist?.id} date={choice.date} value={choice.slot} onChange={slot => { set({ slot }); go(5) }}/>
       </>}
-      {step === 5 && <Review choice={choice} onEdit={go} onBooked={a => { setDone(a); toast?.('Your appointment is booked.', 'success'); onDone?.(a) }}/>}
+      {step === 5 && <Review choice={choice} forPerson={forPerson} onEdit={go} onBooked={a => { setDone(a); toast?.('Your appointment is booked.', 'success'); onDone?.(a) }}/>}
       <div className="pp-step-nav">
         {step > 0 && <Button variant="ghost" icon="chevronLeft" onClick={() => go(step - 1)}>Back</Button>}
       </div>
@@ -169,7 +177,7 @@ function DentistStep({ service, branch, value, onPick }) {
   </div>
 }
 
-function Review({ choice, onEdit, onBooked }) {
+function Review({ choice, forPerson, onEdit, onBooked }) {
   const [policy, setPolicy] = useState(null)
   useEffect(() => { publicFaq().then(r => { if (r.ok) setPolicy(r.meta?.cancellation_policy || null) }) }, [])
   const [busy, setBusy] = useState(false)
@@ -178,12 +186,12 @@ function Review({ choice, onEdit, onBooked }) {
   const confirm = async () => {
     if (busy) return
     setBusy(true); setError('')
-    const result = await createAppointment({ branchId: choice.branch.id, serviceId: choice.service.id, date: choice.date, start: choice.slot.start_time, dentistId: choice.dentist?.id || null }, key.current)
+    const result = await createAppointment({ branchId: choice.branch.id, serviceId: choice.service.id, date: choice.date, start: choice.slot.start_time, dentistId: choice.dentist?.id || null, forPatientId: forPerson?.id || null }, key.current)
     setBusy(false)
     if (!result.ok) { setError(result.message || 'This time could not be booked. Please choose another.'); return }
     onBooked({ ...result.row, serviceName: choice.service.name, branchName: choice.branch.name, branchAddress: choice.branch.address })
   }
-  const rows = [['Service', choice.service.name, 0], ['Branch', <>{choice.branch.name}<small>{choice.branch.address}</small></>, 1],
+  const rows = [...(forPerson ? [['Patient', `${forPerson.name} (${forPerson.relationship.toLowerCase()})`, 0]] : []), ['Service', choice.service.name, 0], ['Branch', <>{choice.branch.name}<small>{choice.branch.address}</small></>, 1],
     ['Dentist', choice.slot?.dentist?.name || choice.dentist?.name || 'Assigned by the clinic', 2], ['Date', dateLong(choice.date), 3], ['Time', time12(choice.slot?.start_time), 4]]
   return <>
     <dl className="pp-summary">{rows.map(([k, v, s]) => <div key={k}><dt>{k}</dt><dd>{v}</dd><button type="button" className="link-button" onClick={() => onEdit(s)} aria-label={`Change ${k.toLowerCase()}`}>Change</button></div>)}</dl>

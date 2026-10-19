@@ -418,3 +418,26 @@ html:has(.public-site), html:has(.public-auth) { scroll-behavior:smooth; scroll-
 .public-auth .respond-facts dd { margin:0; text-align:right; font-weight:750; color:#14283d; overflow-wrap:anywhere; }
 .public-auth .respond-facts dd small { display:block; font-weight:500; color:#5b6b7f; }
 .public-auth .respond-alt { display:block; text-align:center; margin-top:14px; min-height:44px; line-height:44px; }
+
+/* Counter registration (#join / #kiosk) */
+.public-auth .join-choices { display:grid; gap:12px; }
+.public-auth .join-choice { display:grid; gap:4px; justify-items:start; text-align:left; padding:16px; border:1px solid #cfe0ec; border-radius:16px; background:#fff; cursor:pointer; min-height:88px; font:inherit; color:#14283d; }
+.public-auth .join-choice b { font-size:1.1rem; }
+.public-auth .join-choice small { color:#5b6b7f; }
+.public-auth .join-choice:focus-visible { outline:3px solid #1865ac; outline-offset:2px; }
+.public-auth .join-form { display:grid; gap:12px; }
+.public-auth .join-fieldset { border:1px solid #e1eaf1; border-radius:14px; padding:10px 12px; display:grid; gap:8px; min-width:0; }
+.public-auth .join-fieldset legend { font-weight:800; padding:0 4px; }
+.public-auth .join-row { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+@media (max-width:420px) { .public-auth .join-row { grid-template-columns:1fr; } }
+.public-auth .join-why { margin:0; color:#5b6b7f; font-size:.9rem; }
+.public-auth .join-code { font-size:1.4rem; letter-spacing:.2em; text-transform:uppercase; font-weight:800; }
+.public-auth .join-dep { border-top:1px dashed #cfe0ec; padding-top:8px; }
+.public-auth .join-consent { align-items:flex-start; }
+.public-auth .join-ref { font-size:1.2rem; }
+.public-auth .join-back { min-height:44px; }
+.public-auth input.from-id, .ci-fields input.from-id { background:#fff8e6 !important; border-color:#e0a63a !important; box-shadow:0 0 0 2px #f6dfae; }
+.public-auth .scan-consent { border:1px solid #cfe0ec; border-radius:14px; padding:10px 12px; background:#f7fbff; }
+.public-auth .scan-consent ul { margin:6px 0 10px; padding-left:18px; }
+.public-auth .scan-note.is-poor { color:#8f2a19; font-weight:700; }
+.join-page.is-kiosk { font-size:1.08rem; }

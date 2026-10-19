@@ -4,6 +4,7 @@ import { COUNTRY_CODES, DEFAULT_COUNTRY, normalizePhoneNumber } from '../phone.j
 import { AuthShell } from './AuthShell.jsx'
 import { PasswordField } from './PasswordField.jsx'
 import { clinicDate } from '../clock.js'
+import { ScanIdButton } from './Join.jsx'
 
 // Patient self-registration (M1/M4, Backend Foundation 1B). Submits to the real Laravel backend
 // (`POST /api/register` via the `onRegister` prop — see App.jsx/api-client.js), which creates a pending
@@ -162,6 +163,8 @@ export function PatientRegister({ onRegister, onCancel }) {
         <p>Book visits, pay online and message the clinic in one place.</p>
       </div>
       <form ref={formRef} onSubmit={submit} noValidate aria-busy={submitting} className="lp-form">
+        {/* Optional: fill the name and birth date from an ID, read on this device only (the photo is not uploaded or kept). */}
+        <ScanIdButton onResult={r=>{for(const k of ['first_name','last_name','date_of_birth'])if(r.fields[k])update(k,r.fields[k])}}/>
         <div className="lp-form-row">
           <Field label="First name" required error={errors.first_name}><input value={form.first_name} onChange={e=>update('first_name',e.target.value)} onBlur={blur('first_name')} autoComplete="given-name" aria-invalid={errors.first_name?true:undefined}/></Field>
           <Field label="Last name" required error={errors.last_name}><input value={form.last_name} onChange={e=>update('last_name',e.target.value)} onBlur={blur('last_name')} autoComplete="family-name" aria-invalid={errors.last_name?true:undefined}/></Field>

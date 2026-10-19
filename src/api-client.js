@@ -8,6 +8,8 @@
 //   {ok:false, kind:'network'|'server', message}
 // Session auth only (Sanctum SPA cookies) — never a bearer token in localStorage.
 
+import { deviceId } from './intake/device-id.js'
+export const apiBase = () => apiBaseUrl()
 function apiBaseUrl() {
   try {
     return (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_BASE_URL) || 'http://localhost:8000'
@@ -514,5 +516,23 @@ export function addAcceptedHmo(body) { return json('/api/accepted-hmos', 'POST',
 export function updateAcceptedHmo(id, body) { return json(`/api/accepted-hmos/${enc(id)}`, 'PATCH', body) }
 export function publicHmos() { return request('/api/public/hmos') }
 export function publicFaq() { return request('/api/public/faq') }
+// Registration intake (counter QR / kiosk, no sign-in). X-Device-Id is a random id this browser keeps, for rate limits only (src/intake/device-id.js).
+export function intakeBranch(ref) { return request(`/api/public/intake/${enc(ref)}`) }
+export function submitIntake(body) { return request('/api/public/intake', { method: 'POST', body: JSON.stringify(body), headers: { 'X-Device-Id': deviceId() } }) }
+export function joinQueueWithAccount(body) { return request('/api/intake/join', { method: 'POST', body: JSON.stringify(body), headers: { 'X-Device-Id': deviceId() } }) }
+export function claimAccount(body) { return json('/api/account/claim', 'POST', body) }
+// Staff: today's counter code, pending registrations, confirm or cancel, the in-person ID check, the branch poster.
+export function intakeCode(branchRef) { return request(`/api/intake/code${branchRef ? `?branch_ref=${enc(branchRef)}` : ''}`) }
+export function refreshIntakeCode(branchRef) { return json('/api/intake/code/refresh', 'POST', branchRef ? { branch_ref: branchRef } : {}) }
+export function pendingIntake() { return request('/api/intake/submissions') }
+export function confirmIntake(id, body) { return json(`/api/intake/submissions/${enc(id)}/confirm`, 'POST', body) }
+export function cancelIntake(id) { return json(`/api/intake/submissions/${enc(id)}/cancel`, 'POST') }
+export function verifyPatientId(patientId, body) { return json(`/api/patients/${enc(patientId)}/verify-id`, 'POST', body) }
+export function branchPosterUrl(branchRef) { return `${apiBase()}/api/branches/${enc(branchRef)}/poster` }
+// Parents and guardians.
+export function myDependents() { return request('/api/me/dependents') }
+export function addDependent(body) { return json('/api/me/dependents', 'POST', body) }
+export function inviteToClaim(patientId, email) { return json(`/api/patients/${enc(patientId)}/claim-invite`, 'POST', { email }) }
+export function linkGuardian(patientId, body) { return json(`/api/patients/${enc(patientId)}/guardians`, 'POST', body) }
 export function myHmo() { return request('/api/me/hmo') }
 export function saveMyHmo(body) { return json('/api/me/hmo', 'PUT', body) }

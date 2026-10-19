@@ -15,6 +15,7 @@ const DEFAULT_TEXT = {
   offer_count: v => `${v} patients`, min_notice_minutes: v => `${v} minutes`, waitlist_after_minutes: v => `${v} minutes`,
   days: v => `after ${v.join(', ')} days`, rules: v => (v.length ? v.map(r => `${r.category}: ${r.months} months`).join('; ') : 'no rules'),
   notify_count: v => `${v} patients`, send_time: time12, late_hours: v => `${v} hours`, limit: v => `${v} times`, window_months: v => `${v} months`, crowded_percent: v => `${v}% booked`,
+  store_id_last4: onOff, id_upload: onOff, id_upload_days: v => `${v} days`,
 }
 const sourceText = src => (src ? `from clinic interview R2 (${src})` : 'recommended, not confirmed by the clinic')
 
@@ -141,6 +142,10 @@ function AutomationCard({ row, categories, toast, onSaved, onStale }) {
         {num('window_months', 'Counted over the last (months)', 1, 24)}
       </>}
       {row.key === 'calendar_load' && num('crowded_percent', 'Mark a day as crowded at (% of the dentists’ time booked)', 50, 100)}
+      {row.key === 'intake' && <>
+        {check('store_id_last4', 'Keep the last 4 characters of the ID when the front desk checks it (never the full number)')}
+        <label className="au-check"><input type="checkbox" checked={false} disabled/> Let patients upload an ID photo for remote pre-verification <small>Not available in this release. The ID photo is read on the patient’s phone and never uploaded or kept.</small></label>
+      </>}
       {fieldError && <p className="au-error" role="alert">{fieldError}</p>}
       <div className="au-actions">
         <Button type="submit" size="sm" disabled={!dirty || !!busy}>{busy === 'save' ? 'Saving…' : 'Save changes'}</Button>
