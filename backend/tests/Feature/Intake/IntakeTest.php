@@ -248,4 +248,20 @@ class IntakeTest extends TestCase
         $this->assertSame('Checked In', $booking->fresh()->status);
         $this->assertSame($this->d['d1']->id, \App\Models\Visit::where('appointment_id', $booking->id)->sole()->responsible_dentist_profile_id);
     }
+
+    public function test_an_earlier_unverified_claim_cannot_lock_out_the_real_owner(): void
+    {
+        $this->p['B']->person->update(['email' => 'owner.of.record@mailbox.ph', 'date_of_birth' => '1980-02-02']);
+        $this->u['patientB']->forceDelete(); // a record registered at the counter: no account yet
+        $claim = fn (string $password) => $this->postJson('/api/account/claim', ['email' => 'owner.of.record@mailbox.ph', 'date_of_birth' => '1980-02-02', 'password' => $password, 'password_confirmation' => $password])->assertCreated();
+        $claim('Attacker123');
+        $this->postJson('/api/login', ['email' => 'owner.of.record@mailbox.ph', 'password' => 'Attacker123'])->assertStatus(422); // unverified: no sign-in
+        $this->travel(2)->minutes(); // past the resend cooldown
+        $claim('RealOwner123');
+        $code = null;
+        Mail::assertSent(OneTimeCodeMail::class, function (OneTimeCodeMail $m) use (&$code) { if ($m->hasTo('owner.of.record@mailbox.ph')) $code = $m->code; return true; });
+        $this->postJson('/api/register/verify', ['email' => 'owner.of.record@mailbox.ph', 'otp' => $code])->assertOk();
+        $this->postJson('/api/login', ['email' => 'owner.of.record@mailbox.ph', 'password' => 'Attacker123'])->assertStatus(422);
+        $this->postJson('/api/login', ['email' => 'owner.of.record@mailbox.ph', 'password' => 'RealOwner123'])->assertOk();
+    }
 }
