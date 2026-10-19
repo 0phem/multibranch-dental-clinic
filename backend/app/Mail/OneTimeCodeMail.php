@@ -35,6 +35,12 @@ class OneTimeCodeMail extends Mailable
                 'ignore' => 'If you did not ask for this, you can ignore this email. The account keeps its current email address.',
                 'reason' => 'You received this because someone asked to move a clinic account to this email address.',
             ],
+            EmailVerificationOtp::ACCOUNT_CLAIM => [
+                'subject' => "Your account code - $clinic", 'heading' => 'Activate your patient account', 'eyebrow' => 'Online account',
+                'intro' => 'Enter this code together with the password you choose to activate the online account for your clinic record.',
+                'ignore' => 'If you did not ask for this, you can ignore this email. No account is activated without this code.',
+                'reason' => "You received this because an online account was requested for your patient record at $clinic.",
+            ],
             default => [
                 'subject' => "Your verification code - $clinic", 'heading' => 'Confirm your email', 'eyebrow' => 'Account verification',
                 'intro' => 'Use this code to finish creating your patient account.',

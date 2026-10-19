@@ -34,7 +34,8 @@ class EmailVerificationController extends Controller
                 ->first();
             // Unknown, inactive, already verified, wrong, expired and used-up codes all get ONE answer (and the same bcrypt work), so
             // this endpoint cannot be used to learn whether an address is registered. Wrong codes still count toward the 5-try limit.
-            if (! $user || $user->account_status !== 'Active' || $user->email_verified_at) {
+            // A claim not yet verified is activated ONLY through /api/account/claim/verify: same neutral answer here.
+            if (! $user || $user->account_status !== 'Active' || $user->email_verified_at || $user->pending_claim) {
                 Hash::check($data['otp'], '$2y$12$H5ntb6FLY.qFGr/Rba08b.Dt0raoSs2QEEhzAIt5grrYJ3L8/f/q2');
 
                 return ['failure' => self::GENERIC_FAILURE];
@@ -69,7 +70,7 @@ class EmailVerificationController extends Controller
                 ->where('role', Role::Patient->value)
                 ->lockForUpdate()
                 ->first();
-            if (! $user || $user->account_status !== 'Active' || $user->email_verified_at) return;
+            if (! $user || $user->account_status !== 'Active' || $user->email_verified_at || $user->pending_claim) return;
             // Inside the 60-second wait the earlier code stays valid; a different answer here would reveal the account.
             if ($this->codes->cooldown($user, EmailVerificationOtp::REGISTRATION)) return;
             $this->codes->issue($user->load('person'), EmailVerificationOtp::REGISTRATION, $user->email);

@@ -145,6 +145,7 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureAccountAccess::cla
     Route::post('/intake/submissions/{intakeSubmission}/confirm', [\App\Http\Controllers\IntakeController::class, 'confirm'])->middleware('role:staff,owner');
     Route::post('/intake/submissions/{intakeSubmission}/cancel', [\App\Http\Controllers\IntakeController::class, 'cancel'])->middleware('role:staff,owner');
     Route::post('/patients/{patient}/verify-id', [\App\Http\Controllers\IntakeController::class, 'verifyId'])->middleware('role:staff');
+    Route::post('/patients/{patient}/offer-account', [\App\Http\Controllers\IntakeController::class, 'offerAccount'])->middleware(['role:staff', 'throttle:12,1']);
     Route::get('/branches/{branch}/poster', [\App\Http\Controllers\BranchPosterController::class, 'show'])->middleware('role:staff,owner');
     // Parents and guardians (dependents), account-claim invites, Staff linking.
     Route::get('/me/dependents', [\App\Http\Controllers\GuardianController::class, 'mine'])->middleware('role:patient');

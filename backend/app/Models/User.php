@@ -46,6 +46,7 @@ class User extends Authenticatable
     {
         return [
             'email_verified_at' => 'datetime',
+            'pending_claim' => 'boolean',
             'auth_version' => 'integer',
             'password' => 'hashed',
             'role' => Role::class,

@@ -12,6 +12,7 @@ use App\Services\Intake\JoinCodes;
 use App\Support\ClinicClock;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\ValidationException;
 use libphonenumber\NumberParseException;
@@ -128,6 +129,28 @@ class IntakeController extends Controller
         $p = $this->intake->recordIdCheck($patient, $request->user(), $data['id_type'], $data['id_last4'] ?? null);
 
         return response()->json(['data' => ['id_type' => $p->id_type, 'id_verified_at' => $p->id_verified_at?->toIso8601String(), 'id_last4' => $p->id_last4]]);
+    }
+
+    /**
+     * Staff: "Offer online account" for a record without one (for example registered at the counter without an email). The
+     * physical ID is checked first (now, or already recorded); staff confirm the patient's email with them; a one-time claim link
+     * goes to that email. Audited with who and when.
+     */
+    public function offerAccount(Request $request, Patient $patient): JsonResponse
+    {
+        Gate::authorize('update', $patient);
+        $data = $request->validate(['email' => ['required', 'email:rfc', 'max:255'], 'id_type' => ['nullable', 'string', 'max:30']]);
+        // One transaction: a refused offer (a minor, an email in use) also leaves no ID-check record behind.
+        $result = DB::transaction(function () use ($patient, $data, $request) {
+            if (! $patient->id_verified_at) {
+                if (empty($data['id_type'])) throw ValidationException::withMessages(['id_type' => ['Check the patient’s ID in person first.']]);
+                $this->intake->recordIdCheck($patient, $request->user(), $data['id_type']);
+            }
+
+            return app(\App\Services\Intake\AccountClaims::class)->offer($patient, $data['email'], $request->user(), 'staff');
+        });
+
+        return response()->json(['data' => ['status' => $result['status'], 'message' => 'A one-time link was emailed to the patient. It works once and expires.']]);
     }
 
     private function view(IntakeSubmission $s): array

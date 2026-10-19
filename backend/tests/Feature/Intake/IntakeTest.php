@@ -266,4 +266,105 @@ class IntakeTest extends TestCase
         $this->postJson('/api/account/claim/verify', ['email' => 'owner.of.record@mailbox.ph', 'otp' => $code, 'password' => 'Attacker123', 'password_confirmation' => 'Attacker123'])->assertStatus(422); // once only
         $this->postJson('/api/login', ['email' => 'owner.of.record@mailbox.ph', 'password' => 'RealOwner123'])->assertOk();
     }
+
+    // ---- account claim hardening ------------------------------------------------------------------------------------
+
+    private function counterRecord(?string $email, string $dob = '1980-02-02'): Patient
+    {
+        $p = $this->p['B'];
+        $p->person->update(['email' => $email, 'date_of_birth' => $dob]);
+        $this->u['patientB']->forceDelete();
+
+        return $p->fresh(['person']);
+    }
+
+    private function codeFor(string $email): ?string
+    {
+        $code = null;
+        Mail::assertSent(OneTimeCodeMail::class, function (OneTimeCodeMail $m) use (&$code, $email) { if ($m->hasTo($email)) $code = $m->code; return true; });
+
+        return $code;
+    }
+
+    public function test_the_code_goes_only_to_the_stored_email_and_answers_are_identical_for_matching_and_non_matching_details(): void
+    {
+        $this->counterRecord('owner.of.record@mailbox.ph');
+        $match = $this->postJson('/api/account/claim', ['email' => 'owner.of.record@mailbox.ph', 'date_of_birth' => '1980-02-02']);
+        $wrongDob = $this->postJson('/api/account/claim', ['email' => 'owner.of.record@mailbox.ph', 'date_of_birth' => '1981-02-02']);
+        $this->assertSame([$match->status(), $match->json()], [$wrongDob->status(), $wrongDob->json()]);
+        // An attacker types their own email with the owner's birth date: nothing is created or sent to them.
+        $other = $this->postJson('/api/account/claim', ['email' => 'attacker@mailbox.ph', 'date_of_birth' => '1980-02-02']);
+        $this->assertSame([201, ['email', 'code_sent_if_matched', 'resend_available_at']], [$other->status(), array_keys($other->json('data'))]);
+        Mail::assertNotSent(OneTimeCodeMail::class, fn ($m) => $m->hasTo('attacker@mailbox.ph'));
+        $this->assertNull(\App\Models\User::where('email', 'attacker@mailbox.ph')->first());
+        $this->assertNotNull($this->codeFor('owner.of.record@mailbox.ph')); // the owner is unaffected and got the code
+    }
+
+    public function test_a_record_without_an_email_is_claimed_only_through_a_staff_link_that_works_once_and_expires(): void
+    {
+        $record = $this->counterRecord(null);
+        $this->existing('B', 'd1', 'b1', 'svc1', '2026-09-21', '10:00', 30, 'Completed'); // a visit at staff's branch
+        $this->postJson('/api/account/claim', ['email' => 'walkin@mailbox.ph', 'date_of_birth' => '1980-02-02'])->assertCreated();
+        Mail::assertNotSent(OneTimeCodeMail::class);
+
+        $this->actingAsUser('staffB1');
+        $record->person->update(['date_of_birth' => '2012-02-02']);
+        $this->postJson("/api/patients/{$record->public_id}/offer-account", ['email' => 'walkin@mailbox.ph', 'id_type' => 'philid'])->assertStatus(422)->assertJsonValidationErrors('email'); // a minor
+        Mail::assertNotSent(\App\Mail\AccountClaimInviteMail::class);
+        $this->assertNull($record->fresh()->id_verified_at); // the refused offer left no ID check behind
+        $record->person->update(['date_of_birth' => '1980-02-02']);
+        $this->postJson("/api/patients/{$record->public_id}/offer-account", ['email' => 'walkin@mailbox.ph'])->assertStatus(422); // ID not checked yet
+        $this->postJson("/api/patients/{$record->public_id}/offer-account", ['email' => 'walkin@mailbox.ph', 'id_type' => 'philid'])->assertOk();
+        $this->assertTrue(AuditLog::where('action', 'patient.account_offered')->where('actor_user_id', $this->u['staffB1']->id)->exists());
+        $token = null;
+        Mail::assertSent(\App\Mail\AccountClaimInviteMail::class, function ($m) use (&$token) { $token = $m->token; return $m->hasTo('walkin@mailbox.ph'); });
+        $this->app['auth']->forgetGuards();
+        $this->postJson('/api/account/claim', ['token' => $token])->assertCreated()->assertJsonPath('data.email', 'w•••••@mailbox.ph');
+        $this->postJson('/api/account/claim/verify', ['email' => 'walkin@mailbox.ph', 'otp' => $this->codeFor('walkin@mailbox.ph'), 'password' => 'Walkin123', 'password_confirmation' => 'Walkin123'])->assertOk();
+        $this->postJson('/api/account/claim', ['token' => $token])->assertStatus(422); // used once
+        $this->postJson('/api/login', ['email' => 'walkin@mailbox.ph', 'password' => 'Walkin123'])->assertOk();
+
+        // A second record: a link expires after the Owner's setting (24 hours by default).
+        [$otherUser, $other] = $this->patient('PAT-0009');
+        $otherUser->forceDelete();
+        $this->p['X'] = $other;
+        $this->existing('X', 'd1', 'b1', 'svc1', '2026-09-21', '11:00', 30, 'Completed');
+        $this->flushSession();
+        $this->app['auth']->forgetGuards();
+        $this->actingAsUser('staffB1');
+        $this->postJson("/api/patients/{$other->public_id}/offer-account", ['email' => 'late@mailbox.ph', 'id_type' => 'umid'])->assertOk();
+        $late = null;
+        Mail::assertSent(\App\Mail\AccountClaimInviteMail::class, function ($m) use (&$late) { if ($m->hasTo('late@mailbox.ph')) $late = $m->token; return true; });
+        $this->app['auth']->forgetGuards();
+        $this->travel(25)->hours();
+        $this->postJson('/api/account/claim', ['token' => $late])->assertStatus(422);
+        $this->assertTrue(AuditLog::where('action', 'account.claim_blocked')->exists());
+    }
+
+    public function test_a_pending_claim_cannot_be_activated_by_sign_up_verification_resend_or_password_reset_and_codes_die_after_5_tries(): void
+    {
+        $this->counterRecord('owner.of.record@mailbox.ph');
+        $this->postJson('/api/account/claim', ['email' => 'owner.of.record@mailbox.ph', 'date_of_birth' => '1980-02-02'])->assertCreated();
+        $code = $this->codeFor('owner.of.record@mailbox.ph');
+        $neutral = $this->postJson('/api/register/verify', ['email' => 'nobody@mailbox.ph', 'otp' => '123456']);
+        $signup = $this->postJson('/api/register/verify', ['email' => 'owner.of.record@mailbox.ph', 'otp' => $code]);
+        $this->assertSame([$neutral->status(), $neutral->json('code')], [$signup->status(), $signup->json('code')]);
+        $this->postJson('/api/register/resend', ['email' => 'owner.of.record@mailbox.ph'])->assertOk();
+        $this->postJson('/api/password/forgot', ['email' => 'owner.of.record@mailbox.ph'])->assertOk();
+        Mail::assertSent(OneTimeCodeMail::class, 1); // only the claim code: no sign-up or reset code for a pending claim
+        $this->assertNull(\App\Models\User::where('email', 'owner.of.record@mailbox.ph')->sole()->email_verified_at);
+
+        // Resend within the 60-second cooldown: no new code.
+        $this->postJson('/api/account/claim', ['email' => 'owner.of.record@mailbox.ph', 'date_of_birth' => '1980-02-02'])->assertCreated();
+        Mail::assertSent(OneTimeCodeMail::class, 1);
+
+        // Brute force: 5 wrong tries kill the code, even the right one fails afterwards.
+        foreach (range(1, 5) as $i) $this->postJson('/api/account/claim/verify', ['email' => 'owner.of.record@mailbox.ph', 'otp' => str_pad((string) $i, 6, '0', STR_PAD_LEFT), 'password' => 'Owner1234', 'password_confirmation' => 'Owner1234'])->assertStatus(422);
+        $this->postJson('/api/account/claim/verify', ['email' => 'owner.of.record@mailbox.ph', 'otp' => $code, 'password' => 'Owner1234', 'password_confirmation' => 'Owner1234'])->assertStatus(422);
+
+        // Audit entries for claims carry no code, password or birth date.
+        $audit = AuditLog::where('action', 'like', 'account.claim%')->get()->map(fn ($a) => json_encode($a->payload))->implode(' ');
+        $this->assertNotSame('', $audit);
+        foreach ([$code, 'Owner1234', '1980-02-02', '1980'] as $secret) $this->assertStringNotContainsString($secret, $audit);
+    }
 }

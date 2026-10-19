@@ -74,7 +74,7 @@ final class AutomationCatalog
             'attendance_policy' => ['Cancellation policy', 'M6', 'Patients can cancel or reschedule online anytime, so the time can be reused. A cancellation less than the set hours before the visit is recorded as a late cancellation. A patient with the set number of late cancellations or no-shows within the period needs front-desk confirmation for new online bookings until Staff clear it. No fees.',
                 true, ['late_hours' => 24, 'limit' => 3, 'window_months' => 6], ['late_hours' => 'R2-13', 'limit' => null, 'window_months' => null, 'enabled' => null]],
             'intake' => ['Registration and ID', 'M1 / M4 / M8', 'Patients register on their phone at the counter (or on a kiosk) and may scan an ID to fill in the form: the scan runs on their device, the photo is never uploaded or kept, and no ID number is stored. Staff check the physical ID once and record only the ID type, who checked it and when. Optionally keep the last 4 characters of the ID. Uploading an ID for remote pre-verification is not available in this release.',
-                true, ['store_id_last4' => false, 'id_upload' => false, 'id_upload_days' => 7], ['store_id_last4' => null, 'id_upload' => null, 'id_upload_days' => null, 'enabled' => 'R2-12']],
+                true, ['store_id_last4' => false, 'id_upload' => false, 'id_upload_days' => 7, 'claim_link_hours' => 24], ['store_id_last4' => null, 'id_upload' => null, 'id_upload_days' => null, 'claim_link_hours' => null, 'enabled' => 'R2-12']],
             'calendar_load' => ['Calendar load', 'M6 / M3', 'The Staff and Owner calendar colours each day by how full it is (booked minutes against the dentists\' available minutes) and marks days above the threshold as crowded, so the front desk can plan ahead (R2-02).',
                 true, ['crowded_percent' => 80], ['crowded_percent' => null, 'enabled' => 'R2-02']],
         ];
@@ -171,7 +171,7 @@ final class AutomationCatalog
             'intake' => (function () use ($bool, $int, $fail) {
                 if ($bool('id_upload')) $fail('id_upload', 'Uploading an ID for remote pre-verification is not available in this release.');
 
-                return ['store_id_last4' => $bool('store_id_last4'), 'id_upload' => false, 'id_upload_days' => $int('id_upload_days', 1, 30)];
+                return ['store_id_last4' => $bool('store_id_last4'), 'id_upload' => false, 'id_upload_days' => $int('id_upload_days', 1, 30), 'claim_link_hours' => $int('claim_link_hours', 1, 168)];
             })(),
         };
     }

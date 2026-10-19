@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Mail\AccountClaimInviteMail;
 use App\Models\Patient;
 use App\Models\Person;
 use App\Services\Audit\AuditService;
@@ -57,11 +56,9 @@ class GuardianController extends Controller
         $data = $request->validate(['email' => ['required', 'email:rfc', 'max:255']]);
         $email = strtolower(trim($data['email']));
         if ((Guardianship::age($patient->person?->date_of_birth?->toDateString()) ?? 0) < Guardianship::ADULT_AGE) throw ValidationException::withMessages(['email' => ['Only a dependent of 18 or older can have their own account.']]);
-        if ($patient->user) throw ValidationException::withMessages(['email' => ['This patient already has an account.']]);
-        if (Person::whereRaw('lower(email) = ?', [$email])->where('id', '<>', $patient->person_id)->exists()) throw ValidationException::withMessages(['email' => ['This email is already used by another record.']]);
-        $patient->person->update(['email' => $email]);
-        $result = app(MailDispatcher::class)->send($email, new AccountClaimInviteMail($patient->person->first_name), 'account_claim_invite', $user, $patient);
-        app(AuditService::class)->recordAdministrative('patient.claim_invited', $user, $patient, ['by' => $staff ? 'clinic' : 'guardian']);
+        if ($patient->user?->email_verified_at) throw ValidationException::withMessages(['email' => ['This patient already has an account.']]);
+        // A one-time claim link to the dependent's own email (single use, expires); the guardian keeps access until the claim succeeds.
+        $result = app(\App\Services\Intake\AccountClaims::class)->offer($patient, $email, $user, $staff ? 'staff' : 'guardian');
 
         return response()->json(['data' => ['status' => $result['status'], 'message' => $result['message']]]);
     }

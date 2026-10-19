@@ -50,6 +50,7 @@ class OneTimeCodes
         EmailVerificationOtp::REGISTRATION => 'patient_email_verification',
         EmailVerificationOtp::PASSWORD_RESET => 'password_reset_code',
         EmailVerificationOtp::EMAIL_CHANGE => 'email_change_code',
+        EmailVerificationOtp::ACCOUNT_CLAIM => 'account_claim_code',
     ];
 
     /**

@@ -39,7 +39,8 @@ class PasswordResetController extends Controller
 
         DB::transaction(function () use ($email) {
             $user = User::where('email', $email)->lockForUpdate()->first();
-            if (! $user || $user->account_status !== 'Active') return;
+            // A pending account claim is finished only through /api/account/claim/verify (the same neutral answer here).
+            if (! $user || $user->account_status !== 'Active' || $user->pending_claim) return;
             // Inside the 60-second wait the earlier code stays valid; answering differently would reveal the account.
             if ($this->codes->cooldown($user, EmailVerificationOtp::PASSWORD_RESET)) return;
             $this->codes->issue($user->load('person'), EmailVerificationOtp::PASSWORD_RESET, $user->email);
@@ -63,7 +64,7 @@ class PasswordResetController extends Controller
 
         $result = DB::transaction(function () use ($email, $data) {
             $user = User::where('email', $email)->lockForUpdate()->first();
-            if (! $user || $user->account_status !== 'Active') {
+            if (! $user || $user->account_status !== 'Active' || $user->pending_claim) {
                 Hash::check($data['otp'], '$2y$12$H5ntb6FLY.qFGr/Rba08b.Dt0raoSs2QEEhzAIt5grrYJ3L8/f/q2'); // same work as a real check
 
                 return ['failure' => self::GENERIC_FAILURE];

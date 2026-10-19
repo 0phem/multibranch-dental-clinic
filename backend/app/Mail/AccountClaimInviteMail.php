@@ -14,7 +14,7 @@ class AccountClaimInviteMail extends Mailable
 {
     use Queueable, SerializesModels;
 
-    public function __construct(public ?string $firstName) {}
+    public function __construct(public ?string $firstName, public ?string $token = null) {}
 
     public function envelope(): Envelope
     {
@@ -24,6 +24,6 @@ class AccountClaimInviteMail extends Mailable
     public function content(): Content
     {
         return new Content(view: 'emails.account-claim-invite', text: 'emails.account-claim-invite-text', with: [
-            'firstName' => $this->firstName ?: 'there', 'claimUrl' => rtrim((string) config('app.frontend_url'), '/').'/#claim-account', 'subjectLine' => $this->envelope()->subject]);
+            'firstName' => $this->firstName ?: 'there', 'claimUrl' => rtrim((string) config('app.frontend_url'), '/').'/#claim-account'.($this->token ? '/'.$this->token : ''), 'subjectLine' => $this->envelope()->subject]);
     }
 }
