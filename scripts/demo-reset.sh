@@ -26,7 +26,7 @@ pgrep -f "artisan reverb:start" >/dev/null && HAD_REVERB=1 || HAD_REVERB=0
 echo "== Rebuilding $DB_DATABASE"
 php artisan migrate:fresh --force --no-interaction >/dev/null
 php artisan db:seed --force --no-interaction >/dev/null
-php artisan db:seed --class=DemoClinicSeeder --force --no-interaction | grep -E "Demo clinic ready|Real branch|Assistant answers|Interview round 2" || true
+php artisan db:seed --class=DemoClinicSeeder --force --no-interaction | grep -E "Demo clinic ready|Real branch|Assistant answers|Interview round 2|Demo work schedules" || true
 if [ -n "${DEMO_PATIENT_EMAIL:-}" ]; then "$ROOT/scripts/payment-test.sh" patient-email "$DEMO_PATIENT_EMAIL"; fi
 
 # Keep the running demo alive (scripts/demo-start.sh): reload the worker and Reverb with the new code, then wait until the
