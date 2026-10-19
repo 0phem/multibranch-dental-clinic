@@ -6,6 +6,11 @@ import { addDependent, inviteToClaim, myDependents } from '../../api-client.js'
  * Parents and guardians (R2-12): children or others in your care. You book, are reminded and pay for them; they need no ID or
  * email. At 18 you can invite them to claim their own account, and then you no longer manage their record.
  */
+/** The Family page of the portal (reachable from the navigation). */
+export function FamilyPage() {
+  return <div className="pp-page"><Family/></div>
+}
+
 export function Family() {
   const [rows, setRows] = useState(null), [adding, setAdding] = useState(false), [note, setNote] = useState(''), [busy, setBusy] = useState(false)
   const [form, setForm] = useState({ first_name: '', last_name: '', date_of_birth: '', relationship: 'Child', consent: false })

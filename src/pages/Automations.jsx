@@ -142,6 +142,16 @@ function AutomationCard({ row, categories, toast, onSaved, onStale }) {
         {num('window_months', 'Counted over the last (months)', 1, 24)}
       </>}
       {row.key === 'calendar_load' && num('crowded_percent', 'Mark a day as crowded at (% of the dentists’ time booked)', 50, 100)}
+      {row.key === 'staffing' && <>
+        <Field label="Who approves leave requests" hint={hint('leave_approver')}>
+          <select value={draft.leave_approver} onChange={e => set('leave_approver', e.target.value)}>
+            <option value="owner">The Owner only</option>
+            <option value="owner_or_front_desk">The Owner or the front desk of the requester’s branch</option>
+          </select>
+        </Field>
+        {check('front_desk_edits_schedules', 'The front desk may edit the work schedules of the dentists at their branch')}
+        {num('handover_access_days', 'After a handover is acknowledged, the receiving branch keeps the patient’s record for (days)', 1, 365)}
+      </>}
       {row.key === 'intake' && <>
         {check('store_id_last4', 'Keep the last 4 characters of the ID when the front desk checks it (never the full number)')}
         <label className="au-check"><input type="checkbox" checked={false} disabled/> Let patients upload an ID photo for remote pre-verification <small>Not available in this release. The ID photo is read on the patient’s phone and never uploaded or kept.</small></label>

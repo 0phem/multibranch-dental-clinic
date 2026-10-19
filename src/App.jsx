@@ -45,6 +45,9 @@ const PatientMePage=lazy(()=>import('./pages/PatientMe.jsx').then(m=>({default:m
 const AnalyticsPage=lazy(()=>import('./pages/Admin.jsx').then(m=>({default:m.AnalyticsPage})))
 const AutomationPage=lazy(()=>import('./pages/Admin.jsx').then(m=>({default:m.AutomationPage})))
 const ClosedDatesPage=lazy(()=>import('./pages/ClosedDates.jsx').then(m=>({default:m.ClosedDatesPage})))
+const WorkSchedulesPage=lazy(()=>import('./pages/Staffing.jsx').then(m=>({default:m.WorkSchedulesPage})))
+const LeavePage=lazy(()=>import('./pages/Staffing.jsx').then(m=>({default:m.LeavePage})))
+const HandoversPage=lazy(()=>import('./pages/Handovers.jsx').then(m=>({default:m.HandoversPage})))
 const AcceptedHmosPage=lazy(()=>import('./pages/AcceptedHmos.jsx').then(m=>({default:m.AcceptedHmosPage})))
 const WordingApprovalsPage=lazy(()=>import('./pages/WordingApprovals.jsx').then(m=>({default:m.WordingApprovalsPage})))
 const AutomationsPage=lazy(()=>import('./pages/Automations.jsx').then(m=>({default:m.AutomationsPage})))
@@ -340,6 +343,9 @@ function AppBody() {
     case 'pricing': content=<ServicesPricingPage store={store}/>; break
     case 'automations': content=<AutomationsPage store={store}/>; break
     case 'closures': content=<ClosedDatesPage store={store} role={role}/>; break
+    case 'schedules': content=<WorkSchedulesPage store={store} role={role}/>; break
+    case 'leave': content=<LeavePage store={store} role={role}/>; break
+    case 'handovers': content=<HandoversPage store={store} role={role}/>; break
     case 'hmos': content=<AcceptedHmosPage store={store}/>; break
     case 'wording': content=<WordingApprovalsPage store={store}/>; break
     case 'automation': content=<AutomationPage store={store}/>; break

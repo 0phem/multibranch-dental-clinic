@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { Button, Card, Field, Modal } from '../components.jsx'
 import { dentistName } from '../logic.js'
-import { branchPosterUrl, cancelIntake, confirmIntake, getPatientRecord, intakeCode, pendingIntake, offerOnlineAccount, refreshIntakeCode, verifyPatientId } from '../api-client.js'
+import { branchPosterUrl, cancelIntake, confirmIntake, getPatientRecord, intakeCode, pendingIntake, offerOnlineAccount, refreshIntakeCode, requestHandover, verifyPatientId } from '../api-client.js'
 
 const firstError = r => (r.kind === 'validation' ? Object.values(r.errors || {})[0]?.[0] || r.message : r.message) || 'That did not work. Refresh and try again.'
 const FIELDS = [['first_name', 'First name'], ['last_name', 'Last name'], ['date_of_birth', 'Date of birth', 'date'], ['sex', 'Sex'], ['phone', 'Mobile'], ['email', 'Email'], ['address', 'Address']]
@@ -92,7 +92,8 @@ function ReviewDialog({ row, idTypes, toast, onClose, onDone, store }) {
     {!account && row.duplicates?.length > 0 && <div className="ci-dupes" role="region" aria-label="Possible existing patient">
       <p><b>Possible existing patient</b> (same name and birth date, and the same phone or email). Nothing is merged automatically.</p>
       {row.duplicates.map(d => <label key={d.patient_id} className="ci-dupe"><input type="radio" name="use" checked={use === d.patient_id} onChange={() => setUse(d.patient_id)}/>
-        <span><b>{d.name}</b> · {d.code} · <b>Record found from {d.found_from || 'this clinic'}</b>{d.has_account ? ' · has an online account' : ''}{d.id_verified ? ' · ID checked before' : ''}</span></label>)}
+        <span><b>{d.name}</b> · {d.code} · <b>Record found from {d.found_from || 'this clinic'}</b>{d.has_account ? ' · has an online account' : ''}{d.id_verified ? ' · ID checked before' : ''}</span>
+        {d.found_from && <Button size="sm" variant="ghost" onClick={async e => { e.preventDefault(); const r = await requestHandover(d.patient_id); toast(r.ok ? `Asked ${r.data.branch} to send a handover (${r.data.asked} team member(s) told).` : firstError(r), r.ok ? 'success' : 'warning') }}>Request handover</Button>}</label>)}
       <label className="ci-dupe"><input type="radio" name="use" checked={use === ''} onChange={() => setUse('')}/><span>Create a new patient record</span></label>
     </div>}
     {!account && <div className="ci-fields">{FIELDS.map(([k, label, type]) => <Field key={k} label={label} hint={row.scanned_fields?.includes(k) ? 'Read from the patient’s ID on their phone' : null}>

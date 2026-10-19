@@ -46,5 +46,5 @@ test('calendar load is a number and a band (never colour alone), and closed days
   assert.match(cal, /label: `\$\{day\.percent\}% booked/)
   assert.match(cal, /band: 'closed', label: 'Closed', detail: day\.reason/)
   assert.match(cal, /className="daycal-legend"/)
-  assert.match(read('src/patient/BookingCalendar.jsx'), /closed — \{closedNote\.reason\}/)
+  assert.match(read('src/patient/BookingCalendar.jsx'), /\{closedNote\.status === 'off' \? 'not available' : 'closed'\} — \{closedNote\.reason\}/)
 })

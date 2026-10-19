@@ -183,7 +183,7 @@
 .pp-cal-day.is-available { background: var(--brand-soft); color: var(--brand-3); border-color: #cfe1f3; }
 .pp-cal-day.is-available:hover { border-color: var(--brand); }
 .pp-cal-day.is-full { color: var(--muted-2); text-decoration: line-through; background: repeating-linear-gradient(135deg, #f4f6f9, #f4f6f9 4px, #fff 4px, #fff 8px); }
-.pp-cal-day.is-closed { color: #a9b4c0; background: var(--surface-2); }
+.pp-cal-day.is-closed, .pp-cal-day.is-off { color: #a9b4c0; background: var(--surface-2); }
 .pp-cal-day.is-past, .pp-cal-day.is-outside { color: #b5bfca; }
 .pp-cal-day:disabled { opacity: 1; cursor: not-allowed; }
 .pp-cal-day.is-today { border-color: var(--ink); }

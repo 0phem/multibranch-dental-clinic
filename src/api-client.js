@@ -528,6 +528,30 @@ export function refreshIntakeCode(branchRef) { return json('/api/intake/code/ref
 export function pendingIntake() { return request('/api/intake/submissions') }
 export function confirmIntake(id, body) { return json(`/api/intake/submissions/${enc(id)}/confirm`, 'POST', body) }
 export function cancelIntake(id) { return json(`/api/intake/submissions/${enc(id)}/cancel`, 'POST') }
+// M3 Work Schedules
+export function workSchedules() { return request('/api/work-schedules') }
+export function saveWeeklyHours(dentistId, body) { return json(`/api/work-schedules/${enc(dentistId)}/weekly`, 'PUT', body) }
+export function copyProfileHours(dentistId, branchRef) { return json(`/api/work-schedules/${enc(dentistId)}/from-profile`, 'POST', { branch_ref: branchRef }) }
+export function addScheduleException(dentistId, body) { return json(`/api/work-schedules/${enc(dentistId)}/exceptions`, 'POST', body) }
+export function removeScheduleException(id) { return json(`/api/work-schedule-exceptions/${enc(id)}`, 'PATCH', { action: 'remove' }) }
+export function scheduleAffected(dentistId) { return request(`/api/work-schedules/${enc(dentistId)}/affected`) }
+export function notifyScheduleAffected(dentistId) { return json(`/api/work-schedules/${enc(dentistId)}/notify`, 'POST') }
+// M15 Leave Management
+export function myLeave() { return request('/api/leave/mine') }
+export function requestLeave(body) { return json('/api/leave', 'POST', body) }
+export function leaveRequests(filters = {}) { const q = new URLSearchParams(Object.entries(filters).filter(([, v]) => v)).toString(); return request(`/api/leave${q ? `?${q}` : ''}`) }
+export function leaveCalendar(from, to) { return request(`/api/leave/calendar?from=${enc(from)}&to=${enc(to)}`) }
+export function leaveConflicts(id) { return request(`/api/leave/${enc(id)}/conflicts`) }
+export function decideLeave(id, decision) { return json(`/api/leave/${enc(id)}/decide`, 'POST', { decision }) }
+export function cancelLeave(id) { return json(`/api/leave/${enc(id)}/cancel`, 'POST') }
+export function notifyLeaveAffected(id) { return json(`/api/leave/${enc(id)}/notify`, 'POST') }
+// M25 Patient Handovers
+export function handovers(filters = {}) { const q = new URLSearchParams(Object.entries(filters).filter(([, v]) => v)).toString(); return request(`/api/handovers${q ? `?${q}` : ''}`) }
+export function handover(id) { return request(`/api/handovers/${enc(id)}`) }
+export function createHandover(body) { return json('/api/handovers', 'POST', body) }
+export function acknowledgeHandover(id) { return json(`/api/handovers/${enc(id)}/acknowledge`, 'POST') }
+export function cancelHandover(id) { return json(`/api/handovers/${enc(id)}/cancel`, 'POST') }
+export function requestHandover(patientId, fromBranchRef = null) { return json('/api/handovers/request', 'POST', { patient_id: patientId, from_branch_ref: fromBranchRef }) }
 export function offerOnlineAccount(patientId, body) { return json(`/api/patients/${enc(patientId)}/offer-account`, 'POST', body) }
 export function verifyPatientId(patientId, body) { return json(`/api/patients/${enc(patientId)}/verify-id`, 'POST', body) }
 export function branchPosterUrl(branchRef) { return `${apiBase()}/api/branches/${enc(branchRef)}/poster` }

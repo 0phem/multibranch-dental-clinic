@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react'
 import { Button, Field, Icon } from '../../components.jsx'
 import { PasswordField } from '../../pages/PasswordField.jsx'
 import { confirmEmailChange, getPatientRecord, myHmo, requestEmailChange, requestPasswordReset, resetPassword, saveMyHmo } from '../../api-client.js'
-import { Family } from './Family.jsx'
 import { dateLong } from '../format.js'
 import { ErrorState, PageHead, Skeleton, useLoad } from '../ui.jsx'
 
@@ -29,7 +28,9 @@ export function ProfilePage({ me, onNavigate }) {
       <p className="pp-hint">To update these details, message the front desk or tell them at your next visit.</p>
     </section>}
     <HmoDetails/>
-    <Family/>
+    <section className="pp-card pp-fade" aria-labelledby="pp-family-link"><p className="pp-eyebrow" id="pp-family-link">Family</p>
+      <p className="pp-hint">Children or others in your care now have their own page.</p>
+      <button type="button" className="link-button" onClick={() => onNavigate('family')}>Open Family</button></section>
     <section className="pp-card pp-fade">
       <p className="pp-eyebrow">Sign-in email</p>
       <p className="pp-email">{me.email}</p>

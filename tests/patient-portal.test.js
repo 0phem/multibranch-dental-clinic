@@ -64,10 +64,10 @@ test('shared states: skeleton, empty and error states are accessible and the pil
 
 test('booking calendar: only available days can be booked; a full day opens the waitlist only when booking passes onFullDay; closed and past days are disabled', () => {
   const source = read('src/patient/BookingCalendar.jsx')
-  assert.match(source, /disabled=\{day\.status !== 'available' && !\(onFullDay && day\.status === 'full'\) && !\(day\.status === 'closed' && day\.reason\)\}/)
-  assert.match(source, /aria-disabled=\{day\.status === 'closed' \? true : undefined\}/) // a closed day with a reason only shows the reason (F5)
+  assert.match(source, /disabled=\{day\.status !== 'available' && !\(onFullDay && day\.status === 'full'\) && !\(\(day\.status === 'closed' \|\| day\.status === 'off'\) && day\.reason\)\}/)
+  assert.match(source, /aria-disabled=\{day\.status === 'closed' \|\| day\.status === 'off' \? true : undefined\}/) // a closed day with a reason only shows the reason (F5)
   assert.match(source, /onFullDay = null/) // rescheduling does not pass it, so full days stay disabled there
-  assert.match(source, /day\.status === 'closed' \? setClosedNote\(day\) : day\.status === 'full' \? onFullDay\(day\.date\) : onChange\(day\.date\)/)
+  assert.match(source, /day\.status === 'closed' \|\| day\.status === 'off' \? setClosedNote\(day\) : day\.status === 'full' \? onFullDay\(day\.date\) : onChange\(day\.date\)/)
   assert.match(source, /'Morning'/); assert.match(source, /'Afternoon'/)
   assert.match(source, /disabled=\{!data\?\.previous_month/); assert.match(source, /disabled=\{!data\?\.next_month/)
 })
