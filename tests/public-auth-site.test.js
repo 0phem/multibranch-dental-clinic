@@ -154,7 +154,7 @@ test('api.me forwards the exact AbortSignal to fetch and returns its abort as ne
 test('every lazy page resolves to its named component export',async()=>{
   const source=readFileSync('src/App.jsx','utf8')
   const imports=[...source.matchAll(/import\('(.+?)'\)\.then\(m=>\(\{default:m\.(\w+)\}\)\)/g)]
-  assert.equal(imports.length,35) // 28 + the Owner's Clinic Branding page (white-label settings) + the Patient portal + Assistant answers + Automations + Closed dates, Accepted HMOs and Wording approvals (interview R2)
+  assert.equal(imports.length,36) // 28 + the Owner's Clinic Branding page (white-label settings) + the Patient portal + Assistant answers + Automations + Closed dates, Accepted HMOs and Wording approvals (interview R2) + the counter registration page
   for(const [,path,name] of imports){
     const result=await build({entryPoints:[`src/${path.slice(2)}`],bundle:true,write:false,loader:{'.css':'empty'},metafile:true,platform:'node',format:'esm',external:['react']})
     assert.ok(Object.values(result.metafile.outputs).some(output=>output.exports.includes(name)),name)

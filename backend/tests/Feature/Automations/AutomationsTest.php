@@ -383,7 +383,7 @@ class AutomationsTest extends TestCase
         $this->getJson('/api/automations')->assertForbidden();
         $this->actingAsUser('owner');
         $list = $this->getJson('/api/automations')->assertOk();
-        $this->assertSame(['appointment_reminders', 'no_show', 'fill_slots', 'overdue_invoices', 'recall', 'waitlist', 'owner_summary', 'attendance_policy', 'calendar_load'], array_column($list->json('data'), 'key'));
+        $this->assertSame(['appointment_reminders', 'no_show', 'fill_slots', 'overdue_invoices', 'recall', 'waitlist', 'owner_summary', 'attendance_policy', 'intake', 'calendar_load'], array_column($list->json('data'), 'key'));
         $this->assertSame('R2-09', $list->json('data.0.defaults.sources.lead_minutes'));
         $this->assertNull($list->json('data.0.defaults.sources.day_before')); // recommended, not confirmed by the clinic
         $this->assertFalse($list->json('data.0.owner_saved'));
