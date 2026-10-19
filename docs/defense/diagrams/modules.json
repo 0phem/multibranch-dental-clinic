@@ -138,9 +138,9 @@
    "n": 3,
    "base": "M3-work-schedules",
    "name": "Work Schedules",
-   "status": "Planned",
-   "errors": "Not built yet",
-   "automation": "Planned (rule-based)",
+   "status": "Implemented",
+   "errors": "Booking outside a Dentist’s hours; a change silently leaving patients without a Dentist",
+   "automation": "Rule-based",
    "time": null,
    "as_is": [
     {
@@ -166,24 +166,34 @@
    ],
    "to_be": [
     {
-     "lane": "System",
-     "text": "Today: one fixed shift per Dentist is checked when booking",
-     "kind": "auto"
+     "lane": "Owner",
+     "text": "Sets weekly hours per Dentist, branch and weekday (break optional); front desk for their branch",
+     "kind": "manual"
     },
     {
      "lane": "Owner",
-     "text": "Publishes a dated roster per branch",
-     "kind": "planned"
+     "text": "Adds a day off or different hours for one date",
+     "kind": "manual"
     },
     {
      "lane": "System",
-     "text": "Booking follows the roster and absences",
-     "kind": "planned"
+     "text": "Refuses hours outside the branch’s opening hours; audits old and new hours",
+     "kind": "auto"
+    },
+    {
+     "lane": "System",
+     "text": "Booking, walk-ins and the calendar use branch hours ∩ schedule − leave",
+     "kind": "auto"
+    },
+    {
+     "lane": "Front desk",
+     "text": "Sees booked visits a change affects; moves them or emails a reschedule link",
+     "kind": "manual"
     },
     {
      "lane": "Dentist",
-     "text": "Sees own schedule in the portal",
-     "kind": "planned"
+     "text": "Sees own weekly hours",
+     "kind": "manual"
     }
    ]
   },
@@ -886,9 +896,9 @@
    "n": 15,
    "base": "M15-leave-management",
    "name": "Leave Management",
-   "status": "Planned",
-   "errors": "Not built yet",
-   "automation": "Planned",
+   "status": "Implemented",
+   "errors": "Patients booked with an absent Dentist",
+   "automation": "Rule-based",
    "time": null,
    "as_is": [
     {
@@ -905,18 +915,33 @@
    "to_be": [
     {
      "lane": "Dentist",
-     "text": "Requests leave",
-     "kind": "planned"
+     "text": "Requests leave (full or part days, private note)",
+     "kind": "manual"
     },
     {
      "lane": "System",
-     "text": "Finds eligible cover; invites by email",
-     "kind": "planned"
+     "text": "Tells the approver in the app and by approved email",
+     "kind": "auto"
     },
     {
      "lane": "Owner",
-     "text": "Approves when cover is confirmed",
-     "kind": "planned"
+     "text": "Sees booked visits and suggested cover; approves or declines",
+     "kind": "manual"
+    },
+    {
+     "lane": "System",
+     "text": "Approved leave removes the Dentist’s booking time at once; never cancels",
+     "kind": "auto"
+    },
+    {
+     "lane": "Front desk",
+     "text": "Moves each visit to the cover Dentist or emails a reschedule link",
+     "kind": "manual"
+    },
+    {
+     "lane": "Front desk",
+     "text": "Sees who is away in the team strip",
+     "kind": "manual"
     }
    ]
   },
@@ -1341,9 +1366,9 @@
    "n": 25,
    "base": "M25-patient-handovers",
    "name": "Patient Handovers",
-   "status": "Planned",
-   "errors": "Not built yet",
-   "automation": "Planned",
+   "status": "Implemented",
+   "errors": "Care details lost when a patient moves branch",
+   "automation": "Rule-based",
    "time": null,
    "as_is": [
     {
@@ -1364,14 +1389,29 @@
    ],
    "to_be": [
     {
-     "lane": "Dentist",
-     "text": "Creates a handover with a care packet",
-     "kind": "planned"
+     "lane": "Front desk",
+     "text": "Sends a handover: summary, pending treatment, notes, document titles",
+     "kind": "manual"
+    },
+    {
+     "lane": "System",
+     "text": "Receiving branch gets the record while the handover is open; patient told neutrally",
+     "kind": "auto"
     },
     {
      "lane": "Dentist",
-     "text": "Receiving Dentist acknowledges",
-     "kind": "planned"
+     "text": "Receiving Dentist and front desk read it and acknowledge",
+     "kind": "manual"
+    },
+    {
+     "lane": "Owner",
+     "text": "Sees who, when, from and to only (no clinical text)",
+     "kind": "manual"
+    },
+    {
+     "lane": "System",
+     "text": "Audits create, receiving-side reads and acknowledgement",
+     "kind": "auto"
     }
    ]
   }

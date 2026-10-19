@@ -2,22 +2,29 @@
 title: "M3 Work Schedules: TO-BE (with the system)"
 ---
 flowchart TB
+    subgraph L1[" "]
+    direction LR
+      S4["<b>FRONT DESK</b><br/>Sees booked visits a change affects; moves them or emails a reschedule link"]:::manual
+    end
     subgraph L2[" "]
     direction LR
-      S3["<b>DENTIST</b><br/>Sees own schedule in the portal<br/><i>Planned</i>"]:::planned
+      S5["<b>DENTIST</b><br/>Sees own weekly hours"]:::manual
     end
     subgraph L3[" "]
     direction LR
-      S1["<b>OWNER</b><br/>Publishes a dated roster per branch<br/><i>Planned</i>"]:::planned
+      S0["<b>OWNER</b><br/>Sets weekly hours per Dentist, branch and weekday (break optional); front desk for their branch"]:::manual
+      S1["<b>OWNER</b><br/>Adds a day off or different hours for one date"]:::manual
     end
     subgraph L4[" "]
     direction LR
-      S0["<b>SYSTEM</b><br/>Today: one fixed shift per Dentist is checked when booking<br/><i>System does it</i>"]:::auto
-      S2["<b>SYSTEM</b><br/>Booking follows the roster and absences<br/><i>Planned</i>"]:::planned
+      S2["<b>SYSTEM</b><br/>Refuses hours outside the branch’s opening hours; audits old and new hours<br/><i>System does it</i>"]:::auto
+      S3["<b>SYSTEM</b><br/>Booking, walk-ins and the calendar use branch hours ∩ schedule − leave<br/><i>System does it</i>"]:::auto
     end
-    S0 -.-> S1
-    S1 -.-> S2
-    S2 -.-> S3
+    S0 --> S1
+    S1 --> S2
+    S2 --> S3
+    S3 --> S4
+    S4 --> S5
     classDef cited fill:#eaf3fd,stroke:#1865ac,color:#142a40,stroke-width:1.5px
     classDef confirm fill:#fffaf0,stroke:#b26a00,color:#5e3c00,stroke-width:1.5px,stroke-dasharray:6 4
     classDef auto fill:#e6f5ee,stroke:#0c7f75,color:#0f3d33,stroke-width:1.5px

@@ -2,20 +2,29 @@
 title: "M15 Leave Management: TO-BE (with the system)"
 ---
 flowchart TB
+    subgraph L1[" "]
+    direction LR
+      S4["<b>FRONT DESK</b><br/>Moves each visit to the cover Dentist or emails a reschedule link"]:::manual
+      S5["<b>FRONT DESK</b><br/>Sees who is away in the team strip"]:::manual
+    end
     subgraph L2[" "]
     direction LR
-      S0["<b>DENTIST</b><br/>Requests leave<br/><i>Planned</i>"]:::planned
+      S0["<b>DENTIST</b><br/>Requests leave (full or part days, private note)"]:::manual
     end
     subgraph L3[" "]
     direction LR
-      S2["<b>OWNER</b><br/>Approves when cover is confirmed<br/><i>Planned</i>"]:::planned
+      S2["<b>OWNER</b><br/>Sees booked visits and suggested cover; approves or declines"]:::manual
     end
     subgraph L4[" "]
     direction LR
-      S1["<b>SYSTEM</b><br/>Finds eligible cover; invites by email<br/><i>Planned</i>"]:::planned
+      S1["<b>SYSTEM</b><br/>Tells the approver in the app and by approved email<br/><i>System does it</i>"]:::auto
+      S3["<b>SYSTEM</b><br/>Approved leave removes the Dentist’s booking time at once; never cancels<br/><i>System does it</i>"]:::auto
     end
-    S0 -.-> S1
-    S1 -.-> S2
+    S0 --> S1
+    S1 --> S2
+    S2 --> S3
+    S3 --> S4
+    S4 --> S5
     classDef cited fill:#eaf3fd,stroke:#1865ac,color:#142a40,stroke-width:1.5px
     classDef confirm fill:#fffaf0,stroke:#b26a00,color:#5e3c00,stroke-width:1.5px,stroke-dasharray:6 4
     classDef auto fill:#e6f5ee,stroke:#0c7f75,color:#0f3d33,stroke-width:1.5px

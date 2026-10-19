@@ -43,8 +43,10 @@ One web system for patients, front desk, dentists and the owner, across all bran
 | Front desk | Conflict-free calendar, check-in, queue, billing from the treatment, messages | Built / partly built: `AUTOMATION_EVIDENCE.md` |
 | Dentists | Visit-linked treatment records, locked when completed | Built: `Treatments/*` |
 | Owner | Branches, prices, branding (name, colours, logo), assistant answers, analytics, audit trail | Built / partly built |
+| Owner and front desk | Weekly work schedules per dentist and branch; leave requests and approvals; booking follows both at once and never cancels a booked patient (affected visits listed with cover) | Built: `Staffing/WorkSchedulesTest`, `Staffing/LeaveTest` |
+| Front desk and dentists | Patient handovers between branches or dentists, acknowledged, with the receiving branch given the record; the Owner sees only who, when, from and to | Built: `Staffing/HandoverTest` |
 
-Not finished, and we say so: M3, M10, M12, M15, M24, M25 not started; M19 and M20 mock only (`AUTOMATION_EVIDENCE.md`).
+Not finished, and we say so: M10, M12, M24 not started; M19 and M20 mock only (`AUTOMATION_EVIDENCE.md`). The dentists' hours in the demo are demo values the clinic still has to confirm.
 
 ## Deployment model
 
@@ -97,6 +99,6 @@ else to the front desk. It runs as the clinic's own branded installation, with i
 7. **Paying without paperwork** — invoice from the treatment; PayMongo; automatic receipt PDF.
 8. **Messages and the assistant** — real-time front desk; assistant in English/Filipino/Taglish; never invents, hands off.
 9. **Security and privacy** — roles, branch scope, audit trail; codes for sign-in; nothing leaves the system in knowledge mode.
-10. **Status, honestly** — 8 Implemented, 9 Partial, 2 Mock only, 6 Planned (`MODULES_FINAL.md`); before/after process per module
+10. **Status, honestly** — 12 Implemented, 8 Partial, 2 Mock only, 3 Planned (`MODULES_FINAL.md`); before/after process per module
     (`PROCESS_DOCUMENTATION.pdf`); known issues (timezone, BIR, reminders).
 11. **Deployment and proposal** — one install per clinic; clinic's own PayMongo and email; pricing proposal; open decisions.

@@ -267,3 +267,24 @@ address the claimant types, and the answer looks the same whether or not anythin
 the front desk can offer you an online account, after checking your ID in person and confirming your email with you; the link
 works once and expires. Your password is chosen together with the emailed code, so nobody who can't read your inbox can set it.
 Codes die after 5 wrong tries and every claim is audited. `Intake/IntakeTest` (claim tests).
+
+**53. How do you handle a dentist's leave?**
+M15. The dentist asks in the system (vacation, sick or other, full or part days; a private note only the approver sees). The
+Owner approves, or also the branch front desk if the Owner allows it; nobody approves their own leave. Before approving, the Owner
+sees the booked visits in that period with a suggested cover dentist (same branch, same service, free at that time). Approving
+removes the dentist's time from booking at once, but cancels nothing: the front desk moves each visit to the cover dentist in one
+click or emails the patients a reschedule link. Cancelling the leave makes the time bookable again. We do not count leave
+balances: the clinic gave no policy. `Staffing/LeaveTest`.
+
+**54. What if a schedule changes with booked patients?**
+M3. Every booking rule reads one source: the branch's opening hours, the dentist's weekly hours or that day's exception, the
+break and approved leave. Hours outside the branch's opening hours are refused. A change that leaves booked visits without their
+dentist never cancels them: the system lists them with a suggested cover dentist and one action to email the patients a link to
+choose a new time, in wording the Owner approved. Every change is audited with the old and new hours. `Staffing/WorkSchedulesTest`.
+
+**55. Who sees a handover?**
+M25. The sending side (the front desk or the treating dentist) and the receiving side (the receiving branch's front desk and the
+receiving dentist). The receiving front desk gets the patient's record through the normal branch rule while the handover is
+open and for 60 days after it is acknowledged (an Owner setting); the receiving dentist sees the handover itself. The Owner sees
+only who, when, from and to. The patient is told neutrally that the record was shared, without clinical text. Every create,
+read by the receiving side and acknowledgement is audited, and the audit holds no clinical text. `Staffing/HandoverTest`.

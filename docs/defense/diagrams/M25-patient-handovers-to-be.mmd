@@ -2,12 +2,27 @@
 title: "M25 Patient Handovers: TO-BE (with the system)"
 ---
 flowchart TB
+    subgraph L1[" "]
+    direction LR
+      S0["<b>FRONT DESK</b><br/>Sends a handover: summary, pending treatment, notes, document titles"]:::manual
+    end
     subgraph L2[" "]
     direction LR
-      S0["<b>DENTIST</b><br/>Creates a handover with a care packet<br/><i>Planned</i>"]:::planned
-      S1["<b>DENTIST</b><br/>Receiving Dentist acknowledges<br/><i>Planned</i>"]:::planned
+      S2["<b>DENTIST</b><br/>Receiving Dentist and front desk read it and acknowledge"]:::manual
     end
-    S0 -.-> S1
+    subgraph L3[" "]
+    direction LR
+      S3["<b>OWNER</b><br/>Sees who, when, from and to only (no clinical text)"]:::manual
+    end
+    subgraph L4[" "]
+    direction LR
+      S1["<b>SYSTEM</b><br/>Receiving branch gets the record while the handover is open; patient told neutrally<br/><i>System does it</i>"]:::auto
+      S4["<b>SYSTEM</b><br/>Audits create, receiving-side reads and acknowledgement<br/><i>System does it</i>"]:::auto
+    end
+    S0 --> S1
+    S1 --> S2
+    S2 --> S3
+    S3 --> S4
     classDef cited fill:#eaf3fd,stroke:#1865ac,color:#142a40,stroke-width:1.5px
     classDef confirm fill:#fffaf0,stroke:#b26a00,color:#5e3c00,stroke-width:1.5px,stroke-dasharray:6 4
     classDef auto fill:#e6f5ee,stroke:#0c7f75,color:#0f3d33,stroke-width:1.5px
