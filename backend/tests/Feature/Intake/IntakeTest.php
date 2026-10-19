@@ -375,6 +375,7 @@ class IntakeTest extends TestCase
         $record = $this->counterRecord('owner.of.record@mailbox.ph');
         $this->existing('B', 'd1', 'b1', 'svc1', '2026-09-21', '10:00', 30, 'Completed');
         // A guardian cannot point an adult dependent's claim at another inbox when an email is on file.
+        $this->p['A']->person->update(['date_of_birth' => '1975-05-05']); // an adult guardian (the factory date is random)
         \App\Services\Intake\Guardianship::link($record, $this->p['A'], 'Parent', $this->u['staffB1'], null);
         $this->actingAsUser('patientA');
         $this->postJson("/api/patients/{$record->public_id}/claim-invite", ['email' => 'guardian.inbox@mailbox.ph'])->assertStatus(422)->assertJsonValidationErrors('email');
