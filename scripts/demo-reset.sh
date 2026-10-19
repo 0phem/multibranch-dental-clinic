@@ -37,26 +37,30 @@ if [ "${HAD_WORKER:-0}${HAD_REVERB:-0}${HAD_SCHEDULER:-0}" != "000" ]; then
   echo "== Reloading the running demo processes with the new code"
   CACHE_STORE=file php artisan queue:restart >/dev/null 2>&1 || true
   CACHE_STORE=file php artisan reverb:restart >/dev/null 2>&1 || true
-  sleep 3
   LOGS="$BACKEND/storage/logs"
-  fallback() { # fallback NAME COMMAND...: a supervised background copy, kept running after this script ends
-    local name="$1"; shift
+  up() { case "$1" in worker) pgrep -f "artisan queue:work" >/dev/null ;; scheduler) pgrep -f "artisan schedule:work" >/dev/null ;;
+    reverb) lsof -ti tcp:"$REVERB_PORT" -sTCP:LISTEN >/dev/null 2>&1 ;; esac; }
+  # A restart loop already looks after it (demo-start.sh's "supervise NAME", or a fallback loop from an earlier reset).
+  supervised() { pgrep -f "supervise $1 " >/dev/null || pgrep -f "while :; do CACHE_STORE=file.*$2" >/dev/null; }
+  wanted() { case "$1" in worker) [ "${HAD_WORKER:-0}" = 1 ] ;; scheduler) [ "${HAD_SCHEDULER:-0}" = 1 ] ;; reverb) [ "${HAD_REVERB:-0}" = 1 ] ;; esac; }
+  all_up() { local n; for n in worker scheduler reverb; do if wanted "$n" && ! up "$n"; then return 1; fi; done; }
+  # First give the restart loops time to bring each process back (Reverb takes a few seconds to listen again).
+  for _ in $(seq 1 20); do all_up && break; sleep 1; done
+  fallback() { # fallback NAME PATTERN COMMAND...: only when still down AND nothing restarts it, so the reset never adds a duplicate
+    local name="$1" pattern="$2"; shift 2
+    if ! wanted "$name" || up "$name" || supervised "$name" "$pattern"; then return 0; fi
     nohup bash -c 'while :; do CACHE_STORE=file "$@"; sleep 1; done' _ "$@" >"$LOGS/demo-$name.log" 2>&1 &
     disown || true
     echo "   $name was down: restarted in the background (log: backend/storage/logs/demo-$name.log)"
   }
-  [ "${HAD_WORKER:-0}" = 1 ] && ! pgrep -f "artisan queue:work" >/dev/null && fallback worker php artisan queue:work --queue=mail,default
-  [ "${HAD_SCHEDULER:-0}" = 1 ] && ! pgrep -f "artisan schedule:work" >/dev/null && fallback scheduler php artisan schedule:work
-  [ "${HAD_REVERB:-0}" = 1 ] && ! lsof -ti tcp:"$REVERB_PORT" -sTCP:LISTEN >/dev/null 2>&1 && fallback reverb php artisan reverb:start --port="$REVERB_PORT"
+  fallback worker queue:work php artisan queue:work --queue=mail,default
+  fallback scheduler schedule:work php artisan schedule:work
+  fallback reverb reverb:start php artisan reverb:start --port="$REVERB_PORT"
   healthy=""
-  for _ in $(seq 1 30); do
-    ok=1
-    [ "${HAD_WORKER:-0}" = 1 ] && ! pgrep -f "artisan queue:work" >/dev/null && ok=0
-    [ "${HAD_SCHEDULER:-0}" = 1 ] && ! pgrep -f "artisan schedule:work" >/dev/null && ok=0
-    [ "${HAD_REVERB:-0}" = 1 ] && ! lsof -ti tcp:"$REVERB_PORT" -sTCP:LISTEN >/dev/null 2>&1 && ok=0
-    if [ "$ok" = 1 ]; then healthy=yes; break; fi
-    sleep 1
-  done
+  for _ in $(seq 1 30); do all_up && { healthy=yes; break; }; sleep 1; done
+  count() { pgrep -f "artisan $1" | while read -r pid; do ps -o command= -p "$pid"; done | grep -c "^php artisan $1" || true; }
+  dup=""; for c in queue:work schedule:work reverb:start; do [ "$(count "$c")" -gt 1 ] && dup="$dup $c"; done
+  if [ -n "$dup" ]; then echo "   WARNING: more than one copy running:$dup (stop the extras, or restart scripts/demo-start.sh)" >&2; fi
   if [ -n "$healthy" ]; then echo "   worker, scheduler and Reverb are running"; else echo "   WARNING: not every demo process came back; run scripts/predefense-check.sh" >&2; fi
 fi
 echo "== Demo reset done. Reload the browser and sign in again."
