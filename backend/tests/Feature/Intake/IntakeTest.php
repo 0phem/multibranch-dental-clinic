@@ -320,7 +320,8 @@ class IntakeTest extends TestCase
         Mail::assertSent(\App\Mail\AccountClaimInviteMail::class, function ($m) use (&$token) { $token = $m->token; return $m->hasTo('walkin@mailbox.ph'); });
         $this->app['auth']->forgetGuards();
         $this->postJson('/api/account/claim', ['token' => $token])->assertCreated()->assertJsonPath('data.email', 'w•••••@mailbox.ph');
-        $this->postJson('/api/account/claim/verify', ['email' => 'walkin@mailbox.ph', 'otp' => $this->codeFor('walkin@mailbox.ph'), 'password' => 'Walkin123', 'password_confirmation' => 'Walkin123'])->assertOk();
+        $this->postJson('/api/account/claim/verify', ['token' => $token, 'otp' => $this->codeFor('walkin@mailbox.ph'), 'password' => 'Walkin123', 'password_confirmation' => 'Walkin123'])->assertOk()
+            ->assertJsonPath('data.email', 'walkin@mailbox.ph'); // the link names the account: no email retyped
         $this->postJson('/api/account/claim', ['token' => $token])->assertStatus(422); // used once
         $this->postJson('/api/login', ['email' => 'walkin@mailbox.ph', 'password' => 'Walkin123'])->assertOk();
 

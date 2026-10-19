@@ -50,7 +50,7 @@ class IntakeController extends Controller
         $submission = $this->intake->submit($branch, $data, $data['channel'] ?? 'phone', $this->deviceHash($request));
 
         return response()->json(['data' => ['reference' => $submission->reference, 'branch' => $branch->name, 'join_queue' => $submission->join_queue,
-            'message' => $submission->join_queue ? 'You are on today’s list. The front desk will check your ID and call you.' : 'Registered. Show this reference at the front desk.']], 201);
+            'message' => $submission->join_queue ? 'The front desk will check your ID and call you.' : 'Registered. Show this reference at the front desk.']], 201);
     }
 
     /** Signed-in patient: join today's queue with the counter code (for themselves or a dependent). */
@@ -69,7 +69,7 @@ class IntakeController extends Controller
         }
         $submission = $this->intake->submitForAccount($branch, $patient, $visitFor, $this->deviceHash($request));
 
-        return response()->json(['data' => ['reference' => $submission->reference, 'branch' => $branch->name, 'message' => 'You are on today’s list. The front desk will check your ID and call you.']], 201);
+        return response()->json(['data' => ['reference' => $submission->reference, 'branch' => $branch->name, 'message' => 'The front desk will check your ID and call you.']], 201);
     }
 
     /** Staff: today's code for their branch (Owner: any branch). */
@@ -150,7 +150,10 @@ class IntakeController extends Controller
             return app(\App\Services\Intake\AccountClaims::class)->offer($patient, $data['email'], $request->user(), 'staff');
         });
 
-        return response()->json(['data' => ['status' => $result['status'], 'message' => 'A one-time link was emailed to the patient. It works once and expires.']]);
+        // Say what really happened to the email (sent, test address suppressed, failed): the link exists either way.
+        $message = $result['status'] === 'transport_accepted' ? 'A one-time link was emailed to the patient. It works once and expires.' : $result['message'];
+
+        return response()->json(['data' => ['status' => $result['status'], 'message' => $message]]);
     }
 
     private function view(IntakeSubmission $s): array

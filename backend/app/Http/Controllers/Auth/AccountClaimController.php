@@ -113,8 +113,14 @@ class AccountClaimController extends Controller
 
     public function verify(Request $request)
     {
-        $data = $request->validate(['email' => ['required', 'email:rfc', 'max:255'], 'otp' => ['required', 'digits:6'],
+        $data = $request->validate(['email' => ['required_without:token', 'nullable', 'email:rfc', 'max:255'], 'token' => ['nullable', 'string', 'max:64'], 'otp' => ['required', 'digits:6'],
             'password' => ['required', 'string', 'max:72', 'confirmed', Password::min(8)->letters()->numbers()]]);
+        // From a one-time link the patient never retypes the email: the valid link names it (an invalid link: the neutral answer).
+        if (! empty($data['token'])) {
+            [$invite, $problem] = AccountClaims::resolve($data['token']);
+            if ($problem) return OneTimeCodes::failure(...self::GENERIC_FAILURE);
+            $data['email'] = $invite->email;
+        }
         $email = Str::lower(trim($data['email']));
         // Per email AND IP: wrong codes from someone else's network cannot lock the owner out (each code still dies after 5 tries).
         $emailKey = 'claim-verify:'.hash('sha256', $email.'|'.$request->ip());
