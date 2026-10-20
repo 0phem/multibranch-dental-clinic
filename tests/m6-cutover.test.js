@@ -142,7 +142,8 @@ test('pre-cutover records are legacy history: flagged, excluded from live KPIs; 
 
 test('legacy classification follows links: invoices, prescriptions, follow-ups and HMO of legacy treatments are legacy too', () => {
   const c = classifyLegacy({ treatments: structuredClone(data.INITIAL_TREATMENTS), invoices: structuredClone(data.INITIAL_INVOICES),
-    prescriptions: structuredClone(data.INITIAL_PRESCRIPTIONS), followups: structuredClone(data.INITIAL_FOLLOWUPS), hmo: structuredClone(data.INITIAL_HMO) })
+    // The browser keeps no prescriptions any more (M19 is on the server); one saved by an older version is still classified.
+    prescriptions: [{ id: 'rx-old', patientId: 'p4', treatmentId: data.INITIAL_TREATMENTS[0].id, status: 'Authorized' }], followups: [{ id: 'f-old', patientId: 'p4', treatmentId: data.INITIAL_TREATMENTS[0].id, status: 'Open' }], hmo: structuredClone(data.INITIAL_HMO) })
   assert.ok(c.treatments.every(t => t.legacyAppointment), 'every seeded treatment belongs to the former demo appointments')
   for (const key of ['invoices', 'prescriptions', 'followups']) {
     const linked = c[key].filter(r => r.treatmentId)

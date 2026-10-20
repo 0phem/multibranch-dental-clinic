@@ -33,8 +33,9 @@ const QueuePage=lazy(()=>import('./pages/PatientFlow.jsx').then(m=>({default:m.Q
 const CapacityPage=lazy(()=>import('./pages/PatientFlow.jsx').then(m=>({default:m.CapacityPage})))
 const PatientsPage=lazy(()=>import('./pages/Clinical.jsx').then(m=>({default:m.PatientsPage})))
 const TreatmentPage=lazy(()=>import('./pages/Clinical.jsx').then(m=>({default:m.TreatmentPage})))
-const PrescriptionsPage=lazy(()=>import('./pages/Clinical.jsx').then(m=>({default:m.PrescriptionsPage})))
-const FollowupsPage=lazy(()=>import('./pages/Clinical.jsx').then(m=>({default:m.FollowupsPage})))
+const PrescriptionsPage=lazy(()=>import('./pages/ServerPrescriptions.jsx').then(m=>({default:m.PrescriptionsServerPage})))
+const PatientPrescriptionsPage=lazy(()=>import('./patient/pages/Prescriptions.jsx').then(m=>({default:m.PrescriptionsPage})))
+const FollowupsPage=lazy(()=>import('./pages/ServerFollowups.jsx').then(m=>({default:m.FollowupsServerPage})))
 const BillingPage=lazy(()=>import('./pages/FinanceCommunication.jsx').then(m=>({default:m.BillingPage})))
 const HmoPage=lazy(()=>import('./pages/FinanceCommunication.jsx').then(m=>({default:m.HmoPage})))
 const InquiriesPage=lazy(()=>import('./pages/FinanceCommunication.jsx').then(m=>({default:m.InquiriesPage})))
@@ -334,8 +335,8 @@ function AppBody() {
     case 'hmo': content=<HmoPage {...props}/>; break
     case 'inquiries': content=<InquiriesPage store={store}/>; break
     case 'messages': content=<MessagesPage {...props}/>; break
-    case 'prescriptions': content=<PrescriptionsPage role={role} store={store} context={context}/>; break
-    case 'followups': content=<FollowupsPage role={role} store={store} setPage={setPage} context={context}/>; break
+    case 'prescriptions': content=role==='patient'?<PatientPrescriptionsPage toast={store.toast}/>:<PrescriptionsPage role={role} store={store}/>; break
+    case 'followups': content=role==='patient'?<Notice title="Follow-up visits">When your dentist asks to see you again, the clinic contacts you, or book it yourself in Book a visit.</Notice>:<FollowupsPage role={role} store={store}/>; break
     case 'branches': content=<BranchesPage store={store}/>; break
     case 'team': content=<TeamPage store={store}/>; break
     case 'analytics': content=<AnalyticsPage activeBranch={activeBranch} store={store}/>; break

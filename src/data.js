@@ -48,14 +48,14 @@ export const NAV = {
   ],
   staff: [
     ['dashboard','Operations'], ['appointments','Appointments'], ['calendar','Appointment Calendar'], ['checkin','Check-In'], ['queue','Live Queue'], ['capacity','Capacity'], ['closures','Closed Dates'],
-    ['patients','Patient Records'], ['handovers','Handovers'], ['schedules','Work Schedules'], ['leave','Leave'], ['billing','Billing & Payments'], ['hmo','HMO Management'], ['inquiries','Social Inquiries'], ['messages','Messages'], ['followups','Follow-Up Tasks'], ['engagement','Engagement']
+    ['patients','Patient Records'], ['handovers','Handovers'], ['prescriptions','Prescriptions'], ['schedules','Work Schedules'], ['leave','Leave'], ['billing','Billing & Payments'], ['hmo','HMO Management'], ['inquiries','Social Inquiries'], ['messages','Messages'], ['followups','Follow-Up Tasks'], ['engagement','Engagement']
   ],
   dentist: [
     ['dashboard','Clinical Home'], ['schedule','My Schedule'], ['queue','My Queue'], ['patients','Patient Records'], ['handovers','Handovers'], ['schedules','My Work Hours'], ['leave','My Leave'], ['treatment','Treatment'],
     ['prescriptions','Prescriptions'], ['followups','Follow-Up Care'], ['messages','Messages'], ['wording','Wording to Approve']
   ],
   owner: [
-    ['dashboard','Executive Dashboard'], ['analytics','Analytics & Reports'], ['branches','Branches'], ['team','People & Team'], ['calendar','Appointment Calendar'], ['capacity','Capacity & Workload'], ['schedules','Work Schedules'], ['leave','Leave Requests'], ['handovers','Handovers'],
+    ['dashboard','Executive Dashboard'], ['analytics','Analytics & Reports'], ['branches','Branches'], ['team','People & Team'], ['calendar','Appointment Calendar'], ['capacity','Capacity & Workload'], ['schedules','Work Schedules'], ['leave','Leave Requests'], ['handovers','Handovers'], ['prescriptions','Prescriptions'],
     ['hmo','HMO Management'], ['users','User Management'], ['pricing','Services & Pricing'], ['automations','Automations'], ['closures','Closed Dates'], ['hmos','Accepted HMOs'], ['automation','Automation Monitor'], ['audit','Audit Trail'], ['branding','Clinic Branding'], ['assistant','Assistant Answers'], ['engagement','Engagement']
   ],
 }
@@ -192,14 +192,11 @@ export const INITIAL_NOTIFICATIONS = [
   { id:'n4', patientId:'p4', type:'Follow-Up Reminder', channel:'SMS', text:'Reminder: your post-extraction review is scheduled for Sep 20.', status:'Failed', createdAt:'2026-09-19 08:30', read:false },
 ]
 
-export const INITIAL_PRESCRIPTIONS = [
-  { id:'rx1', patientId:'p4', treatmentId:'t1', dentistId:'d4', medication:'Ibuprofen 400 mg', dosage:'1 tablet', instructions:'Take after meals every 8 hours as needed for pain for up to 3 days.', authorizedAt:'2026-09-13 15:12', status:'Authorized', version:1 },
-]
+// M19 prescriptions live on the clinic server (PrescriptionController); the browser keeps none.
+export const INITIAL_PRESCRIPTIONS = []
 
-export const INITIAL_FOLLOWUPS = [
-  { id:'f1', patientId:'p4', treatmentId:'t1', dentistId:'d4', reason:'Post-extraction review', recommendedDate:'2026-09-20', interval:'7 days', status:'Scheduled', appointmentId:'a4', taskCreatedAt:'2026-09-13 15:11' },
-  { id:'f2', patientId:'p1', treatmentId:'t2', dentistId:'d1', reason:'Routine recall', recommendedDate:'2027-03-12', interval:'6 months', status:'Open', appointmentId:null, taskCreatedAt:'2026-09-12 10:43' },
-]
+// M20 follow-up tasks live on the clinic server (FollowupController); the browser keeps none.
+export const INITIAL_FOLLOWUPS = []
 
 export const INITIAL_USERS = [
   { id:'u1', personId:'per-owner', username:'dana.roxas', login:'dana.roxas', roleName:'Owner / Admin', role:'Owner / Admin', branchId:null, branch:'All Branches', accountStatus:'Active', status:'Active', permissions:['all'], lastLogin:'2026-09-19 07:40' },

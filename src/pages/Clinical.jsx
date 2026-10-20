@@ -5,8 +5,7 @@ import { dateLabel, dentistName, displayTime, patientName } from '../logic.js'
 import { AppointmentForm } from './Scheduling.jsx'
 import { IdCheck } from './CounterIntake.jsx'
 import { HandoverPanel } from './Handovers.jsx'
-import { PatientPrescriptionsPage } from './PatientCare.jsx'
-import { PatientFollowupsPage } from './PatientVisits.jsx'
+import { FollowupPanel } from './ServerFollowups.jsx'
 
 import { visibleHmo } from '../phase3-contracts.js'
 import { visiblePrescriptions, prescriptionTasks, linkedTreatment, followupDisplayState } from '../phase2.js'
@@ -91,7 +90,7 @@ export function PatientsPage({ role, store, context, setPage }) {
         <Card className="patient-header-card"><div className="patient-record-head"><div className="avatar xl">{patient.name.split(' ').map(x=>x[0]).slice(0,2).join('')}</div><div><h2>{patient.name}</h2><p>{patient.serverProjection?patient.patientCode:<>{patient.patientCode||patient.id} • {patient.dob||'DOB not set'} • {patient.sex||'—'} • {patient.preferredBranch}</>}</p><div className="chip-row">{!patient.serverProjection&&<span className="mini-chip">Allergies: {patient.allergies}</span>}{patient.consent&&<span className="mini-chip success">Consent on file</span>}</div></div></div></Card>
         <Tabs tabs={tabs} active={tab} onChange={setTab}/>
         {tab==='summary'&&(serverPatient
-          ?<ServerPatientSummary key={patient.id} patient={patient} role={role} branches={state.branches} toast={toast}/>
+          ?<ServerPatientSummary key={patient.id} patient={patient} role={role} branches={state.branches} toast={toast} store={store}/>
           :<SummaryTab key={patient.id} patient={patient} role={role} onSave={saveRecord}/>)}
         {tab==='visits'&&<Card title="Cross-branch visit history"><Table rows={visits} columns={[{key:'date',label:'Date',render:a=>dateLabel(a.date)},{key:'branch',label:'Branch'},{key:'service',label:'Service'},{key:'dentist',label:'Dentist',render:a=>dentistName(a.dentistId,state.dentists)},{key:'status',label:'Status',render:a=><Status>{a.status}</Status>}]} /></Card>}
         {tab==='clinical'&&<Card title="Treatment history" subtitle={role==='dentist'?'Clinic server records you may read: your own treatments and, while you treat this patient, their earlier completed treatments. Read-only unless you are the treating Dentist.':'Staff read-only clinical record'}>{treatments.length?treatments.map(t=><div className="clinical-history" key={t.id}><div><b>{dateLabel(t.date)} • {t.procedure||t.plan||'Treatment in progress'}</b>{t.complaint&&<p>Complaint: {t.complaint}</p>}{t.plan&&<p>Plan: {t.plan}</p>}{t.notes&&<p>{t.notes}</p>}{Array.isArray(t.procedures)&&t.procedures.length>0&&<p>{t.procedures.map(p=>`${p.serviceName||state.services.find(s=>s.id===p.serviceId)?.name||'Service'} × ${p.quantity}`).join(', ')}</p>}<small>{t.dentistName||dentistName(t.dentistId,state.dentists)} • {t.status}</small>{!t.server&&<small className="block-muted">{t.legacyAppointment?'Historical demo record':'Recorded before server treatment records'} — read-only</small>}</div><Status>{t.status}</Status></div>):<Notice>No treatment history recorded.</Notice>}</Card>}
@@ -157,7 +156,7 @@ function SummaryTab({ patient, role, onSave }) {
 // M4: the Patient profile of a server Patient, loaded from and saved to the clinic server. No browser or demo value is ever
 // shown as the patient's profile: a failed load is an explicit error with Retry. Only Staff (front desk) may edit, and only
 // the non-clinical fields; Dentist and Owner see a read-only projection. Clinical history has no server record yet.
-function ServerPatientSummary({ patient, role, branches, toast }) {
+function ServerPatientSummary({ patient, role, branches, toast, store }) {
   // Dentists have no generic Patient-record access yet (POLICY DECISION REQUIRED); their workflow screens carry the patient
   // context care needs. Nothing is requested from the Patient record API for them.
   if(role==='dentist')return <Card title="Patient summary" subtitle="Identity from your appointments and queue.">
@@ -167,10 +166,10 @@ function ServerPatientSummary({ patient, role, branches, toast }) {
     </div>
     <Notice tone="info" title="Full patient record not available to Dentists yet">A Dentist’s access to the complete patient record is pending a clinic decision. Your schedule, queue and treatment screens show the details needed for each visit, and clinical history is not stored on the clinic server yet.</Notice>
   </Card>
-  return <StaffPatientSummary patient={patient} role={role} branches={branches} toast={toast}/>
+  return <StaffPatientSummary patient={patient} role={role} branches={branches} toast={toast} store={store}/>
 }
 
-function StaffPatientSummary({ patient, role, branches, toast }) {
+function StaffPatientSummary({ patient, role, branches, toast, store }) {
   const [load,setLoad]=useState({status:'loading',record:null,message:''})
   const [form,setForm]=useState(null)
   const [index,setIndex]=useState(null)
@@ -227,6 +226,7 @@ function StaffPatientSummary({ patient, role, branches, toast }) {
       {editable&&<Button className="span-2" disabled={saving} onClick={save}>{saving?'Saving…':'Save changes'}</Button>}
       {editable&&<div className="span-2"><IdCheck patientId={patient.id} toast={toast}/></div>}
       {role==='staff'&&<div className="span-2"><HandoverPanel patientId={patient.id} toast={toast}/></div>}
+      {role==='staff'&&full&&<div className="span-2"><FollowupPanel patientId={patient.id} toast={toast} store={store} branches={(branches||[]).filter(b=>b.status!=='Closed')}/></div>}
     </div>
   </Card>
 }
@@ -647,59 +647,5 @@ export function TreatmentPage({ store, context, setPage }) {
         {dirty&&!readOnly&&treatment&&<small className="block-muted">Unsaved changes — they are kept only on this screen until you save.</small>}
       </div></fieldset></Card>
     </div>}
-  </>
-}
-
-export function PrescriptionsPage({ role, store, context }) {
-  const { state, actions, toast }=store
-  const session=store.session||sessionForRole(role,state)
-  const eligible=prescriptionTasks(state,session)
-  const [form,setForm]=useState({treatmentId:'',items:[]})
-  const visible=visiblePrescriptions(state,session)
-  const select=treatmentId=>{
-    const draft=state.prescriptions.find(r=>r.treatmentId===treatmentId&&r.status==='Draft')
-    setForm(draft||{treatmentId,items:[{medication:'',dosage:'',instructions:'',duration:''}]})
-  }
-  const save=authorize=>{
-    const result=authorize?actions.authorizePrescription(form):actions.savePrescription(form)
-    if(!result.ok)return toast(result.message,'warning')
-    setForm(authorize?{treatmentId:'',items:[]}:result.record)
-    toast(authorize?'Prescription authorized.':'Prescription draft saved.','success')
-  }
-  const update=(index,key,value)=>setForm({...form,items:form.items.map((r,i)=>i===index?{...r,[key]:value}:r)})
-  if(role==='patient')return <PatientPrescriptionsPage store={store} context={context}/>
-  return <>
-    <PageHeader title={role==='patient'?'My Prescriptions':'Prescription tasks'} text="Prescriptions are available to the patient only after the treating dentist authorizes them."/>
-    {role==='dentist'&&<Card title="Requested prescriptions"><Field label="Treatment"><select value={form.treatmentId} onChange={e=>select(e.target.value)}><option value="">Select treatment</option>{eligible.map(t=><option value={t.id} key={t.id}>{patientName(t.patientId,state.patients)} • {dateLabel(t.date)} • {t.procedure} • {t.id}</option>)}</select></Field>
-      {!eligible.length&&<Notice>No prescriptions await authorization.</Notice>}
-      {form.treatmentId&&<><div className="form-grid">{form.items.map((r,index)=><React.Fragment key={index}>
-        <Field label={`Medication ${index+1}`} required><input value={r.medication} onChange={e=>update(index,'medication',e.target.value)}/></Field>
-        <Field label="Dosage" required><input value={r.dosage} onChange={e=>update(index,'dosage',e.target.value)}/></Field>
-        <Field label="Frequency / instructions" required><textarea value={r.instructions} onChange={e=>update(index,'instructions',e.target.value)}/></Field>
-        <Field label="Duration"><input value={r.duration||''} onChange={e=>update(index,'duration',e.target.value)}/></Field>
-        <Button variant="ghost" onClick={()=>setForm({...form,items:form.items.filter((_,i)=>i!==index)})}>Remove medication {index+1}</Button>
-      </React.Fragment>)}</div><div className="form-actions"><Button variant="ghost" onClick={()=>setForm({...form,items:[...form.items,{medication:'',dosage:'',instructions:'',duration:''}]})}>Add medication</Button><Button variant="ghost" onClick={()=>save(false)}>Save Draft</Button><Button onClick={()=>save(true)}>Authorize Prescription</Button></div></>}
-    </Card>}
-    <Card className="top-gap" title={role==='patient'?'Authorized prescriptions':'Prescription records'}>{visible.length?visible.map(r=><div className="clinical-history" key={r.id}><div><b>{patientName(r.patientId,state.patients)} • {dentistName(r.dentistId,state.dentists)}</b>{(Array.isArray(r.items)?r.items.filter(Boolean):[r]).map((item,index)=><p key={item.id||index}>{item.medication} • {item.dosage} • {item.instructions} {item.duration&&`• ${item.duration}`}</p>)}<small>{r.authorizedAt||'Awaiting authorization'}</small></div><Status>{r.status}</Status></div>):<Notice>No prescriptions available.</Notice>}</Card>
-  </>
-}
-
-export function FollowupsPage({ role, store, setPage, context }) {
-  const { state, toast }=store
-  const session=store.session||sessionForRole(role,state)
-  const visible=state.followups.filter(f=>inScope(f,session,state)&&(role!=='patient'||linkedTreatment(state,f)))
-  const [booking,setBooking]=useState(null)
-  if(role==='patient')return <PatientFollowupsPage store={store} setPage={setPage} context={context}/>
-  return <>
-    <PageHeader title="Treatment Follow-Up Scheduling" text="Return visits requested by the treating dentist. Scheduling uses normal appointment availability and conflict checks."/>
-    {/* Transitional M6/M20 rule (until M20 is backend-authoritative): the Dentist records/recommends the follow-up in the
-        treatment encounter; clinic Staff schedule the appointment through M6. Dentists get no booking action here. */}
-    {role==='dentist'&&<Notice title="Clinic Staff schedule follow-up visits">Indicate that a follow-up is required, with the recommended date and instructions, in the treatment encounter. Clinic Staff then book the appointment with you; you can’t book it from here.</Notice>}
-    <Card title="Follow-up tasks">{!visible.length&&<Notice>No follow-up requirements.</Notice>}{visible.map(f=>{
-      const appointment=state.appointments.find(a=>a.id===f.appointmentId)
-      const effectiveStatus=followupDisplayState(state,f)
-      return <div className="clinical-history" key={f.id}><div><b>{patientName(f.patientId,state.patients)} • {f.reason}</b><p>{dateLabel(f.recommendedDate)} {f.interval} • {dentistName(f.dentistId,state.dentists)}</p>{!linkedTreatment(state,f)&&<p>Care record needs clinic review before scheduling.</p>}<small>{appointment?`${dateLabel(appointment.date)} • ${displayTime(appointment.start)}`:'Awaiting scheduling'}</small></div><Status>{effectiveStatus==='Open'?'Awaiting Scheduling':effectiveStatus}</Status>{f.legacyAppointment&&<small className="block-muted">Historical demo record</small>}{effectiveStatus==='Open'&&linkedTreatment(state,f)&&!f.legacyAppointment&&role==='staff'&&<Button size="sm" onClick={()=>setBooking(f)}>Schedule follow-up</Button>}</div>
-    })}</Card>
-    <Modal open={!!booking} onClose={()=>setBooking(null)} title="Schedule required follow-up" wide>{booking&&<AppointmentForm role={role} store={store} followup={booking} onSaved={()=>setBooking(null)} submitLabel="Schedule follow-up"/>}</Modal>
   </>
 }

@@ -38,6 +38,7 @@ const SHORT = {
   calendar_load: 'When the calendar marks a day as crowded.',
   intake: 'Counter registration and the ID check.',
   staffing: 'Who approves leave, who edits schedules, how long a handover gives access.',
+  prescriptions: 'Common medicine names dentists can pick from (optional).',
 }
 
 /**
@@ -188,6 +189,9 @@ function AutomationRow({ row, categories, demo, toast, onSaved, onStale, onWordi
           {check('front_desk_edits_schedules', 'The front desk may edit the work schedules of the dentists at their branch')}
           {num('handover_access_days', 'After a handover is acknowledged, the receiving branch keeps the patient’s record for (days)', 1, 365)}
         </>}
+        {row.key === 'prescriptions' && <Field label="Common medicines (one per line, optional)" hint="Shown as suggestions while a dentist types; any medicine can still be typed. No doses, no checks.">
+          <textarea rows={5} value={(draft.common_medicines || []).join('\n')} onChange={e => set('common_medicines', e.target.value.split('\n').map(x => x.trimStart()).filter((x, i, all) => x || i < all.length - 1))}/>
+        </Field>}
         {row.key === 'intake' && <>
           {check('store_id_last4', 'Keep the last 4 characters of the ID when the front desk checks it (never the full number)')}
           <label className="au-check"><input type="checkbox" checked={false} disabled/> Let patients upload an ID photo for remote pre-verification <small>Not available in this release. The ID photo is read on the patient’s phone and never uploaded or kept.</small></label>

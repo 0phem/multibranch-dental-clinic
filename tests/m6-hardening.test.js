@@ -74,12 +74,11 @@ test('a Dentist cannot book the follow-up: nothing reaches the server and the fo
   assert.equal(w.actions.linkFollowupAppointment(followup.id, existing).ok, false)
 })
 
-test('the Dentist follow-up screen explains that clinic Staff schedule the visit and offers no booking action', () => {
-  const source = read('src/pages/Clinical.jsx')
-  assert.match(source, /Clinic Staff schedule follow-up visits/)
-  assert.match(source, /you can’t book it from here/)
-  // The only booking action on the page is gated to Staff.
-  assert.match(source, /role==='staff'&&<Button size="sm" onClick=\{\(\)=>setBooking\(f\)\}>Schedule follow-up<\/Button>/)
+test('the follow-up screen (M20, clinic server) offers booking to the front desk only', () => {
+  const source = read('src/pages/ServerFollowups.jsx')
+  // The only booking action on the page is gated to Staff; it opens the normal booking form with the task's details preselected.
+  assert.match(source, /\{t\.can_book && role === 'staff' && <Button size="sm" onClick=\{\(\) => setBooking\(true\)\}>Book follow-up<\/Button>\}/)
+  assert.match(source, /<AppointmentForm role=\{role\} store=\{store\} prefill=\{\{ patientPublicId: t\.patient\.id/)
 })
 
 test('a Patient has no active follow-up self-booking control', async () => {
@@ -92,9 +91,8 @@ test('a Patient has no active follow-up self-booking control', async () => {
   assert.ok(item, 'the recommendation is still shown to the Patient')
   assert.equal(item.action, 'View follow-up')
   assert.match(item.detail, /clinic will schedule it/)
-  const visits = read('src/pages/PatientVisits.jsx')
-  assert.doesNotMatch(visits, /you choose a time that works for you|will return in a later update/)
-  assert.match(visits, /follow-ups can’t be booked online/)
+  // The browser follow-up page is gone (M20 is on the clinic server); a patient is told the clinic contacts them.
+  assert.match(read('src/App.jsx'), /When your dentist asks to see you again, the clinic contacts you/)
 })
 
 // ================================================================================================================

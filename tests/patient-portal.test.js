@@ -35,7 +35,8 @@ test('decisions 2, 3 and 5: the name is read-only with a front-desk link, email 
   assert.match(account, /label="Current password"/)
   assert.match(account, /requestEmailChange\(\{ newEmail: email\.trim\(\), currentPassword: password \}\)/)
   const portal = read('src/patient/Portal.jsx')
-  for (const word of ['hmo', 'prescriptions', 'loyalty', 'followups', 'queue']) assert.doesNotMatch(portal, new RegExp(`\\['${word}'`), word)
+  // Prescriptions are real clinic-server data now (M19), so the portal has that page; the other placeholders stay out.
+  for (const word of ['hmo', 'loyalty', 'followups', 'queue']) assert.doesNotMatch(portal, new RegExp(`\\['${word}'`), word)
 })
 
 test('decision 4 and decision 6: no payment at booking, and messages are routed to a front desk with a Change link', () => {

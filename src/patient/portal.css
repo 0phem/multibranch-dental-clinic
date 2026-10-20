@@ -372,3 +372,10 @@
 .pp-family-invite { flex-basis:100%; display:grid; gap:8px; }
 .pp-row-actions { display:flex; flex-wrap:wrap; align-items:center; gap:12px; }
 .join-card { margin-bottom:16px; }
+/* M19 prescriptions in the portal */
+.pp-rx-list { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 12px; }
+.pp-rx-list > li { border: 1px solid var(--line); border-radius: 14px; padding: 12px; display: grid; gap: 6px; overflow-wrap: anywhere; }
+.pp-rx-list > li.is-void { background: #fff7f5; border-color: #f0c6bd; }
+.pp-rx-list ol { margin: 0; padding-left: 20px; display: grid; gap: 4px; }
+.pp-rx-list p { margin: 0; }
+.pp-void { color: #8f2a19; font-weight: 800; }

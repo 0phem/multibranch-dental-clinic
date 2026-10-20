@@ -12,20 +12,6 @@ import { useVisibleRefresh } from '../use-visible-refresh.js'
 
 const NO_ACCOUNT=<Notice tone="warning" title="We couldn’t confirm your account">Reopen your workspace, or ask the clinic to check your account access.</Notice>
 
-export function PatientPrescriptionsPage({ store, context }) {
-  const { state }=store, session=store.session
-  if(!patientContext(state,session))return NO_ACCOUNT
-  const target=resolveTarget(state,session,'prescriptions',context)
-  const items=patientPrescriptions(state,session).map(r=>prescriptionView(state,r)).sort((a,b)=>String(b.authorizedAt||'').localeCompare(String(a.authorizedAt||'')))
-  return <div className="pt-page">
-    <PageHeader kicker="Your care" title="My Prescriptions" text="Prescriptions appear here after your Dentist authorizes them."/>
-    <div className="pt-list">{items.length?items.map(rx=><RecordCard key={rx.id} id={`rx-${rx.id}`} highlight={target===rx.id} title={rx.items.map(i=>i.medication).filter(Boolean).join(', ')||'Prescription'} subtitle={`Authorized by ${rx.dentist}${rx.authorizedAt?` • ${formatStamp(rx.authorizedAt)}`:''}`} status="Authorized">
-      {rx.items.map(item=><div className="pt-rx-item" key={item.key}><h4>{item.medication||'Medication'}</h4><DefinitionList items={[{label:'Dosage',value:item.dosage},{label:'Instructions',value:item.instructions},{label:'Duration',value:item.duration}]}/></div>)}
-      <DefinitionList items={[{label:'From your visit',value:rx.visitDate?dateLabel(rx.visitDate):null}]}/>
-    </RecordCard>):<Empty title="No prescriptions" text="Prescriptions appear here after your Dentist authorizes them."/>}</div>
-  </div>
-}
-
 export function PatientBillingPage({ store, context }) {
   const { state }=store, session=store.session
   const [openReceiptId,setOpenReceiptId]=useState(null)

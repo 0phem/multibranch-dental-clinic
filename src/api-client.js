@@ -389,6 +389,37 @@ export async function downloadBillingPdf(invoiceId, kind = 'invoice') {
   setTimeout(() => URL.revokeObjectURL(url), 1000)
   return { ok: true }
 }
+/** M19: downloads a prescription PDF (issued or void) the signed-in person may read. */
+export async function downloadPrescriptionPdf(id, number = null) {
+  let response
+  try {
+    response = await rawFetch(`/api/prescriptions/${encodeURIComponent(id)}/pdf`, { headers: { Accept: 'application/pdf' } })
+  } catch {
+    return { ok: false, kind: 'network', message: 'Could not reach the clinic system. Check your connection and try again.' }
+  }
+  if (!response.ok) return response.status === 404 ? { ok: false, kind: 'not_found', message: 'This document is not available.' } : parseFailure(response)
+  const name = /filename="([^"]+)"/.exec(response.headers.get('Content-Disposition') || '')?.[1] || `Prescription${number ? `-${number}` : ''}.pdf`
+  const url = URL.createObjectURL(await response.blob())
+  const a = Object.assign(document.createElement('a'), { href: url, download: name })
+  document.body.appendChild(a); a.click(); a.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+  return { ok: true }
+}
+// M20 Patient Follow-Up
+export function followups(filters = {}) { const q = new URLSearchParams(Object.entries(filters).filter(([, v]) => v)).toString(); return request(`/api/followups${q ? `?${q}` : ''}`) }
+export function patientFollowups(patientId) { return request(`/api/patients/${encodeURIComponent(patientId)}/followups`) }
+export function createFollowup(body) { return json('/api/followups', 'POST', body) }
+export function updateFollowup(id, body) { return json(`/api/followups/${encodeURIComponent(id)}`, 'PATCH', body) }
+// M19 Prescriptions
+export function listPrescriptions() { return request('/api/prescriptions') }
+export function myPrescriptions() { return request('/api/me/prescriptions') }
+export function prescription(id) { return request(`/api/prescriptions/${encodeURIComponent(id)}`) }
+export function prescriptionVisits() { return request('/api/prescriptions/visits') }
+export function createPrescription(body) { return json('/api/prescriptions', 'POST', body) }
+export function updatePrescription(id, body) { return json(`/api/prescriptions/${encodeURIComponent(id)}`, 'PUT', body) }
+export function issuePrescription(id, revision) { return json(`/api/prescriptions/${encodeURIComponent(id)}/issue`, 'POST', { expected_revision: revision }) }
+export function voidPrescription(id, reason) { return json(`/api/prescriptions/${encodeURIComponent(id)}/void`, 'POST', { reason }) }
+export function savePrescriptionLicense(value) { return json('/api/me/prescription-license', 'PUT', { rx_license_no: value }) }
 export function getPaymentOptions(invoiceId) { return request(`/api/invoices/${encodeURIComponent(invoiceId)}/payment-options`) }
 export function createPayMongoCheckout(invoiceId, payload = {}) {
   return request(`/api/invoices/${encodeURIComponent(invoiceId)}/paymongo-checkout`, {

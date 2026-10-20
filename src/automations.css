@@ -154,3 +154,14 @@
 .au-demo-tools > summary { cursor: pointer; font-weight: 750; min-height: 44px; display: flex; align-items: center; gap: 6px; }
 .au-demo-tools > summary:focus-visible { outline: 3px solid #1865ac; outline-offset: 2px; }
 @media (max-width: 420px) { .au-row-head { align-items: flex-start; } .au-row-text { flex-basis: 100%; } }
+/* M19 prescription form and view */
+.rx-line { border: 1px solid var(--line, #e1eaf1); border-radius: 12px; padding: 8px 12px; display: grid; gap: 8px; min-width: 0; }
+.rx-line legend { font-weight: 800; padding: 0 4px; }
+.rx-view { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
+.rx-view li { display: grid; gap: 2px; overflow-wrap: anywhere; }
+.rx-view span { color: var(--muted, #5b6b7f); }
+/* M20 follow-ups */
+.fu-counts { margin: 0; color: var(--muted, #5b6b7f); }
+.fu-counts .is-bad { color: #8f2a19; }
+.fd-list li.fu-overdue { border-left: 4px solid #c0392b; padding-left: 10px; }
+.fd-badge.is-bad { background: #fde8e4; color: #8f2a19; }

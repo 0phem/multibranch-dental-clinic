@@ -20,7 +20,8 @@ export function bookableBranches(state,session){
   return open
 }
 
-export function AppointmentForm({ role, store, appointment=null, followup=null, onSaved, submitLabel='Confirm appointment' }) {
+// `prefill` (M20 server follow-up task): {patientPublicId, patientName, branchId, serviceId, date} preselected; the patient and branch are fixed.
+export function AppointmentForm({ role, store, appointment=null, followup=null, prefill=null, onSaved, submitLabel='Confirm appointment' }) {
   const { state, toast }=store
   const session=store.session||sessionForRole(role,state)
   const key=useRef(commandKey())
@@ -28,6 +29,7 @@ export function AppointmentForm({ role, store, appointment=null, followup=null, 
   const followupPatient=followup?publicPatientIdFor(followup.patientId,{session,users:state.users,patients:state.patients}):null
   const [form,setFormState]=useState(()=>{
     if(appointment)return {patientPublicId:appointment.patientPublicId,branchId:appointment.branchId,serviceId:appointment.serviceId,dentistId:appointment.dentistId,date:appointment.date>=clinicDate()?appointment.date:clinicDate(),start:'',notes:''}
+    if(prefill)return {patientPublicId:prefill.patientPublicId,branchId:prefill.branchId,serviceId:prefill.serviceId||'',dentistId:'',date:prefill.date&&prefill.date>=clinicDate()?prefill.date:clinicDate(),start:'',notes:''}
     if(followup)return {patientPublicId:followupPatient,branchId:followup.branchId,serviceId:'',dentistId:followup.dentistId,date:followup.recommendedDate&&followup.recommendedDate>=clinicDate()?followup.recommendedDate:clinicDate(),start:'',notes:followup.reason||''}
     return {patientPublicId:'',branchId:branches[0]?.id||'',serviceId:'',dentistId:'',date:clinicDate(),start:'',notes:''}
   })
@@ -75,8 +77,8 @@ export function AppointmentForm({ role, store, appointment=null, followup=null, 
 
   return <div className="booking-layout">
     <form className="form-grid" onSubmit={e=>{e.preventDefault();if(canSave)save()}}>
-      {appointment||followup
-        ?<Field label="Patient"><input value={appointment?`${appointment.patientName||patientName(appointment.patientId,state.patients)} • ${appointment.patientCode||''}`:patientName(followup.patientId,state.patients)} disabled/></Field>
+      {appointment||followup||prefill
+        ?<Field label="Patient"><input value={appointment?`${appointment.patientName||patientName(appointment.patientId,state.patients)} • ${appointment.patientCode||''}`:prefill?prefill.patientName:patientName(followup.patientId,state.patients)} disabled/></Field>
         :<>
           <Field label="Find patient" hint="Search the clinic Patient directory by name, code or phone."><input value={search} placeholder="Type at least 2 characters" onChange={e=>setSearch(e.target.value)}/></Field>
           <Field label="Patient" required><select value={form.patientPublicId} onChange={e=>update('patientPublicId',e.target.value)}>
@@ -84,9 +86,9 @@ export function AppointmentForm({ role, store, appointment=null, followup=null, 
             {directory.map(p=><option key={p.id} value={p.id}>{p.name} • {p.patientCode}{p.phone?` • ${p.phone}`:''}</option>)}
           </select></Field>
         </>}
-      <Field label="Branch" required><select disabled={!!appointment||!!followup} value={form.branchId} onChange={e=>update('branchId',e.target.value)}>
+      <Field label="Branch" required><select disabled={!!appointment||!!followup||!!prefill} value={form.branchId} onChange={e=>update('branchId',e.target.value)}>
         {!branches.length&&<option value="">No authorized branch</option>}
-        {(appointment||followup?state.branches.filter(b=>b.id===form.branchId):branches).map(b=><option key={b.id} value={b.id}>{b.name}</option>)}
+        {(appointment||followup||prefill?state.branches.filter(b=>b.id===form.branchId):branches).map(b=><option key={b.id} value={b.id}>{b.name}</option>)}
       </select></Field>
       <Field label="Service" required><select disabled={!!appointment} value={form.serviceId} onChange={e=>update('serviceId',e.target.value)}>
         <option value="">Select a service</option>

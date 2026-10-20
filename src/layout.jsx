@@ -26,9 +26,9 @@ const GROUPS={
   // Loyalty remain fully reachable pages (see `pages` in safeguards.js and Me's secondary links) — they are just
   // not primary navigation destinations.
   patient:[['Overview',['dashboard']],['Booking',['book','appointments']],['Communication',['messages']],['Account',['billing','feedback','me']]],
-  staff:[['Today',['dashboard','appointments','calendar','checkin','queue','capacity','closures']],['Patients & finance',['patients','handovers','billing','hmo']],['Team',['schedules','leave']],['Communication',['inquiries','messages','followups','engagement']]],
+  staff:[['Today',['dashboard','appointments','calendar','checkin','queue','capacity','closures']],['Patients & finance',['patients','handovers','prescriptions','billing','hmo']],['Team',['schedules','leave']],['Communication',['inquiries','messages','followups','engagement']]],
   dentist:[['Today',['dashboard','schedule','queue']],['Clinical',['patients','handovers','treatment','prescriptions','followups']],['Team',['schedules','leave']],['Communication',['messages','wording']]],
-  owner:[['Overview',['dashboard','analytics']],['Operations',['branches','team','calendar','capacity','hmo']],['Team',['schedules','leave','handovers']],['Administration',['users','pricing','automations','closures','hmos','automation','audit','branding','assistant','engagement']]],
+  owner:[['Overview',['dashboard','analytics']],['Operations',['branches','team','calendar','capacity','hmo']],['Team',['schedules','leave','handovers']],['Clinical records',['prescriptions']],['Administration',['users','pricing','automations','closures','hmos','automation','audit','branding','assistant','engagement']]],
 }
 
 // In a clinic-server session the capacity page is the factual live-queue view (src/pages/QueueCounts.jsx); the

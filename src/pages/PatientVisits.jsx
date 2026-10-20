@@ -161,19 +161,3 @@ function TreatmentHistoryMore({ store }) {
   const more=async()=>{setBusy(true);setError('');const result=await store.loadOlderTreatments();setBusy(false);if(!result.ok)setError(result.message||'Older treatment records could not be loaded.')}
   return <Notice tone="info" title="Only part of your treatment history is shown">Older completed treatments are available. {error&&<span role="alert">{error} </span>}<Button size="sm" variant="soft" disabled={busy} onClick={more}>{error?'Retry':busy?'Loading…':'Load older treatment records'}</Button></Notice>
 }
-
-const FOLLOWUP_NOTE={Open:'Your Dentist recommended a return visit. It isn’t scheduled yet.',Scheduled:'Your follow-up visit is scheduled.',Completed:'This follow-up visit is complete.','Needs clinic review':'The clinic needs to review this record before it can be scheduled.'}
-export function PatientFollowupsPage({ store, setPage, context }) {
-  const { state }=store, session=store.session
-  if(!patientContext(state,session))return NO_ACCOUNT
-  const items=patientFollowups(state,session), target=resolveTarget(state,session,'followups',context)
-  return <div className="pt-page">
-    <PageHeader kicker="Your care" title="Follow-up care" text="Your Dentist decides when a return visit is needed. The clinic then schedules it with you."/>
-    <div className="pt-list">{items.length?items.map(({record:f,display,appointment})=><RecordCard key={f.id} id={`followup-${f.id}`} highlight={target===f.id} title={f.reason||'Follow-up visit'} subtitle={`Requested by ${dentistLabel(state,f.dentistId)}`} status={display==='Open'?'Awaiting Scheduling':display}
-      actions={<>{appointment&&<Button size="sm" variant="ghost" onClick={()=>setPage?.('appointments',{entityId:appointment.id})}>View appointment</Button>}</>}>
-      <p className="pt-hint">{FOLLOWUP_NOTE[display]||''}</p>
-      {display==='Open'&&<p className="pt-hint">The clinic schedules Dentist-requested follow-ups with your Dentist. Contact the clinic to arrange this visit; follow-ups can’t be booked online.</p>}
-      <DefinitionList items={[{label:'Recommended date',value:f.recommendedDate?dateLabel(f.recommendedDate):null},{label:'Recommended interval',value:f.interval},{label:'Scheduled visit',value:appointment?`${dateLabel(appointment.date)} · ${displayTime(appointment.start)} at ${appointment.branch}`:null}]}/>
-    </RecordCard>):<Empty title="No follow-up visits" text="If your Dentist recommends a return visit, it appears here."/>}</div>
-  </div>
-}
