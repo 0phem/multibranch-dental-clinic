@@ -451,7 +451,7 @@ test('a structurally readable but inconsistent ledger loads (it is not silently 
 
 // ---- UI and source guards ----------------------------------------------------------------------------
 
-const read=path=>readFileSync(new URL(`../${path}`,import.meta.url),'utf8')
+const read=path=>readFileSync(new URL(`../${path}`,import.meta.url),'utf8').replace(/\r\n/g,'\n')
 
 test('Patient M24 code has no raw loyalty setter, no ROLE_INFO identity and no editable points',()=>{
   assert.ok(existsSync(new URL('../src/pages/PatientLoyalty.jsx',import.meta.url)))
