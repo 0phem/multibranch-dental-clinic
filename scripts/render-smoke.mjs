@@ -55,8 +55,9 @@ assert.ok(/can.t diagnose/.test(server.replace(/&#x27;|’/g,"'")),'the scope is
 assert.ok(patient.includes('Share feedback')&&patient.includes('it is not anonymous')&&patient.includes('has not set a response time'),'Patient feedback page renders honestly')
 assert.ok(!/\bstars?\b|rating|survey|testimonial/i.test(patient),'no rating/survey/testimonial UI')
 assert.ok(!m.NAV.owner.some(([k])=>k==='feedback')&&!m.NAV.staff.some(([k])=>k==='feedback')&&!m.NAV.dentist.some(([k])=>k==='feedback'),'only Patients have a feedback entry (no reviewer authority exists)')}
-// Scheduled automations: the Owner page renders its loading state under SSR and labels every value as an unconfirmed default.
-{const automations=render('automations','owner');assert.ok(automations.includes('Automations')&&automations.includes('not confirmed by the clinic')&&automations.includes('Loading automations'),'automations page renders honestly')
+// Scheduled automations: the Owner page renders its loading state under SSR and says nothing is sent before the wording is approved
+// (each value's "not confirmed by the clinic" label is in the row details, loaded from the server).
+{const automations=render('automations','owner');assert.ok(automations.includes('Automations')&&automations.includes('Nothing is sent until you approve its wording')&&automations.includes('Loading automations'),'automations page renders honestly')
 assert.ok(!m.NAV.staff.some(([k])=>k==='automations')&&!m.NAV.patient.some(([k])=>k==='automations'),'only the Owner has the Automations page')}
 // M13: the Owner pricing page renders its honest loading state under SSR (no fetch runs) and the Branches screen labels
 // the reference fee as unconfirmed rather than as a price.
