@@ -19,16 +19,38 @@ const DEFAULT_TEXT = {
 }
 const sourceText = src => (src ? `from clinic interview R2 (${src})` : 'recommended, not confirmed by the clinic')
 
+/** Plain words for each row (the full description stays in the details). Grouped as the Owner thinks of them. */
+const GROUPS = [
+  ['Appointments', ['appointment_reminders', 'no_show', 'fill_slots', 'waitlist']],
+  ['Payments', ['overdue_invoices']],
+  ['Reports', ['owner_summary', 'recall', 'followup_reminders']],
+]
+const SHORT = {
+  appointment_reminders: 'Reminds patients before their visit.',
+  no_show: 'Asks late patients if they are coming, and frees the time when they are not.',
+  fill_slots: 'Offers a freed time to patients booked later that day.',
+  waitlist: 'Tells waiting patients when a time opens on a full day.',
+  overdue_invoices: 'Reminds patients of an unpaid invoice.',
+  owner_summary: 'Emails you the day’s numbers each evening.',
+  recall: 'Invites patients back for a check-up.',
+  followup_reminders: 'Reminds a patient when a follow-up the dentist asked for is due.',
+  attendance_policy: 'When a cancellation counts as late, and when bookings need the front desk.',
+  calendar_load: 'When the calendar marks a day as crowded.',
+  intake: 'Counter registration and the ID check.',
+  staffing: 'Who approves leave, who edits schedules, how long a handover gives access.',
+}
+
 /**
- * Administration → Automations (Owner): the scheduled automations, two clinic policies and the wording of every automated email.
- * Each default says where it came from: the clinic's second interview (R2, with the answer number) or our recommendation. An
- * automation that sends email can be switched on only after the Owner approved its wording (R2-09); recall also needs a
- * Dentist. The server saves, validates and audits every change (who, old and new value). Nothing is kept in the browser.
+ * Administration → Automations (Owner): the emails the system sends by itself and four clinic policies, as one compact row each
+ * (plain name, one line, an on/off switch and a status chip); timings, wording, last run and the 7-day counts open in the row's
+ * details. An automation that sends email can be switched on only after the Owner approved its wording (R2-09); recall and
+ * follow-up reminders also need a Dentist. The demo clock and test emails exist only on the demo database. Every change is
+ * validated and audited by the server; nothing is kept in the browser.
  */
-export function AutomationsPage({ store }) {
+export function AutomationsPage({ store, setPage }) {
   const toast = store?.toast || (() => {})
   const [rows, setRows] = useState(null), [meta, setMeta] = useState({ categories: [], demo: false })
-  const [error, setError] = useState(''), [attempt, setAttempt] = useState(0)
+  const [error, setError] = useState(''), [attempt, setAttempt] = useState(0), [wordingKey, setWordingKey] = useState('')
 
   useEffect(() => {
     let live = true
@@ -41,32 +63,37 @@ export function AutomationsPage({ store }) {
   }, [attempt])
 
   const saved = r => { setRows(r.data || []); setMeta(m => ({ ...m, ...(r.meta || {}) })) }
-  const automations = (rows || []).filter(r => r.kind !== 'policy'), policies = (rows || []).filter(r => r.kind === 'policy')
+  const byKey = Object.fromEntries((rows || []).map(r => [r.key, r]))
+  const grouped = GROUPS.map(([title, keys]) => [title, keys.map(k => byKey[k]).filter(Boolean)])
+  const listed = new Set(GROUPS.flatMap(([, keys]) => keys))
+  const other = (rows || []).filter(r => r.kind !== 'policy' && !listed.has(r.key)), policies = (rows || []).filter(r => r.kind === 'policy')
+  const openWording = key => { setWordingKey(key); requestAnimationFrame(() => document.getElementById(`tpl-${key}`)?.scrollIntoView({ block: 'center' })) }
+  const rowProps = { categories: meta.categories, demo: meta.demo, toast, onSaved: saved, onStale: () => setAttempt(a => a + 1), onWording: openWording, onAudit: () => setPage?.('audit') }
 
   return <div className="au-page">
-    <PageHeader kicker="Administration" title="Automations"
-      text="What the system does by itself: reminders, late arrivals, filling freed times, overdue invoices, recall, the waitlist and your daily summary. Times are Philippine time (Asia/Manila). Emails go through the clinic’s email outbox, which retries failures and never sends the same message twice."/>
-    <Notice tone="warning" title="Approve the wording first">Every automated email uses wording you approve below (interview R2-09). An automation stays off until its wording is approved. Each default says whether it came from the clinic’s second interview (R2) or is our recommendation, not confirmed by the clinic; change any value to the clinic’s own rule. Every change is saved in the audit trail.</Notice>
+    <PageHeader kicker="Administration" title="Automations" text="Emails the system sends for you. Nothing is sent until you approve its wording."/>
     {error && <Notice tone="warning" title="Automations unavailable">{error} <Button size="sm" variant="ghost" onClick={() => setAttempt(a => a + 1)}>Try again</Button></Notice>}
     {!rows && !error && <p className="au-muted" role="status">Loading automations…</p>}
-    {meta.demo && <DemoClockCard toast={toast} onDone={() => setAttempt(a => a + 1)}/>}
-    <MessageWording toast={toast} onChanged={() => setAttempt(a => a + 1)}/>
-    {automations.length > 0 && <h2 className="au-section">Automations</h2>}
-    <div className="au-grid">
-      {automations.map(row => <AutomationCard key={row.key} row={row} categories={meta.categories} toast={toast} onSaved={saved} onStale={() => setAttempt(a => a + 1)}/>)}
-    </div>
-    {policies.length > 0 && <>
-      <h2 className="au-section">Clinic policies</h2>
-      <div className="au-grid">
-        {policies.map(row => <AutomationCard key={row.key} row={row} categories={meta.categories} toast={toast} onSaved={saved} onStale={() => setAttempt(a => a + 1)}/>)}
-      </div>
-    </>}
+    {rows && [...grouped, ...(other.length ? [['Other', other]] : [])].filter(([, list]) => list.length).map(([title, list]) => <section key={title} className="au-group" aria-labelledby={`au-g-${title}`}>
+      <h2 className="au-section" id={`au-g-${title}`}>{title}</h2>
+      <ul className="au-rows">{list.map(row => <AutomationRow key={row.key} row={row} {...rowProps}/>)}</ul>
+    </section>)}
+    {policies.length > 0 && <section className="au-group" aria-labelledby="au-g-policies">
+      <h2 className="au-section" id="au-g-policies">Clinic settings</h2>
+      <ul className="au-rows">{policies.map(row => <AutomationRow key={row.key} row={row} {...rowProps}/>)}</ul>
+    </section>}
+    <MessageWording toast={toast} demo={meta.demo} openKey={wordingKey} onOpen={setWordingKey} onChanged={() => setAttempt(a => a + 1)}/>
+    {meta.demo && <details className="au-demo-tools"><summary>Demo tools <small>(demo database only)</small></summary>
+      <DemoClockCard toast={toast} onDone={() => setAttempt(a => a + 1)}/>
+    </details>}
   </div>
 }
 
-function AutomationCard({ row, categories, toast, onSaved, onStale }) {
+const STATUS = { active: ['Active', 'is-ok'], wording: ['Needs wording approval', 'is-wait'], off: ['Off', 'is-off'] }
+
+function AutomationRow({ row, categories, demo, toast, onSaved, onStale, onWording, onAudit }) {
   const [draft, setDraft] = useState(row.settings)
-  const [busy, setBusy] = useState(''), [fieldError, setFieldError] = useState('')
+  const [busy, setBusy] = useState(''), [fieldError, setFieldError] = useState(''), [open, setOpen] = useState(false)
   useEffect(() => { setDraft(row.settings); setFieldError('') }, [row.revision])
   const dirty = JSON.stringify(draft) !== JSON.stringify(row.settings)
   const stats = row.last_7_days || {}
@@ -74,6 +101,7 @@ function AutomationCard({ row, categories, toast, onSaved, onStale }) {
   const policy = row.kind === 'policy'
   const unapproved = (row.templates || []).filter(t => !t.approved)
   const blocked = !row.enabled && unapproved.length > 0
+  const [label, tone] = STATUS[row.enabled ? 'active' : blocked ? 'wording' : 'off']
 
   const save = async body => {
     setBusy('save'); setFieldError('')
@@ -82,6 +110,7 @@ function AutomationCard({ row, categories, toast, onSaved, onStale }) {
     if (!r.ok) {
       if (r.code === 'stale_revision') { toast(r.message, 'warning'); return onStale() }
       setFieldError(r.kind === 'validation' ? Object.values(r.errors || {})[0]?.[0] || r.message : r.message || 'Not saved.')
+      if (!open) toast(r.message || 'Not saved.', 'warning')
       return
     }
     onSaved(r); toast(`${row.name} saved.`, 'success')
@@ -99,79 +128,82 @@ function AutomationCard({ row, categories, toast, onSaved, onStale }) {
   const num = (k, label, min, max) => <Field label={label} hint={hint(k)}><input type="number" min={min} max={max} value={draft[k]} onChange={e => set(k, Number(e.target.value))}/></Field>
   const check = (k, label) => <label className="au-check"><input type="checkbox" checked={!!draft[k]} onChange={e => set(k, e.target.checked)}/> {label} <small>{hint(k)}</small></label>
 
-  return <Card className={`au-card ${row.enabled ? '' : 'is-off'}`} title={row.name} subtitle={`${row.module} · default ${row.defaults.enabled ? 'on' : 'off'}, ${sourceText(row.defaults.sources?.enabled)}`}
-    actions={<button type="button" role="switch" aria-checked={row.enabled} aria-label={`${row.name}: ${row.enabled ? 'on' : 'off'}`} className="au-switch" disabled={!!busy || blocked}
-      title={blocked ? 'Approve the wording first' : undefined} onClick={() => save({ enabled: !row.enabled })}><span aria-hidden="true"/>{row.enabled ? 'On' : 'Off'}</button>}>
-    <p className="au-desc">{row.description}</p>
-    {(row.templates || []).length > 0 && <p className="au-wording">Wording: {row.templates.map(t => <span key={t.key} className={`au-tag ${t.approved ? 'is-ok' : 'is-wait'}`}>{t.approved ? '✓' : '!'} {t.name}{t.approved ? ' approved' : t.needs_dentist ? ' needs Owner and Dentist approval' : ' needs approval'}</span>)}</p>}
-    {blocked && <p className="au-muted" role="note">Approve the wording under “Message wording” to switch this on.</p>}
-    <form className="au-form" aria-labelledby={id} onSubmit={e => { e.preventDefault(); if (dirty) save({ settings: draft }) }}>
-      <span id={id} hidden>{row.name} settings</span>
-      {row.key === 'appointment_reminders' && <>
-        {num('lead_minutes', 'Remind this many minutes before the visit', 15, 240)}
-        {check('day_before', 'Also remind 24 hours before')}
-        {check('morning_of', 'Also remind on the morning of the visit')}
-        <Field label="Morning reminder time" hint={hint('morning_time')}><input type="time" value={draft.morning_time} disabled={!draft.morning_of} onChange={e => set('morning_time', e.target.value)}/></Field>
-      </>}
-      {row.key === 'no_show' && <>
-        {num('check_minutes', '“Are you on your way?” after (minutes)', 1, 60)}
-        {num('late_minutes', 'Show as Late and queue last after (minutes)', 1, 120)}
-        {num('release_minutes', 'Release the time after (minutes)', 5, 240)}
-        <Field label="At the release time" hint={hint('release_mode')}>
-          <select value={draft.release_mode} onChange={e => set('release_mode', e.target.value)}>
-            <option value="automatic">Release automatically (the front desk can undo it today)</option>
-            <option value="ask">Ask the front desk (possible no-show)</option>
-          </select>
-        </Field>
-        {check('rebook_email', 'Email “We missed you, book a new time” after a release or a confirmed no-show')}
-      </>}
-      {row.key === 'fill_slots' && <>
-        {num('offer_count', 'How many later patients to offer a freed time to', 1, 10)}
-        {num('min_notice_minutes', 'Offer only times at least this many minutes away', 0, 240)}
-        {num('waitlist_after_minutes', 'Head start for move-up offers before the waitlist hears (minutes)', 0, 1440)}
-      </>}
-      {row.key === 'overdue_invoices' && <Field label="Remind after (days since the invoice was issued, up to 3)" hint={hint('days')}>
-        <input inputMode="numeric" value={(draft.days || []).join(', ')} onChange={e => set('days', e.target.value.split(/[\s,]+/).filter(Boolean).map(Number))}/>
-      </Field>}
-      {row.key === 'recall' && <RecallRules rules={draft.rules || []} categories={categories} onChange={rules => set('rules', rules)} hint={hint('rules')}/>}
-      {row.key === 'waitlist' && num('notify_count', 'How many waiting patients to tell when a time opens', 1, 10)}
-      {row.key === 'owner_summary' && <Field label="Send time" hint={hint('send_time')}><input type="time" value={draft.send_time} onChange={e => set('send_time', e.target.value)}/></Field>}
-      {row.key === 'attendance_policy' && <>
-        {num('late_hours', 'A cancellation is late when made less than this many hours before', 1, 72)}
-        {num('limit', 'Late cancellations or no-shows before bookings need confirmation', 1, 10)}
-        {num('window_months', 'Counted over the last (months)', 1, 24)}
-      </>}
-      {row.key === 'calendar_load' && num('crowded_percent', 'Mark a day as crowded at (% of the dentists’ time booked)', 50, 100)}
-      {row.key === 'staffing' && <>
-        <Field label="Who approves leave requests" hint={hint('leave_approver')}>
-          <select value={draft.leave_approver} onChange={e => set('leave_approver', e.target.value)}>
-            <option value="owner">The Owner only</option>
-            <option value="owner_or_front_desk">The Owner or the front desk of the requester’s branch</option>
-          </select>
-        </Field>
-        {check('front_desk_edits_schedules', 'The front desk may edit the work schedules of the dentists at their branch')}
-        {num('handover_access_days', 'After a handover is acknowledged, the receiving branch keeps the patient’s record for (days)', 1, 365)}
-      </>}
-      {row.key === 'intake' && <>
-        {check('store_id_last4', 'Keep the last 4 characters of the ID when the front desk checks it (never the full number)')}
-        <label className="au-check"><input type="checkbox" checked={false} disabled/> Let patients upload an ID photo for remote pre-verification <small>Not available in this release. The ID photo is read on the patient’s phone and never uploaded or kept.</small></label>
-      </>}
-      {fieldError && <p className="au-error" role="alert">{fieldError}</p>}
-      <div className="au-actions">
-        <Button type="submit" size="sm" disabled={!dirty || !!busy}>{busy === 'save' ? 'Saving…' : 'Save changes'}</Button>
-        {dirty && <Button size="sm" variant="ghost" onClick={() => setDraft(row.settings)}>Undo</Button>}
-        {!policy && <Button size="sm" variant="soft" icon="mail" disabled={!!busy} onClick={test}>{busy === 'test' ? 'Sending…' : 'Send a test to myself'}</Button>}
-      </div>
-    </form>
-    {!policy && <dl className="au-stats">
-      <div><dt>Last run</dt><dd>{manila(row.last_run_at)}</dd></div>
-      <div><dt>Sent (7 days)</dt><dd>{stats.sent ?? 0}</dd></div>
-      {row.key === 'no_show' && <div><dt>Flagged (7 days)</dt><dd>{stats.flagged ?? 0}</dd></div>}
-      <div><dt>Skipped</dt><dd>{stats.skipped ?? 0}</dd></div>
-      <div><dt>Failed</dt><dd className={stats.failed ? 'is-bad' : ''}>{stats.failed ?? 0}</dd></div>
-      {stats.pending > 0 && <div><dt>Waiting to send</dt><dd>{stats.pending}</dd></div>}
-    </dl>}
-  </Card>
+  return <li className={`au-row ${row.enabled ? '' : 'is-off'}`}>
+    <div className="au-row-head">
+      <div className="au-row-text"><b>{row.name}</b><span>{SHORT[row.key] || row.description}</span></div>
+      {!policy && <span className={`au-chip ${tone}`}>{label}</span>}
+      {!policy && <button type="button" role="switch" aria-checked={row.enabled} aria-label={`${row.name}: ${row.enabled ? 'on' : 'off'}`} className="au-switch" disabled={!!busy || blocked}
+        title={blocked ? 'Approve the wording first' : undefined} onClick={() => save({ enabled: !row.enabled })}><span aria-hidden="true"/>{row.enabled ? 'On' : 'Off'}</button>}
+      <Button size="sm" variant="ghost" aria-expanded={open} aria-controls={`${id}-details`} onClick={() => setOpen(o => !o)}>{open ? 'Hide details' : policy ? 'Settings' : 'Details'}</Button>
+    </div>
+    {blocked && <p className="au-row-note" role="note">{unapproved.map(t => <button key={t.key} type="button" className="link-button" onClick={() => onWording(t.key)}>Approve the wording first: {t.name}</button>)}</p>}
+    {open && <div className="au-row-body" id={`${id}-details`}>
+      <p className="au-desc">{row.description}</p>
+      <p className="au-muted">{row.module} · default {row.defaults.enabled ? 'on' : 'off'}, {sourceText(row.defaults.sources?.enabled)}</p>
+      {(row.templates || []).length > 0 && <p className="au-wording">Wording: {row.templates.map(t => <button key={t.key} type="button" className={`au-tag ${t.approved ? 'is-ok' : 'is-wait'}`} onClick={() => onWording(t.key)}>{t.approved ? '✓' : '!'} {t.name}{t.approved ? ' approved' : t.needs_dentist ? ' needs Owner and Dentist approval' : ' needs approval'}</button>)}</p>}
+      <form className="au-form" aria-labelledby={id} onSubmit={e => { e.preventDefault(); if (dirty) save({ settings: draft }) }}>
+        <span id={id} hidden>{row.name} settings</span>
+        {row.key === 'appointment_reminders' && <>
+          {num('lead_minutes', 'Remind this many minutes before the visit', 15, 240)}
+          {check('day_before', 'Also remind 24 hours before')}
+          {check('morning_of', 'Also remind on the morning of the visit')}
+          <Field label="Morning reminder time" hint={hint('morning_time')}><input type="time" value={draft.morning_time} disabled={!draft.morning_of} onChange={e => set('morning_time', e.target.value)}/></Field>
+        </>}
+        {row.key === 'no_show' && <>
+          {num('check_minutes', '“Are you on your way?” after (minutes)', 1, 60)}
+          {num('late_minutes', 'Show as Late and queue last after (minutes)', 1, 120)}
+          {num('release_minutes', 'Release the time after (minutes)', 5, 240)}
+          <Field label="At the release time" hint={hint('release_mode')}>
+            <select value={draft.release_mode} onChange={e => set('release_mode', e.target.value)}>
+              <option value="automatic">Release automatically (the front desk can undo it today)</option>
+              <option value="ask">Ask the front desk (possible no-show)</option>
+            </select>
+          </Field>
+          {check('rebook_email', 'Email “We missed you, book a new time” after a release or a confirmed no-show')}
+        </>}
+        {row.key === 'fill_slots' && <>
+          {num('offer_count', 'How many later patients to offer a freed time to', 1, 10)}
+          {num('min_notice_minutes', 'Offer only times at least this many minutes away', 0, 240)}
+          {num('waitlist_after_minutes', 'Head start for move-up offers before the waitlist hears (minutes)', 0, 1440)}
+        </>}
+        {row.key === 'overdue_invoices' && <Field label="Remind after (days since the invoice was issued, up to 3)" hint={hint('days')}>
+          <input inputMode="numeric" value={(draft.days || []).join(', ')} onChange={e => set('days', e.target.value.split(/[\s,]+/).filter(Boolean).map(Number))}/>
+        </Field>}
+        {row.key === 'recall' && <RecallRules rules={draft.rules || []} categories={categories} onChange={rules => set('rules', rules)} hint={hint('rules')}/>}
+        {row.key === 'waitlist' && num('notify_count', 'How many waiting patients to tell when a time opens', 1, 10)}
+        {row.key === 'owner_summary' && <Field label="Send time" hint={hint('send_time')}><input type="time" value={draft.send_time} onChange={e => set('send_time', e.target.value)}/></Field>}
+        {row.key === 'attendance_policy' && <>
+          {num('late_hours', 'A cancellation is late when made less than this many hours before', 1, 72)}
+          {num('limit', 'Late cancellations or no-shows before bookings need confirmation', 1, 10)}
+          {num('window_months', 'Counted over the last (months)', 1, 24)}
+        </>}
+        {row.key === 'calendar_load' && num('crowded_percent', 'Mark a day as crowded at (% of the dentists’ time booked)', 50, 100)}
+        {row.key === 'staffing' && <>
+          <Field label="Who approves leave requests" hint={hint('leave_approver')}>
+            <select value={draft.leave_approver} onChange={e => set('leave_approver', e.target.value)}>
+              <option value="owner">The Owner only</option>
+              <option value="owner_or_front_desk">The Owner or the front desk of the requester’s branch</option>
+            </select>
+          </Field>
+          {check('front_desk_edits_schedules', 'The front desk may edit the work schedules of the dentists at their branch')}
+          {num('handover_access_days', 'After a handover is acknowledged, the receiving branch keeps the patient’s record for (days)', 1, 365)}
+        </>}
+        {row.key === 'intake' && <>
+          {check('store_id_last4', 'Keep the last 4 characters of the ID when the front desk checks it (never the full number)')}
+          <label className="au-check"><input type="checkbox" checked={false} disabled/> Let patients upload an ID photo for remote pre-verification <small>Not available in this release. The ID photo is read on the patient’s phone and never uploaded or kept.</small></label>
+        </>}
+        {fieldError && <p className="au-error" role="alert">{fieldError}</p>}
+        <div className="au-actions">
+          <Button type="submit" size="sm" disabled={!dirty || !!busy}>{busy === 'save' ? 'Saving…' : 'Save changes'}</Button>
+          {dirty && <Button size="sm" variant="ghost" onClick={() => setDraft(row.settings)}>Undo</Button>}
+          {!policy && demo && <Button size="sm" variant="soft" icon="mail" disabled={!!busy} onClick={test}>{busy === 'test' ? 'Sending…' : 'Send a test to myself'}</Button>}
+        </div>
+      </form>
+      {!policy && <p className="au-activity"><b>Recent activity</b> (last 7 days): {stats.sent ?? 0} sent · {stats.skipped ?? 0} skipped · <span className={stats.failed ? 'is-bad' : ''}>{stats.failed ?? 0} failed</span>
+        {row.key === 'no_show' ? ` · ${stats.flagged ?? 0} flagged` : ''}{stats.pending > 0 ? ` · ${stats.pending} waiting to send` : ''} · last run {manila(row.last_run_at)}
+        {stats.failed > 0 && <> · <button type="button" className="link-button" onClick={onAudit}>See the failed emails in the Audit Trail</button></>}</p>}
+    </div>}
+  </li>
 }
 
 function RecallRules({ rules, categories, onChange, hint }) {
@@ -193,29 +225,30 @@ function RecallRules({ rules, categories, onChange, hint }) {
 }
 
 /** F1: the wording of every automated email, with preview, test and approval. Saving new wording clears its approval. */
-function MessageWording({ toast, onChanged }) {
-  const [rows, setRows] = useState(null), [open, setOpen] = useState(''), [error, setError] = useState('')
+function MessageWording({ toast, onChanged, demo, openKey, onOpen }) {
+  const [rows, setRows] = useState(null), [error, setError] = useState('')
+  const open = openKey, setOpen = f => onOpen(typeof f === 'function' ? f(openKey) : f)
   useEffect(() => { listMessageTemplates().then(r => { if (r.ok) setRows(r.data || []); else setError(r.message || 'The wording could not be loaded.') }) }, [])
   const changed = t => { setRows(list => list.map(x => x.key === t.key ? t : x)); onChanged() }
   if (error) return <Notice tone="warning" title="Message wording unavailable">{error}</Notice>
   if (!rows) return null
   const waiting = rows.filter(t => !t.approved).length
-  return <Card className="au-wording-card" title="Message wording" subtitle={waiting ? `${waiting} of ${rows.length} still need approval` : 'All approved'}>
+  return <Card className="au-wording-card" title="Email wording" subtitle={waiting ? `${waiting} of ${rows.length} still need approval` : 'All approved'}>
     <p className="au-desc">The words of each automated email. The date, time, branch, address, buttons and calendar file are added by the system and cannot be removed. Health-related wording (recall) also needs a Dentist’s approval.</p>
     <ul className="au-tpl-list">
-      {rows.map(t => <li key={t.key} className={open === t.key ? 'is-open' : ''}>
+      {rows.map(t => <li key={t.key} id={`tpl-${t.key}`} className={open === t.key ? 'is-open' : ''}>
         <div className="au-tpl-head">
           <div><b>{t.name}</b> <span className={`au-tag ${t.approved ? 'is-ok' : 'is-wait'}`}>{t.approved ? '✓ Approved' : t.owner_approval && t.needs_dentist ? '! Needs a Dentist' : '! Needs approval'}</span>
             <small className="au-muted">{t.owner_approval ? `Owner: ${t.owner_approval.by}, ${manila(t.owner_approval.at)}` : 'Not approved by the Owner yet'}{t.needs_dentist ? ` · Dentist: ${t.dentist_approval ? `${t.dentist_approval.by}, ${manila(t.dentist_approval.at)}` : 'not yet'}` : ''}{t.is_default ? ' · our recommended wording' : ''}</small></div>
           <Button size="sm" variant="ghost" aria-expanded={open === t.key} onClick={() => setOpen(o => (o === t.key ? '' : t.key))}>{open === t.key ? 'Close' : 'Review'}</Button>
         </div>
-        {open === t.key && <TemplateEditor template={t} toast={toast} onChanged={changed}/>}
+        {open === t.key && <TemplateEditor template={t} toast={toast} onChanged={changed} showTest={demo}/>}
       </li>)}
     </ul>
   </Card>
 }
 
-export function TemplateEditor({ template, toast, onChanged, approveAction = approveMessageTemplate, canEdit = true }) {
+export function TemplateEditor({ template, toast, onChanged, approveAction = approveMessageTemplate, canEdit = true, showTest = true }) {
   const [draft, setDraft] = useState({ subject: template.subject, body: template.body })
   const [preview, setPreview] = useState(null), [busy, setBusy] = useState(''), [err, setErr] = useState('')
   const dirty = draft.subject !== template.subject || draft.body !== template.body
@@ -259,7 +292,7 @@ export function TemplateEditor({ template, toast, onChanged, approveAction = app
         <Button size="sm" variant="soft" disabled={!!busy} onClick={show}>{busy === 'preview' ? 'Loading…' : dirty ? 'Preview my changes' : 'Refresh preview'}</Button>
         {canEdit && <Button size="sm" disabled={!dirty || !!busy} onClick={save}>{busy === 'save' ? 'Saving…' : 'Save wording'}</Button>}
         {!dirty && !approvedByMe && <Button size="sm" icon="check" disabled={!!busy} onClick={approve}>{busy === 'approve' ? 'Approving…' : 'Approve this wording'}</Button>}
-        {canEdit && <Button size="sm" variant="ghost" icon="mail" disabled={!!busy} onClick={test}>Send a test to myself</Button>}
+        {canEdit && showTest && <Button size="sm" variant="ghost" icon="mail" disabled={!!busy} onClick={test}>Send a test to myself</Button>}
       </div>
       {canEdit && dirty && template.approved && <p className="au-muted">Saving changes clears the approval and switches off the automations that use this email until you approve again.</p>}
     </div>

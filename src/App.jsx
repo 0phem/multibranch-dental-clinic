@@ -341,7 +341,7 @@ function AppBody() {
     case 'analytics': content=<AnalyticsPage activeBranch={activeBranch} store={store}/>; break
     case 'users': content=<UsersPage store={store}/>; break
     case 'pricing': content=<ServicesPricingPage store={store}/>; break
-    case 'automations': content=<AutomationsPage store={store}/>; break
+    case 'automations': content=<AutomationsPage store={store} setPage={setPage}/>; break
     case 'closures': content=<ClosedDatesPage store={store} role={role}/>; break
     case 'schedules': content=<WorkSchedulesPage store={store} role={role}/>; break
     case 'leave': content=<LeavePage store={store} role={role}/>; break

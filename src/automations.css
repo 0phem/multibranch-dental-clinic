@@ -131,3 +131,26 @@
 .st-dl dd { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .st-panel { display: grid; gap: 8px; border-top: 1px solid var(--line, #e1eaf1); padding-top: 8px; }
 .st-docs { border: 1px solid var(--line, #e1eaf1); border-radius: 12px; padding: 8px 12px; display: grid; gap: 4px; }
+
+/* Automations, simplified: one compact row per automation, details on demand */
+.au-group { display: grid; gap: 8px; }
+.au-rows { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.au-row { border: 1px solid var(--line, #e1eaf1); border-radius: 14px; background: #fff; padding: 10px 12px; display: grid; gap: 8px; min-width: 0; }
+.au-row.is-off { background: #fbfcfd; }
+.au-row-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.au-row-text { flex: 1 1 260px; display: grid; gap: 2px; min-width: 0; }
+.au-row-text span { color: var(--muted, #5b6b7f); overflow-wrap: anywhere; }
+.au-chip { display: inline-flex; align-items: center; min-height: 28px; padding: 0 10px; border-radius: 999px; font-size: .82rem; font-weight: 750; border: 1px solid transparent; }
+.au-chip.is-ok { background: #e6f4ef; color: #0b5e55; border-color: #b9ded2; }
+.au-chip.is-wait { background: #fff4e0; color: #7a4a00; border-color: #f0d29a; }
+.au-chip.is-off { background: #f1f4f7; color: #3a4e63; border-color: #d9e2ea; }
+.au-row-note { margin: 0; display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.au-row-body { display: grid; gap: 10px; border-top: 1px solid var(--line, #e1eaf1); padding-top: 10px; }
+.au-row-body .au-tag { border: 0; cursor: pointer; font: inherit; }
+.au-row-body .au-tag:focus-visible, .au-row-note .link-button:focus-visible { outline: 3px solid #1865ac; outline-offset: 2px; }
+.au-activity { margin: 0; color: var(--muted, #5b6b7f); overflow-wrap: anywhere; }
+.au-activity .is-bad { color: #8f2a19; font-weight: 700; }
+.au-demo-tools { border: 1px dashed var(--line-strong, #c9d6e2); border-radius: 14px; padding: 10px 12px; }
+.au-demo-tools > summary { cursor: pointer; font-weight: 750; min-height: 44px; display: flex; align-items: center; gap: 6px; }
+.au-demo-tools > summary:focus-visible { outline: 3px solid #1865ac; outline-offset: 2px; }
+@media (max-width: 420px) { .au-row-head { align-items: flex-start; } .au-row-text { flex-basis: 100%; } }
