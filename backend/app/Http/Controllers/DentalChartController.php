@@ -19,7 +19,8 @@ use Illuminate\Validation\ValidationException;
 
 /**
  * M10 Dental Charts. A Dentist records a finding per tooth (and optional surfaces) from the Owner's status list, with a date, an
- * optional note and an optional treatment link; nothing is ever changed, the current chart is the latest entry per tooth and each
+ * optional note and an optional treatment link (only a patient the Dentist is caring for: their own appointment or visit, or a
+ * handover to them); nothing is ever changed, the current chart is the latest entry per tooth and each
  * tooth's history stays visible. The front desk sees a read-only chart (without notes); the patient (or guardian) a simplified
  * current chart; the Owner no chart content. Teeth are stored in FDI codes; the Owner chooses FDI or Universal labels. The system
  * makes no diagnosis and no suggestion. Writes and front-desk views are audited without notes.
@@ -79,13 +80,18 @@ class DentalChartController extends Controller
 
     // ---- helpers ------------------------------------------------------------------------------------------------------
 
-    /** A Dentist charts a patient who has an appointment or visit at one of their branches. */
+    /**
+     * Workflow-tied, like every other Dentist access to patient data: the Dentist's own appointment with this patient (not
+     * cancelled and not a no-show), a visit they are responsible for, or an open handover addressed to them. Never the whole branch.
+     */
     private function dentistMayChart(User $user, Patient $patient): bool
     {
-        $branches = DentistProfile::where('person_id', $user->person_id)->first()?->branches()->pluck('branches.id')->all() ?? [];
+        $me = DentistProfile::where('person_id', $user->person_id)->value('id');
+        if (! $me) return false;
 
-        return $branches !== [] && (Appointment::where('patient_id', $patient->id)->whereIn('branch_id', $branches)->exists()
-            || Visit::where('patient_id', $patient->id)->whereIn('branch_id', $branches)->exists());
+        return Appointment::where('patient_id', $patient->id)->where('dentist_profile_id', $me)->whereNotIn('status', ['Cancelled', 'No-show'])->exists()
+            || Visit::where('patient_id', $patient->id)->where('responsible_dentist_profile_id', $me)->exists()
+            || \App\Models\PatientHandover::where('patient_id', $patient->id)->where('to_dentist_profile_id', $me)->whereIn('status', ['Sent', 'Acknowledged'])->exists();
     }
 
     private function settings(): array

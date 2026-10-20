@@ -48,7 +48,13 @@ class DentalChartTest extends TestCase
     public function test_roles_see_what_they_should_and_audit_holds_no_notes(): void
     {
         $this->actingAsUser('dentist3');
-        $this->record([])->assertForbidden(); // no appointment or visit at their branch
+        $this->record([])->assertForbidden(); // not caring for this patient
+        $this->actingAsUser('dentist2');
+        $this->record([])->assertForbidden(); // same branch, but not their patient: access is workflow-tied, never branch-wide
+        $this->getJson('/api/patients/'.$this->p['A']->public_id.'/chart')->assertNotFound();
+        $cancelled = $this->existing('A', 'd2', 'b1', 'svc1', '2026-09-30', '11:00');
+        $cancelled->update(['status' => 'Cancelled']);
+        $this->record([])->assertForbidden(); // a cancelled booking grants nothing
         $this->actingAsUser('dentist1');
         $this->record([])->assertCreated();
 
