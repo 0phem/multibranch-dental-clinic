@@ -202,6 +202,24 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureAccountAccess::cla
         Route::post('/{patientHandover}/acknowledge', [\App\Http\Controllers\HandoverController::class, 'acknowledge'])->middleware(['role:staff,dentist', 'throttle:30,1']);
         Route::post('/{patientHandover}/cancel', [\App\Http\Controllers\HandoverController::class, 'cancel'])->middleware(['role:staff,dentist', 'throttle:30,1']);
     });
+    // M20 Patient Follow-Up: front desk and Dentists of the branch; Owner counts and dates only.
+    Route::get('/followups', [\App\Http\Controllers\FollowupController::class, 'index'])->middleware('role:staff,dentist,owner');
+    Route::post('/followups', [\App\Http\Controllers\FollowupController::class, 'store'])->middleware(['role:staff,dentist', 'throttle:30,1']);
+    Route::patch('/followups/{followupTask}', [\App\Http\Controllers\FollowupController::class, 'update'])->middleware(['role:staff,dentist', 'throttle:60,1']);
+    Route::get('/patients/{patient}/followups', [\App\Http\Controllers\FollowupController::class, 'forPatient'])->middleware('role:staff,dentist');
+    // M19 Prescriptions: Dentists at the branch write, issue and void; front desk views and prints; Owner metadata; patient own.
+    Route::get('/me/prescriptions', [\App\Http\Controllers\PrescriptionController::class, 'mine'])->middleware('role:patient');
+    Route::put('/me/prescription-license', [\App\Http\Controllers\PrescriptionController::class, 'license'])->middleware(['role:dentist', 'throttle:20,1']);
+    Route::prefix('prescriptions')->group(function () {
+        Route::get('/', [\App\Http\Controllers\PrescriptionController::class, 'index'])->middleware('role:dentist,staff,owner');
+        Route::get('/visits', [\App\Http\Controllers\PrescriptionController::class, 'visits'])->middleware('role:dentist');
+        Route::post('/', [\App\Http\Controllers\PrescriptionController::class, 'store'])->middleware(['role:dentist', 'throttle:30,1']);
+        Route::get('/{prescription}', [\App\Http\Controllers\PrescriptionController::class, 'show'])->middleware('role:dentist,staff,owner,patient');
+        Route::put('/{prescription}', [\App\Http\Controllers\PrescriptionController::class, 'update'])->middleware(['role:dentist', 'throttle:60,1']);
+        Route::post('/{prescription}/issue', [\App\Http\Controllers\PrescriptionController::class, 'issue'])->middleware(['role:dentist', 'throttle:30,1']);
+        Route::post('/{prescription}/void', [\App\Http\Controllers\PrescriptionController::class, 'void'])->middleware(['role:dentist', 'throttle:30,1']);
+        Route::get('/{prescription}/pdf', [\App\Http\Controllers\PrescriptionController::class, 'pdf'])->middleware(['role:dentist,staff,patient', 'throttle:60,1']);
+    });
     Route::patch('/work-schedule-exceptions/{dentistScheduleException}', [\App\Http\Controllers\WorkScheduleController::class, 'changeException'])->middleware(['role:staff,owner', 'throttle:30,1']);
     Route::prefix('branch-closures')->group(function () {
         Route::get('/', [\App\Http\Controllers\BranchClosureController::class, 'index'])->middleware('role:staff,owner');

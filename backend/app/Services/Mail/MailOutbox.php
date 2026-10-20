@@ -38,11 +38,15 @@ class MailOutbox
         // M3/M15: the dentist is no longer available at the visit's time.
         'dentist_unavailable_notice',
         // M15: a leave request to an approver, and the decision back to the requester.
-        'leave_requested', 'leave_decided'];
+        'leave_requested', 'leave_decided',
+        // M19: "a prescription from your visit is ready" (never its content).
+        'prescription_ready',
+        // M20 optional reminder (approved wording, Owner and Dentist).
+        'followup_due'];
 
     /** Purposes whose wording the Owner approves (F1): an email whose wording lost its approval before sending is not sent. */
     private const APPROVED_WORDING = ['appointment_reminder', 'no_show_rebook', 'invoice_overdue', 'recall_due', 'waitlist_opening', 'owner_daily_summary',
-        'late_check', 'move_up_offer', 'closure_notice', 'dentist_unavailable_notice', 'leave_requested', 'leave_decided'];
+        'late_check', 'move_up_offer', 'closure_notice', 'dentist_unavailable_notice', 'leave_requested', 'leave_decided', 'followup_due'];
 
     public function __construct(private readonly MailDispatcher $dispatcher) {}
 
@@ -150,6 +154,21 @@ class MailOutbox
             [$user, $reason] = \App\Services\Automations\Recipient::patient($offer->appointment->patient);
 
             return [new \App\Mail\MoveUpOfferMail($offer), $offer->appointment, false, $reason ? null : $user?->email];
+        }
+        if ($dispatch->subject_type === 'followuptask') {
+            // Booked, closed or already has an upcoming appointment by the time the worker runs: no reminder.
+            $task = \App\Models\FollowupTask::where('public_id', $dispatch->subject_public_id)->with(['patient.user', 'patient.person', 'branch'])->first();
+            if (! $task || ! in_array($task->status, \App\Models\FollowupTask::OPEN, true) || \App\Services\Automations\RecallReminders::hasUpcoming($task->patient_id, \Carbon\CarbonImmutable::now())) return [null, $task, true, null];
+            [$user, $reason] = \App\Services\Automations\Recipient::patient($task->patient);
+
+            return [new \App\Mail\FollowupDueMail($task), $task, false, $reason ? null : $user?->email];
+        }
+        if ($dispatch->subject_type === 'prescription') {
+            // Voided before the email went out: nothing to announce. The address is the patient's (or guardian's) current one.
+            $p = \App\Models\Prescription::where('public_id', $dispatch->subject_public_id)->with('patient.person')->first();
+            if (! $p || $p->status !== 'Issued') return [null, $p, true, null];
+
+            return [new \App\Mail\PrescriptionReadyMail($p->patient?->person?->first_name), $p, false, $p->patient?->contactUser()?->email];
         }
         if ($dispatch->subject_type === 'leaverequest') {
             // A request already decided, or a decision changed again (cancelled), is not emailed. The address is resolved now.

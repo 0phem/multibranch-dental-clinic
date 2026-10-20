@@ -20,6 +20,7 @@
             ['Times released (not checked in)', (string) $b['released']],
             ['Freed times refilled', 'move-up '.$b['refilled']['move_up'].' · waitlist '.$b['refilled']['waitlist'].' · walk-in '.$b['refilled']['walk_in'].' · booking '.$b['refilled']['booking']],
             ['Possible no-shows flagged', (string) $b['possible_no_shows']],
+            ['Follow-ups open (overdue)', $b['followups_open'].' ('.$b['followups_overdue'].')'],
             ['Payments received', $b['payments_count'].' · '.$m($b['payments_total'])],
             ['Invoices issued today', $b['issued_count'].' · '.$m($b['issued_total'])],
             ['Unpaid invoices (open now)', $b['unpaid_count'].' · '.$m($b['unpaid_total'])],

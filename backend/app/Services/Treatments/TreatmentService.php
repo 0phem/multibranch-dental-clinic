@@ -190,6 +190,8 @@ final class TreatmentService
             $this->history($current, $actor, 'treatment.completed', 'In Treatment');
             $this->audit($actor, 'treatment.completed', $current, $visit->branch_id, ['visit' => $visit->public_id, 'from_status' => 'In Treatment', 'to_status' => 'Completed', 'revision' => $current->revision, 'procedure_lines' => $lines->count()]);
             $this->visits->applyClinical($actor, $visit, $appointment, 'Completed');
+            // M20: a follow-up asked for in the treatment becomes a task for the branch front desk (once per treatment).
+            \App\Services\Followups\Followups::fromTreatment($current);
 
             return [$current, 200];
         });

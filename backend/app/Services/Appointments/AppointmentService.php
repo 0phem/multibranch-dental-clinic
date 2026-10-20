@@ -87,6 +87,7 @@ final class AppointmentService
             ]);
             $this->record($appointment, $actor, 'appointment.created', null);
             \App\Services\Automations\FillFreedSlots::claimByBooking($appointment);
+            \App\Services\Followups\Followups::booked($appointment); // M20: the patient's open follow-up is now Booked
 
             $this->notifyPatient($appointment, $actor, 'appointment_confirmation');
 
@@ -175,6 +176,7 @@ final class AppointmentService
             if ($late) \App\Services\Automations\AttendancePolicy::recordStrike($current->patient);
             // F3: the time is free now; it is offered to patients booked later that day, then to the waitlist.
             \App\Services\Automations\FillFreedSlots::open($current, ($input['source'] ?? null) === 'cant_make_it' ? 'cant_make_it' : 'cancelled', $now);
+            \App\Services\Followups\Followups::cancelled($current); // M20: its follow-up task is open again
             $this->notifyPatient($current, $actor, 'appointment_cancelled');
 
             return [$current, 200];

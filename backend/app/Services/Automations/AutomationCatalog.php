@@ -16,10 +16,10 @@ use Illuminate\Validation\ValidationException;
  */
 final class AutomationCatalog
 {
-    public const KEYS = ['appointment_reminders', 'no_show', 'fill_slots', 'overdue_invoices', 'recall', 'waitlist', 'owner_summary', 'attendance_policy', 'calendar_load', 'intake', 'staffing'];
+    public const KEYS = ['appointment_reminders', 'no_show', 'fill_slots', 'overdue_invoices', 'recall', 'waitlist', 'owner_summary', 'attendance_policy', 'calendar_load', 'intake', 'staffing', 'prescriptions', 'followup_reminders'];
 
     /** Clinic policies: Owner settings with an on/off switch, but no scheduled job and no email of their own. */
-    public const POLICIES = ['attendance_policy', 'calendar_load', 'intake', 'staffing'];
+    public const POLICIES = ['attendance_policy', 'calendar_load', 'intake', 'staffing', 'prescriptions'];
 
     public const JOBS = [
         'appointment_reminders' => AppointmentReminders::class,
@@ -29,6 +29,7 @@ final class AutomationCatalog
         'recall' => RecallReminders::class,
         'waitlist' => WaitlistOpenings::class,
         'owner_summary' => OwnerDailySummary::class,
+        'followup_reminders' => FollowupReminders::class,
     ];
 
     /** The email templates each automation sends (it cannot be switched on until all of them are approved). */
@@ -40,6 +41,7 @@ final class AutomationCatalog
         'recall' => ['recall_due'],
         'waitlist' => ['waitlist_opening'],
         'owner_summary' => ['owner_daily_summary'],
+        'followup_reminders' => ['followup_due'],
     ];
 
     public static function isPolicy(string $key): bool
@@ -77,6 +79,10 @@ final class AutomationCatalog
                 true, ['store_id_last4' => false, 'id_upload' => false, 'id_upload_days' => 7, 'claim_link_hours' => 24], ['store_id_last4' => null, 'id_upload' => null, 'id_upload_days' => null, 'claim_link_hours' => null, 'enabled' => 'R2-12']],
             'staffing' => ['Work schedules, leave and handovers', 'M3 / M15 / M25', 'Who approves leave requests (the Owner only, or also the front desk of the requester\'s branch) and whether the front desk may edit the work schedules of the dentists at their branch (the Owner can always edit every branch), and for how many days after a patient handover is acknowledged the receiving branch keeps access to that patient\'s record (M25). Leave balances are not tracked.',
                 true, ['leave_approver' => 'owner', 'front_desk_edits_schedules' => true, 'handover_access_days' => 60], ['leave_approver' => null, 'front_desk_edits_schedules' => null, 'handover_access_days' => 'R2-08', 'enabled' => null]],
+            'followup_reminders' => ['Follow-up reminders', 'M20 / M18', 'Emails the patient once when a follow-up the dentist asked for is due (or the set number of days before) and no appointment is booked yet: "Time to book your follow-up visit", with a booking link. No health advice. Health-related: the wording needs the Owner\'s and a Dentist\'s approval, so it ships off.',
+                false, ['days_before' => 0], ['days_before' => null, 'enabled' => null]],
+            'prescriptions' => ['Prescriptions', 'M19', 'An optional list of common medicine names the dentists can pick from when writing a prescription (they can always type any medicine). Empty by default: the system has no drug list and does not check doses or interactions.',
+                true, ['common_medicines' => []], ['common_medicines' => null, 'enabled' => null]],
             'calendar_load' => ['Calendar load', 'M6 / M3', 'The Staff and Owner calendar colours each day by how full it is (booked minutes against the dentists\' available minutes) and marks days above the threshold as crowded, so the front desk can plan ahead (R2-02).',
                 true, ['crowded_percent' => 80], ['crowded_percent' => null, 'enabled' => 'R2-02']],
         ];
@@ -174,6 +180,18 @@ final class AutomationCatalog
                 if (! in_array($s['leave_approver'], ['owner', 'owner_or_front_desk'], true)) $fail('leave_approver', 'Choose the Owner only, or the Owner or the branch front desk.');
 
                 return ['leave_approver' => $s['leave_approver'], 'front_desk_edits_schedules' => $bool('front_desk_edits_schedules'), 'handover_access_days' => $int('handover_access_days', 1, 365)];
+            })(),
+            'followup_reminders' => ['days_before' => $int('days_before', 0, 14)],
+            'prescriptions' => (function () use ($s, $fail) {
+                $list = $s['common_medicines'];
+                if (! is_array($list) || ! array_is_list($list) || count($list) > 200) $fail('common_medicines', 'Enter up to 200 medicine names.');
+                $out = [];
+                foreach ($list as $i => $name) {
+                    if (! is_string($name) || mb_strlen(trim($name)) < 2 || mb_strlen($name) > 120) $fail("common_medicines.$i", 'Each name needs 2 to 120 characters.');
+                    $out[mb_strtolower(trim($name))] = trim($name);
+                }
+
+                return ['common_medicines' => array_values($out)];
             })(),
             'intake' => (function () use ($bool, $int, $fail) {
                 if ($bool('id_upload')) $fail('id_upload', 'Uploading an ID for remote pre-verification is not available in this release.');

@@ -381,7 +381,11 @@ class TreatmentTest extends TestCase
         Event::assertNotDispatched(\Illuminate\Notifications\Events\NotificationSending::class);
         $this->assertSame(0, AppointmentHistory::count());
         $this->assertSame(0, DB::table('invoices')->count(), 'M5 completion creates no invoice');
-        foreach (['prescriptions', 'followups', 'notifications', 'notification_deliveries'] as $table) {
+        // M19 and M20 are their own server modules now: completing a treatment issues no prescription by itself (the dentist writes
+        // it), and the follow-up the dentist asked for becomes one Open task for the front desk; nothing is sent to the patient.
+        $this->assertSame(0, DB::table('prescriptions')->count(), 'M5 completion issues no prescription');
+        $this->assertSame([['source' => 'treatment', 'status' => 'Open']], DB::table('followup_tasks')->get(['source', 'status'])->map(fn ($r) => (array) $r)->all());
+        foreach (['followups', 'notifications', 'notification_deliveries'] as $table) {
             $this->assertFalse(Schema::hasTable($table), "M5 must not create an authoritative {$table} table");
         }
         // M12 exists since its own checkpoint: completing a treatment still opens no HMO case (Staff open it explicitly).

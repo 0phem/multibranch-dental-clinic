@@ -104,6 +104,12 @@ class BillingDocuments
     /** Pages of the marked rows in the last PDF made (pdf-tail, pdf-totals, pdf-end); used by tests to check the totals stay together. */
     public array $lastLayout = [];
 
+    /** Another clinic document (M19 prescription) with the same renderer, header data and page-numbered footer. */
+    public function documentPdf(string $view, array $data, string $documentLabel): string
+    {
+        return $this->pdf($view, $data, $documentLabel);
+    }
+
     private function pdf(string $view, array $data, string $documentLabel): string
     {
         $brand = Brand::forEmail($data['branch'] ?? null);

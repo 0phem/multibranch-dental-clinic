@@ -89,6 +89,14 @@ class NotificationCenter
         $this->write($user, 'recall_due', 'Time for your check-up', 'Book your next visit when it suits you', 'book', null, $dedupe);
     }
 
+    /** M20: a follow-up is due (no reason or clinical text). */
+    public function followupDue(\App\Models\FollowupTask $task, string $dedupe): void
+    {
+        $user = $task->patient?->contactUser();
+        if (! $user) return;
+        $this->write($user, 'followup_due', 'Time to book your follow-up visit', 'Your dentist asked to see you again. Book when it suits you.', 'book', null, $dedupe);
+    }
+
     public function waitlistOpening(\App\Models\WaitlistEntry $entry, string $dedupe): void
     {
         $user = $entry->patient?->contactUser();

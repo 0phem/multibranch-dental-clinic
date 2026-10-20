@@ -44,6 +44,8 @@ final class OwnerSummaryData
         $unpaid = DB::table('invoices')->where('status', 'Issued')->whereRaw('patient_responsibility_amount > paid_amount')
             ->groupBy('branch_id')->selectRaw('branch_id, count(*) as n, coalesce(sum(patient_responsibility_amount - paid_amount), 0) as total')->get()->keyBy('branch_id');
 
+        // M20: open and overdue follow-up tasks per branch at the end of that day (counts only, never a reason).
+        $followOpen = DB::table('followup_tasks')->whereIn('status', ['Open', 'Contacted'])->groupBy('branch_id')->selectRaw('branch_id, count(*) as n, count(*) filter (where due_on < ?) as overdue', [$date])->get()->keyBy('branch_id');
         $branches = [];
         foreach (Branch::orderBy('id')->get() as $branch) {
             $row = [
@@ -63,6 +65,8 @@ final class OwnerSummaryData
                 'issued_total' => number_format((float) ($issued[$branch->id]->total ?? 0), 2, '.', ''),
                 'unpaid_count' => (int) ($unpaid[$branch->id]->n ?? 0),
                 'unpaid_total' => number_format((float) ($unpaid[$branch->id]->total ?? 0), 2, '.', ''),
+                'followups_open' => (int) ($followOpen[$branch->id]->n ?? 0),
+                'followups_overdue' => (int) ($followOpen[$branch->id]->overdue ?? 0),
             ];
             $activity = $row['booked'] + $row['completed'] + $row['cancelled'] + $row['possible_no_shows'] + $row['payments_count'] + $row['issued_count'] + $row['released'] + $row['late_arrivals'];
             if ($row['open'] || $activity > 0) $branches[] = $row;

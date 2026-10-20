@@ -127,7 +127,7 @@ class InterviewRoundTwoTest extends TestCase
         $this->actingAsUser('staffB1');
         $this->getJson('/api/message-templates')->assertForbidden();
         $this->actingAsUser('dentist1');
-        $this->assertSame(['recall_due'], array_column($this->getJson('/api/message-templates')->assertOk()->json('data'), 'key'));
+        $this->assertSame(['recall_due', 'followup_due'], array_column($this->getJson('/api/message-templates')->assertOk()->json('data'), 'key'));
         $this->postJson('/api/message-templates/recall_due/dentist-approve', ['expected_revision' => $t->revision])->assertOk()->assertJsonPath('data.approved', true);
         $this->actingAsUser('owner');
         $this->putJson('/api/automations/recall', ['enabled' => true, 'expected_revision' => 1])->assertOk();

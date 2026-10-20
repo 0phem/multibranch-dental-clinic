@@ -84,6 +84,7 @@ final class TestEmails
             'owner_daily_summary' => new OwnerDailySummaryMail($owner, ClinicClock::today()),
             'closure_notice' => new ClosureNoticeMail($appointment, 'Example reason'),
             'dentist_unavailable_notice' => new \App\Mail\DentistUnavailableMail($appointment),
+            'followup_due' => new \App\Mail\FollowupDueMail((new \App\Models\FollowupTask(['due_on' => ClinicClock::today()]))->setRelation('branch', $branch)->setRelation('patient', $patient)),
             'leave_requested', 'leave_decided' => (function () use ($owner, $template) {
                 $leave = (new \App\Models\LeaveRequest(['type' => 'vacation', 'status' => $template === 'leave_decided' ? 'Approved' : 'Pending',
                     'starts_at' => ClinicClock::at(ClinicClock::addDays(ClinicClock::today(), 7), '00:00'), 'ends_at' => ClinicClock::at(ClinicClock::addDays(ClinicClock::today(), 9), '00:00')]))
