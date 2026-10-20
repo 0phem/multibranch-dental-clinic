@@ -12,10 +12,10 @@ are verbatim in `docs/defense/INTERVIEW_EVIDENCE.md`.
 
 | State | Count | Modules |
 | --- | --- | --- |
-| Implemented | 14 | M2, M3, M5, M6, M7, M11, M15, M17, M18, M19, M20, M22, M23, M25 |
+| Implemented | 15 | M2, M3, M5, M6, M7, M10, M11, M15, M17, M18, M19, M20, M22, M23, M25 |
 | Partial | 8 | M1, M4, M8, M9, M13, M14, M16, M21 |
 | Mock only | 0 | — |
-| Planned | 3 | M10, M12, M24 |
+| Planned | 2 | M12, M24 |
 
 ## Modules
 
@@ -30,7 +30,7 @@ are verbatim in `docs/defense/INTERVIEW_EVIDENCE.md`.
 | M7 AI Chatbot | Implemented (knowledge mode) | Clinic Assistant answering from the clinic's own answers and live records (English, Filipino, Taglish); emergencies, medical advice and other patients' data are refused; unknowns go to the front desk; Owner edits and tests answers. AI mode exists but is switched off. | `Assistant/AssistantKnowledgeTest`, `Assistant/AssistantTest` | Q23, PI-42, PI-43 |
 | M8 Patient Visits | Partial | Check-in of booked patients and walk-ins (within today's branch hours), Visit records; possible no-shows flagged after a grace period for the front desk to confirm or undo (the system never marks a no-show itself). Missing: complete assignment workflow and live integration checks. Late-arrival steps (R2-07, R2-10): "Are you on your way?" at 5 minutes, Late at 10, release at 15 (automatic by default, front-desk undo the same day) with a rebook email; the Check-In page shows late patients, replies, releases, free times and bookings to confirm. Walk-ins self-register and join today's queue with the daily code; staff see "Self-registered: verify ID" and admit with one confirmation. | `Visits/*`, `Automations/AutomationsTest`, `Automations/InterviewRoundTwoTest`, `Intake/IntakeTest`, `tests/intake.test.js` | Q15, PI-13, PI-21, R2-06, R2-07, R2-10, R2-03, R2-06 |
 | M9 Patient Queue | Partial | Queue numbers and transitions on the server. Missing: complete live screens; removed from the patient portal. A patient checking in more than 10 minutes late is queued after on-time patients (R2-07); Staff can restore the place with a reason (audited). | `Queue/*`, `Automations/InterviewRoundTwoTest` | Q19, Q21, PI-24, PI-25, R2-07 |
-| M10 Dental Charts | Planned | Nothing built (no tooth chart records). | None (not started) | Q17 (records kept in digital software) |
+| M10 Dental Charts | Implemented | Tooth chart per patient: 32 adult and 20 primary teeth, FDI numbering by default or Universal (Owner setting), legend. A Dentist caring for the patient (an appointment or visit at their branch) taps a tooth and records a status from the Owner-editable list (defaults: healthy, caries, filled, crown, root canal, missing, extracted, implant, to monitor), surfaces, date, an optional note (encrypted) and an optional treatment link. History is append-only (database trigger); the current chart is the latest entry per tooth and each tooth's history is shown. Front desk read-only without notes (each view audited); patient a simplified current chart in the portal; Owner no chart content. SVG chart with number and status abbreviation on every tooth (not colour alone), keyboard operable, side panel on desktop and bottom sheet on phones. No diagnosis or suggestion. | `Charts/DentalChartTest`, `tests/m10-dental-chart.test.js` | Q17 |
 | M11 Billing Management | Implemented | Draft invoice from the treatment's performed procedures, Staff review and issue, invoice email with PDF, immutable charges, PDF downloads for the patient; overdue reminders (days 3, 7, 14 by default) that stop when paid. | `Billing/*`, `Automations/AutomationsTest` | Q27 |
 | M12 Treatment Plans | Planned | Only a free-text "treatment plan" field on a treatment; no versioned plan or patient decision. | None (not started) | Q29 (treatment decided case by case) |
 | M13 Services and Pricing | Partial | Services with descriptions; versioned prices resolved for each invoice line; prices are not shown to patients. Missing: clinic-approved prices (demo prices only). Each service is bookable online, "consultation first" (books the linked consultation instead, R2-17) or not shown online; Owner setting, audited. | `Pricing/*`, `Automations/InterviewRoundTwoTest` | Q1, Q12, R2-13, R2-17 |

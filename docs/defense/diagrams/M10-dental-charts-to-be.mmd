@@ -2,15 +2,30 @@
 title: "M10 Dental Charts: TO-BE (with the system)"
 ---
 flowchart TB
+    subgraph L0[" "]
+    direction LR
+      S3["<b>PATIENT</b><br/>Sees a simplified current chart in the portal"]:::manual
+    end
+    subgraph L1[" "]
+    direction LR
+      S2["<b>FRONT DESK</b><br/>Sees the chart read-only (no notes)"]:::manual
+    end
     subgraph L2[" "]
     direction LR
-      S0["<b>DENTIST</b><br/>Records findings per tooth and surface<br/><i>Planned</i>"]:::planned
+      S0["<b>DENTIST</b><br/>Taps a tooth; records a status (Owner's list), surfaces, date, note"]:::manual
+    end
+    subgraph L3[" "]
+    direction LR
+      S4["<b>OWNER</b><br/>Chooses FDI or Universal numbering and the status list"]:::manual
     end
     subgraph L4[" "]
     direction LR
-      S1["<b>SYSTEM</b><br/>Keeps every chart revision<br/><i>Planned</i>"]:::planned
+      S1["<b>SYSTEM</b><br/>Keeps every entry (append-only); the latest per tooth is the current chart<br/><i>System does it</i>"]:::auto
     end
-    S0 -.-> S1
+    S0 --> S1
+    S1 --> S2
+    S2 --> S3
+    S3 --> S4
     classDef cited fill:#eaf3fd,stroke:#1865ac,color:#142a40,stroke-width:1.5px
     classDef confirm fill:#fffaf0,stroke:#b26a00,color:#5e3c00,stroke-width:1.5px,stroke-dasharray:6 4
     classDef auto fill:#e6f5ee,stroke:#0c7f75,color:#0f3d33,stroke-width:1.5px

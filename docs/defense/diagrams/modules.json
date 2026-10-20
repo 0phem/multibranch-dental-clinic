@@ -681,9 +681,9 @@
    "n": 10,
    "base": "M10-dental-charts",
    "name": "Dental Charts",
-   "status": "Planned",
-   "errors": "Not built yet",
-   "automation": "Planned",
+   "status": "Implemented",
+   "errors": "Findings lost or overwritten; no history per tooth",
+   "automation": "None (the system never diagnoses or suggests)",
    "time": null,
    "as_is": [
     {
@@ -705,13 +705,28 @@
    "to_be": [
     {
      "lane": "Dentist",
-     "text": "Records findings per tooth and surface",
-     "kind": "planned"
+     "text": "Taps a tooth; records a status (Owner's list), surfaces, date, note",
+     "kind": "manual"
     },
     {
      "lane": "System",
-     "text": "Keeps every chart revision",
-     "kind": "planned"
+     "text": "Keeps every entry (append-only); the latest per tooth is the current chart",
+     "kind": "auto"
+    },
+    {
+     "lane": "Front desk",
+     "text": "Sees the chart read-only (no notes)",
+     "kind": "manual"
+    },
+    {
+     "lane": "Patient",
+     "text": "Sees a simplified current chart in the portal",
+     "kind": "manual"
+    },
+    {
+     "lane": "Owner",
+     "text": "Chooses FDI or Universal numbering and the status list",
+     "kind": "manual"
     }
    ]
   },

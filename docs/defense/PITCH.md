@@ -45,10 +45,11 @@ One web system for patients, front desk, dentists and the owner, across all bran
 | Owner | Branches, prices, branding (name, colours, logo), assistant answers, analytics, audit trail | Built / partly built |
 | Owner and front desk | Weekly work schedules per dentist and branch; leave requests and approvals; booking follows both at once and never cancels a booked patient (affected visits listed with cover) | Built: `Staffing/WorkSchedulesTest`, `Staffing/LeaveTest` |
 | Dentists and patients | Prescriptions issued by the dentist (locked once issued, numbered, voidable with a reason), PDF for the patient; no drug list or interaction checks claimed | Built: `Prescriptions/*` |
+| Dentists | A tooth chart per patient with each tooth's history; the patient sees a simplified chart | Built: `Charts/DentalChartTest` |
 | Front desk | Follow-up tasks from the dentist's treatment notes, booked from the task; optional reminder email | Built: `Followups/FollowupTest` |
 | Front desk and dentists | Patient handovers between branches or dentists, acknowledged, with the receiving branch given the record; the Owner sees only who, when, from and to | Built: `Staffing/HandoverTest` |
 
-Not finished, and we say so: M10 Dental Charts, M12 Treatment Plans and M24 Lab Cases are not started (post-defense roadmap slide). The dentists' hours in the demo are demo values the clinic still has to confirm.
+Not finished, and we say so: M12 Treatment Plans and M24 Lab Cases are not started (post-defense roadmap slide). The dentists' hours in the demo are demo values the clinic still has to confirm.
 
 ## Deployment model
 
@@ -101,7 +102,7 @@ else to the front desk. It runs as the clinic's own branded installation, with i
 7. **Paying without paperwork** — invoice from the treatment; PayMongo; automatic receipt PDF.
 8. **Messages and the assistant** — real-time front desk; assistant in English/Filipino/Taglish; never invents, hands off.
 9. **Security and privacy** — roles, branch scope, audit trail; codes for sign-in; nothing leaves the system in knowledge mode.
-10. **Status, honestly** — 14 Implemented, 8 Partial, 0 Mock only, 3 Planned (`MODULES_FINAL.md`); before/after process per module
+10. **Status, honestly** — 15 Implemented, 8 Partial, 0 Mock only, 2 Planned (`MODULES_FINAL.md`); before/after process per module
     (`PROCESS_DOCUMENTATION.pdf`); known issues (timezone, BIR, reminders).
 11. **Deployment and proposal** — one install per clinic; clinic's own PayMongo and email; pricing proposal; open decisions.
-12. **Post-defense roadmap (not built)** — M12 Treatment Plans (versioned plans and the patient's decision) and M24 Lab Cases (tracking work sent to the external lab); M10 Dental Charts if not finished; each waits for the clinic's answers in `SECOND_INTERVIEW_QUESTIONS.md`.
+12. **Post-defense roadmap (not built)** — M12 Treatment Plans (versioned plans and the patient's decision) and M24 Lab Cases (tracking work sent to the external lab); each waits for the clinic's answers in `SECOND_INTERVIEW_QUESTIONS.md`.
