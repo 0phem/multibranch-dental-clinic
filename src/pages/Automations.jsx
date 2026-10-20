@@ -39,6 +39,7 @@ const SHORT = {
   intake: 'Counter registration and the ID check.',
   staffing: 'Who approves leave, who edits schedules, how long a handover gives access.',
   prescriptions: 'Common medicine names dentists can pick from (optional).',
+  dental_chart: 'Tooth numbering and the statuses a dentist records.',
 }
 
 /**
@@ -188,6 +189,10 @@ function AutomationRow({ row, categories, demo, toast, onSaved, onStale, onWordi
           </Field>
           {check('front_desk_edits_schedules', 'The front desk may edit the work schedules of the dentists at their branch')}
           {num('handover_access_days', 'After a handover is acknowledged, the receiving branch keeps the patient’s record for (days)', 1, 365)}
+        </>}
+        {row.key === 'dental_chart' && <>
+          <Field label="Tooth numbering" hint={hint('numbering')}><select value={draft.numbering} onChange={e => set('numbering', e.target.value)}><option value="fdi">FDI (11–48, primary 51–85)</option><option value="universal">Universal (1–32, primary A–T)</option></select></Field>
+          <Field label="Statuses a dentist can record (one per line)" hint="Changing the list does not change what was already recorded."><textarea rows={6} value={(draft.statuses || []).join('\n')} onChange={e => set('statuses', e.target.value.split('\n'))}/></Field>
         </>}
         {row.key === 'prescriptions' && <Field label="Common medicines (one per line, optional)" hint="Shown as suggestions while a dentist types; any medicine can still be typed. No doses, no checks.">
           <textarea rows={5} value={(draft.common_medicines || []).join('\n')} onChange={e => set('common_medicines', e.target.value.split('\n').map(x => x.trimStart()).filter((x, i, all) => x || i < all.length - 1))}/>

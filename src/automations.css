@@ -165,3 +165,25 @@
 .fu-counts .is-bad { color: #8f2a19; }
 .fd-list li.fu-overdue { border-left: 4px solid #c0392b; padding-left: 10px; }
 .fd-badge.is-bad { background: #fde8e4; color: #8f2a19; }
+/* M10 dental chart */
+.tc-layout { display: grid; gap: 12px; }
+@media (min-width: 1024px) { .tc-layout.has-panel { grid-template-columns: minmax(0, 1fr) 340px; align-items: start; } }
+.tc-wrap { display: grid; gap: 10px; min-width: 0; }
+.tc-quadrants { display: grid; gap: 8px; }
+@media (min-width: 900px) { .tc-quadrants { grid-template-columns: 1fr 1fr; } }
+.tc-quadrant { margin: 0; min-width: 0; }
+.tc-quadrant figcaption { font-size: .8rem; color: var(--muted, #5b6b7f); font-weight: 700; }
+.tc-quadrant svg { width: 100%; height: auto; display: block; }
+.tc-tooth { cursor: pointer; outline: none; }
+.tc-tooth:focus-visible rect { stroke: #1865ac; stroke-width: 3.5; }
+.tc-num { font-size: 13px; font-weight: 700; fill: #14283d; }
+.tc-abbr { font-size: 12px; font-weight: 800; fill: #3a4e63; }
+.tc-legend { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: .85rem; }
+.tc-swatch { display: inline-block; width: 14px; height: 14px; border-radius: 4px; border: 1px solid #9fb3c8; margin-right: 4px; vertical-align: -2px; background: #fff; }
+.tc-panel { border: 1px solid var(--line, #e1eaf1); border-radius: 14px; background: #fff; padding: 12px; display: grid; gap: 8px; }
+.tc-panel-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.tc-panel-head h3 { margin: 0; }
+.tc-surfaces { border: 0; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 4px 14px; }
+.tc-history { margin: 0; padding-left: 20px; display: grid; gap: 4px; }
+.tc-history span { display: block; color: var(--muted, #5b6b7f); }
+@media (max-width: 1023px) { .tc-panel { position: fixed; left: 0; right: 0; bottom: 0; max-height: 70vh; overflow: auto; z-index: 60; border-radius: 16px 16px 0 0; box-shadow: 0 -8px 24px rgba(20, 40, 61, .18); } }

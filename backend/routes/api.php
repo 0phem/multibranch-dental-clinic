@@ -207,6 +207,10 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureAccountAccess::cla
     Route::post('/followups', [\App\Http\Controllers\FollowupController::class, 'store'])->middleware(['role:staff,dentist', 'throttle:30,1']);
     Route::patch('/followups/{followupTask}', [\App\Http\Controllers\FollowupController::class, 'update'])->middleware(['role:staff,dentist', 'throttle:60,1']);
     Route::get('/patients/{patient}/followups', [\App\Http\Controllers\FollowupController::class, 'forPatient'])->middleware('role:staff,dentist');
+    // M10 Dental Charts: Dentists record; front desk read-only; patient simplified; Owner none.
+    Route::get('/patients/{patient}/chart', [\App\Http\Controllers\DentalChartController::class, 'show'])->middleware('role:dentist,staff,owner');
+    Route::post('/patients/{patient}/chart', [\App\Http\Controllers\DentalChartController::class, 'store'])->middleware(['role:dentist', 'throttle:120,1']);
+    Route::get('/me/chart', [\App\Http\Controllers\DentalChartController::class, 'mine'])->middleware('role:patient');
     // M19 Prescriptions: Dentists at the branch write, issue and void; front desk views and prints; Owner metadata; patient own.
     Route::get('/me/prescriptions', [\App\Http\Controllers\PrescriptionController::class, 'mine'])->middleware('role:patient');
     Route::put('/me/prescription-license', [\App\Http\Controllers\PrescriptionController::class, 'license'])->middleware(['role:dentist', 'throttle:20,1']);

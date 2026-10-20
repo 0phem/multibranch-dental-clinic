@@ -16,13 +16,14 @@ const SecurityPage = lazy(() => import('./pages/Account.jsx').then(m => ({ defau
 const ServerMessagesPage = lazy(() => import('../pages/ServerMessages.jsx').then(m => ({ default: m.ServerMessagesPage })))
 const PatientFeedbackPage = lazy(() => import('../pages/Feedback.jsx').then(m => ({ default: m.PatientFeedbackPage })))
 const PrescriptionsPage = lazy(() => import('./pages/Prescriptions.jsx').then(m => ({ default: m.PrescriptionsPage })))
+const TeethPage = lazy(() => import('./pages/Teeth.jsx').then(m => ({ default: m.TeethPage })))
 const FamilyPage = lazy(() => import('./pages/Family.jsx').then(m => ({ default: m.FamilyPage })))
 const PatientMePage = lazy(() => import('../pages/PatientMe.jsx').then(m => ({ default: m.PatientMePage })))
 
 // Only screens backed by real clinic-server data (decision 5): no HMO, prescriptions, loyalty or follow-up placeholders.
-const NAV = [['home', 'home', 'Home'], ['book', 'plusCalendar', 'Book a visit'], ['visits', 'calendar', 'My visits'], ['messages', 'message', 'Messages'], ['billing', 'receipt', 'Billing'], ['prescriptions', 'file', 'Prescriptions'], ['family', 'user', 'Family'], ['feedback', 'star', 'Feedback'], ['documents', 'file', 'Documents']]
+const NAV = [['home', 'home', 'Home'], ['book', 'plusCalendar', 'Book a visit'], ['visits', 'calendar', 'My visits'], ['messages', 'message', 'Messages'], ['billing', 'receipt', 'Billing'], ['prescriptions', 'file', 'Prescriptions'], ['teeth', 'star', 'My teeth'], ['family', 'user', 'Family'], ['feedback', 'star', 'Feedback'], ['documents', 'file', 'Documents']]
 const PHONE_NAV = [['home', 'home', 'Home'], ['book', 'plusCalendar', 'Book'], ['visits', 'calendar', 'Visits'], ['messages', 'message', 'Messages'], ['more', 'menu', 'More']]
-const TITLES = { home: 'Home', book: 'Book a visit', visits: 'My visits', messages: 'Messages', billing: 'Billing', prescriptions: 'Prescriptions', family: 'Family', feedback: 'Feedback', documents: 'Documents', profile: 'Profile', security: 'Account security' }
+const TITLES = { home: 'Home', book: 'Book a visit', visits: 'My visits', messages: 'Messages', billing: 'Billing', prescriptions: 'Prescriptions', teeth: 'My teeth', family: 'Family', feedback: 'Feedback', documents: 'Documents', profile: 'Profile', security: 'Account security' }
 export const PORTAL_PAGES = Object.keys(TITLES)
 
 /** The portal page named in the address (#p/visits), so a reload stays on the same page. */
@@ -63,6 +64,7 @@ export function PatientPortal({ me, store, initialPage = 'home', initialContext 
     case 'profile': content = <ProfilePage me={me} onNavigate={navigate}/>; break
     case 'family': content = <FamilyPage/>; break
     case 'prescriptions': content = <PrescriptionsPage toast={toast}/>; break
+    case 'teeth': content = <TeethPage/>; break
     case 'security': content = <SecurityPage me={me} onSignedOut={onSignedOut}/>; break
     default: content = <HomePage me={me} onNavigate={navigate}/>
   }
@@ -105,7 +107,7 @@ export function PatientPortal({ me, store, initialPage = 'home', initialContext 
     {more && <div className="pp-sheet-backdrop" onClick={() => setMore(false)}>
       <div className="pp-sheet pp-pop" role="dialog" aria-label="More" onClick={e => e.stopPropagation()}>
         <div className="pp-sheet-me"><span className="pp-avatar" aria-hidden="true">{initials(me.name)}</span><span><b>{me.name}</b><small>{me.email}</small></span></div>
-        {[['billing', 'receipt', 'Billing'], ['prescriptions', 'file', 'Prescriptions'], ['family', 'user', 'Family'], ['feedback', 'star', 'Feedback'], ['documents', 'file', 'Documents'], ['profile', 'user', 'Profile'], ['security', 'lock', 'Account security']].map(([key, icon, label]) =>
+        {[['billing', 'receipt', 'Billing'], ['prescriptions', 'file', 'Prescriptions'], ['teeth', 'star', 'My teeth'], ['family', 'user', 'Family'], ['feedback', 'star', 'Feedback'], ['documents', 'file', 'Documents'], ['profile', 'user', 'Profile'], ['security', 'lock', 'Account security']].map(([key, icon, label]) =>
           <button key={key} type="button" className="pp-sheet-item" onClick={() => navigate(key)}><Icon name={icon} size={20}/>{label}</button>)}
         <button type="button" className="pp-sheet-item pp-danger" onClick={onLogout}><Icon name="logout" size={20}/>Sign out</button>
       </div>

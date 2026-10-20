@@ -405,6 +405,10 @@ export async function downloadPrescriptionPdf(id, number = null) {
   setTimeout(() => URL.revokeObjectURL(url), 1000)
   return { ok: true }
 }
+// M10 Dental Charts
+export function patientChart(patientId) { return request(`/api/patients/${encodeURIComponent(patientId)}/chart`) }
+export function recordChartEntry(patientId, body) { return json(`/api/patients/${encodeURIComponent(patientId)}/chart`, 'POST', body) }
+export function myChart(patientId = null) { return request(`/api/me/chart${patientId ? `?patient_id=${encodeURIComponent(patientId)}` : ''}`) }
 // M20 Patient Follow-Up
 export function followups(filters = {}) { const q = new URLSearchParams(Object.entries(filters).filter(([, v]) => v)).toString(); return request(`/api/followups${q ? `?${q}` : ''}`) }
 export function patientFollowups(patientId) { return request(`/api/patients/${encodeURIComponent(patientId)}/followups`) }

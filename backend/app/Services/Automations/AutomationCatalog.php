@@ -16,10 +16,10 @@ use Illuminate\Validation\ValidationException;
  */
 final class AutomationCatalog
 {
-    public const KEYS = ['appointment_reminders', 'no_show', 'fill_slots', 'overdue_invoices', 'recall', 'waitlist', 'owner_summary', 'attendance_policy', 'calendar_load', 'intake', 'staffing', 'prescriptions', 'followup_reminders'];
+    public const KEYS = ['appointment_reminders', 'no_show', 'fill_slots', 'overdue_invoices', 'recall', 'waitlist', 'owner_summary', 'attendance_policy', 'calendar_load', 'intake', 'staffing', 'prescriptions', 'followup_reminders', 'dental_chart'];
 
     /** Clinic policies: Owner settings with an on/off switch, but no scheduled job and no email of their own. */
-    public const POLICIES = ['attendance_policy', 'calendar_load', 'intake', 'staffing', 'prescriptions'];
+    public const POLICIES = ['attendance_policy', 'calendar_load', 'intake', 'staffing', 'prescriptions', 'dental_chart'];
 
     public const JOBS = [
         'appointment_reminders' => AppointmentReminders::class,
@@ -81,6 +81,8 @@ final class AutomationCatalog
                 true, ['leave_approver' => 'owner', 'front_desk_edits_schedules' => true, 'handover_access_days' => 60], ['leave_approver' => null, 'front_desk_edits_schedules' => null, 'handover_access_days' => 'R2-08', 'enabled' => null]],
             'followup_reminders' => ['Follow-up reminders', 'M20 / M18', 'Emails the patient once when a follow-up the dentist asked for is due (or the set number of days before) and no appointment is booked yet: "Time to book your follow-up visit", with a booking link. No health advice. Health-related: the wording needs the Owner\'s and a Dentist\'s approval, so it ships off.',
                 false, ['days_before' => 0], ['days_before' => null, 'enabled' => null]],
+            'dental_chart' => ['Dental chart', 'M10', 'How teeth are numbered on the chart (FDI 11–48 by default, or Universal 1–32) and the list of statuses a dentist can record per tooth. The system never diagnoses or suggests anything; changing the list does not change recorded history.',
+                true, ['numbering' => 'fdi', 'statuses' => ['Healthy', 'Caries', 'Filled', 'Crown', 'Root canal', 'Missing', 'Extracted', 'Implant', 'To monitor']], ['numbering' => null, 'statuses' => null, 'enabled' => null]],
             'prescriptions' => ['Prescriptions', 'M19', 'An optional list of common medicine names the dentists can pick from when writing a prescription (they can always type any medicine). Empty by default: the system has no drug list and does not check doses or interactions.',
                 true, ['common_medicines' => []], ['common_medicines' => null, 'enabled' => null]],
             'calendar_load' => ['Calendar load', 'M6 / M3', 'The Staff and Owner calendar colours each day by how full it is (booked minutes against the dentists\' available minutes) and marks days above the threshold as crowded, so the front desk can plan ahead (R2-02).',
@@ -182,6 +184,18 @@ final class AutomationCatalog
                 return ['leave_approver' => $s['leave_approver'], 'front_desk_edits_schedules' => $bool('front_desk_edits_schedules'), 'handover_access_days' => $int('handover_access_days', 1, 365)];
             })(),
             'followup_reminders' => ['days_before' => $int('days_before', 0, 14)],
+            'dental_chart' => (function () use ($s, $fail) {
+                if (! in_array($s['numbering'], ['fdi', 'universal'], true)) $fail('numbering', 'Choose FDI or Universal numbering.');
+                $list = $s['statuses'];
+                if (! is_array($list) || ! array_is_list($list) || count($list) < 1 || count($list) > 30) $fail('statuses', 'Enter 1 to 30 statuses.');
+                $out = [];
+                foreach ($list as $i => $label) {
+                    if (! is_string($label) || mb_strlen(trim($label)) < 2 || mb_strlen($label) > 40) $fail("statuses.$i", 'Each status needs 2 to 40 characters.');
+                    $out[mb_strtolower(trim($label))] = trim($label);
+                }
+
+                return ['numbering' => $s['numbering'], 'statuses' => array_values($out)];
+            })(),
             'prescriptions' => (function () use ($s, $fail) {
                 $list = $s['common_medicines'];
                 if (! is_array($list) || ! array_is_list($list) || count($list) > 200) $fail('common_medicines', 'Enter up to 200 medicine names.');

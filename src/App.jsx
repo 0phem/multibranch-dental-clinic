@@ -35,6 +35,7 @@ const PatientsPage=lazy(()=>import('./pages/Clinical.jsx').then(m=>({default:m.P
 const TreatmentPage=lazy(()=>import('./pages/Clinical.jsx').then(m=>({default:m.TreatmentPage})))
 const PrescriptionsPage=lazy(()=>import('./pages/ServerPrescriptions.jsx').then(m=>({default:m.PrescriptionsServerPage})))
 const PatientPrescriptionsPage=lazy(()=>import('./patient/pages/Prescriptions.jsx').then(m=>({default:m.PrescriptionsPage})))
+const DentalChartPage=lazy(()=>import('./pages/DentalChart.jsx').then(m=>({default:m.DentalChartPage})))
 const FollowupsPage=lazy(()=>import('./pages/ServerFollowups.jsx').then(m=>({default:m.FollowupsServerPage})))
 const BillingPage=lazy(()=>import('./pages/FinanceCommunication.jsx').then(m=>({default:m.BillingPage})))
 const HmoPage=lazy(()=>import('./pages/FinanceCommunication.jsx').then(m=>({default:m.HmoPage})))
@@ -344,6 +345,7 @@ function AppBody() {
     case 'pricing': content=<ServicesPricingPage store={store}/>; break
     case 'automations': content=<AutomationsPage store={store} setPage={setPage}/>; break
     case 'closures': content=<ClosedDatesPage store={store} role={role}/>; break
+    case 'chart': content=<DentalChartPage store={store}/>; break
     case 'schedules': content=<WorkSchedulesPage store={store} role={role}/>; break
     case 'leave': content=<LeavePage store={store} role={role}/>; break
     case 'handovers': content=<HandoversPage store={store} role={role}/>; break
