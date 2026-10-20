@@ -67,8 +67,9 @@ class DentalChartController extends Controller
         if ($on > ClinicClock::today()) throw ValidationException::withMessages(['recorded_on' => ['The date cannot be in the future.']]);
         $treatment = null;
         if (! empty($data['treatment_id'])) {
-            $treatment = Treatment::where('public_id', $data['treatment_id'])->whereHas('visit', fn ($v) => $v->where('patient_id', $patient->id))->first();
-            if (! $treatment) throw ValidationException::withMessages(['treatment_id' => ['That treatment is not this patient’s.']]);
+            // Only this patient's treatment that this Dentist performed.
+            $treatment = Treatment::where('public_id', $data['treatment_id'])->where('dentist_profile_id', $me->id)->whereHas('visit', fn ($v) => $v->where('patient_id', $patient->id))->first();
+            if (! $treatment) throw ValidationException::withMessages(['treatment_id' => ['Link only a treatment of this patient that you performed.']]);
         }
         $entry = ToothChartEntry::create(['patient_id' => $patient->id, 'tooth' => $data['tooth'], 'surfaces' => array_values(array_unique($data['surfaces'] ?? [])),
             'status' => $status, 'recorded_on' => $on, 'note' => $data['note'] ?? null, 'treatment_id' => $treatment?->id,
@@ -91,7 +92,17 @@ class DentalChartController extends Controller
 
         return Appointment::where('patient_id', $patient->id)->where('dentist_profile_id', $me)->whereNotIn('status', ['Cancelled', 'No-show'])->exists()
             || Visit::where('patient_id', $patient->id)->where('responsible_dentist_profile_id', $me)->exists()
-            || \App\Models\PatientHandover::where('patient_id', $patient->id)->where('to_dentist_profile_id', $me)->whereIn('status', ['Sent', 'Acknowledged'])->exists();
+            || self::openHandoverTo($me, $patient);
+    }
+
+    /** A handover to this Dentist counts for the same Owner-set number of days as everywhere else (from sending or acknowledgement). */
+    private static function openHandoverTo(int $dentistId, Patient $patient): bool
+    {
+        $since = now()->subDays((int) (AutomationCatalog::setting('staffing')?->settings['handover_access_days'] ?? 60))->toIso8601String();
+
+        return \App\Models\PatientHandover::where('patient_id', $patient->id)->where('to_dentist_profile_id', $dentistId)
+            ->where(fn ($q) => $q->where(fn ($s) => $s->where('status', 'Sent')->where('created_at', '>', $since))
+                ->orWhere(fn ($a) => $a->where('status', 'Acknowledged')->where('acknowledged_at', '>', $since)))->exists();
     }
 
     private function settings(): array

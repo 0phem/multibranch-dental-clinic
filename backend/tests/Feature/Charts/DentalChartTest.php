@@ -78,4 +78,16 @@ class DentalChartTest extends TestCase
         $this->assertStringNotContainsString('Deep lesion', $audit->toJson());
         $this->assertNotSame('Deep lesion, monitor sensitivity', DB::table('tooth_chart_entries')->value('note')); // encrypted at rest
     }
+
+    public function test_a_handover_gives_the_receiving_dentist_chart_access_only_for_the_owner_days(): void
+    {
+        $this->actingAsUser('dentist1');
+        $this->record([])->assertCreated();
+        \App\Models\PatientHandover::create(['patient_id' => $this->p['A']->id, 'from_branch_id' => $this->b['b1']->id, 'to_branch_id' => $this->b['b2']->id,
+            'to_dentist_profile_id' => $this->d['d3']->id, 'created_by_user_id' => $this->u['staffB1']->id, 'summary' => 'x', 'status' => 'Sent']);
+        $this->actingAsUser('dentist3');
+        $this->getJson('/api/patients/'.$this->p['A']->public_id.'/chart')->assertOk();
+        $this->travel(61)->days();
+        $this->getJson('/api/patients/'.$this->p['A']->public_id.'/chart')->assertNotFound();
+    }
 }
