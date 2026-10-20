@@ -4,7 +4,7 @@ title: "M20 Patient Follow-Up: TO-BE (with the system)"
 flowchart TB
     subgraph L1[" "]
     direction LR
-      S1["<b>FRONT DESK</b><br/>Follow-up task in the browser<br/><i>Mock only</i>"]:::mock
+      S2["<b>FRONT DESK</b><br/>Calls the patient; books from the task (patient, branch, service preselected)"]:::manual
     end
     subgraph L2[" "]
     direction LR
@@ -12,12 +12,14 @@ flowchart TB
     end
     subgraph L4[" "]
     direction LR
-      S2["<b>SYSTEM</b><br/>Recall email (R2-11); suggested 6 months, off until a Dentist approves<br/><i>System does it</i>"]:::auto
-      S3["<b>SYSTEM</b><br/>Follow-up list on the server<br/><i>Planned</i>"]:::planned
+      S1["<b>SYSTEM</b><br/>Completing the treatment creates a follow-up task for the front desk<br/><i>System does it</i>"]:::auto
+      S3["<b>SYSTEM</b><br/>Booking marks the task Booked; overdue tasks highlighted<br/><i>System does it</i>"]:::auto
+      S4["<b>SYSTEM</b><br/>Optional reminder email when due (off until Owner and Dentist approve)<br/><i>System does it</i>"]:::auto
     end
-    S0 -.-> S1
+    S0 --> S1
     S1 --> S2
-    S2 -.-> S3
+    S2 --> S3
+    S3 --> S4
     classDef cited fill:#eaf3fd,stroke:#1865ac,color:#142a40,stroke-width:1.5px
     classDef confirm fill:#fffaf0,stroke:#b26a00,color:#5e3c00,stroke-width:1.5px,stroke-dasharray:6 4
     classDef auto fill:#e6f5ee,stroke:#0c7f75,color:#0f3d33,stroke-width:1.5px

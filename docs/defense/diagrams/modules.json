@@ -695,6 +695,11 @@
      "lane": "Dentist",
      "text": "Tooth findings are charted",
      "confirm": "Is a tooth chart used today? On paper or in the software?"
+    },
+    {
+     "lane": "Dentist",
+     "text": "Tooth numbering",
+     "confirm": "Which tooth numbering do you use (FDI 11–48, or Universal 1–32)?"
     }
    ],
    "to_be": [
@@ -1118,9 +1123,9 @@
    "n": 19,
    "base": "M19-prescriptions",
    "name": "Prescriptions",
-   "status": "Mock only",
-   "errors": "Not built on the server yet",
-   "automation": "Planned",
+   "status": "Implemented",
+   "errors": "Lost or illegible paper prescriptions; edits after handing over",
+   "automation": "Rule-based (numbering, lock, notice)",
    "time": null,
    "as_is": [
     {
@@ -1137,23 +1142,38 @@
      "lane": "Dentist",
      "text": "Prescription content is set",
      "confirm": "Who writes and prints prescriptions, and what must appear on them?"
+    },
+    {
+     "lane": "Dentist",
+     "text": "License number on the prescription",
+     "confirm": "Does a license number appear on your prescriptions today?"
     }
    ],
    "to_be": [
     {
+     "lane": "Dentist",
+     "text": "Writes free-text lines for a visit (allergy reminder shown; no drug list)",
+     "kind": "manual"
+    },
+    {
+     "lane": "Dentist",
+     "text": "Issues it: locked and numbered RX-YYYY-000001",
+     "kind": "manual"
+    },
+    {
      "lane": "System",
-     "text": "Treatment stores \"prescription required\"",
+     "text": "Tells the patient it is ready (no medicine in the email); PDF",
      "kind": "auto"
     },
     {
-     "lane": "Dentist",
-     "text": "Draft prescription in the browser",
-     "kind": "mock"
+     "lane": "Front desk",
+     "text": "Views and prints it; cannot edit",
+     "kind": "manual"
     },
     {
      "lane": "Dentist",
-     "text": "Authorized prescription saved and printable",
-     "kind": "planned"
+     "text": "A mistake: voids with a reason and issues a new one",
+     "kind": "manual"
     }
    ]
   },
@@ -1161,9 +1181,9 @@
    "n": 20,
    "base": "M20-patient-follow-up",
    "name": "Patient Follow-Up",
-   "status": "Mock only",
-   "errors": "Follow-up tasks not on the server yet",
-   "automation": "Scheduled recall email (off by default); follow-up tasks planned",
+   "status": "Implemented",
+   "errors": "Follow-ups forgotten when not booked at payment",
+   "automation": "Rule-based tasks; optional scheduled reminder (off by default)",
    "time": null,
    "as_is": [
     {
@@ -1175,6 +1195,11 @@
      "lane": "Front desk",
      "text": "Follow-up handled by the receptionist",
      "cite": "Q27"
+    },
+    {
+     "lane": "Front desk",
+     "text": "Follow-ups are tracked",
+     "confirm": "How are follow-ups tracked today when the next visit is not booked at payment?"
     }
    ],
    "to_be": [
@@ -1184,19 +1209,24 @@
      "kind": "manual"
     },
     {
+     "lane": "System",
+     "text": "Completing the treatment creates a follow-up task for the front desk",
+     "kind": "auto"
+    },
+    {
      "lane": "Front desk",
-     "text": "Follow-up task in the browser",
-     "kind": "mock"
+     "text": "Calls the patient; books from the task (patient, branch, service preselected)",
+     "kind": "manual"
     },
     {
      "lane": "System",
-     "text": "Recall email (R2-11); suggested 6 months, off until a Dentist approves",
+     "text": "Booking marks the task Booked; overdue tasks highlighted",
      "kind": "auto"
     },
     {
      "lane": "System",
-     "text": "Follow-up list on the server",
-     "kind": "planned"
+     "text": "Optional reminder email when due (off until Owner and Dentist approve)",
+     "kind": "auto"
     }
    ]
   },

@@ -288,3 +288,24 @@ receiving dentist). The receiving front desk gets the patient's record through t
 setting) from sending or from acknowledgement, and cannot pass it on to a third branch; the receiving dentist sees the handover itself. The Owner sees
 only who, when, from and to. The patient is told neutrally that the record was shared, without clinical text. Every create,
 read by the receiving side and acknowledgement is audited, and the audit holds no clinical text. `Staffing/HandoverTest`.
+
+**56. Who can write a prescription?**
+Only a dentist who works at the branch of that visit (the treating dentist or another dentist there), and only for a visit. The
+front desk can view and print an issued prescription but not change it; the Owner sees only the number, date, dentist and branch;
+the patient sees their own issued prescriptions in the portal and downloads the PDF. `Prescriptions/PrescriptionTest`.
+
+**57. Can a prescription be changed after issuing?**
+No. Issuing locks it, also in the database (a trigger refuses any change), and gives it the next number of the year without gaps,
+even when two dentists issue at the same moment. A mistake is corrected by voiding it with a reason, which stays visible as VOID and
+is audited, and issuing a new one. `Prescriptions/PrescriptionTest`, `Prescriptions/ConcurrentPrescriptionTest`.
+
+**58. Does the system check drug interactions?**
+No. There is no drug database and no interaction or dose checking, and we do not claim any. The dentist writes the medicine as free
+text and decides; the form only reminds them to check the patient's allergies (the clinic system does not record allergies yet,
+and says so). The PDF says it is valid only with the dentist's signature; we make no e-signature claim.
+
+**59. How are follow-ups tracked?**
+When the dentist marks a follow-up on the treatment, completing it creates a task for that branch's front desk with the due date.
+The front desk sees open and overdue tasks, calls the patient and books from the task (patient, branch and service already
+chosen); booking marks it Booked by itself, and cancelling that booking reopens it. Closing without a booking needs a note. An
+optional reminder email to the patient exists but is off until the Owner and a dentist approve its wording. `Followups/FollowupTest`.
