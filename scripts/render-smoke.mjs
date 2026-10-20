@@ -8,7 +8,7 @@ import React from 'react'
 import { renderToString } from 'react-dom/server'
 
 const require=createRequire(import.meta.url)
-const files=['assistant-panel.jsx','components.jsx','store.jsx','layout.jsx','clock.js','contracts.js','workflow.js','phase2.js','phase3-contracts.js','orchestration.js','pages/Dashboards.jsx','pages/Scheduling.jsx','pages/StaffDayCalendar.jsx','pages/PatientFlow.jsx','pages/Clinical.jsx','pages/FinanceCommunication.jsx','pages/Admin.jsx','pages/Pricing.jsx','pages/AuditTrail.jsx','pages/ClinicBranding.jsx','pages/AssistantAnswers.jsx','pages/Automations.jsx','pages/PossibleNoShows.jsx','pages/FrontDeskToday.jsx','pages/ClosedDates.jsx','pages/Staffing.jsx','pages/Handovers.jsx','pages/AcceptedHmos.jsx','pages/WordingApprovals.jsx','audit-api.js','automation-api.js','analytics-api.js','hmo-api.js','pages/PatientLoyalty.jsx','pages/Feedback.jsx','pages/PatientRegister.jsx','pages/PatientBook.jsx','pages/PatientMe.jsx','pages/PatientVisits.jsx','pages/PatientHome.jsx','loyalty.js','registration.js','scheduling.js','booking-drafts.js','geo.js','patient-view.js','data.js']
+const files=['assistant-panel.jsx','components.jsx','store.jsx','layout.jsx','clock.js','contracts.js','workflow.js','phase2.js','phase3-contracts.js','orchestration.js','pages/Dashboards.jsx','pages/Scheduling.jsx','pages/StaffDayCalendar.jsx','pages/PatientFlow.jsx','pages/Clinical.jsx','pages/FinanceCommunication.jsx','pages/Admin.jsx','pages/Pricing.jsx','pages/AuditTrail.jsx','pages/ClinicBranding.jsx','pages/AssistantAnswers.jsx','pages/Automations.jsx','pages/PossibleNoShows.jsx','pages/FrontDeskToday.jsx','pages/ClosedDates.jsx','pages/Staffing.jsx','pages/Handovers.jsx','pages/ServerPrescriptions.jsx','pages/ServerFollowups.jsx','pages/AcceptedHmos.jsx','pages/WordingApprovals.jsx','audit-api.js','automation-api.js','analytics-api.js','hmo-api.js','pages/PatientLoyalty.jsx','pages/Feedback.jsx','pages/PatientRegister.jsx','pages/PatientBook.jsx','pages/PatientMe.jsx','pages/PatientVisits.jsx','pages/PatientHome.jsx','loyalty.js','registration.js','scheduling.js','booking-drafts.js','geo.js','patient-view.js','data.js']
 const result=await build({stdin:{contents:[...files.map(file=>`export * from './src/${file}';`),`export * from './tests/support/server-appointments.js';`].join('\n'),resolveDir:process.cwd()},bundle:true,write:false,platform:'node',format:'esm',plugins:[{name:'shared-react',setup(b){b.onResolve({filter:/^react$/},()=>({path:pathToFileURL(require.resolve('react')).href,external:true}))}}]})
 const m=await import('data:text/javascript;base64,'+Buffer.from(result.outputFiles[0].text).toString('base64'))
 m.setClockSource(()=>new Date('2026-09-19T02:08:00Z'))
@@ -33,7 +33,7 @@ const initialReferenceData={
 let store
 function Capture(){store=m.useClinic();return null}
 renderToString(React.createElement(m.ClinicProvider,{initialReferenceData},React.createElement(Capture)))
-const pages={dashboard:'DashboardPage',book:'BookingPage',appointments:'AppointmentsPage',schedule:'SchedulePage',calendar:'StaffDayCalendar',checkin:'CheckInPage',queue:'QueuePage',capacity:'CapacityPage',patients:'PatientsPage',treatment:'TreatmentPage',billing:'BillingPage',hmo:'HmoPage',inquiries:'InquiriesPage',messages:'MessagesPage',prescriptions:'PrescriptionsPage',followups:'FollowupsPage',branches:'BranchesPage',team:'TeamPage',analytics:'AnalyticsPage',users:'UsersPage',pricing:'ServicesPricingPage',automations:'AutomationsPage',closures:'ClosedDatesPage',schedules:'WorkSchedulesPage',leave:'LeavePage',handovers:'HandoversPage',hmos:'AcceptedHmosPage',wording:'WordingApprovalsPage',automation:'AutomationPage',audit:'AuditTrailPage',branding:'ClinicBrandingPage',assistant:'AssistantAnswersPage',engagement:'EngagementPage',loyalty:'PatientLoyaltyPage',feedback:'PatientFeedbackPage',me:'PatientMePage'}
+const pages={dashboard:'DashboardPage',book:'BookingPage',appointments:'AppointmentsPage',schedule:'SchedulePage',calendar:'StaffDayCalendar',checkin:'CheckInPage',queue:'QueuePage',capacity:'CapacityPage',patients:'PatientsPage',treatment:'TreatmentPage',billing:'BillingPage',hmo:'HmoPage',inquiries:'InquiriesPage',messages:'MessagesPage',prescriptions:'PrescriptionsServerPage',followups:'FollowupsServerPage',branches:'BranchesPage',team:'TeamPage',analytics:'AnalyticsPage',users:'UsersPage',pricing:'ServicesPricingPage',automations:'AutomationsPage',closures:'ClosedDatesPage',schedules:'WorkSchedulesPage',leave:'LeavePage',handovers:'HandoversPage',hmos:'AcceptedHmosPage',wording:'WordingApprovalsPage',automation:'AutomationPage',audit:'AuditTrailPage',branding:'ClinicBrandingPage',assistant:'AssistantAnswersPage',engagement:'EngagementPage',loyalty:'PatientLoyaltyPage',feedback:'PatientFeedbackPage',me:'PatientMePage'}
 let count=0
 function render(page,role='staff',context=null){
   const session=m.sessionForRole(role,store.state)
@@ -123,15 +123,16 @@ assert.equal(actions.updateQueue(ownQueue.id,'Called').ok,true)
 assert.equal(actions.saveTreatment({queueEntryId:ownQueue.id,procedures:[]}).ok,true)
 const completed=actions.completeTreatment({queueEntryId:ownQueue.id,procedure:'Phase Two completed care',procedures:[{serviceId:'svc1',quantity:1},{serviceId:'svc2',quantity:1}],prescriptionRequired:true,followupRequired:true,followupDate:'2026-09-20',followupReason:'Phase Two return visit'})
 assert.equal(completed.ok,true,completed.message)
-assert.ok(render('prescriptions','dentist').includes('Phase Two completed care'))
+// M19 is a clinic-server page now: it renders its own loading state and never shows browser-stored prescriptions.
+assert.ok(render('prescriptions','dentist').includes('Write a prescription'))
 const rx=actions.savePrescription({treatmentId:completed.record.id,items:[{medication:'Phase Two medication',dosage:'Dentist dose',instructions:'Dentist instructions',duration:'Dentist duration'}]})
 assert.equal(rx.ok,true,rx.message)
 assert.ok(!render('prescriptions','patient').includes('Phase Two medication'))
 assert.equal(actions.authorizePrescription({treatmentId:completed.record.id}).ok,true)
-assert.ok(render('prescriptions','patient').includes('Phase Two medication'))
+assert.ok(!render('prescriptions','patient').includes('Phase Two medication'),'browser-stored prescriptions are never displayed')
 // Phase 4B.3C-1: completed-visit summaries live on Visits (Past), not Home — Home stays active-care-first.
 assert.ok(render('appointments','patient',{entityId:ownQueue.appointmentId}).includes('Phase Two completed care'))
-assert.ok(render('followups','patient').includes('Phase Two return visit'))
+assert.ok(!render('followups','patient').includes('Phase Two return visit')) // M20: follow-ups come from the clinic server only
 session=m.sessionForRole('staff',state)
 const invoice=state.invoices.find(i=>i.treatmentId===completed.record.id)
 assert.equal(invoice.total,1800)
@@ -147,18 +148,18 @@ assert.equal(actions.postPayment(invoice.id,'Cash',1800).unchanged,true)
 assert.ok(render('billing','patient').includes(payment.receipt))
 assert.ok(!render('billing','patient').includes('Record Payment'))
 const followup=state.followups.find(f=>f.treatmentId===completed.record.id)
-assert.ok(render('followups','staff').includes('Schedule follow-up'))
+assert.ok(render('followups','staff').includes('Follow-ups'))
 // Transitional M6/M20 rule: the Dentist records the follow-up requirement; clinic Staff schedule it. No Dentist or
 // Patient booking control is rendered for the same open follow-up.
-assert.ok(render('followups','dentist').includes('Clinic Staff schedule follow-up visits'))
-assert.ok(/>Schedule follow-up</.test(render('followups','staff'))&&!/>Schedule follow-up</.test(render('followups','dentist')))
-assert.ok(render('followups','patient').includes('follow-ups can’t be booked online'))
+assert.ok(render('followups','dentist').includes('Patients the dentist asked to see again'))
+assert.ok(!/>Schedule follow-up</.test(render('followups','staff'))&&!/>Schedule follow-up</.test(render('followups','dentist'))) // the browser scheduling control is gone
+assert.ok(!render('followups','patient').includes('Phase Two return visit'))
 assert.ok(!/>Schedule follow-up</.test(render('followups','patient')))
 session=m.sessionForRole('staff',state)
 const followBooking=bookServer({patientId:'p1',branchId:'b1',dentistId:'d1',serviceId:'svc11',date:'2026-09-20',start:'12:00'})
 const followLink=actions.linkFollowupAppointment(followup.id,followBooking.record.id)
 assert.equal(followLink.ok,true,followLink.message)
-assert.ok(render('followups','patient').includes('Scheduled'))
+assert.ok(!render('followups','patient').includes('Phase Two return visit'))
 console.log('PASS: Phase 2 procedures, prescription draft privacy/authorization, patient care, invoice review/issue/payment/receipt and follow-up scheduling')
 
 // Phase 3 operational flows: no real provider, delivery, or server transport.
@@ -264,7 +265,7 @@ render('dashboard','staff')
 render('dashboard','owner')
 assert.equal(store.state.appointments.find(a=>a.id===booking.record.id).branchId,'b1')
 assert.ok(render('billing','patient').includes(payment.receipt))
-assert.ok(render('prescriptions','patient').includes('Phase Two medication'))
+assert.ok(!render('prescriptions','patient').includes('Phase Two medication')) // M19: prescriptions come from the clinic server only
 assert.ok(render('hmo','patient',{hmoCaseId:hmoCase.id}).includes('Provider Approved'))
 assert.ok(render('messages','patient',{conversationId:conversation.id}).includes('Phase Three clinic reply'))
 delete globalThis.localStorage
@@ -278,7 +279,7 @@ store={...store,state:m.normalizeClinicState({...recoveryBase,
   conversations:recoveryBase.conversations.map(c=>c.id===conversation.id?{...c,status:'Closed'}:c),
 })}
 assert.ok(render('appointments','staff').includes('Cancelled'))
-assert.ok(render('followups','staff').includes('Schedule follow-up'))
+assert.ok(render('followups','staff').includes('Follow-ups'))
 assert.ok(render('billing','patient').includes(payment.receipt))
 assert.ok(render('messages','patient',{conversationId:conversation.id}).includes('Closed'))
 assert.ok(!render('treatment','dentist',{queueEntryId:'missing'}).includes('Save Treatment Progress'))
@@ -403,14 +404,12 @@ assert.ok(past.includes('Visit details')&&past.includes('is-target')&&past.inclu
 assert.ok(past.includes('Payment status'),'Past visit shows real payment status from evidence, never a fabricated one')
 assert.ok(!past.includes('Rescheduled')&&!render('appointments','patient',{entityId:'nope'}).includes('is-target'))
 assert.ok(render('appointments','patient',{entityId:upcomingVisit.id}).includes('is-target'))
-const rxRecord=state.prescriptions.find(r=>r.status==='Authorized')
-assert.ok(render('prescriptions','patient',{entityId:rxRecord.id}).includes('is-target'))
-assert.ok(!render('prescriptions','patient',{entityId:'other'}).includes('is-target'))
+// M19: the patient's prescriptions page reads the clinic server (no browser record to deep-link to) and offers no edit or renewal.
 assert.ok(!/Renew|Reissue|Edit prescription/.test(render('prescriptions','patient')))
 const bill=render('billing','patient',{invoiceId:invoice.id})
 assert.ok(bill.includes('is-target')&&bill.includes(payment.receipt)&&bill.includes('Total')&&bill.includes('The clinic records payments'))
 assert.ok(!/>Pay</.test(bill)&&!/Payment pay-/.test(bill))
-assert.ok(render('followups','patient',{entityId:followup.id}).includes('is-target'))
+// M20: the follow-up page reads the clinic server (no browser record to deep-link to).
 const hmoPage=render('hmo','patient',{hmoCaseId:hmoCase.id})
 assert.ok(hmoPage.includes('is-target')&&hmoPage.includes('Provider Approved')&&hmoPage.includes('is not approval from your HMO'))
 assert.ok(!/Internal|Record Provider Response/.test(hmoPage))
@@ -456,7 +455,8 @@ assert.ok(!quietHome.includes('Message the clinic')&&!quietHome.includes('Your c
 store={...store,state:fullState}
 // Invalid or stale Patient session: every Patient page fails closed instead of showing another identity.
 withState({users:fullState.users.map(u=>u.id==='u12'?{...u,accountStatus:'Inactive',status:'Inactive'}:u)})
-for(const page of ['dashboard','book','appointments','queue','prescriptions','followups','hmo','billing','messages']){
+// (Prescriptions are a clinic-server page since M19: the server refuses an inactive account, so it is not a browser-session page here.)
+for(const page of ['dashboard','book','appointments','queue','hmo','billing','messages']){ // (follow-ups too are a clinic-server page since M20)
   const html=render(page,'patient')
   assert.ok(html.includes('couldn’t confirm your account'),`${page}: fails closed for an inactive account`)
   assert.ok(!html.includes('Phase Two')&&!html.includes(payment.receipt),`${page}: exposes nothing`)
