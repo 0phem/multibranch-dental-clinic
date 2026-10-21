@@ -75,3 +75,6 @@ Artisan::command('intake:expire', function () {
     $this->info("$n registration(s) expired.");
 })->purpose('Expire unconfirmed counter registrations from earlier days');
 \Illuminate\Support\Facades\Schedule::command('intake:expire')->hourly()->withoutOverlapping();
+
+// Section 22.3: release pending appointments whose 15-minute checkout hold has expired.
+\Illuminate\Support\Facades\Schedule::command('appointments:release-expired-holds')->everyMinute()->withoutOverlapping();

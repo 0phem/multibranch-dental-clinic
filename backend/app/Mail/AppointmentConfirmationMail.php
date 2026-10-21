@@ -3,8 +3,10 @@
 namespace App\Mail;
 
 use App\Models\Appointment;
+use App\Support\Ics;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
+use Illuminate\Mail\Mailables\Attachment;
 use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
@@ -33,5 +35,13 @@ class AppointmentConfirmationMail extends Mailable
                 'appointment' => $this->appointment,
             ]
         );
+    }
+
+    public function attachments(): array
+    {
+        return [
+            Attachment::fromData(fn () => Ics::appointment($this->appointment), 'appointment.ics')
+                ->withMime('text/calendar'),
+        ];
     }
 }

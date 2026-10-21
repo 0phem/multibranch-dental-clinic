@@ -35,10 +35,16 @@ return new class extends Migration
         Schema::table('payment_provider_events', function (Blueprint $table) {
             $table->foreignId('appointment_id')->nullable()->constrained('appointments')->restrictOnDelete();
         });
+
+        DB::statement('ALTER TABLE invoices DROP CONSTRAINT IF EXISTS invoices_settlement_type_check');
+        DB::statement("ALTER TABLE invoices ADD CONSTRAINT invoices_settlement_type_check CHECK (settlement_type IS NULL OR (settlement_type = 'full_hmo_coverage' AND status = 'Paid' AND paid_amount = 0 AND patient_responsibility_amount = 0) OR (settlement_type IN ('booking_deposit', 'partial_booking_deposit')))");
     }
 
     public function down(): void
     {
+        DB::statement('ALTER TABLE invoices DROP CONSTRAINT IF EXISTS invoices_settlement_type_check');
+        DB::statement("ALTER TABLE invoices ADD CONSTRAINT invoices_settlement_type_check CHECK (settlement_type IS NULL OR (settlement_type = 'full_hmo_coverage' AND status = 'Paid' AND paid_amount = 0 AND patient_responsibility_amount = 0)) NOT VALID");
+
         Schema::table('payment_provider_events', function (Blueprint $table) {
             $table->dropConstrainedForeignId('appointment_id');
         });

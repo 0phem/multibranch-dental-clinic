@@ -3,6 +3,7 @@
 namespace Tests\Feature\Payment;
 
 use App\Enums\Role;
+use App\Mail\AppointmentConfirmationMail;
 use App\Mail\PaymentReceiptMail;
 use App\Models\Appointment;
 use App\Models\AuditLog;
@@ -11,6 +12,7 @@ use App\Models\InvoiceLine;
 use App\Models\Payment;
 use App\Models\PaymentCheckoutSession;
 use App\Models\Receipt;
+use App\Models\ServicePrice;
 use App\Models\Treatment;
 use App\Models\User;
 use App\Models\Visit;
@@ -83,6 +85,48 @@ class AppointmentBookingPaymentTest extends TestCase
         ]);
     }
 
+    private function fakePayMongoProvider(string $sessionId, string $paymentId, Appointment $appointment, int $centavos = 60000, ?string $refundId = null): void
+    {
+        $fakes = [
+            "https://api.paymongo.com/v1/checkout_sessions/{$sessionId}" => Http::response([
+                'data' => [
+                    'id' => $sessionId,
+                    'attributes' => [
+                        'status' => 'active',
+                        'reference_number' => $appointment->public_id,
+                        'livemode' => false,
+                        'payments' => [
+                            [
+                                'id' => $paymentId,
+                                'type' => 'payment',
+                                'attributes' => [
+                                    'status' => 'paid',
+                                    'amount' => $centavos,
+                                    'currency' => 'PHP',
+                                    'source' => ['type' => 'gcash'],
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+            ], 200),
+        ];
+
+        if ($refundId !== null) {
+            $fakes['https://api.paymongo.com/v1/refunds'] = Http::response([
+                'data' => [
+                    'id' => $refundId,
+                    'attributes' => [
+                        'amount' => $centavos,
+                        'status' => 'succeeded',
+                    ],
+                ],
+            ], 200);
+        }
+
+        Http::fake($fakes);
+    }
+
     private function deliverWebhook(array $payload): \Illuminate\Testing\TestResponse
     {
         $raw = json_encode($payload);
@@ -151,6 +195,9 @@ class AppointmentBookingPaymentTest extends TestCase
         $this->assertSame('held', $appointment->booking_payment_status);
         $this->assertNotNull($appointment->booking_hold_expires_at);
 
+        // Never sends confirmation at initial slot hold (held state)
+        Mail::assertNotSent(AppointmentConfirmationMail::class);
+
         $session = PaymentCheckoutSession::where('appointment_id', $appointment->id)->firstOrFail();
         $this->assertSame('cs_booking_test_1', $session->provider_session_id);
         $this->assertSame('600.00', (string) $session->amount);
@@ -211,6 +258,7 @@ class AppointmentBookingPaymentTest extends TestCase
         $appointment = Appointment::where('public_id', $response->json('data.id'))->firstOrFail();
 
         // Deliver webhook from PayMongo
+        $this->fakePayMongoProvider('cs_webhook_1', 'pay_apt_1', $appointment, 60000);
         $payload = $this->appointmentPaidWebhook('evt_booking_1', 'cs_webhook_1', 'pay_apt_1', $appointment, 60000);
         $this->deliverWebhook($payload)->assertOk();
 
@@ -218,11 +266,20 @@ class AppointmentBookingPaymentTest extends TestCase
         $this->assertSame('Confirmed', $fresh->status);
         $this->assertSame('paid', $fresh->booking_payment_status);
         $this->assertSame('pay_apt_1', $fresh->booking_payment_ref);
-        $this->assertSame('gcash', $fresh->booking_payment_method);
+        $this->assertSame('PayMongo (GCASH)', $fresh->booking_payment_method);
         $this->assertNotNull($fresh->booking_paid_at);
 
         $session = PaymentCheckoutSession::where('appointment_id', $appointment->id)->first();
         $this->assertSame('Settled', $session->status);
+
+        // Triggers appointment confirmation email with .ics calendar file
+        Mail::assertSent(AppointmentConfirmationMail::class, function (AppointmentConfirmationMail $mail) use ($fresh) {
+            $hasIcs = collect($mail->attachments())->contains(function ($attachment) {
+                return $attachment->as === 'appointment.ics' && $attachment->mime === 'text/calendar';
+            });
+
+            return $mail->appointment->id === $fresh->id && $hasIcs;
+        });
     }
 
     public function test_expired_hold_is_released_and_frees_slot(): void
@@ -266,6 +323,7 @@ class AppointmentBookingPaymentTest extends TestCase
         $appointment = Appointment::where('public_id', $response->json('data.id'))->firstOrFail();
 
         // Webhook arrives to mark paid
+        $this->fakePayMongoProvider('cs_refund_1', 'pay_ref_1', $appointment, 60000, 'ref_booking_123');
         $payload = $this->appointmentPaidWebhook('evt_ref_1', 'cs_refund_1', 'pay_ref_1', $appointment, 60000);
         $this->deliverWebhook($payload)->assertOk();
 
@@ -305,6 +363,7 @@ class AppointmentBookingPaymentTest extends TestCase
         $appointment = Appointment::where('public_id', $response->json('data.id'))->firstOrFail();
 
         // Webhook arrives to mark paid
+        $this->fakePayMongoProvider('cs_forfeit_1', 'pay_forf_1', $appointment, 60000);
         $payload = $this->appointmentPaidWebhook('evt_forf_1', 'cs_forfeit_1', 'pay_forf_1', $appointment, 60000);
         $this->deliverWebhook($payload)->assertOk();
 
@@ -327,8 +386,8 @@ class AppointmentBookingPaymentTest extends TestCase
         // Audit log created for late cancellation refund decision
         $this->assertDatabaseHas('audit_logs', [
             'action' => 'billing.booking_refund_withheld_late_cancellation',
-            'target_type' => Appointment::class,
-            'target_id' => $appointment->id,
+            'auditable_type' => 'Appointment',
+            'auditable_public_id' => $appointment->public_id,
         ]);
     }
 
@@ -345,6 +404,7 @@ class AppointmentBookingPaymentTest extends TestCase
         ])->assertCreated();
 
         $appointment = Appointment::where('public_id', $response->json('data.id'))->firstOrFail();
+        $this->fakePayMongoProvider('cs_manual_ref', 'pay_man_1', $appointment, 60000);
         $payload = $this->appointmentPaidWebhook('evt_man_1', 'cs_manual_ref', 'pay_man_1', $appointment, 60000);
         $this->deliverWebhook($payload)->assertOk();
 
@@ -376,6 +436,7 @@ class AppointmentBookingPaymentTest extends TestCase
         ])->assertCreated();
 
         $appointment = Appointment::where('public_id', $response->json('data.id'))->firstOrFail();
+        $this->fakePayMongoProvider('cs_invoice_credit', 'pay_inv_1', $appointment, 60000);
         $payload = $this->appointmentPaidWebhook('evt_inv_1', 'cs_invoice_credit', 'pay_inv_1', $appointment, 60000);
         $this->deliverWebhook($payload)->assertOk();
 
@@ -385,7 +446,7 @@ class AppointmentBookingPaymentTest extends TestCase
             'branch_id' => $appointment->branch_id,
             'appointment_id' => $appointment->id,
             'clinic_date' => '2026-09-29',
-            'source' => 'scheduled',
+            'source' => 'appointment',
             'status' => 'In Treatment',
             'arrived_at' => now(),
         ]);
@@ -417,9 +478,21 @@ class AppointmentBookingPaymentTest extends TestCase
             'updated_by_user_id' => $this->u['staffB1']->id,
         ]);
 
+        $price = ServicePrice::create([
+            'service_id' => $this->svc['svc1']->id,
+            'branch_id' => null,
+            'kind' => 'priced',
+            'amount' => '600.00',
+            'effective_from' => now()->subDay()->toDateString(),
+            'source' => 'owner_confirmed',
+            'created_by_user_id' => $this->u['owner']->id,
+            'created_at' => now(),
+        ]);
+
         InvoiceLine::create([
             'invoice_id' => $invoice->id,
             'service_id' => $this->svc['svc1']->id,
+            'service_price_id' => $price->id,
             'line_no' => 1,
             'service_code' => 'SVC1',
             'service_name' => 'Service svc1',
@@ -445,5 +518,20 @@ class AppointmentBookingPaymentTest extends TestCase
         $receipt = Receipt::where('invoice_id', $invoice->id)->first();
         $this->assertNotNull($receipt);
         $this->assertSame('600.00', (string) $receipt->amount);
+
+        // When the invoice is issued and settled by the deposit, PaymentReceiptMail is queued/sent
+        Mail::assertSent(PaymentReceiptMail::class, function (PaymentReceiptMail $mail) use ($invoice, $receipt) {
+            return $mail->invoice->id === $invoice->id && $mail->receipt->id === $receipt->id;
+        });
+    }
+
+    public function test_release_expired_holds_command_is_registered_in_scheduler_every_minute(): void
+    {
+        $schedule = app(\Illuminate\Console\Scheduling\Schedule::class);
+        $event = collect($schedule->events())->first(fn ($e) => str_contains((string) $e->command, 'appointments:release-expired-holds'));
+
+        $this->assertNotNull($event, 'appointments:release-expired-holds must be registered in the Laravel scheduler');
+        $this->assertSame('* * * * *', $event->expression);
+        $this->assertTrue($event->withoutOverlapping);
     }
 }

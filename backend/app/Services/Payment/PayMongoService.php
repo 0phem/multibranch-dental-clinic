@@ -413,7 +413,7 @@ class PayMongoService
         $secret = $this->secretKey();
         $this->live();
 
-        if (! $appointment->booking_payment_ref || $appointment->booking_payment_status !== 'paid') {
+        if (! $appointment->booking_payment_ref || ! in_array($appointment->booking_payment_status, ['paid', 'forfeited'], true)) {
             throw new BillingException(422, 'no_refundable_payment', 'This appointment does not have a settled booking payment to refund.');
         }
 

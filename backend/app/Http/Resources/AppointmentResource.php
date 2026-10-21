@@ -43,7 +43,7 @@ class AppointmentResource extends JsonResource
             'booking_payment_method' => $this->booking_payment_method,
             'booking_paid_at' => $iso($this->booking_paid_at),
             'checkout_url' => $this->checkout_url ?? $this->activeCheckoutSession?->checkout_url,
-            'checkout_session_id' => $this->checkout_session_id ?? $this->activeCheckoutSession?->session_id,
+            'checkout_session_id' => $this->checkout_session_id ?? $this->activeCheckoutSession?->provider_session_id,
             'cancelled_at' => $iso($this->cancelled_at),
             'created_at' => $iso($this->created_at),
             'updated_at' => $iso($this->updated_at),

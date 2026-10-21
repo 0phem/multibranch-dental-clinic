@@ -395,10 +395,10 @@ final class AppointmentService
                     'revision' => $locked->revision + 1,
                 ]);
                 $this->record($locked, null, 'appointment.hold_expired', $from);
-                \App\Services\Automations\FillFreedSlots::open($locked, 'hold_expired', $now);
+                \App\Services\Automations\FillFreedSlots::open($locked, 'released', $now);
                 $patientUser = $locked->patient?->user ?? ($locked->created_by_user_id ? User::find($locked->created_by_user_id) : null);
                 if ($patientUser) {
-                    $this->notifyPatient($locked, $patientUser, 'appointment_hold_expired');
+                    $this->notifyPatient($locked, $patientUser, 'appointment_cancelled');
                 }
             });
             $count++;
