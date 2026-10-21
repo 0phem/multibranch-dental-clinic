@@ -245,7 +245,6 @@ class DemoCheck extends Command
             ? $this->result('FAIL', 'Branch phone or opening hours missing or placeholder: '.$missing->pluck('name')->implode(', '), 'Enter the clinic\'s phone and hours in Administration → Branches, or run the RealBranchSeeder on the demo database.')
             : $this->result('PASS', 'Every branch has a real phone and opening hours ('.$branches->count().')');
         foreach ($branches->filter(fn ($b) => ! $b->email) as $b) $this->result('WARN', "{$b->name}: no email on file", 'Open item: ask the clinic for this branch\'s email (it is hidden wherever an email would show).');
-        foreach ($branches->filter(fn ($b) => ! preg_match('/\b\d{4}\b/', (string) $b->address)) as $b) $this->result('WARN', "{$b->name}: address has no ZIP code (shown as given)", 'Open item: ask the clinic for the full street, barangay and ZIP code.');
     }
 
     private function demoData(): void

@@ -2,6 +2,7 @@
 
 namespace App\Services\Payment;
 
+use App\Models\Appointment;
 use App\Models\Invoice;
 use App\Models\PaymentCheckoutSession;
 use App\Models\PaymentProviderEvent;
@@ -9,6 +10,7 @@ use App\Models\User;
 use App\Services\Audit\AuditService;
 use App\Services\Billing\BillingException;
 use App\Services\Billing\BillingService;
+use App\Support\ClinicClock;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\DB;
@@ -127,6 +129,12 @@ class PayMongoService
         }
 
         return array_values(array_unique(array_map(fn ($t) => \App\Support\Brand::paymentMethod('PayMongo ('.self::METHOD_LABELS[$t].')'), $types)));
+    }
+
+    /** True when online payment credentials and methods are configured on this server. */
+    public function isConfigured(): bool
+    {
+        return ! empty($this->acceptedMethodNames());
     }
 
     /**
@@ -263,6 +271,202 @@ class PayMongoService
     }
 
     /**
+     * Creates a hosted checkout session for an appointment booking fee (Section 22.3).
+     * The slot is held as Pending during checkout; only a verified webhook confirms it.
+     */
+    public function createAppointmentCheckoutSession(Appointment $appointment, User $actor, ?array $address = null): array
+    {
+        $secret = $this->secretKey();
+        $this->live();
+        $methods = $this->paymentMethodTypes();
+
+        return DB::transaction(function () use ($appointment, $actor, $secret, $methods, $address) {
+            $appointment = Appointment::whereKey($appointment->id)->lockForUpdate()->firstOrFail();
+            $appointment->loadMissing(['patient.person', 'patient.user', 'branch', 'service']);
+
+            $fee = $appointment->booking_fee_php;
+            if ($fee === null || (float) $fee <= 0) {
+                $targetService = $appointment->service;
+                if ($targetService->online_booking === 'consultation_first' && $targetService->consultation_service_id) {
+                    $targetService = \App\Models\Service::find($targetService->consultation_service_id) ?? $targetService;
+                }
+                $date = ClinicClock::local($appointment->starts_at)->toDateString();
+                $resolved = app(\App\Services\Pricing\PriceResolver::class)->resolve($targetService, $appointment->branch, $date);
+                $fee = ($resolved instanceof \App\Services\Pricing\ResolvedPrice)
+                    ? $resolved->amount()
+                    : ((string) ($targetService->reference_fee_php ?? '500.00'));
+                $appointment->booking_fee_php = $fee;
+            }
+
+            $centavos = $this->billing->centavos((string) $fee);
+            if ($centavos < self::MIN_CENTAVOS) {
+                throw new BillingException(422, 'amount_below_minimum', 'Online payment needs an amount of at least PHP 1.00.');
+            }
+
+            $frontend = rtrim((string) config('app.frontend_url', 'http://localhost:5173'), '/');
+            $billing = array_filter([
+                'name' => trim(($appointment->patient?->person?->first_name ?? '').' '.($appointment->patient?->person?->last_name ?? '')) ?: null,
+                'email' => $appointment->patient?->user?->email ?? $appointment->patient?->person?->email,
+                'phone' => $appointment->patient?->person?->phone,
+                'address' => $address ? array_filter($address, fn ($v) => $v !== null && $v !== '') : ($appointment->patient?->billing_address ? array_filter($appointment->patient->billing_address, fn ($v) => $v !== null && $v !== '') : null),
+            ]);
+
+            $lineItems = [[
+                'name' => $this->limit("{$appointment->service->name} Appointment Fee"),
+                'description' => $this->limit("Appointment {$appointment->appointment_code} at {$appointment->branch->name}"),
+                'amount' => $centavos,
+                'currency' => self::CURRENCY,
+                'quantity' => 1,
+            ]];
+
+            $returnTo = fn (string $status) => "{$frontend}/?appointment={$appointment->public_id}&payment={$status}";
+            $attributes = [
+                'line_items' => $lineItems,
+                'payment_method_types' => $methods,
+                'description' => $this->limit("Appointment {$appointment->appointment_code} - ".\App\Support\Brand::name()),
+                'reference_number' => $appointment->public_id,
+                'send_email_receipt' => false,
+                'show_description' => true,
+                'show_line_items' => true,
+                'success_url' => $returnTo('success'),
+                'cancel_url' => $returnTo('cancelled'),
+                'metadata' => [
+                    'appointment_public_id' => $appointment->public_id,
+                    'appointment_code' => $appointment->appointment_code,
+                    'type' => 'appointment_booking',
+                ],
+            ];
+            if ($billing) {
+                $attributes['billing'] = $billing;
+            }
+            $fingerprint = hash('sha256', json_encode([(string) $fee, $attributes]));
+
+            $existing = PaymentCheckoutSession::where('appointment_id', $appointment->id)->where('status', 'Open')->first();
+            if ($existing && $existing->checkout_url && (string) $existing->amount === (string) $fee && $existing->request_fingerprint === $fingerprint) {
+                return [
+                    'checkout_session_id' => $existing->provider_session_id,
+                    'checkout_url' => $existing->checkout_url,
+                    'reference_number' => $appointment->public_id,
+                    'amount_php' => (string) $fee,
+                ];
+            }
+            if ($existing) {
+                $existing->update(['status' => 'Superseded']);
+                $this->expireAtProvider($existing, $secret);
+            }
+
+            $attempt = PaymentCheckoutSession::where('appointment_id', $appointment->id)->count();
+            $idempotencyKey = 'checkout-apt-'.substr(hash('sha256', $appointment->public_id.'|'.$fingerprint.'|'.$attempt), 0, 44);
+            try {
+                $response = Http::withBasicAuth($secret, '')->acceptJson()->asJson()->timeout(15)->withHeaders(['Idempotency-Key' => $idempotencyKey])
+                    ->post($this->host().'/v2/checkout_sessions', ['data' => ['attributes' => $attributes]]);
+            } catch (ConnectionException) {
+                throw new BillingException(502, 'payment_gateway_unavailable', 'The payment provider could not be reached. No payment was started.');
+            }
+            if (! $response->successful()) {
+                report(new \RuntimeException('PayMongo appointment checkout creation refused with HTTP '.$response->status()));
+                throw new BillingException(502, 'payment_gateway_error', 'The payment provider could not start this payment. No payment was started.');
+            }
+
+            $sessionId = $response->json('data.id');
+            $checkoutUrl = $response->json('data.attributes.checkout_url');
+            $reportedLive = $response->json('data.attributes.livemode');
+            if (is_bool($reportedLive) && $reportedLive !== $this->live()) {
+                throw new BillingException(502, 'payment_gateway_invalid_response', 'The payment provider answered for a different mode than this server is configured for. No payment was started.');
+            }
+            if (! is_string($sessionId) || $sessionId === '' || ! is_string($checkoutUrl) || ! str_starts_with($checkoutUrl, 'https://')) {
+                throw new BillingException(502, 'payment_gateway_invalid_response', 'The payment provider returned an unusable response. No payment was started.');
+            }
+
+            PaymentCheckoutSession::create([
+                'appointment_id' => $appointment->id,
+                'provider_session_id' => $sessionId,
+                'checkout_url' => $checkoutUrl,
+                'amount' => $fee,
+                'currency' => self::CURRENCY,
+                'status' => 'Open',
+                'initiated_by_user_id' => $actor->id,
+                'request_fingerprint' => $fingerprint,
+            ]);
+
+            $appointment->update([
+                'booking_fee_php' => $fee,
+                'booking_payment_status' => 'held',
+                'booking_hold_expires_at' => ClinicClock::now()->addMinutes(15),
+            ]);
+
+            return [
+                'checkout_session_id' => $sessionId,
+                'checkout_url' => $checkoutUrl,
+                'reference_number' => $appointment->public_id,
+                'amount_php' => (string) $fee,
+            ];
+        });
+    }
+
+    /**
+     * Refunds an appointment booking payment (Section 22.3).
+     * Used automatically for cancellations >= 24h, or manually by front desk.
+     */
+    public function refundAppointment(Appointment $appointment, string $reason = 'requested_by_customer'): array
+    {
+        $secret = $this->secretKey();
+        $this->live();
+
+        if (! $appointment->booking_payment_ref || $appointment->booking_payment_status !== 'paid') {
+            throw new BillingException(422, 'no_refundable_payment', 'This appointment does not have a settled booking payment to refund.');
+        }
+
+        $centavos = $this->billing->centavos((string) $appointment->booking_fee_php);
+        $validReason = in_array($reason, ['duplicate', 'fraudulent', 'requested_by_customer', 'others'], true) ? $reason : 'requested_by_customer';
+
+        try {
+            $response = Http::withBasicAuth($secret, '')->acceptJson()->asJson()->timeout(15)
+                ->post($this->host().'/v1/refunds', [
+                    'data' => [
+                        'attributes' => [
+                            'amount' => $centavos,
+                            'payment_id' => $appointment->booking_payment_ref,
+                            'reason' => $validReason,
+                            'notes' => "Refund for Appointment {$appointment->appointment_code}",
+                        ],
+                    ],
+                ]);
+        } catch (ConnectionException) {
+            throw new BillingException(502, 'payment_gateway_unavailable', 'The payment provider could not be reached to process the refund.');
+        }
+
+        if (! $response->successful()) {
+            report(new \RuntimeException('PayMongo refund refused with HTTP '.$response->status().': '.$response->body()));
+            throw new BillingException(502, 'payment_gateway_error', 'The payment provider could not complete the refund.');
+        }
+
+        $refundId = $response->json('data.id');
+        $appointment->update([
+            'booking_payment_status' => 'refunded',
+            'booking_refund_ref' => $refundId,
+            'booking_refunded_at' => ClinicClock::now(),
+        ]);
+
+        $this->audit->record([
+            'action' => 'billing.booking_payment_refunded',
+            'category' => 'financial',
+            'severity' => 'info',
+            'actor' => null,
+            'target' => $appointment,
+            'branch_id' => $appointment->branch_id,
+            'payload' => [
+                'appointment_code' => $appointment->appointment_code,
+                'fee' => (string) $appointment->booking_fee_php,
+                'refund_id' => $refundId,
+                'reason' => $validReason,
+            ],
+        ]);
+
+        return ['refund_id' => $refundId, 'status' => 'refunded'];
+    }
+
+    /**
      * Best effort: asks PayMongo to expire a retired session (POST /v1/checkout_sessions/{id}/expire). PayMongo answers 400 when the
      * session is already paid, in progress or expired; a payment that still lands on it is caught by the webhook as "Needs review"
      * (its amount no longer matches), never applied. A failure here never blocks the new checkout.
@@ -381,16 +585,22 @@ class PayMongoService
             if ($event->status !== 'Received') {
                 return $this->outcome($event, 200);
             }
-            $session = PaymentCheckoutSession::where('provider_session_id', $event->provider_session_id)->with('invoice')->first();
+            $session = PaymentCheckoutSession::where('provider_session_id', $event->provider_session_id)->with(['invoice', 'appointment'])->first();
             if (! $session) {
                 return $this->review($event, null, 'unknown_checkout_session');
             }
-            $event->invoice_id = $session->invoice_id;
+            if ($session->invoice_id) {
+                $event->invoice_id = $session->invoice_id;
+            }
+            if ($session->appointment_id) {
+                $event->appointment_id = $session->appointment_id;
+            }
 
             try {
                 $paid = $this->confirmWithProvider($session, (array) ($payload['data']['attributes']['data']['attributes'] ?? []));
             } catch (ConnectionException) {
-                return ['http' => 503, 'status' => 'Received', 'invoice' => $session->invoice->public_id]; // retry later; the event stays stored
+                $targetId = $session->invoice?->public_id ?? $session->appointment?->public_id;
+                return ['http' => 503, 'status' => 'Received', 'invoice' => $targetId, 'reference' => $targetId]; // retry later; the event stays stored
             }
             if (is_string($paid)) {
                 return $this->review($event, $session, $paid);
@@ -401,6 +611,63 @@ class PayMongoService
 
             if ($paid['currency'] !== self::CURRENCY || $paid['centavos'] !== $this->billing->centavos((string) $session->amount)) {
                 return $this->review($event, $session, 'amount_mismatch');
+            }
+
+            // Section 22.3: Appointment booking settlement path
+            if ($session->appointment_id) {
+                $appointment = Appointment::whereKey($session->appointment_id)->lockForUpdate()->firstOrFail();
+                if ($appointment->status === 'Cancelled') {
+                    // Captured by provider but appointment was already cancelled/expired: keep event for review
+                    return $this->review($event, $session, 'appointment_already_cancelled', 'Needs review');
+                }
+                $from = $appointment->status;
+                $method = 'PayMongo ('.(self::METHOD_LABELS[$paid['method']] ?? 'ONLINE').')';
+                $appointment->update([
+                    'status' => 'Confirmed',
+                    'booking_payment_status' => 'paid',
+                    'booking_payment_method' => $method,
+                    'booking_payment_ref' => $paid['id'],
+                    'booking_paid_at' => ClinicClock::now(),
+                    'booking_hold_expires_at' => null,
+                    'revision' => $appointment->revision + 1,
+                ]);
+
+                app(\App\Services\Appointments\AppointmentService::class)->record($appointment, null, 'appointment.booking_paid', $from);
+                \App\Services\Automations\FillFreedSlots::claimByBooking($appointment);
+                \App\Services\Followups\Followups::booked($appointment);
+
+                try {
+                    app(\App\Services\Mail\MailOutbox::class)->queue(
+                        'appointment_confirmation',
+                        "appointment_confirmation:{$appointment->public_id}:r{$appointment->revision}",
+                        $appointment,
+                        $appointment->revision,
+                        $appointment->patient?->contactUser(),
+                        null
+                    );
+                } catch (\Throwable $e) {
+                    report($e);
+                }
+                app(\App\Services\Notifications\NotificationCenter::class)->appointment($appointment, 'appointment_confirmation');
+
+                $this->audit->record([
+                    'action' => 'billing.booking_payment_received',
+                    'category' => 'financial',
+                    'severity' => 'info',
+                    'actor' => null,
+                    'target' => $appointment,
+                    'branch_id' => $appointment->branch_id,
+                    'payload' => [
+                        'appointment_code' => $appointment->appointment_code,
+                        'amount' => (string) $session->amount,
+                        'method' => $method,
+                        'provider_payment_id' => $paid['id'],
+                    ],
+                ]);
+
+                $session->update(['status' => 'Settled']);
+
+                return $this->finish($event, 'Settled', null, 200, $appointment->public_id);
             }
 
             try {
@@ -418,9 +685,9 @@ class PayMongoService
     /**
      * Asks the provider directly (server to server, with the secret key) what it captured for this session, so the settlement
      * never rests on the contents of an inbound request. The session read back must be in this endpoint's mode, carry OUR invoice
-     * reference, and hold a paid payment with an id, an integer amount and a currency; when the event itself names a payment or a
-     * reference it must agree. Returns the paid payment, or a review reason string; throws ConnectionException when the provider
-     * cannot be asked (the provider then retries the event).
+     * or appointment reference, and hold a paid payment with an id, an integer amount and a currency; when the event itself names
+     * a payment or a reference it must agree. Returns the paid payment, or a review reason string; throws ConnectionException when
+     * the provider cannot be asked (the provider then retries the event).
      *
      * @return array{id:string,centavos:int,currency:string,method:string}|string
      */
@@ -436,9 +703,9 @@ class PayMongoService
         if (($response->json('data.attributes.livemode')) !== $this->live()) {
             return 'livemode_mismatch';
         }
-        $invoicePublicId = $session->invoice->public_id;
-        if ($response->json('data.attributes.reference_number') !== $invoicePublicId
-            || (isset($eventSession['reference_number']) && $eventSession['reference_number'] !== $invoicePublicId)) {
+        $targetPublicId = $session->invoice?->public_id ?? $session->appointment?->public_id;
+        if ($response->json('data.attributes.reference_number') !== $targetPublicId
+            || (isset($eventSession['reference_number']) && $eventSession['reference_number'] !== $targetPublicId)) {
             return 'reference_mismatch';
         }
         $payments = $response->json('data.attributes.payments');
@@ -474,26 +741,33 @@ class PayMongoService
 
     private function review(PaymentProviderEvent $event, ?PaymentCheckoutSession $session, string $reason, string $status = 'Needs review'): array
     {
+        $target = $session?->invoice ?? $session?->appointment;
+        $branchId = $session?->invoice?->branch_id ?? $session?->appointment?->branch_id;
+        $publicId = $session?->invoice?->public_id ?? $session?->appointment?->public_id;
+
         $this->audit->record([
             'action' => 'billing.provider_payment_unreconciled', 'category' => 'financial', 'severity' => 'critical', 'actor' => null, 'actor_name' => 'Payment provider event',
-            'actor_role' => 'system', 'target' => $session?->invoice, 'branch_id' => $session?->invoice?->branch_id,
+            'actor_role' => 'system', 'target' => $target, 'branch_id' => $branchId,
             // The captured payment is on record and needs a person: identifiers, a reason and a decimal-safe amount only.
             'payload' => ['reason' => $reason, 'status' => $status, 'provider_event_id' => $event->provider_event_id, 'provider_payment_id' => $event->provider_payment_id,
                 'amount' => $event->amount_centavos === null ? null : number_format($event->amount_centavos / 100, 2, '.', '')],
         ]);
 
-        return $this->finish($event, $status, $reason, 200, $session?->invoice?->public_id);
+        return $this->finish($event, $status, $reason, 200, $publicId);
     }
 
-    private function finish(PaymentProviderEvent $event, string $status, ?string $reason, int $http, ?string $invoicePublicId = null): array
+    private function finish(PaymentProviderEvent $event, string $status, ?string $reason, int $http, ?string $targetPublicId = null): array
     {
         $event->forceFill(['status' => $status, 'reason' => $reason, 'processed_at' => now()])->save();
+        $publicId = $targetPublicId ?? $event->invoice?->public_id ?? $event->appointment?->public_id;
 
-        return ['http' => $http, 'status' => $status, 'invoice' => $invoicePublicId ?? $event->invoice?->public_id];
+        return ['http' => $http, 'status' => $status, 'invoice' => $publicId, 'reference' => $publicId];
     }
 
     private function outcome(PaymentProviderEvent $event, int $http): array
     {
-        return ['http' => $http, 'status' => $event->status, 'invoice' => $event->invoice?->public_id];
+        $publicId = $event->invoice?->public_id ?? $event->appointment?->public_id;
+
+        return ['http' => $http, 'status' => $event->status, 'invoice' => $publicId, 'reference' => $publicId];
     }
 }

@@ -268,7 +268,7 @@ test('Patient logout requires explicit confirmation and never fires directly fro
 test('booking-drafts.js and geo.js contain no forbidden patterns',()=>{
   for(const file of ['src/booking-drafts.js','src/geo.js','src/pages/PatientBook.jsx']){
     const src=read(file)
-    for(const forbidden of [/Date\.now\(/,/Math\.random\(/,/dentists\[0\]/,/setTimeout\(/,/paymentPreference/,/PayMongo/i,/\botp\b/i,/overdue|past due|payment deadline/i])
+    for(const forbidden of [/Date\.now\(/,/Math\.random\(/,/dentists\[0\]/,/setTimeout\(/,/paymentPreference/,/\botp\b/i,/overdue|past due|payment deadline/i])
       assert.doesNotMatch(src,forbidden,`${file}: ${forbidden}`)
   }
 })

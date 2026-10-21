@@ -33,6 +33,7 @@ class StoreAppointmentRequest extends FormRequest
             // A Patient may prefer a Dentist (optional; "Any available" keeps the automatic assignment). The scheduling rules still
             // check that the Dentist works at the branch, does the service and is free.
             'dentist_ref' => ['nullable', 'string', 'exists:dentist_profiles,legacy_ref'],
+            'pay_at_clinic' => ['nullable', 'boolean'],
 
             'id' => ['prohibited'],
             'status' => ['prohibited'],

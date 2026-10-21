@@ -35,4 +35,9 @@ class PaymentProviderEvent extends Model
     {
         return $this->belongsTo(Invoice::class);
     }
+
+    public function appointment(): BelongsTo
+    {
+        return $this->belongsTo(Appointment::class);
+    }
 }

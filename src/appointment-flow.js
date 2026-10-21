@@ -48,7 +48,7 @@ export function createAppointmentFlow({ getState, getSession, getActions, refres
         const link = getActions().linkFollowupAppointment(followupId, result.row.id)
         if (!link.ok) warnings.push(`The appointment is booked, but the follow-up task was not linked: ${link.message}`)
       } else getActions().recordAppointmentEvent(result.row.id, 'created')
-      return { ok: true, record: projected(result.row.id), warning: warnings.join(' ') }
+      return { ok: true, record: projected(result.row.id), row: result.row, warning: warnings.join(' ') }
     },
 
     async reschedule(appointment, form, key) {

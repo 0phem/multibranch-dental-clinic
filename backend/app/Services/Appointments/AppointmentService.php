@@ -67,6 +67,18 @@ final class AppointmentService
                 throw AppointmentCommandException::invalidSchedule($failures, $this->alternatives($request, $dentist));
             }
 
+            $targetService = $service;
+            if ($service->online_booking === 'consultation_first' && $service->consultation_service_id) {
+                $targetService = Service::find($service->consultation_service_id) ?? $service;
+            }
+            $resolved = app(\App\Services\Pricing\PriceResolver::class)->resolve($targetService, $branch, $result->startsAt->toDateString());
+            $fee = ($resolved instanceof \App\Services\Pricing\ResolvedPrice)
+                ? $resolved->amount()
+                : ((string) ($targetService->reference_fee_php ?? '500.00'));
+
+            $payMongo = app(\App\Services\Payment\PayMongoService::class);
+            $payOnline = $isPatient && $payMongo->isConfigured() && empty($input['pay_at_clinic']);
+
             $appointment = Appointment::create([
                 'patient_id' => $patient->id,
                 'branch_id' => $branch->id,
@@ -75,8 +87,12 @@ final class AppointmentService
                 'starts_at' => $result->startsAt,
                 'ends_at' => $result->endsAt,
                 'duration_minutes' => $result->duration,
+                'booking_fee_php' => $isPatient ? $fee : null,
+                'booking_payment_status' => $payOnline ? 'held' : 'unpaid',
+                'booking_hold_expires_at' => $payOnline ? ClinicClock::now()->addMinutes(15) : null,
                 // F4: a patient over the late-cancellation/no-show limit books as Pending until the front desk confirms.
-                'status' => $isPatient && \App\Services\Automations\AttendancePolicy::needsConfirmation($patient) ? 'Pending' : 'Confirmed',
+                // Section 22.3: Online payment at booking holds slot as Pending until verified webhook confirms.
+                'status' => $payOnline || ($isPatient && \App\Services\Automations\AttendancePolicy::needsConfirmation($patient)) ? 'Pending' : 'Confirmed',
                 'source' => $isPatient ? 'patient_portal' : 'front_desk',
                 'assignment_method' => $method,
                 'assignment_rule_version' => $method === 'auto' ? SchedulingService::RULE_VERSION : null,
@@ -86,10 +102,16 @@ final class AppointmentService
                 'updated_by_user_id' => $actor->id,
             ]);
             $this->record($appointment, $actor, 'appointment.created', null);
-            \App\Services\Automations\FillFreedSlots::claimByBooking($appointment);
-            \App\Services\Followups\Followups::booked($appointment); // M20: the patient's open follow-up is now Booked
 
-            $this->notifyPatient($appointment, $actor, 'appointment_confirmation');
+            if ($payOnline) {
+                $checkout = $payMongo->createAppointmentCheckoutSession($appointment, $actor);
+                $appointment->checkout_url = $checkout['checkout_url'] ?? null;
+                $appointment->checkout_session_id = $checkout['checkout_session_id'] ?? null;
+            } else {
+                \App\Services\Automations\FillFreedSlots::claimByBooking($appointment);
+                \App\Services\Followups\Followups::booked($appointment); // M20: the patient's open follow-up is now Booked
+                $this->notifyPatient($appointment, $actor, 'appointment_confirmation');
+            }
 
             return [$appointment, 201];
         });
@@ -174,6 +196,34 @@ final class AppointmentService
             ]);
             $this->record($current, $actor, 'appointment.cancelled', $from);
             if ($late) \App\Services\Automations\AttendancePolicy::recordStrike($current->patient);
+
+            // Section 22.3: Booking payment refund handling (>=24h automatic refund via PayMongo; <24h withheld for front-desk decision)
+            if ($current->booking_payment_status === 'paid' && $current->booking_payment_ref) {
+                $diffHours = $now->diffInHours($current->starts_at, false);
+                if ($diffHours >= 24) {
+                    try {
+                        app(\App\Services\Payment\PayMongoService::class)->refundAppointment($current, 'requested_by_customer');
+                    } catch (\Throwable $e) {
+                        report($e);
+                    }
+                } else {
+                    $current->update(['booking_payment_status' => 'forfeited']);
+                    app(\App\Services\Audit\AuditService::class)->record([
+                        'action' => 'billing.booking_refund_withheld_late_cancellation',
+                        'category' => 'financial',
+                        'severity' => 'info',
+                        'actor' => $actor,
+                        'target' => $current,
+                        'branch_id' => $current->branch_id,
+                        'payload' => [
+                            'appointment_code' => $current->appointment_code,
+                            'fee' => (string) $current->booking_fee_php,
+                            'hours_before' => $diffHours,
+                        ],
+                    ]);
+                }
+            }
+
             // F3: the time is free now; it is offered to patients booked later that day, then to the waitlist.
             \App\Services\Automations\FillFreedSlots::open($current, ($input['source'] ?? null) === 'cant_make_it' ? 'cant_make_it' : 'cancelled', $now);
             \App\Services\Followups\Followups::cancelled($current); // M20: its follow-up task is open again
@@ -233,7 +283,24 @@ final class AppointmentService
                 'updated_by_user_id' => $actor->id,
             ]);
             $this->record($current, $actor, $event, $previous);
-            if ($command === 'no-show') $this->afterNoShow($current);
+            if ($command === 'no-show') {
+                $this->afterNoShow($current);
+                if ($current->booking_payment_status === 'paid') {
+                    $current->update(['booking_payment_status' => 'forfeited']);
+                    app(\App\Services\Audit\AuditService::class)->record([
+                        'action' => 'billing.booking_refund_withheld_no_show',
+                        'category' => 'financial',
+                        'severity' => 'info',
+                        'actor' => $actor,
+                        'target' => $current,
+                        'branch_id' => $current->branch_id,
+                        'payload' => [
+                            'appointment_code' => $current->appointment_code,
+                            'fee' => (string) $current->booking_fee_php,
+                        ],
+                    ]);
+                }
+            }
 
             return [$current, 200];
         });
@@ -275,10 +342,86 @@ final class AppointmentService
             if ($current->visit()->exists() || ClinicClock::local($current->starts_at)->toDateString() !== ClinicClock::today()) return null;
             $previous = $current->status;
             $current->update(['status' => 'No-show', 'revision' => $current->revision + 1, 'updated_by_user_id' => null]);
+            if ($current->booking_payment_status === 'paid') {
+                $current->update(['booking_payment_status' => 'forfeited']);
+                app(\App\Services\Audit\AuditService::class)->record([
+                    'action' => 'billing.booking_refund_withheld_no_show',
+                    'category' => 'financial',
+                    'severity' => 'info',
+                    'actor' => null,
+                    'target' => $current,
+                    'branch_id' => $current->branch_id,
+                    'payload' => [
+                        'appointment_code' => $current->appointment_code,
+                        'fee' => (string) $current->booking_fee_php,
+                        'reason' => 'released_late',
+                    ],
+                ]);
+            }
             $this->record($current, null, 'appointment.no_show_released', $previous);
             $this->afterNoShow($current);
 
             return $current;
+        });
+    }
+
+    /**
+     * Section 22.3: releases pending appointments held for payment whose 15-minute checkout window expired.
+     */
+    public function releaseExpiredHolds(): int
+    {
+        $now = ClinicClock::now();
+        $expired = Appointment::where('status', 'Pending')
+            ->where('booking_payment_status', 'held')
+            ->whereNotNull('booking_hold_expires_at')
+            ->where('booking_hold_expires_at', '<=', $now)
+            ->get();
+
+        $count = 0;
+        foreach ($expired as $appointment) {
+            \Illuminate\Support\Facades\DB::transaction(function () use ($appointment, $now) {
+                $locked = Appointment::whereKey($appointment->id)->lockForUpdate()->first();
+                if (! $locked || $locked->status !== 'Pending' || $locked->booking_payment_status !== 'held') {
+                    return;
+                }
+                if ($locked->booking_hold_expires_at && $locked->booking_hold_expires_at->greaterThan($now)) {
+                    return;
+                }
+                $from = $locked->status;
+                $locked->update([
+                    'status' => 'Cancelled',
+                    'cancelled_at' => $now,
+                    'booking_payment_status' => 'unpaid',
+                    'revision' => $locked->revision + 1,
+                ]);
+                $this->record($locked, null, 'appointment.hold_expired', $from);
+                \App\Services\Automations\FillFreedSlots::open($locked, 'hold_expired', $now);
+                $patientUser = $locked->patient?->user ?? ($locked->created_by_user_id ? User::find($locked->created_by_user_id) : null);
+                if ($patientUser) {
+                    $this->notifyPatient($locked, $patientUser, 'appointment_hold_expired');
+                }
+            });
+            $count++;
+        }
+
+        return $count;
+    }
+
+    /**
+     * Section 22.3: Front desk or Owner decides to refund a forfeited or paid booking payment.
+     */
+    public function refundBookingPayment(User $actor, Appointment $appointment, string $reason): array
+    {
+        return \Illuminate\Support\Facades\DB::transaction(function () use ($actor, $appointment, $reason) {
+            $locked = Appointment::whereKey($appointment->id)->lockForUpdate()->firstOrFail();
+            if (! in_array($locked->booking_payment_status, ['paid', 'forfeited'], true)) {
+                throw AppointmentCommandException::rule('not_refundable', 'Only paid or forfeited booking payments can be refunded.', 'booking_payment_status');
+            }
+
+            $result = app(\App\Services\Payment\PayMongoService::class)->refundAppointment($locked, $reason);
+            $this->record($locked, $actor, 'appointment.booking_refunded', $locked->status);
+
+            return $result;
         });
     }
 

@@ -34,7 +34,7 @@ Counting methodology:
 | **M3 Work Schedules** | Implemented | Weekly schedules per dentist/branch, exceptions, capacity intersection (hours ∩ schedule − leave). | `Staffing/WorkSchedulesTest`, `tests/staffing.test.js` | Clinic confirmed dentist shifts (demo shifts used). |
 | **M4 Patient Records** | Partial | Canonical persons & patients, audited staff edits, duplicate guard, guardian links. | `Patients/PatientRecordTest`, `tests/intake.test.js` | Patient archive (soft delete with audit), record merge. |
 | **M5 Treatment Management** | Implemented | Encounter-linked treatment by attending dentist, append-only locking upon completion. | `Treatments/TreatmentTest` | Treatment plan integration (deferred). |
-| **M6 Appointment Management** | Implemented | 1-flow booking, anti-double-booking guard, cancellation policy, consultation-first services, calendar load. | `Appointments/*`, `Automations/InterviewRoundTwoTest` | Online payment at booking (clinic confirmed 2026-10-20). |
+| **M6 Appointment Management** | Implemented | 1-flow booking, anti-double-booking guard, cancellation policy, consultation-first services, calendar load, PayMongo Pay-at-Booking with 15-minute slot hold, auto-refund on >=24h cancellation. | `Appointments/*`, `Payment/AppointmentBookingPaymentTest`, `tests/patient-portal.test.js` | None (Section 22 implemented). |
 | **M7 AI Chatbot (Clinic Assistant)** | Implemented (Knowledge) | Intent matcher, clinic FAQ, multilingual (EN/TL/Taglish), safety guards for medical/emergency queries. | `Assistant/AssistantKnowledgeTest` | AI mode stream buffering (switched OFF for safety). |
 | **M8 Patient Visits** | Partial | Check-in, walk-ins, daily branch code, counter QR self-registration, late arrival workflows. | `Visits/*`, `Intake/IntakeTest` | Complete live board assignment view. |
 | **M9 Patient Queue** | Partial | Sequential queue numbers, live dentist queue, late patients moved to end of queue. | `Queue/*`, `Automations/InterviewRoundTwoTest` | Dedicated kiosk wallboard display. |
@@ -51,7 +51,7 @@ Counting methodology:
 | **M20 Patient Follow-Up** | Implemented | Server tasks (Open/Contacted/Booked/Closed), treatment triggers, "Book follow-up" shortcut, recall automation. | `Followups/FollowupTest`, `tests/m20-followups.test.js` | Automated SMS recall dispatch. |
 | **M21 Reports and Analytics** | Partial | Executive metrics, daily summary email, staff workload calendar. | `Analytics/*`, `InterviewRoundTwoTest` | Custom date range filtering and CSV export. |
 | **M22 Audit Logs** | Implemented | Append-only database triggers, immutable audit records, search, filter, and CSV export. | `Audit/*` | Archival storage offloading. |
-| **M23 Payment Management** | Implemented (Test) | PayMongo Checkout sessions (GCash & Card), verified webhook signature, Payment Receipt PDF. | `Payment/PayMongoPaymentTest`, `payment-test.sh` | Production business entity verification. |
+| **M23 Payment Management** | Implemented (Test) | PayMongo Checkout sessions (GCash & Card) for post-visit invoices and online appointment booking fees; 15-min slot hold, verified webhook, Payment Receipt PDF, refund API. | `Payment/PayMongoPaymentTest`, `Payment/AppointmentBookingPaymentTest`, `payment-test.sh` | Production business entity verification. |
 | **M24 Lab Cases** | Planned | Tracked manually by clinic outside software. | None | Post-defense roadmap. |
 | **M25 Patient Handovers** | Implemented | Inter-branch patient transfer, bounded access duration (60 days default), non-forwardable, audited. | `Staffing/HandoverTest`, `tests/staffing.test.js` | Permanent cross-branch record merge. |
 
@@ -76,7 +76,7 @@ Counting methodology:
 
 ### Pending Before Defense (Thursday Oct 22 Freeze)
 1. **Host on Vercel + Railway + Supabase** (first priority).
-2. **Online payment at booking via PayMongo** (confirmed by clinic on Oct 20).
+2. **Online payment at booking via PayMongo** (Implemented in Section 22; verified with 884 tests and appointment payment feature suite).
 3. **End-to-end dress rehearsal** on the hosted URL following `DEMO_SCRIPT.md`.
 4. **Align defense documents** with the official paper's 26-module numbering.
 

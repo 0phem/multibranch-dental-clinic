@@ -39,10 +39,10 @@ test('decisions 2, 3 and 5: the name is read-only with a front-desk link, email 
   for (const word of ['hmo', 'loyalty', 'followups', 'queue']) assert.doesNotMatch(portal, new RegExp(`\\['${word}'`), word)
 })
 
-test('decision 4 and decision 6: no payment at booking, and messages are routed to a front desk with a Change link', () => {
+test('Section 22 and decision 6: pay at booking via PayMongo, and messages are routed to a front desk with a Change link', () => {
   const book = read('src/patient/pages/Book.jsx')
-  assert.match(book, /You’ll receive your invoice after your visit and can pay online in Billing\./)
-  assert.doesNotMatch(book, /createPayMongoCheckout|paymongo/i)
+  assert.match(book, /Pay at booking via PayMongo/i)
+  assert.match(book, /checkout_url/)
   const messages = read('src/pages/ServerMessages.jsx')
   assert.match(messages, /To: <b>\{chosen\.name\} front desk<\/b>/)
   assert.match(messages, />Change<\/button>/)

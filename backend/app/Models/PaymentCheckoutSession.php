@@ -28,6 +28,11 @@ class PaymentCheckoutSession extends Model
         return $this->belongsTo(Invoice::class);
     }
 
+    public function appointment(): BelongsTo
+    {
+        return $this->belongsTo(Appointment::class);
+    }
+
     public function initiatedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'initiated_by_user_id');

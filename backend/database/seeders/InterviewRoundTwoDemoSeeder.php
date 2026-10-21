@@ -25,8 +25,12 @@ use Illuminate\Database\Seeder;
 class InterviewRoundTwoDemoSeeder extends Seeder
 {
     private const HMOS = [
-        ['Avega', null], ['InLife iCare', null], ['Intellicare', null], ['Etiqa', null],
-        ['AXA Health Plans', 'Qualifying premium dental packages only (to confirm)'], ['Dental network partner plans', 'Names to confirm with the clinic'],
+        ['Avega', null],
+        ['InLife iCare', null],
+        ['Intellicare', null],
+        ['eTiQa', null],
+        ['Dental Network partnerships', null],
+        ['AXA Health Plans', 'Qualifying premium dental packages'],
     ];
 
     private const NAMES = [
@@ -61,7 +65,12 @@ class InterviewRoundTwoDemoSeeder extends Seeder
             foreach ([$consult, $braces] as $s) DentistServiceAssignment::firstOrCreate(['dentist_profile_id' => $d->id, 'service_id' => $s->id], ['is_authorized' => true]);
         }
 
-        foreach (self::HMOS as [$name, $note]) AcceptedHmo::firstOrCreate(['branch_id' => null, 'name' => $name], ['note' => $note, 'verified_by_clinic' => false, 'active' => true]);
+        foreach (self::HMOS as [$name, $note]) {
+            AcceptedHmo::updateOrCreate(
+                ['branch_id' => null, 'name' => $name],
+                ['note' => $note, 'verified_by_clinic' => true, 'verified_at' => now(), 'active' => true]
+            );
+        }
 
         foreach (self::NAMES as $email => [$first, $last, $title]) {
             $user = User::where('email', $email)->first();

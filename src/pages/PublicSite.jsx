@@ -53,8 +53,8 @@ function HeroIllustration() {
 const STEPS = [
   ['user', 'Create your account', 'Sign up with your email. We send a 6-digit code to confirm it is yours.'],
   ['calendar', 'Book a visit', 'Choose a service, a branch near you and a time on the calendar. Only real open times are shown.'],
-  ['message', 'Stay in touch', 'Get an email confirmation, and message the front desk of your branch from the portal.'],
-  ['receipt', 'Pay online', 'After your visit, pay your invoice online through PayMongo (for example GCash or card) and get your receipt by email.'],
+  ['wallet', 'Pay appointment fee', 'Pay the appointment fee online securely with PayMongo (GCash or card) to hold your slot. Full refund if cancelled 24+ hours before.'],
+  ['receipt', 'Visit & receipt', 'Complete your treatment at the clinic; any remaining balance is billed after your visit with an itemized payment receipt.'],
 ]
 
 const FEATURES = [
@@ -68,8 +68,8 @@ const FEATURES = [
 // portal really works; no clinic fact (hours, prices, policies) is stated here.
 const PORTAL_FAQ = [
   ['How do I create an account?', 'Choose “Create account”, fill in your details and the email you use. We send a 6-digit code to that email; enter it, then sign in with your email and password.'],
-  ['How do I book a visit?', 'After signing in, choose “Book a visit”, pick the service, a branch and a day on the calendar, then a time. Only open times are shown, and nothing is charged when you book.'],
-  ['How do I pay?', 'After your visit the clinic sends your invoice. Open Billing in the portal and pay online through PayMongo (for example GCash or card), or pay at the clinic. Your receipt is emailed to you.'],
+  ['How do I book a visit?', 'After signing in, choose “Book a visit”, pick the service, a branch and a day on the calendar, then a time. Pay the appointment fee securely through PayMongo (GCash or card). If you cancel at least 24 hours before, your payment is refunded.'],
+  ['How do I pay?', 'You pay the appointment fee online when booking. After your visit, any remaining balance on your invoice can be paid online in Billing through PayMongo or in person at the clinic.'],
   ['How do I message the clinic?', 'Open Messages in the portal and write to the front desk of your branch. They reply in the same conversation.'],
 ]
 
@@ -101,7 +101,7 @@ function Hero() {
           <a className="lp-btn lp-btn-primary lp-btn-lg" href="#create-account"><Icon name="plusCalendar" size={20}/>Book a visit</a>
           <a className="lp-btn lp-btn-soft lp-btn-lg" href="#branches"><Icon name="pin" size={20}/>See branches</a>
         </div>
-        <p className="lp-hero-note"><Icon name="lock" size={16}/> Free to sign up. Nothing is charged when you book.</p>
+        <p className="lp-hero-note"><Icon name="lock" size={16}/> Secure PayMongo payments (GCash &amp; Cards). Full refund if cancelled 24+ hours before.</p>
       </div>
       <div className="lp-hero-visual"><HeroIllustration/></div>
     </div>

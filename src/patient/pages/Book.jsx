@@ -10,7 +10,7 @@ import { EmptyState, ErrorState, PageHead, Skeleton, useLoad } from '../ui.jsx'
 const STEPS = ['Service', 'Branch', 'Dentist', 'Date', 'Time', 'Review']
 
 /**
- * One booking flow (decision 4: nothing is paid when booking). Suggestions fill the choices (nearest branch with the earliest slot,
+ * One booking flow (Section 22: Pay-at-Booking via PayMongo with 15-minute slot hold; refundable >= 24h). Suggestions fill the choices (nearest branch with the earliest slot,
  * any available Dentist), and the Patient can change every one. Choices are kept when going back. Real data only.
  */
 export function BookPage({ prefill = null, onDone, onNavigate, toast }) {
@@ -40,7 +40,7 @@ export function BookPage({ prefill = null, onDone, onNavigate, toast }) {
   if (done) return <Success appointment={done} forName={forPerson?.first_name || null} onNavigate={onNavigate}/>
 
   return <div className="pp-page pp-book">
-    <PageHead eyebrow="Book a visit" title="Book an appointment" text="Only real open times are shown. Nothing is charged when you book."/>
+    <PageHead eyebrow="Book a visit" title="Book an appointment" text="Only real open times are shown. Online payment via GCash, Maya, or Card holds your slot."/>
     {(family.data || []).length > 0 && <label className="pp-for"><span>Booking for</span>
       <select value={forId} onChange={e => setForId(e.target.value)} aria-label="Booking for">
         <option value="self">Me</option>{(family.data || []).map(d => <option key={d.id} value={d.id}>{d.first_name} ({d.relationship.toLowerCase()})</option>)}
@@ -67,7 +67,16 @@ export function BookPage({ prefill = null, onDone, onNavigate, toast }) {
         <p className="pp-hint">{dateLong(choice.date)} at {choice.branch.name}</p>
         <TimeSlots branchId={choice.branch.id} serviceId={choice.service.id} dentistId={choice.dentist?.id} date={choice.date} value={choice.slot} onChange={slot => { set({ slot }); go(5) }}/>
       </>}
-      {step === 5 && <Review choice={choice} forPerson={forPerson} onEdit={go} onBooked={a => { setDone(a); toast?.('Your appointment is booked.', 'success'); onDone?.(a) }}/>}
+      {step === 5 && <Review choice={choice} forPerson={forPerson} onEdit={go} onBooked={a => {
+        if (a.checkout_url) {
+          toast?.('Redirecting to PayMongo secure checkout…', 'info')
+          window.location.href = a.checkout_url
+          return
+        }
+        setDone(a)
+        toast?.('Your appointment is booked.', 'success')
+        onDone?.(a)
+      }}/>}
       <div className="pp-step-nav">
         {step > 0 && <Button variant="ghost" icon="chevronLeft" onClick={() => go(step - 1)}>Back</Button>}
       </div>
@@ -195,10 +204,10 @@ function Review({ choice, forPerson, onEdit, onBooked }) {
     ['Dentist', choice.slot?.dentist?.name || choice.dentist?.name || 'Assigned by the clinic', 2], ['Date', dateLong(choice.date), 3], ['Time', time12(choice.slot?.start_time), 4]]
   return <>
     <dl className="pp-summary">{rows.map(([k, v, s]) => <div key={k}><dt>{k}</dt><dd>{v}</dd><button type="button" className="link-button" onClick={() => onEdit(s)} aria-label={`Change ${k.toLowerCase()}`}>Change</button></div>)}</dl>
-    <p className="pp-note"><Icon name="wallet" size={18}/> You’ll receive your invoice after your visit and can pay online in Billing.</p>
+    <p className="pp-note"><Icon name="wallet" size={18}/> Pay at booking via PayMongo (GCash, Maya, Cards). Your slot is held for 15 minutes. Cancellations at least 24 hours in advance are fully refunded.</p>
     {policy && <p className="pp-note pp-policy"><Icon name="calendar" size={18}/> {policy}</p>}
     {error && <p className="pp-error-text" role="alert">{error}</p>}
-    <Button width="full" className="pp-primary" disabled={busy} onClick={confirm}>{busy ? 'Booking…' : 'Confirm appointment'}</Button>
+    <Button width="full" className="pp-primary" disabled={busy} onClick={confirm}>{busy ? 'Processing…' : 'Confirm & pay'}</Button>
   </>
 }
 
@@ -212,7 +221,7 @@ function Success({ appointment, forName = null, onNavigate }) {
       <span className="pp-success-mark" aria-hidden="true"><Icon name="check" size={34}/></span>
       <h1>{forName ? `${forName} is booked!` : 'You’re booked!'}</h1>
       <p className="pp-lead">{appointment.serviceName || appointment.service?.name} on <b>{dateLong(date)}</b> at <b>{time12(start)}</b>, {appointment.branchName || appointment.branch?.name}.</p>
-      <p className="pp-hint">{forName ? `The confirmation email, reminders and ${forName}’s invoice come to you, and you can pay online in Billing.` : 'A confirmation email is on its way. You’ll receive your invoice after your visit and can pay online in Billing.'}</p>
+      <p className="pp-hint">{forName ? `The confirmation email, reminders and booking receipt come to you. Any remaining balance can be settled in Billing after the visit.` : 'A confirmation email and booking receipt are on their way. Any remaining balance can be settled in Billing after your visit.'}</p>
       <div className="pp-actions">
         <Button icon="download" variant="soft" onClick={ics}>Add to calendar</Button>
         <Button onClick={() => onNavigate('visits')}>View my visits</Button>

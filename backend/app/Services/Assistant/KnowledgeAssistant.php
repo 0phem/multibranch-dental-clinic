@@ -175,12 +175,12 @@ final class KnowledgeAssistant
             'my_appointment' => $this->myAppointment(),
             'my_balance' => $this->myBalance(),
             'price' => $this->reply(($entities['service'] ?? null ? 'The price of '.$entities['service']->name.' is' : 'Treatment prices are')
-                .' confirmed by the clinic, because they depend on what the dentist finds and does. Nothing is charged when you book: you receive the invoice after your visit and can pay online in Billing. For an estimate, message the front desk.', [$desk, $book]),
+                .' confirmed by the clinic, because they depend on what the dentist finds and does. You pay the appointment fee when booking online through GCash or card (credited to your invoice after the visit). For an estimate, message the front desk.', [$desk, $book]),
             'services' => $this->services(),
             'service_info' => $this->serviceInfo($entities['service']),
             'branches' => $this->branchesAnswer($entities['branch'] ?? null),
             'hours' => $this->hoursAnswer($words, $entities['branch'] ?? null),
-            'booking' => $this->reply('Booking takes a few steps in this portal: choose a service, a branch (we can suggest the nearest), a dentist or “any available”, then a day and a time. Only real open times are shown, and nothing is charged when you book. You’ll get a confirmation email.', [$book]),
+            'booking' => $this->reply('Booking takes a few steps in this portal: choose a service, a branch (we can suggest the nearest), a dentist or “any available”, then a day and a time. You pay the appointment fee when booking online through GCash or card (fully refunded if cancelled at least 24 hours before). You’ll get a confirmation email.', [$book]),
             'changes' => $this->reply('Open My visits, choose the appointment, then Reschedule (pick a new day and time) or Cancel. The change is confirmed right away and you’ll get an email. If you need help, message the front desk.', [['type' => 'open_visits', 'label' => 'Open My visits'], $desk]),
             'payment' => $this->payment(),
             'account' => $this->reply('When you create an account, we email you a 6-digit code that is valid for '.(int) config('clinic.otp_ttl_minutes', 10).' minutes. Enter it to verify your email, then sign in with your email and password. No code? Check your spam folder, then use Resend code (after a minute). Forgot your password? Choose “Forgot password?” on the sign-in page and we’ll email you a code to set a new one.', [$desk]),
@@ -265,9 +265,9 @@ final class KnowledgeAssistant
     private function payment(): array
     {
         $methods = app(PayMongoService::class)->acceptedMethodNames();
-        $online = $methods ? 'online in Billing with '.implode(', ', $methods).' (secure PayMongo checkout)' : 'online in Billing (secure PayMongo checkout)';
+        $online = $methods ? implode(', ', $methods) : 'GCash, Maya, or Card';
 
-        return $this->reply("Nothing is paid when you book. After your visit the clinic issues your invoice; you can pay {$online}, or at the clinic. When the payment is confirmed, your Payment Receipt is emailed with a PDF and is also in Billing.", [['type' => 'open_billing', 'label' => 'Open Billing']]);
+        return $this->reply("Yes, you pay the appointment fee when you book online through {$online} (PayMongo). It holds your slot for 15 minutes and is credited to your invoice after your visit. If you cancel at least 24 hours before, it is fully refunded. Remaining balances can be paid online in Billing or at the clinic.", [['type' => 'open_booking', 'label' => 'Book an appointment'], ['type' => 'open_billing', 'label' => 'Open Billing']]);
     }
 
     private function contact(?Branch $branch = null): array

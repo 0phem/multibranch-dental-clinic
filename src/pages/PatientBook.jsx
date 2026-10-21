@@ -204,14 +204,14 @@ function ReviewStep({ state, mode, form, notes, onNotes, onBack, onConfirm, onPi
       {label:'Time',value:form.start?displayTime(form.start):null},
       {label:'Dentist',value:form.dentist?`${form.dentist} (currently available)`:'Assigned when you confirm'},
     ]}/>
-    <p className="pt-hint">The clinic assigns an eligible Dentist when you confirm; if availability changed, you’ll be asked to choose again.</p>
+    <p className="pt-hint">The clinic assigns an eligible Dentist when you confirm. Booking fee is paid securely via PayMongo (GCash, Maya, Card) with a 15-minute slot hold. Cancellations at least 24h prior are fully refunded.</p>
     <Field label="Optional note"><textarea value={notes} placeholder="Anything the clinic should know before your visit?" onChange={event=>onNotes(event.target.value)}/></Field>
     {failure&&<Notice tone="danger" title="This time couldn’t be booked">{failure.message}
       {!!failure.alternatives?.length&&<div className="row-actions top-gap" role="group" aria-label="Other times on this date">{failure.alternatives.map(time=><Button key={time} size="sm" variant="soft" onClick={()=>onPickAlternative(time)}>{displayTime(time)}</Button>)}</div>}
     </Notice>}
     <div className="pt-stage-footer">
       <Button variant="ghost" onClick={onBack}>{failure?.kind==='conflict'?'Choose another time':'Back'}</Button>
-      <Button icon="checkin" onClick={onConfirm} disabled={confirming||!form.start}>{confirming?'Confirming…':'Confirm appointment'}</Button>
+      <Button icon="checkin" onClick={onConfirm} disabled={confirming||!form.start}>{confirming?'Processing…':'Confirm & pay'}</Button>
     </div>
   </>
 }
@@ -299,6 +299,11 @@ export function PatientBookingPage({ store, setPage, context }) {
       if(result.kind==='conflict'||result.kind==='validation')confirmKey.current=commandKey()
       return
     }
+    if (result.row?.checkout_url) {
+      toast('Redirecting to PayMongo checkout…', 'info')
+      window.location.href = result.row.checkout_url
+      return
+    }
     if(result.warning)toast(result.warning,'warning')
     toast('Appointment confirmed.','success');setConfirmed(result.record)
   }
@@ -316,7 +321,7 @@ export function PatientBookingPage({ store, setPage, context }) {
 
   const timeStage=mode==='smart'?'smart-schedule':'manual-time'
   return <div className="pt-page is-wide pt-book-flow">
-    <PageHeader kicker="Online booking" title="Book your visit" text="Choose how you’d like to book. Only real available times are shown, and nothing is charged when you book."/>
+    <PageHeader kicker="Online booking" title="Book your visit" text="Choose how you’d like to book. Only real available times are shown. Online payment via GCash, Maya, or Card holds your slot."/>
     {!resumeDismissed&&stage==='mode'&&<DraftBanner status={status} onResume={resumeDraft} onDiscard={discardDraft}/>}
     {stage==='mode'&&<ModeChoice onChoose={chooseMode}/>}
     <BookProgress mode={mode} stage={stage}/>

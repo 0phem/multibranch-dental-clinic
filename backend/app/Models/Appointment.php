@@ -32,6 +32,10 @@ class Appointment extends Model
             'starts_at' => 'immutable_datetime',
             'ends_at' => 'immutable_datetime',
             'cancelled_at' => 'immutable_datetime',
+            'booking_hold_expires_at' => 'immutable_datetime',
+            'booking_paid_at' => 'immutable_datetime',
+            'booking_refunded_at' => 'immutable_datetime',
+            'booking_fee_php' => 'decimal:2',
             'duration_minutes' => 'integer',
             'revision' => 'integer',
         ];
@@ -76,6 +80,16 @@ class Appointment extends Model
     public function history(): HasMany
     {
         return $this->hasMany(AppointmentHistory::class)->orderBy('id');
+    }
+
+    public function checkoutSessions(): HasMany
+    {
+        return $this->hasMany(PaymentCheckoutSession::class);
+    }
+
+    public function activeCheckoutSession(): HasOne
+    {
+        return $this->hasOne(PaymentCheckoutSession::class)->where('status', 'Open');
     }
 
     public function scopeActive(Builder $query): Builder
