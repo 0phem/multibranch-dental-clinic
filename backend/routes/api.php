@@ -13,7 +13,6 @@ use App\Http\Controllers\PricingController;
 use App\Http\Controllers\QueueController;
 use App\Http\Controllers\AssistantController;
 use App\Http\Controllers\ConversationController;
-use App\Http\Controllers\FeedbackController;
 use App\Http\Controllers\InquiryController;
 use App\Http\Controllers\TreatmentController;
 use App\Http\Controllers\UserBranchScopeController;
@@ -22,7 +21,6 @@ use App\Http\Controllers\VisitController;
 use App\Http\Controllers\BillingController;
 use App\Http\Controllers\DocumentController;
 use App\Http\Controllers\AuditController;
-use App\Http\Controllers\AutomationController;
 use App\Http\Controllers\AnalyticsController;
 use App\Http\Controllers\Payment\PayMongoController;
 use App\Http\Controllers\Mail\MailDiagnosticController;
@@ -255,15 +253,6 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureAccountAccess::cla
         Route::post('/{waitlistEntry}/cancel', [\App\Http\Controllers\WaitlistController::class, 'cancel']);
     });
 
-    // M23 Workflow Automation & Exception Management (Owner only)
-    Route::prefix('automation')->middleware('role:owner')->group(function () {
-        Route::get('/snapshot', [AutomationController::class, 'snapshot']);
-        Route::get('/rules', [AutomationController::class, 'rules']);
-        Route::get('/actions', [AutomationController::class, 'actions']);
-        Route::post('/dispatch', [AutomationController::class, 'dispatch'])->middleware('throttle:20,1');
-        Route::get('/export-csv', [AutomationController::class, 'exportCsv']);
-    });
-
     // M21 Operational Analytics & Executive Intelligence (Owner only)
     Route::prefix('analytics')->middleware('role:owner')->group(function () {
         Route::get('/executive-summary', [AnalyticsController::class, 'executiveSummary']);
@@ -383,16 +372,6 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureAccountAccess::cla
         Route::post('/{hmoCase}/escalate', [HmoController::class, 'escalate'])->middleware('role:staff');
         Route::post('/{hmoCase}/response', [HmoController::class, 'respond'])->middleware('role:staff');
         Route::post('/{hmoCase}/withdraw', [HmoController::class, 'withdraw'])->middleware('role:staff');
-    });
-
-    // M26 Patient Feedback & Service Quality — narrow foundation, PATIENT ONLY: submit about an own completed Visit, read own, choose a Visit.
-    // No reviewer endpoint exists (Owner review is only an intended-lifecycle note); Owner/Staff/Dentist/guests: none. No edit/delete/reply/status/publication.
-    Route::prefix('feedback')->group(function () {
-        Route::get('/eligible-visits', [FeedbackController::class, 'eligibleVisits'])->middleware('role:patient');
-        Route::get('/', [FeedbackController::class, 'mine'])->middleware('role:patient');
-        Route::get('/mine', [FeedbackController::class, 'mine'])->middleware('role:patient');
-        Route::get('/review', [FeedbackController::class, 'review'])->middleware('role:owner');
-        Route::post('/', [FeedbackController::class, 'store'])->middleware(['role:patient', 'throttle:m26-submit']);
     });
 
     // M17 Unified Patient Messaging: in-app human conversations between an identified Patient and the clinic. Patient, Staff and Dentist

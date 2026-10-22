@@ -30,21 +30,19 @@ const CANONICAL=[
   [16,'Social Media & External Inquiry Management','Millar'],[17,'Unified Patient Messaging Management','Millar'],[18,'Transactional Notification & Reminder Management','Millar'],
   [19,'Digital Prescription Management','Ecal'],[20,'Clinical Follow-Up & Recall Management','Ecal'],
   [21,'Operational Analytics & Executive Intelligence','Delos Santos'],[22,'Audit Trail & Activity Monitoring Management','Delos Santos'],
-  [23,'Workflow Automation & Exception Management','Delos Santos'],[24,'Referral & Loyalty Management','Millar'],
-  [25,'Marketing Campaign & Patient Reactivation Management','Millar'],
-  [26,'Patient Feedback & Service Quality Management','Group 3 — Shared Enhancement'],
+  [23,'Archives & Historical Records Management','Delos Santos'],[24,'Referral & Loyalty Management','Millar'],
+  [25,'Marketing Campaign & Patient Reactivation Management','Millar'],
 ]
 
-test('MODULES matches the canonical 26-module structure, owners and PE designation',()=>{
+test('MODULES matches the canonical 25-module structure, owners and PE designation',()=>{
+  assert.equal(data.MODULES.length,25,'canonical module registry has exactly 25 modules')
   assert.deepEqual(data.MODULES.map(m=>[m.no,m.name,m.owner.split(',')[0]]),CANONICAL)
   assert.deepEqual(data.MODULES.filter(m=>m.pe).map(m=>m.no),[24,25])
-  const m26=data.MODULES.find(m=>m.no===26)
-  assert.equal(DOMAIN_MODULE.feedback,26,'M26 uses the stable domain key feedback')
-  assert.equal(m26.implemented,false,'M26 is defined but not implemented')
-  assert.equal(m26.coverage,'partial','M26 is built but narrower than its canonical scope, like M12/M13/M19')
-  assert.deepEqual(m26.roles,['patient'],'M26 roles = the authorized foundation roles (Patient only; no reviewer authority exists)')
-  assert.ok(!m26.pe&&!m26.enhancement,'M26 is a shared enhancement, not a PE')
-  assert.equal(Object.keys(DOMAIN_MODULE).length,26)
+  const m23=data.MODULES.find(m=>m.no===23)
+  assert.equal(DOMAIN_MODULE.archives,23,'M23 uses the stable domain key archives')
+  assert.equal(m23.implemented,true)
+  assert.deepEqual(m23.roles,['patient','staff','dentist','owner'])
+  assert.equal(Object.keys(DOMAIN_MODULE).length,25)
   // Newly defined modules that are not built yet must not claim full representation.
   for(const no of [7,13,14,15,22])assert.ok(data.MODULES.find(m=>m.no===no).coverage,`M${no} states its real coverage`)
 })

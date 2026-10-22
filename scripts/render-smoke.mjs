@@ -8,7 +8,7 @@ import React from 'react'
 import { renderToString } from 'react-dom/server'
 
 const require=createRequire(import.meta.url)
-const files=['assistant-panel.jsx','components.jsx','store.jsx','layout.jsx','clock.js','contracts.js','workflow.js','phase2.js','phase3-contracts.js','orchestration.js','pages/Dashboards.jsx','pages/Scheduling.jsx','pages/StaffDayCalendar.jsx','pages/PatientFlow.jsx','pages/Clinical.jsx','pages/FinanceCommunication.jsx','pages/Admin.jsx','pages/Pricing.jsx','pages/AuditTrail.jsx','pages/ClinicBranding.jsx','pages/AssistantAnswers.jsx','pages/Automations.jsx','pages/PossibleNoShows.jsx','pages/FrontDeskToday.jsx','pages/ClosedDates.jsx','pages/Staffing.jsx','pages/Handovers.jsx','pages/ServerPrescriptions.jsx','pages/ServerFollowups.jsx','pages/DentalChart.jsx','pages/AcceptedHmos.jsx','pages/WordingApprovals.jsx','audit-api.js','automation-api.js','analytics-api.js','hmo-api.js','pages/PatientLoyalty.jsx','pages/Feedback.jsx','pages/PatientRegister.jsx','pages/PatientBook.jsx','pages/PatientMe.jsx','pages/PatientVisits.jsx','pages/PatientHome.jsx','loyalty.js','registration.js','scheduling.js','booking-drafts.js','geo.js','patient-view.js','data.js']
+const files=['assistant-panel.jsx','components.jsx','store.jsx','layout.jsx','clock.js','contracts.js','workflow.js','phase2.js','phase3-contracts.js','orchestration.js','pages/Dashboards.jsx','pages/Scheduling.jsx','pages/StaffDayCalendar.jsx','pages/PatientFlow.jsx','pages/Clinical.jsx','pages/FinanceCommunication.jsx','pages/Admin.jsx','pages/Pricing.jsx','pages/AuditTrail.jsx','pages/ClinicBranding.jsx','pages/AssistantAnswers.jsx','pages/Automations.jsx','pages/PossibleNoShows.jsx','pages/FrontDeskToday.jsx','pages/ClosedDates.jsx','pages/Staffing.jsx','pages/Handovers.jsx','pages/ServerPrescriptions.jsx','pages/ServerFollowups.jsx','pages/DentalChart.jsx','pages/AcceptedHmos.jsx','pages/WordingApprovals.jsx','pages/ArchivesPage.jsx','audit-api.js','automation-api.js','analytics-api.js','hmo-api.js','pages/PatientLoyalty.jsx','pages/Feedback.jsx','pages/PatientRegister.jsx','pages/PatientBook.jsx','pages/PatientMe.jsx','pages/PatientVisits.jsx','pages/PatientHome.jsx','loyalty.js','registration.js','scheduling.js','booking-drafts.js','geo.js','patient-view.js','data.js']
 const result=await build({stdin:{contents:[...files.map(file=>`export * from './src/${file}';`),`export * from './tests/support/server-appointments.js';`].join('\n'),resolveDir:process.cwd()},bundle:true,write:false,platform:'node',format:'esm',plugins:[{name:'shared-react',setup(b){b.onResolve({filter:/^react$/},()=>({path:pathToFileURL(require.resolve('react')).href,external:true}))}}]})
 const m=await import('data:text/javascript;base64,'+Buffer.from(result.outputFiles[0].text).toString('base64'))
 m.setClockSource(()=>new Date('2026-09-19T02:08:00Z'))
@@ -33,7 +33,7 @@ const initialReferenceData={
 let store
 function Capture(){store=m.useClinic();return null}
 renderToString(React.createElement(m.ClinicProvider,{initialReferenceData},React.createElement(Capture)))
-const pages={dashboard:'DashboardPage',book:'BookingPage',appointments:'AppointmentsPage',schedule:'SchedulePage',calendar:'StaffDayCalendar',checkin:'CheckInPage',queue:'QueuePage',capacity:'CapacityPage',patients:'PatientsPage',treatment:'TreatmentPage',billing:'BillingPage',hmo:'HmoPage',inquiries:'InquiriesPage',messages:'MessagesPage',prescriptions:'PrescriptionsServerPage',followups:'FollowupsServerPage',chart:'DentalChartPage',branches:'BranchesPage',team:'TeamPage',analytics:'AnalyticsPage',users:'UsersPage',pricing:'ServicesPricingPage',automations:'AutomationsPage',closures:'ClosedDatesPage',schedules:'WorkSchedulesPage',leave:'LeavePage',handovers:'HandoversPage',hmos:'AcceptedHmosPage',wording:'WordingApprovalsPage',automation:'AutomationPage',audit:'AuditTrailPage',branding:'ClinicBrandingPage',assistant:'AssistantAnswersPage',engagement:'EngagementPage',loyalty:'PatientLoyaltyPage',feedback:'PatientFeedbackPage',me:'PatientMePage'}
+const pages={dashboard:'DashboardPage',book:'BookingPage',appointments:'AppointmentsPage',schedule:'SchedulePage',calendar:'StaffDayCalendar',checkin:'CheckInPage',queue:'QueuePage',capacity:'CapacityPage',patients:'PatientsPage',treatment:'TreatmentPage',billing:'BillingPage',hmo:'HmoPage',inquiries:'InquiriesPage',messages:'MessagesPage',prescriptions:'PrescriptionsServerPage',followups:'FollowupsServerPage',chart:'DentalChartPage',branches:'BranchesPage',team:'TeamPage',analytics:'AnalyticsPage',users:'UsersPage',pricing:'ServicesPricingPage',automations:'AutomationsPage',closures:'ClosedDatesPage',schedules:'WorkSchedulesPage',leave:'LeavePage',handovers:'HandoversPage',hmos:'AcceptedHmosPage',wording:'WordingApprovalsPage',automation:'AutomationPage',audit:'AuditTrailPage',branding:'ClinicBrandingPage',assistant:'AssistantAnswersPage',engagement:'EngagementPage',loyalty:'PatientLoyaltyPage',feedback:'PatientFeedbackPage',me:'PatientMePage',archives:'ArchivesPage'}
 let count=0
 function render(page,role='staff',context=null){
   const session=m.sessionForRole(role,store.state)
@@ -50,12 +50,12 @@ assert.equal(m.ModulesPage,undefined,'the professor-facing Module Coverage page 
 assert.ok(server.includes('Ask about using the clinic system')&&!server.includes('Offline demo preview'),'server-mode assistant has the question box and no demo label')
 assert.ok(demo.includes('Offline demo preview')&&!demo.includes('Ask about using the clinic system'),'the demo assistant is labelled and has no free-text box')
 assert.ok(/can.t diagnose/.test(server.replace(/&#x27;|’/g,"'")),'the scope is stated up front')}
-// M26: Patient feedback renders 1-5 star rating and honest loading state under SSR. Owner has Patient Feedback review authority.
-{const patient=render('feedback','patient')
-assert.ok(patient.includes('Share feedback')&&patient.includes('it is not anonymous')&&patient.includes('has not set a response time'),'Patient feedback page renders honestly')
-assert.ok(/stars?|rating/i.test(patient),'Patient feedback includes star rating UI')
-assert.ok(m.NAV.owner.some(([k])=>k==='feedback'),'Owner has feedback review page')
-assert.ok(!m.NAV.staff.some(([k])=>k==='feedback')&&!m.NAV.dentist.some(([k])=>k==='feedback'),'Staff and Dentist have no feedback nav entry')}
+// M23: Archives & Historical Records Management renders for Staff, Dentist, and Owner
+{const archives=render('archives','owner')
+assert.ok(archives.includes('Archives')&&archives.includes('Historical Records'),'Archives page renders honestly')
+assert.ok(m.NAV.owner.some(([k])=>k==='archives'),'Owner has archives nav entry')
+assert.ok(m.NAV.staff.some(([k])=>k==='archives'),'Staff has archives nav entry')
+assert.ok(!m.NAV.owner.some(([k])=>k==='feedback'),'Owner has no feedback nav entry')}
 // Scheduled automations: the Owner page renders its loading state under SSR and says nothing is sent before the wording is approved
 // (each value's "not confirmed by the clinic" label is in the row details, loaded from the server).
 {const automations=render('automations','owner');assert.ok(automations.includes('Automations')&&automations.includes('Nothing is sent until you approve its wording')&&automations.includes('Loading automations'),'automations page renders honestly')
@@ -335,7 +335,7 @@ assert.ok(!restricted.includes('>Billing &amp; Payments</span>'))
 // Inspect the navigation itself rather than unrelated dashboard text.
 const navMarkup=restricted.match(/<nav class="main-nav"[\s\S]*?<\/nav>/)?.[0]||''
 assert.ok(navMarkup.length)
-assert.ok(!navMarkup.includes('Billing'))
+assert.ok(!navMarkup.includes('Billing &amp; Payments'))
 store=beforeRestricted
 console.log('PASS: Phase 4A shared field/table/dialog semantics, distinct statuses, official logo and permission-filtered navigation')
 

@@ -3,7 +3,7 @@ import { clinicDate } from './clock.js'
 // Compatibility export for deferred modules; workflow code reads the live clinic clock.
 export const TODAY = clinicDate()
 
-// Canonical module structure (26 modules approved October 4, 2026; M26 is registered as metadata only and is not implemented). `coverage` states what the frontend actually represents today:
+// Canonical module structure (25 modules; M23 is Archives & Historical Records Management). `coverage` states what the frontend actually represents today:
 // 'represented' (default), 'partial', 'preview' or 'planned'. M24/M25 are Proposed Enhancements (PE).
 export const MODULES = [
   { no: 1, name: 'User & Access Management', owner: 'Licanda, Celin', area: 'Administration', roles: ['owner'] },
@@ -28,10 +28,9 @@ export const MODULES = [
   { no: 20, name: 'Clinical Follow-Up & Recall Management', owner: 'Ecal, Richmon', area: 'Clinical', roles: ['patient','staff','dentist'] },
   { no: 21, name: 'Operational Analytics & Executive Intelligence', owner: 'Delos Santos, Joevan', area: 'Analytics', roles: ['owner'], coverage: 'implemented', coverageNote: 'Backend-authoritative executive summary, multi-branch comparative KPI analytics, date-bounded aggregations and safe CSV export', implemented: true },
   { no: 22, name: 'Audit Trail & Activity Monitoring Management', owner: 'Delos Santos, Joevan', area: 'Governance', roles: ['owner'], coverage: 'implemented', coverageNote: 'Backend-authoritative immutable audit trail with forensic inspection and CSV export (Planned: only a limited in-browser activity history exists in legacy client)', implemented: true },
-  { no: 23, name: 'Workflow Automation & Exception Management', owner: 'Delos Santos, Joevan', area: 'Automation', roles: ['owner'], coverage: 'partial', coverageNote: 'Partly represented: backend workflow rules, immutable system events and recorded rule evaluations with Owner monitoring. Rules are evaluated and recorded only: no business action is executed, no domain event feeds them yet, and threshold values are unconfirmed demonstration values', implemented: false },
+  { no: 23, name: 'Archives & Historical Records Management', owner: 'Delos Santos, Joevan', area: 'Archives', roles: ['patient','staff','dentist','owner'], implemented: true, coverage: 'implemented', coverageNote: 'Centralized historical completed visits, past prescriptions, archived receipts, and medical retention compliance.' },
   { no: 24, name: 'Referral & Loyalty Management', owner: 'Millar, John Yzhekiel', area: 'Engagement', roles: ['patient','staff','owner'], enhancement: true, pe: true, implemented: true },
-  { no: 25, name: 'Marketing Campaign & Patient Reactivation Management', owner: 'Millar, John Yzhekiel', area: 'Engagement', roles: ['staff','owner'], enhancement: true, pe: true, implemented: false, preview: true },
-  { no: 26, name: 'Patient Feedback & Service Quality Management', owner: 'Group 3 — Shared Enhancement', area: 'Quality', roles: ['patient'], coverage: 'partial', coverageNote: 'Partly represented: a Patient-only technical foundation (free-text feedback about an own completed visit, kept immutable) exists. No reviewer access, rating, category, review status, reply, publication or analytics is implemented or approved', implemented: false },
+  { no: 25, name: 'Marketing Campaign & Patient Reactivation Management', owner: 'Millar, John Yzhekiel', area: 'Engagement', roles: ['staff','owner'], enhancement: true, pe: true, implemented: false, preview: true },
 ]
 
 export const ROLE_INFO = {
@@ -44,19 +43,19 @@ export const ROLE_INFO = {
 export const NAV = {
   patient: [
     ['dashboard','Home'], ['book','Book Appointment'], ['appointments','Visits'], ['queue','Live Queue'],
-    ['hmo','HMO Coverage'], ['messages','Messages'], ['billing','Receipts & Payments'], ['prescriptions','Prescriptions'], ['followups','Follow-Up Care'], ['loyalty','Referral & Loyalty'], ['feedback','Share Feedback'], ['me','Me']
+    ['hmo','HMO Coverage'], ['messages','Messages'], ['billing','Receipts & Payments'], ['prescriptions','Prescriptions'], ['followups','Follow-Up Care'], ['loyalty','Referral & Loyalty'], ['archives','Archives'], ['me','Me']
   ],
   staff: [
     ['dashboard','Operations'], ['appointments','Appointments'], ['calendar','Appointment Calendar'], ['checkin','Check-In'], ['queue','Live Queue'], ['capacity','Capacity'], ['closures','Closed Dates'],
-    ['patients','Patient Records'], ['handovers','Handovers'], ['prescriptions','Prescriptions'], ['schedules','Work Schedules'], ['leave','Leave'], ['billing','Billing & Payments'], ['hmo','HMO Management'], ['inquiries','Social Inquiries'], ['messages','Messages'], ['followups','Follow-Up Tasks'], ['engagement','Engagement']
+    ['patients','Patient Records'], ['handovers','Handovers'], ['prescriptions','Prescriptions'], ['schedules','Work Schedules'], ['leave','Leave'], ['billing','Billing & Payments'], ['hmo','HMO Management'], ['inquiries','Social Inquiries'], ['messages','Messages'], ['followups','Follow-Up Tasks'], ['engagement','Engagement'], ['archives','Archives & Records']
   ],
   dentist: [
     ['dashboard','Clinical Home'], ['schedule','My Schedule'], ['queue','My Queue'], ['patients','Patient Records'], ['chart','Dental Chart'], ['handovers','Handovers'], ['schedules','My Work Hours'], ['leave','My Leave'], ['treatment','Treatment'],
-    ['prescriptions','Prescriptions'], ['followups','Follow-Up Care'], ['messages','Messages'], ['wording','Wording to Approve']
+    ['prescriptions','Prescriptions'], ['followups','Follow-Up Care'], ['messages','Messages'], ['wording','Wording to Approve'], ['archives','Archives & Records']
   ],
   owner: [
     ['dashboard','Executive Dashboard'], ['analytics','Analytics & Reports'], ['branches','Branches'], ['team','People & Team'], ['calendar','Appointment Calendar'], ['capacity','Capacity & Workload'], ['schedules','Work Schedules'], ['leave','Leave Requests'], ['handovers','Handovers'], ['prescriptions','Prescriptions'],
-    ['hmo','HMO Management'], ['users','User Management'], ['pricing','Services & Pricing'], ['automations','Automations'], ['closures','Closed Dates'], ['hmos','Accepted HMOs'], ['automation','Automation Monitor'], ['audit','Audit Trail'], ['branding','Clinic Branding'], ['assistant','Assistant Answers'], ['engagement','Engagement'], ['feedback','Patient Feedback']
+    ['hmo','HMO Management'], ['users','User Management'], ['pricing','Services & Pricing'], ['automations','Automations'], ['closures','Closed Dates'], ['hmos','Accepted HMOs'], ['audit','Audit Trail'], ['branding','Clinic Branding'], ['assistant','Assistant Answers'], ['engagement','Engagement'], ['archives','Archives & Records']
   ],
 }
 
@@ -227,7 +226,7 @@ export const INITIAL_WORKFLOW_LOG = [
   { id:'log1', at:'2026-09-19 09:46', domain:'checkin→queue', event:'Patient checked in', result:'Queue entry q1 created', status:'Success' },
   { id:'log2', at:'2026-09-19 08:10', domain:'hmo', event:'HMO threshold reached', result:'Follow-up task generated for h1', status:'Success' },
   { id:'log3', at:'2026-09-18 16:41', domain:'inquiry', event:'Inquiry responded', result:'Response history updated', status:'Success' },
-  { id:'log4', at:'2026-09-18 14:12', domain:'automation', event:'Notification trigger', result:'SMS provider unavailable; responsible staff alerted for retry', status:'Failed' },
+  { id:'log4', at:'2026-09-18 14:12', domain:'notification', event:'Notification trigger', result:'SMS provider unavailable; responsible staff alerted for retry', status:'Failed' },
 ]
 
 export const INITIAL_CAMPAIGNS = [

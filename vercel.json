@@ -2,15 +2,15 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://dental-clinic-backend.onrender.com/api/:path*"
+      "destination": "https://multibranch-dental-clinic.onrender.com/api/:path*"
     },
     {
       "source": "/sanctum/:path*",
-      "destination": "https://dental-clinic-backend.onrender.com/sanctum/:path*"
+      "destination": "https://multibranch-dental-clinic.onrender.com/sanctum/:path*"
     },
     {
       "source": "/broadcasting/:path*",
-      "destination": "https://dental-clinic-backend.onrender.com/broadcasting/:path*"
+      "destination": "https://multibranch-dental-clinic.onrender.com/broadcasting/:path*"
     },
     {
       "source": "/(.*)",

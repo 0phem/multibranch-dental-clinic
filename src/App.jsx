@@ -41,11 +41,11 @@ const BillingPage=lazy(()=>import('./pages/FinanceCommunication.jsx').then(m=>({
 const HmoPage=lazy(()=>import('./pages/FinanceCommunication.jsx').then(m=>({default:m.HmoPage})))
 const InquiriesPage=lazy(()=>import('./pages/FinanceCommunication.jsx').then(m=>({default:m.InquiriesPage})))
 const MessagesPage=lazy(()=>import('./pages/FinanceCommunication.jsx').then(m=>({default:m.MessagesPage})))
-const PatientFeedbackPage=lazy(()=>import('./pages/Feedback.jsx').then(m=>({default:m.PatientFeedbackPage})))
+const ArchivesPage=lazy(()=>import('./pages/ArchivesPage.jsx').then(m=>({default:m.ArchivesPage})))
 const PatientLoyaltyPage=lazy(()=>import('./pages/PatientLoyalty.jsx').then(m=>({default:m.PatientLoyaltyPage})))
 const PatientMePage=lazy(()=>import('./pages/PatientMe.jsx').then(m=>({default:m.PatientMePage})))
 const AnalyticsPage=lazy(()=>import('./pages/Admin.jsx').then(m=>({default:m.AnalyticsPage})))
-const AutomationPage=lazy(()=>import('./pages/Admin.jsx').then(m=>({default:m.AutomationPage})))
+// Automation monitor retired
 const ClosedDatesPage=lazy(()=>import('./pages/ClosedDates.jsx').then(m=>({default:m.ClosedDatesPage})))
 const WorkSchedulesPage=lazy(()=>import('./pages/Staffing.jsx').then(m=>({default:m.WorkSchedulesPage})))
 const LeavePage=lazy(()=>import('./pages/Staffing.jsx').then(m=>({default:m.LeavePage})))
@@ -351,13 +351,13 @@ function AppBody() {
     case 'handovers': content=<HandoversPage store={store} role={role}/>; break
     case 'hmos': content=<AcceptedHmosPage store={store}/>; break
     case 'wording': content=<WordingApprovalsPage store={store}/>; break
-    case 'automation': content=<AutomationPage store={store}/>; break
+    case 'archives': content=<ArchivesPage store={store} activeBranch={branch}/>; break
     case 'branding': content=<ClinicBrandingPage/>; break
     case 'assistant': content=<AssistantAnswersPage store={store}/>; break
     case 'audit': content=<AuditTrailPage store={store}/>; break
     case 'engagement': content=<EngagementPage role={role} store={store}/>; break
     case 'loyalty': content=<PatientLoyaltyPage store={store}/>; break
-    case 'feedback': content=<PatientFeedbackPage role={role} store={store}/>; break
+    // feedback retired
     case 'me': content=<PatientMePage store={store} setPage={setPage}/>; break
     default: content=<Notice>This screen is no longer available with your current permissions. <button onClick={()=>setPage('dashboard')}>Return home</button></Notice>;
   }

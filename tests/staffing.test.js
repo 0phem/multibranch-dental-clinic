@@ -32,12 +32,12 @@ test('handover content is shown only when the server sends it; the Owner sees me
   assert.match(read('src/pages/Clinical.jsx'), /<HandoverPanel patientId=\{patient\.id\}/)
 })
 
-test('portal: a reload keeps the page (#p/<page>) and Family is in the navigation', () => {
+test('portal: a reload keeps the page (#p/<page>) and Archives is in the navigation', () => {
   const portal = read('src/patient/Portal.jsx')
   assert.match(portal, /window\.history\.replaceState\(null, '', `#p\/\$\{page\}`\)/)
   assert.match(portal, /useState\(\(\) => portalPageFromHash\(\) \|\|/)
-  assert.match(portal, /\['family', 'user', 'Family'\]/)
-  assert.match(portal, /case 'family': content = <FamilyPage\/>/)
+  assert.match(portal, /\['archives', 'archive', 'Archives'\]/)
+  assert.match(portal, /case 'archives':/)
   assert.doesNotMatch(read('src/patient/pages/Account.jsx'), /<Family\/>/)
 })
 

@@ -17,7 +17,7 @@ const useLayoutEffectSafe=typeof window==='undefined'?React.useEffect:React.useL
 const NAV_ICONS={
   dashboard:'home',book:'plusCalendar',appointments:'calendar',calendar:'calendar',schedule:'calendar',checkin:'checkin',queue:'queue',capacity:'activity',
   patients:'users',treatment:'tooth',billing:'receipt',hmo:'shield',inquiries:'message',messages:'message',prescriptions:'pill',followups:'followup',
-  branches:'building',team:'users',analytics:'chart',users:'shield',pricing:'receipt',automations:'clock',automation:'settings',branding:'sparkles',assistant:'robot',closures:'calendar',hmos:'shield',wording:'mail',engagement:'sparkles',loyalty:'gift',me:'user',feedback:'message'
+  branches:'building',team:'users',analytics:'chart',users:'shield',pricing:'receipt',automations:'clock',archives:'archive',branding:'sparkles',assistant:'robot',closures:'calendar',hmos:'shield',wording:'mail',engagement:'sparkles',loyalty:'gift',me:'user'
 }
 
 const GROUPS={
@@ -25,10 +25,10 @@ const GROUPS={
   // (reached from Home's active-visit card, not a permanent nav item). HMO/Prescriptions/Follow-ups/Referral &
   // Loyalty remain fully reachable pages (see `pages` in safeguards.js and Me's secondary links) — they are just
   // not primary navigation destinations.
-  patient:[['Overview',['dashboard']],['Booking',['book','appointments']],['Communication',['messages']],['Account',['billing','feedback','me']]],
-  staff:[['Today',['dashboard','appointments','calendar','checkin','queue','capacity','closures']],['Patients & finance',['patients','handovers','prescriptions','billing','hmo']],['Team',['schedules','leave']],['Communication',['inquiries','messages','followups','engagement']]],
-  dentist:[['Today',['dashboard','schedule','queue']],['Clinical',['patients','chart','handovers','treatment','prescriptions','followups']],['Team',['schedules','leave']],['Communication',['messages','wording']]],
-  owner:[['Overview',['dashboard','analytics']],['Operations',['branches','team','calendar','capacity','hmo']],['Team',['schedules','leave','handovers']],['Clinical records',['prescriptions']],['Administration',['users','pricing','automations','closures','hmos','automation','audit','branding','assistant','engagement','feedback']]],
+  patient:[['Overview',['dashboard']],['Booking',['book','appointments']],['Communication',['messages']],['Account',['billing','archives','me']]],
+  staff:[['Patient Care',['checkin','queue','capacity','prescriptions','followups']],['Clinic Operations',['dashboard','appointments','calendar','patients','handovers','schedules','leave','closures']],['Billing & Finance',['billing','hmo']],['Marketing & Analytics',['inquiries','messages','engagement']],['Archives',['archives']]],
+  dentist:[['Patient Care',['dashboard','schedule','queue','chart','treatment','prescriptions','followups']],['Clinic Operations',['patients','handovers','schedules','leave']],['Marketing & Analytics',['messages','wording']],['Archives',['archives']]],
+  owner:[['Patient Care',['capacity','prescriptions']],['Clinic Operations',['dashboard','branches','team','calendar','schedules','leave','handovers']],['Billing & Finance',['pricing','hmo','hmos']],['Marketing & Analytics',['analytics','engagement']],['Administration',['users','automations','closures','audit','branding','assistant']],['Archives',['archives']]],
 }
 
 // In a clinic-server session the capacity page is the factual live-queue view (src/pages/QueueCounts.jsx); the
