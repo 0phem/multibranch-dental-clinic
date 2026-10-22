@@ -27,9 +27,10 @@ class SubmitFeedbackRequest extends FormRequest
     {
         return [
             'visit_id' => ['required', 'string', 'size:26'],
+            'rating' => ['nullable', 'integer', 'min:1', 'max:5'],
             'body' => ['required', 'string', 'min:1', 'max:'.self::MAX, 'not_regex:/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/'],
             ...array_fill_keys(['id', 'public_id', 'patient_id', 'patient', 'user_id', 'author', 'author_id', 'reviewer', 'reviewed_by', 'review_status', 'status', 'branch_id', 'branch', 'dentist_id', 'dentist',
-                'rating', 'score', 'stars', 'nps', 'category', 'tags', 'anonymous', 'is_anonymous', 'publish', 'public', 'testimonial', 'testimonial_consent', 'marketing_consent', 'consent',
+                'stars', 'score', 'nps', 'category', 'tags', 'anonymous', 'is_anonymous', 'publish', 'public', 'testimonial', 'testimonial_consent', 'marketing_consent', 'consent',
                 'resolved_at', 'created_at', 'updated_at', 'attachment', 'attachments', 'html', 'audit'], ['prohibited']),
         ];
     }

@@ -9,7 +9,7 @@ import { normalizeFailure } from './appointments-api.js'
 export const MAX_FEEDBACK = 2000
 
 export const mapVisit = row => ({ id: row.id, date: row.date, services: Array.isArray(row.services) ? row.services : [] })
-export const mapMine = row => ({ id: row.id, visit: mapVisit(row.visit || {}), body: row.body ?? '', submittedAt: row.submitted_at })
+export const mapMine = row => ({ id: row.id, rating: row.rating ?? null, visit: mapVisit(row.visit || {}), body: row.body ?? '', submittedAt: row.submitted_at })
 
 async function page(call, map, cursor, size) {
   const result = await call({ per_page: size, ...(cursor ? { cursor } : {}) })
@@ -19,13 +19,18 @@ async function page(call, map, cursor, size) {
 
 export const loadEligibleVisits = cursor => page(api.eligibleFeedbackVisits, mapVisit, cursor, 25)
 export const loadMyFeedback = cursor => page(api.myFeedback, mapMine, cursor, 25)
+export const loadFeedbackReview = params => api.reviewFeedback(params)
 
 /** One Idempotency-Key per send attempt: reuse it when retrying the same text so a lost response never stores it twice. */
-export async function submit(visitId, body, key) {
+export async function submit(visitId, body, key, rating = null) {
   const text = String(body ?? '').trim()
   if (!visitId) return { ok: false, kind: 'validation', message: 'Choose the visit your feedback is about.' }
   if (!text) return { ok: false, kind: 'validation', message: 'Write your feedback first.' }
   if (text.length > MAX_FEEDBACK) return { ok: false, kind: 'validation', message: `Keep your feedback under ${MAX_FEEDBACK} characters.` }
-  const result = await api.submitFeedback({ visit_id: visitId, body: text }, key)
+  const payload = { visit_id: visitId, body: text }
+  if (rating !== null && rating !== undefined && rating !== '') {
+    payload.rating = Number(rating)
+  }
+  const result = await api.submitFeedback(payload, key)
   return result.ok ? { ok: true, row: mapMine(result.data) } : normalizeFailure(result)
 }

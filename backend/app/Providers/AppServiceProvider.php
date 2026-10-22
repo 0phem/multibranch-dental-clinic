@@ -17,11 +17,14 @@ class AppServiceProvider extends ServiceProvider
         $this->app->scoped(\App\Services\Closures\ClosureCalendar::class); // F5 closed dates, read once per request or job
     }
 
-    /**
-     * Bootstrap any application services.
-     */
     public function boot(): void
     {
+        if (file_exists(storage_path('cacert.pem'))) {
+            \Illuminate\Support\Facades\Http::globalOptions([
+                'verify' => storage_path('cacert.pem'),
+            ]);
+        }
+
         // Counter registration (public, no sign-in): per IP and per device (a random id the page keeps; IP alone is shared by a
         // clinic's guest Wi-Fi). Plus a daily cap per device.
         \Illuminate\Support\Facades\RateLimiter::for('intake', function ($request) {

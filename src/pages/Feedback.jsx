@@ -42,11 +42,13 @@ function MoreControls({ state, noun }) {
   </div>
 }
 
-export function PatientFeedbackPage({ store }) {
+export function PatientFeedbackPage({ role, store }) {
+  if (role === 'owner') return <OwnerFeedbackReviewPage store={store}/>
   const { toast } = store
   const visits = usePaged(loadEligibleVisits)
   const mine = usePaged(loadMyFeedback)
   const [visitId, setVisitId] = useState('')
+  const [rating, setRating] = useState('5')
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
   const [failure, setFailure] = useState(null)
@@ -57,7 +59,7 @@ export function PatientFeedbackPage({ store }) {
     event?.preventDefault()
     if (sending) return
     setSending(true); setFailure(null)
-    const result = await submit(visitId, text, key.current)
+    const result = await submit(visitId, text, key.current, rating ? Number(rating) : null)
     setSending(false)
     if (!result.ok) return setFailure(result)         // the text and the key are kept: "Try again" cannot store it twice
     mine.prepend(result.row); setText(''); key.current = commandKey(); toast('Your feedback was saved.', 'success')
@@ -73,6 +75,7 @@ export function PatientFeedbackPage({ store }) {
       {visits.rows && visits.rows.length > 0 && <form onSubmit={send} className="form-grid one-col">
         <Field label="Which visit?" required><select value={visitId} onChange={e => edit(setVisitId, e.target.value)}><option value="">Choose a completed visit</option>{visits.rows.map(v => <option key={v.id} value={v.id}>{visitLabel(v)}</option>)}</select></Field>
         {visits.cursor && <Button type="button" size="sm" variant="ghost" onClick={visits.more}>Show older visits</Button>}
+        <Field label="Rating (1–5 Stars)"><select value={rating} onChange={e => edit(setRating, e.target.value)}><option value="5">⭐⭐⭐⭐⭐ 5 Stars - Excellent</option><option value="4">⭐⭐⭐⭐ 4 Stars - Very Good</option><option value="3">⭐⭐⭐ 3 Stars - Average</option><option value="2">⭐⭐ 2 Stars - Needs Improvement</option><option value="1">⭐ 1 Star - Poor</option><option value="">No star rating (Text only)</option></select></Field>
         <Field label="Your feedback" required><textarea value={text} maxLength={MAX_FEEDBACK} onChange={e => edit(setText, e.target.value)}/></Field>
         <Button type="submit" disabled={sending || !visitId || !text.trim()}>{sending ? 'Sending…' : 'Send feedback'}</Button>
         {failure && <Notice tone="warning" title={failure.kind === 'rate_limited' ? 'Please wait a moment' : 'Your feedback was not sent'}><span role="alert">{failure.message}{failure.kind === 'rate_limited' && failure.retry_after ? ` Try again in about ${failure.retry_after} seconds.` : ''}</span>{failure.kind !== 'validation' && <> <Button size="sm" variant="soft" disabled={sending} onClick={send}>Try again</Button></>}</Notice>}
@@ -83,9 +86,133 @@ export function PatientFeedbackPage({ store }) {
       {!mine.rows && !mine.error && <Notice>Loading…</Notice>}
       {mine.rows && !mine.rows.length && <p className="muted">You have not sent any feedback yet.</p>}
       {mine.rows && mine.rows.length > 0 && <>
-        <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>{mine.rows.map(f => <li key={f.id} style={{ marginBottom: 12 }}><b>{visitLabel(f.visit)}</b><small className="block-muted">Sent {when(f.submittedAt)}</small><p style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{f.body}</p></li>)}</ul>
+        <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>{mine.rows.map(f => <li key={f.id} style={{ marginBottom: 12 }}><b>{visitLabel(f.visit)}</b>{f.rating ? ` • ${'★'.repeat(f.rating)}${'☆'.repeat(5 - f.rating)} (${f.rating}/5)` : ''}<small className="block-muted">Sent {when(f.submittedAt)}</small><p style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{f.body}</p></li>)}</ul>
         <MoreControls state={mine} noun="entries"/>
       </>}
     </Card>
   </div>
 }
+
+export function OwnerFeedbackReviewPage({ store }) {
+  const { state } = store
+  const [rows, setRows] = useState(null)
+  const [cursor, setCursor] = useState(null)
+  const [branchFilter, setBranchFilter] = useState('')
+  const [dentistFilter, setDentistFilter] = useState('')
+  const [ratingFilter, setRatingFilter] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  const fetchFeedback = async (isMore = false) => {
+    setLoading(true)
+    setError('')
+    const params = { per_page: 25 }
+    if (branchFilter) params.branch_id = branchFilter
+    if (dentistFilter) params.dentist_id = dentistFilter
+    if (ratingFilter) params.rating = Number(ratingFilter)
+    if (isMore && cursor) params.cursor = cursor
+
+    const res = await (await import('../feedback-api.js')).loadFeedbackReview(params)
+    setLoading(false)
+    if (res.ok) {
+      const data = Array.isArray(res.data) ? res.data : []
+      setRows(prev => isMore ? [...(prev || []), ...data] : data)
+      setCursor(res.meta?.next_cursor || null)
+    } else {
+      setError(res.message || 'Could not load feedback reviews.')
+    }
+  }
+
+  useEffect(() => {
+    fetchFeedback(false)
+  }, [branchFilter, dentistFilter, ratingFilter])
+
+  const totalCount = rows?.length || 0
+  const ratedRows = (rows || []).filter(r => r.rating)
+  const avgRating = ratedRows.length > 0 ? (ratedRows.reduce((acc, r) => acc + r.rating, 0) / ratedRows.length).toFixed(1) : 'N/A'
+
+  return <div className="admin-page">
+    <PageHeader kicker="Governance & Quality" title="Patient Feedback Review" text="Review patient satisfaction ratings and comments across all branches and dentists. Low ratings (1–2 stars) automatically create front-desk follow-up tasks."/>
+    
+    <div style={{display:'flex',gap:'12px',flexWrap:'wrap',marginBottom:'16px'}}>
+      <Field label="Filter by Branch">
+        <select value={branchFilter} onChange={e => setBranchFilter(e.target.value)}>
+          <option value="">All Branches</option>
+          {(state.branches || []).map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+        </select>
+      </Field>
+      <Field label="Filter by Dentist">
+        <select value={dentistFilter} onChange={e => setDentistFilter(e.target.value)}>
+          <option value="">All Dentists</option>
+          {(state.dentists || []).map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+        </select>
+      </Field>
+      <Field label="Filter by Star Rating">
+        <select value={ratingFilter} onChange={e => setRatingFilter(e.target.value)}>
+          <option value="">All Ratings</option>
+          <option value="5">⭐⭐⭐⭐⭐ 5 Stars</option>
+          <option value="4">⭐⭐⭐⭐ 4 Stars</option>
+          <option value="3">⭐⭐⭐ 3 Stars</option>
+          <option value="2">⭐⭐ 2 Stars (Auto-Task)</option>
+          <option value="1">⭐ 1 Star (Auto-Task)</option>
+        </select>
+      </Field>
+    </div>
+
+    <div style={{display:'flex',gap:'16px',marginBottom:'16px'}}>
+      <Card title="Average Rating" subtitle={ratedRows.length ? `Based on ${ratedRows.length} rated visits` : 'No ratings in selection'}>
+        <h2 style={{margin:0,fontSize:'2rem',color:'var(--color-primary,#10b981)'}}>{avgRating} {avgRating !== 'N/A' ? '★' : ''}</h2>
+      </Card>
+      <Card title="Feedback Records" subtitle="Matching active filters">
+        <h2 style={{margin:0,fontSize:'2rem'}}>{totalCount}</h2>
+      </Card>
+    </div>
+
+    <Card title="Patient Reviews">
+      {error && <Notice tone="warning" title="Could not load reviews">{error} <Button size="sm" onClick={() => fetchFeedback(false)}>Retry</Button></Notice>}
+      {!rows && !error && <Notice>Loading feedback records…</Notice>}
+      {rows && !rows.length && <Empty title="No feedback entries found" text="No patient feedback matches the current branch, dentist, or rating filter."/>}
+      {rows && rows.length > 0 && <>
+        <div style={{display:'flex',flexDirection:'column',gap:'12px'}}>
+          {rows.map(item => (
+            <div key={item.id} style={{padding:'12px',border:'1px solid var(--border-color,#e5e7eb)',borderRadius:'8px',background:'var(--bg-card,#fff)'}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:'6px'}}>
+                <div>
+                  <strong>{item.patient?.name || 'Patient'}</strong>
+                  <span className="muted" style={{marginLeft:'8px',fontSize:'0.85rem'}}>
+                    {item.visit?.branch?.name ? `${item.visit.branch.name} • ` : ''}
+                    {item.visit?.dentist?.name ? `Dr. ${item.visit.dentist.name} • ` : ''}
+                    {item.visit?.date || ''}
+                  </span>
+                </div>
+                <div>
+                  {item.rating ? (
+                    <span style={{fontWeight:'bold',color:item.rating <= 2 ? '#dc2626' : '#f59e0b',fontSize:'1.1rem'}}>
+                      {'★'.repeat(item.rating)}{'☆'.repeat(5 - item.rating)}
+                      <small style={{marginLeft:'4px',fontSize:'0.85rem',color:'inherit'}}>({item.rating}/5)</small>
+                    </span>
+                  ) : <span className="muted">No rating</span>}
+                </div>
+              </div>
+              <p style={{margin:'6px 0',whiteSpace:'pre-wrap',color:'var(--text-main,#111827)'}}>{item.body}</p>
+              {item.rating && item.rating <= 2 && (
+                <div style={{marginTop:'8px',padding:'6px 10px',background:'#fef2f2',border:'1px solid #fecaca',borderRadius:'4px',fontSize:'0.85rem',color:'#991b1b',display:'inline-flex',alignItems:'center',gap:'6px'}}>
+                  <span>⚠️</span>
+                  <span><strong>Low satisfaction alert:</strong> An automatic follow-up task has been scheduled for front desk staff.</span>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+        {cursor && (
+          <div style={{marginTop:'16px',textAlign:'center'}}>
+            <Button variant="soft" disabled={loading} onClick={() => fetchFeedback(true)}>
+              {loading ? 'Loading…' : 'Load older reviews'}
+            </Button>
+          </div>
+        )}
+      </>}
+    </Card>
+  </div>
+}
+

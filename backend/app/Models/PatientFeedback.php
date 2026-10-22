@@ -21,7 +21,7 @@ class PatientFeedback extends Model
 
     protected function casts(): array
     {
-        return ['created_at' => 'immutable_datetime'];
+        return ['rating' => 'integer', 'created_at' => 'immutable_datetime'];
     }
 
     public function uniqueIds(): array

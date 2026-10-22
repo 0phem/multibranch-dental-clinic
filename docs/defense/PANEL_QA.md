@@ -76,8 +76,10 @@ run time. Test mode only in this project.
 The patient pays at the clinic as today; the invoice stays "Payment due" and Staff record the payment. A late webhook is still
 accepted and settles once.
 
-**17. Partial payments and refunds?**
-Not online. Online payment is for the full balance; partial payments and refunds stay at the front desk (OPEN_ITEMS 11).
+**17. Partial payments, discounts, and refunds?**
+- Booking deposits paid online via PayMongo are credited directly against the patient's visit invoice (M6, M21).
+- Statutory 20% Senior Citizen and PWD discounts (RA 9994 / RA 10754) are applied on draft invoices by staff with ID type and number validation, rendered as distinct discount lines on invoices and receipts.
+- Automatic online refunds via PayMongo API are executed for appointments cancelled 24 hours or more before the slot; cancellations under 24 hours or no-shows are held for front-desk discretionary review.
 
 ## D. Technology and scalability
 
@@ -117,13 +119,14 @@ with a named contact and the pre-defense style health check (`scripts/predefense
 ## E. Hard questions
 
 **25. Which modules are not finished?**
-Not started: M3 Work Schedules, M10 Dental Charts, M12 Treatment Plans, M15 Leave Management, M24 Lab Cases, M25 Patient
-Handovers. Mock only (browser-local): M19 Prescriptions, M20 Patient Follow-Up. Partly built: M1, M2, M4, M8, M9, M13, M14,
-M16, M21. Full table: `AUTOMATION_EVIDENCE.md`.
+We align strictly with the official 26-module paper (`BPA_MODULES_UPDATED_OCT_20_2026.docx`):
+- **19 Implemented**: M2 Branch, M3 Staff (schedules & leave), M5 Clinic Policy, M6 Appointments (with PayMongo pay-at-booking), M7 Attendance, M8 Check-In, M9 Queue, M10 Patient Flow, M11 Patient Records (with Handovers), M13 Treatment (with SVG Dental Chart), M14 Prescriptions, M15 Follow-Up Tasks, M17 AI Chatbot, M18 Messaging, M19 Notifications, M21 Billing (PayMongo, deposit credit, 20% Senior/PWD discount), M23 Automations, M25 Audit Trail, M26 Feedback.
+- **7 Partial**: M1 User Management (multiple owners & 2FA planned), M4 Service Management (clinic-approved prices pending), M12 Document Management (intake & consent live; text extraction pipeline planned), M16 Social Media (inquiries built; live Meta API planned), M20 Marketing Management (campaign links built; Facebook insights planned), M22 Loyalty Management (ledger engine built; clinic policy pending), M24 Analytics Management (Owner metrics built; date range export planned).
+- **0 Mock only**: Every former browser mock has been replaced by a tested PostgreSQL server module.
+- **Roadmap**: Multi-phase treatment plans, external lab case tracking, and live Meta Messenger webhooks. Full matrix: `MODULES_FINAL.md`.
 
-**26. Why did you remove modules from the patient portal?**
-HMO, Prescriptions, Referral & Loyalty, Follow-Up Care and Live Queue were removed from the patient portal because they had no
-real server data behind them; we show only what is real. HMO is out of the new scope (`MODULE_COVERAGE.md`).
+**26. Why did you restructure the patient portal modules?**
+Earlier prototypes relied on browser-only mock tabs for prescriptions, follow-ups, and dental charts with no real clinic database. We removed the ungrounded mocks and built M13 (Dental Chart), M14 (Prescriptions), M15 (Follow-Up Tasks), and M26 (Feedback) as real, server-authoritative modules with PostgreSQL tables, API endpoints, authorization checks, and PDF generation. Features are exposed to patients only when real clinic records back them.
 
 **27. Is there a known bug?**
 Yes: some timestamps written by the framework are stored 8 hours early because the app and the database disagree on the time
@@ -179,7 +182,7 @@ Q31: the clinic says its internet is reliable.
 
 **38. Who can see what?**
 Patients see only their own records; Staff see their branches; the Dentist sees the patients they treat; the Owner oversees
-the clinic but cannot read patient conversations. Every change is in the append-only audit trail (MODULES_FINAL.md, M1, M17, M22).
+the clinic but cannot read patient conversations. Every change is in the append-only audit trail (MODULES_FINAL.md, M1, M18, M25).
 
 **39. How is the data protected?**
 Server-side role checks on every request, email codes for sign-in, passwords stored as hashes, card details only on PayMongo,

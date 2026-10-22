@@ -190,4 +190,73 @@ class BillingTest extends TestCase
         $this->getJson('/api/receipts/mine')->assertOk();
     }
 
+    public function test_staff_can_apply_and_clear_20_percent_senior_pwd_statutory_discount_on_draft(): void
+    {
+        $this->price();
+        $t = $this->completed();
+        $invoice = Invoice::where('public_id', $this->createInvoice($t)->json('data.id'))->firstOrFail();
+        $this->assertSame('251.00', (string) $invoice->gross_amount);
+        $this->assertSame('0.00', (string) $invoice->discount_amount);
+        $this->assertSame('251.00', (string) $invoice->patient_responsibility_amount);
+
+        // Apply Senior Citizen discount: 20% of 251.00 = 50.20
+        $this->actingAsUser('staffB1');
+        $res = $this->postJson("/api/invoices/{$invoice->public_id}/discount", [
+            'expected_revision' => 1,
+            'discount_type' => 'Senior Citizen',
+            'discount_id_number' => 'OSCA-12345',
+        ], ['Idempotency-Key' => $this->key()])->assertOk();
+
+        $this->assertSame('Senior Citizen', $res->json('data.discount_type'));
+        $this->assertSame('OSCA-12345', $res->json('data.discount_id_number'));
+        $this->assertSame('50.20', $res->json('data.discount_amount'));
+        $this->assertSame('200.80', $res->json('data.patient_responsibility_amount'));
+
+        $fresh = $invoice->fresh();
+        $this->assertSame('Senior Citizen', $fresh->discount_type);
+        $this->assertSame('OSCA-12345', $fresh->discount_id_number);
+        $this->assertSame('50.20', (string) $fresh->discount_amount);
+        $this->assertSame('200.80', (string) $fresh->patient_responsibility_amount);
+
+        // Clear discount:
+        $resClear = $this->postJson("/api/invoices/{$invoice->public_id}/discount", [
+            'expected_revision' => 2,
+            'discount_type' => null,
+            'discount_id_number' => null,
+        ], ['Idempotency-Key' => $this->key()])->assertOk();
+
+        $this->assertNull($resClear->json('data.discount_type'));
+        $this->assertSame('0.00', $resClear->json('data.discount_amount'));
+        $this->assertSame('251.00', $resClear->json('data.patient_responsibility_amount'));
+
+        // Apply PWD discount:
+        $resPwd = $this->postJson("/api/invoices/{$invoice->public_id}/discount", [
+            'expected_revision' => 3,
+            'discount_type' => 'PWD',
+            'discount_id_number' => 'PWD-999',
+        ], ['Idempotency-Key' => $this->key()])->assertOk();
+        $this->assertSame('PWD', $resPwd->json('data.discount_type'));
+        $this->assertSame('50.20', $resPwd->json('data.discount_amount'));
+
+        // Transition to Review and Issue, verify invoice and receipt totals
+        $this->postJson("/api/invoices/{$invoice->public_id}/review", ['expected_revision' => 4], ['Idempotency-Key' => $this->key()])->assertOk();
+        $this->postJson("/api/invoices/{$invoice->public_id}/issue", ['expected_revision' => 5], ['Idempotency-Key' => $this->key()])->assertOk();
+
+        // Cannot mutate discount on Issued invoice
+        $this->postJson("/api/invoices/{$invoice->public_id}/discount", [
+            'expected_revision' => 6,
+            'discount_type' => null,
+        ], ['Idempotency-Key' => $this->key()])->assertStatus(422);
+
+        // Payment of net balance 200.80
+        $this->postJson("/api/invoices/{$invoice->public_id}/payment", [
+            'expected_revision' => 6,
+            'method' => 'Cash',
+            'amount' => '200.80',
+        ], ['Idempotency-Key' => $this->key()])->assertOk();
+
+        $this->assertSame('Paid', $invoice->fresh()->status);
+        $receipt = Receipt::where('invoice_id', $invoice->id)->sole();
+        $this->assertSame('200.80', (string) $receipt->amount);
+    }
 }

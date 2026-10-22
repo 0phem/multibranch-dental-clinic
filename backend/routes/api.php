@@ -85,6 +85,7 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureAccountAccess::cla
         Route::post('/from-treatment/{treatment}', [BillingController::class, 'create'])->middleware('role:staff');
         Route::get('/{invoice}', [BillingController::class, 'show'])->middleware('role:patient,staff,owner');
         Route::post('/{invoice}/review', [BillingController::class, 'review'])->middleware('role:staff');
+        Route::post('/{invoice}/discount', [BillingController::class, 'discount'])->middleware('role:staff');
         Route::post('/{invoice}/issue', [BillingController::class, 'issue'])->middleware('role:staff');
         Route::post('/{invoice}/payment', [BillingController::class, 'pay'])->middleware('role:staff');
         Route::post('/{invoice}/paymongo-checkout', [PayMongoController::class, 'checkout']);
@@ -390,6 +391,7 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureAccountAccess::cla
         Route::get('/eligible-visits', [FeedbackController::class, 'eligibleVisits'])->middleware('role:patient');
         Route::get('/', [FeedbackController::class, 'mine'])->middleware('role:patient');
         Route::get('/mine', [FeedbackController::class, 'mine'])->middleware('role:patient');
+        Route::get('/review', [FeedbackController::class, 'review'])->middleware('role:owner');
         Route::post('/', [FeedbackController::class, 'store'])->middleware(['role:patient', 'throttle:m26-submit']);
     });
 

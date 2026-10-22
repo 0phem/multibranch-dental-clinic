@@ -17,6 +17,7 @@ class PatientFeedbackResource extends JsonResource
 
         return [
             'id' => $f->public_id,
+            'rating' => $f->rating,
             'visit' => FeedbackVisit::for($f->visit),
             'body' => $f->body,
             'submitted_at' => ClinicClock::local($f->created_at)->toIso8601String(),

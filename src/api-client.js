@@ -12,7 +12,13 @@ import { deviceId } from './intake/device-id.js'
 export const apiBase = () => apiBaseUrl()
 function apiBaseUrl() {
   try {
-    return (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_BASE_URL) || 'http://localhost:8000'
+    if (typeof import.meta !== 'undefined' && import.meta.env && typeof import.meta.env.VITE_API_BASE_URL !== 'undefined') {
+      return import.meta.env.VITE_API_BASE_URL
+    }
+    if (typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+      return ''
+    }
+    return 'http://localhost:8000'
   } catch {
     return 'http://localhost:8000'
   }
@@ -320,6 +326,7 @@ export function bookingCalendar(params) { return request(`/api/appointments/cale
 export function eligibleFeedbackVisits(params) { return request(`/api/feedback/eligible-visits${query(params)}`) }
 export function submitFeedback(payload, key) { return command('/api/feedback', payload, key) }
 export function myFeedback(params) { return request(`/api/feedback/mine${query(params)}`) }
+export function reviewFeedback(params) { return request(`/api/feedback/review${query(params)}`) }
 
 // M17 in-app human conversations (cursor-paged; a Patient may start a front-desk conversation; no edit/delete route).
 export function listConversations(params) { return request(`/api/conversations${query(params)}`) }
@@ -370,6 +377,7 @@ export function getBillingInvoice(id) { return request(`/api/invoices/${encodeUR
 export function listBillingTreatments() { return request('/api/billing/treatments') }
 export function createBillingDraft(treatmentId, key) { return command(`/api/invoices/from-treatment/${encodeURIComponent(treatmentId)}`, {}, key) }
 export function reviewBillingInvoice(id, payload, key) { return command(`/api/invoices/${encodeURIComponent(id)}/review`, payload, key) }
+export function applyBillingDiscount(id, payload, key) { return command(`/api/invoices/${encodeURIComponent(id)}/discount`, payload, key) }
 export function issueBillingInvoice(id, payload, key) { return command(`/api/invoices/${encodeURIComponent(id)}/issue`, payload, key) }
 export function recordBillingPayment(id, payload, key) { return command(`/api/invoices/${encodeURIComponent(id)}/payment`, payload, key) }
 // Review and Pay: accepted methods in plain words and the billing-address prefill (Patient who owns the invoice, or scoped Staff).

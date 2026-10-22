@@ -18,20 +18,44 @@ use Illuminate\Http\JsonResponse;
 // notification, conversation, audit transcript or marketing record.
 final class FeedbackService
 {
-    public function submit(User $actor, string $visitPublicId, string $body, string $key): JsonResponse
+    public function submit(User $actor, string $visitPublicId, string $body, string $key, ?int $rating = null): JsonResponse
     {
-        $payload = ['visit' => strtolower($visitPublicId), 'body' => $body];
+        $payload = ['visit' => strtolower($visitPublicId), 'body' => $body, 'rating' => $rating];
 
         return IdempotentCommand::run(
             CommandKey::class, $actor, $key, 'feedback.submit', $payload,
-            function () use ($actor, $visitPublicId, $body) {
+            function () use ($actor, $visitPublicId, $body, $rating) {
                 $patient = $actor->patient;
                 // Foreign, unknown, malformed and not-yet-completed Visits are one and the same refusal: nothing about another Patient's care leaks.
-                $visit = $patient ? Visit::where('public_id', strtolower($visitPublicId))->where('patient_id', $patient->id)->where('status', 'Completed')->lockForUpdate()->first() : null;
+                $visit = $patient ? Visit::where('public_id', strtolower($visitPublicId))->where('patient_id', $patient->id)->where('status', 'Completed')->with(['treatment.procedures'])->lockForUpdate()->first() : null;
                 if (! $visit) {
                     throw VisitCommandException::rule('visit_not_eligible', 'Choose one of your completed visits.', 'visit_id');
                 }
-                $feedback = PatientFeedback::create(['patient_id' => $patient->id, 'visit_id' => $visit->id, 'body' => $body, 'created_at' => ClinicClock::now()]);
+                $feedback = PatientFeedback::create(['patient_id' => $patient->id, 'visit_id' => $visit->id, 'rating' => $rating, 'body' => $body, 'created_at' => ClinicClock::now()]);
+
+                // Auto-create a follow-up task for 1-2 star ratings so clinic staff can follow up
+                if ($rating !== null && $rating <= 2) {
+                    try {
+                        \App\Models\FollowupTask::create([
+                            'patient_id' => $patient->id,
+                            'branch_id' => $visit->branch_id,
+                            'treatment_id' => $visit->treatment?->id,
+                            'service_id' => $visit->requested_service_id ?? $visit->treatment?->procedures->first()?->service_id,
+                            'dentist_profile_id' => $visit->dentist_profile_id ?? $visit->treatment?->dentist_profile_id,
+                            'reason' => "Low satisfaction feedback ({$rating} stars): {$body}",
+                            'due_on' => ClinicClock::today(),
+                            'source' => 'feedback',
+                            'status' => 'Open',
+                            'created_by_user_id' => null,
+                        ]);
+                        app(\App\Services\Audit\AuditService::class)->record([
+                            'action' => 'followup.created_from_feedback', 'category' => 'clinical', 'severity' => 'info', 'actor' => $actor, 'target' => $patient,
+                            'payload' => ['rating' => $rating, 'visit' => $visit->public_id],
+                        ]);
+                    } catch (\Throwable $e) {
+                        report($e);
+                    }
+                }
 
                 return [(new PatientFeedbackResource($feedback->load(['visit.treatment.procedures'])))->response()->getData(true), 201];
             },

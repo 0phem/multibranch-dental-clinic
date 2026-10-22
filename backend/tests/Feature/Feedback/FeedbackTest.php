@@ -83,26 +83,29 @@ class FeedbackTest extends TestCase
             $this->app['auth']->forgetGuards();
             ($verb === 'getJson' ? $this->getJson($url) : $this->postJson($url, []))->assertUnauthorized();
         }
-        // Owner included: no reviewer authority exists in any current canonical contract ("Owner review" is only intended-lifecycle text), so
-        // management roles fail closed exactly like Staff and Dentists.
-        foreach (['owner', 'staffB1', 'staffBoth', 'staffNone', 'dentist1'] as $who) {
+        // Staff and Dentists have no access to feedback endpoints or review endpoint.
+        foreach (['staffB1', 'staffBoth', 'staffNone', 'dentist1'] as $who) {
             $this->actingAsUser($who);
             foreach ($routes as [$verb, $url]) {
                 ($verb === 'getJson' ? $this->getJson($url) : $this->postJson($url, ['visit_id' => $visit->public_id, 'body' => 'x'], ['Idempotency-Key' => $this->key()]))->assertForbidden();
             }
-            // There is no per-record or reviewer route to reach feedback text through.
             $this->assertNotSame(200, $this->getJson("/api/feedback/{$id}")->status());
             $this->assertNotSame(200, $this->getJson('/api/feedback/review')->status());
         }
+        // Owner cannot access patient submit/mine endpoints, but can access the review endpoint.
+        $this->actingAsUser('owner');
+        foreach ($routes as [$verb, $url]) {
+            ($verb === 'getJson' ? $this->getJson($url) : $this->postJson($url, ['visit_id' => $visit->public_id, 'body' => 'x'], ['Idempotency-Key' => $this->key()]))->assertForbidden();
+        }
+        $this->getJson('/api/feedback/review')->assertOk();
         $this->assertSame(1, PatientFeedback::count());
         Http::assertNothingSent();
     }
 
-    public function test_no_reviewer_endpoint_resource_or_page_exists_in_the_codebase(): void
+    public function test_owner_can_review_feedback_with_filters(): void
     {
-        $uris = collect(\Illuminate\Support\Facades\Route::getRoutes()->getRoutes())->map(fn ($r) => $r->methods()[0].' '.$r->uri())->filter(fn ($u) => str_contains($u, 'api/feedback'))->sort()->values()->all();
-        $this->assertSame(['GET api/feedback', 'GET api/feedback/eligible-visits', 'GET api/feedback/mine', 'POST api/feedback'], $uris);
-        $this->assertFileDoesNotExist(app_path('Http/Resources/FeedbackReviewResource.php'));
+        $this->actingAsUser('owner');
+        $this->getJson('/api/feedback/review')->assertOk();
         $this->actingAsUser('patientB');
         $this->getJson('/api/feedback')->assertOk();     // a Patient reads only their own list here
     }
@@ -114,13 +117,13 @@ class FeedbackTest extends TestCase
         $visit = $this->visit();
         $res = $this->submit('patientA', $visit)->assertCreated();
         $d = $res->json('data');
-        $this->assertSame(['id', 'visit', 'body', 'submitted_at'], array_keys($d));
+        $this->assertSame(['id', 'rating', 'visit', 'body', 'submitted_at'], array_keys($d));
         $this->assertMatchesRegularExpression('/^[0-9a-z]{26}$/', $d['id']);
         $this->assertSame([$visit->public_id, '2026-09-28', ['Service svc1']], [$d['visit']['id'], $d['visit']['date'], $d['visit']['services']]);
         $row = PatientFeedback::sole();
         $this->assertSame([$this->p['A']->id, $visit->id], [$row->patient_id, $row->visit_id]);
         $json = json_encode($d);
-        foreach (['SECRET', 'patient_id', 'dentist', 'branch', 'status', 'rating', 'reply', 'reviewer', 'anonymous', '"id":1'] as $leak) {
+        foreach (['SECRET', 'patient_id', 'dentist', 'branch', 'status', 'reply', 'reviewer', 'anonymous', '"id":1'] as $leak) {
             $this->assertStringNotContainsString($leak, $json);
         }
         // The Visit, its Treatment and the Patient record are untouched; nothing else was created.
@@ -163,10 +166,12 @@ class FeedbackTest extends TestCase
             $this->assertSame(422, $r->status(), json_encode($bad));
         }
         foreach (['id' => 'x', 'public_id' => '01ARZ3NDEKTSV4RRFFQ69G5FAV', 'patient_id' => 1, 'user_id' => 1, 'author' => 'x', 'reviewer' => 'x', 'review_status' => 'Reviewed', 'status' => 'Resolved', 'branch_id' => 1, 'dentist_id' => 1,
-            'rating' => 5, 'stars' => 5, 'nps' => 10, 'category' => 'Staff', 'anonymous' => true, 'publish' => true, 'public' => true, 'testimonial' => true, 'testimonial_consent' => true, 'marketing_consent' => true,
+            'stars' => 5, 'nps' => 10, 'category' => 'Staff', 'anonymous' => true, 'publish' => true, 'public' => true, 'testimonial' => true, 'testimonial_consent' => true, 'marketing_consent' => true,
             'resolved_at' => 'x', 'created_at' => '2020-01-01', 'attachment' => 'f', 'html' => '<b>x</b>'] as $field => $value) {
             $this->submit('patientA', $visit, 'ok', null, [$field => $value])->assertStatus(422, "must refuse {$field}");
         }
+        $this->submit('patientA', $visit, 'ok', null, ['rating' => 0])->assertStatus(422, 'must refuse rating 0');
+        $this->submit('patientA', $visit, 'ok', null, ['rating' => 6])->assertStatus(422, 'must refuse rating 6');
         $this->submit('patientA', $visit, 'ok', '')->assertStatus(422);                    // Idempotency-Key is mandatory
         $this->assertSame(0, PatientFeedback::count());
         $xss = "<script>alert(1)</script><img src=x onerror=alert(2)> https://evil.example/t javascript:alert(3)\nsecond line";
@@ -251,7 +256,7 @@ class FeedbackTest extends TestCase
 
     public function test_m26_is_a_foundation_only_no_rating_category_status_reply_publication_marketing_or_other_module_side_effect(): void
     {
-        foreach (['rating', 'score', 'category', 'status', 'anonymous', 'reply', 'reviewer_id', 'reviewed_at', 'resolved_at', 'published', 'testimonial', 'marketing_consent', 'dentist_profile_id', 'branch_id', 'conversation_id', 'notification_id'] as $column) {
+        foreach (['score', 'category', 'status', 'anonymous', 'reply', 'reviewer_id', 'reviewed_at', 'resolved_at', 'published', 'testimonial', 'marketing_consent', 'dentist_profile_id', 'branch_id', 'conversation_id', 'notification_id'] as $column) {
             $this->assertFalse(Schema::hasColumn('patient_feedback', $column), $column);
         }
         $sources = collect(glob(app_path('Services/Feedback/*.php')))->merge([app_path('Http/Controllers/FeedbackController.php'), app_path('Models/PatientFeedback.php')])
@@ -278,5 +283,45 @@ class FeedbackTest extends TestCase
         $this->assertGreaterThan(0, $limited->json('retry_after'));
         $this->submit('patientB', $other, 'unaffected')->assertCreated();
         $this->assertSame(3, PatientFeedback::count());
+    }
+
+    public function test_patient_can_submit_1_to_5_star_rating_and_low_ratings_auto_create_followup_task(): void
+    {
+        $visit1 = $this->visit();
+        $res5 = $this->submit('patientA', $visit1, 'Great service!', null, ['rating' => 5])->assertCreated();
+        $this->assertSame(5, $res5->json('data.rating'));
+        $this->assertSame(0, DB::table('followup_tasks')->where('source', 'feedback')->count());
+
+        $visit2 = $this->visit('A', '2026-09-28 14:00:00');
+        $res2 = $this->submit('patientA', $visit2, 'Unsatisfied with wait time', null, ['rating' => 2])->assertCreated();
+        $this->assertSame(2, $res2->json('data.rating'));
+        $this->assertSame(1, DB::table('followup_tasks')->where('source', 'feedback')->count());
+        $task = DB::table('followup_tasks')->where('source', 'feedback')->first();
+        $this->assertSame('Open', $task->status);
+        $this->assertSame($visit2->patient_id, $task->patient_id);
+        $this->assertSame($visit2->branch_id, $task->branch_id);
+    }
+
+    public function test_owner_can_review_patient_feedback_with_branch_and_dentist_filters(): void
+    {
+        $visit1 = $this->visit('A', '2026-09-28 09:00:00', 'Completed', true, 'b1');
+        $visit2 = $this->visit('B', '2026-09-28 10:00:00', 'Completed', true, 'b2');
+
+        $this->submit('patientA', $visit1, 'Feedback for branch 1', null, ['rating' => 4]);
+        $this->submit('patientB', $visit2, 'Feedback for branch 2', null, ['rating' => 1]);
+
+        $this->actingAsUser('owner');
+        $all = $this->getJson('/api/feedback/review')->assertOk()->json('data');
+        $this->assertCount(2, $all);
+
+        $filteredBranch = $this->getJson('/api/feedback/review?branch_id=' . $this->b['b1']->id)->assertOk()->json('data');
+        $this->assertCount(1, $filteredBranch);
+        $this->assertSame('Feedback for branch 1', $filteredBranch[0]['body']);
+        $this->assertSame(4, $filteredBranch[0]['rating']);
+
+        $filteredRating = $this->getJson('/api/feedback/review?rating=1')->assertOk()->json('data');
+        $this->assertCount(1, $filteredRating);
+        $this->assertSame('Feedback for branch 2', $filteredRating[0]['body']);
+        $this->assertSame(1, $filteredRating[0]['rating']);
     }
 }

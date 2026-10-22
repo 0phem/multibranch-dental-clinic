@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs'
 import * as api from '../src/api-client.js'
 import * as feedback from '../src/feedback-api.js'
 import * as data from '../src/data.js'
+import { normalizeClinicState, sessionForRole } from '../src/contracts.js'
 import { canAccessPage } from '../src/safeguards.js'
 
 // M26 client behaviour: a foundation only. The server is the authority; no rating/category/anonymity/status/reply/publication exists.
@@ -67,30 +68,41 @@ test('feedback text is a plain string rendered only as text; no HTML, link, fetc
   assert.doesNotMatch(read('src/pages/Feedback.jsx'), /<a\s|href=|window\.open|fetch\(/)
 })
 
-test('the screens promise only what exists: no response time, no anonymity, no rating/category/status/reply/publication', () => {
+test('the screens promise only what exists: no response time, no anonymity, honest star rating', () => {
   const page = read('src/pages/Feedback.jsx')
   const visible = page.split('\n').filter(l => !l.trim().startsWith('//')).join('\n')
   assert.match(visible, /it is not anonymous/)
   assert.match(visible, /The clinic has not set a response time, and this form does not start a conversation/)
-  assert.doesNotMatch(visible, /within \d|we will (contact|respond|reply)|anonymous(ly)? (feedback|submission)|\bstars?\b|\brating:|\bResolved\b|Action Required|testimonial|public review|\bsurvey\b|satisfaction/i)
-  for (const text of ['Load older', 'Retry', 'Try again', 'Loading', 'No completed visits yet', 'maxLength={MAX_FEEDBACK}']) assert.ok(visible.includes(text), text)
-  assert.doesNotMatch(visible, /Read-only for now|Patient feedback entries|Read full text/, 'no reviewer UI')
+  assert.doesNotMatch(visible, /within \d|we will (contact|respond|reply)|anonymous(ly)? (feedback|submission)|\bResolved\b|Action Required|testimonial|public review|\bsurvey\b/i)
+  for (const text of ['Load older', 'Retry', 'Try again', 'Loading', 'No completed visits yet', 'maxLength={MAX_FEEDBACK}', 'Rating (1–5 Stars)']) assert.ok(visible.includes(text), text)
   assert.match(visible, /if \(failure\) key\.current = commandKey\(\)/, 'a retry of the same text reuses the same key; editing starts a new one')
 })
 
-test('registry and access: only Patients have a feedback entry (no reviewer authority exists); M26 registry reflects a built-but-partial foundation', () => {
+test('registry and access: Patients and Owner have feedback access; staff and dentist are excluded', () => {
   assert.deepEqual(data.NAV.patient.find(([k]) => k === 'feedback'), ['feedback', 'Share Feedback'])
-  for (const role of ['owner', 'staff', 'dentist']) assert.equal(data.NAV[role].some(([k]) => k === 'feedback'), false, role)
-  const state = { users: [], patients: [], clock: {} }
-  for (const role of ['owner', 'staff', 'dentist']) assert.equal(canAccessPage(state, { role, userId: 'x' }, 'feedback'), false, role)
+  assert.equal(data.NAV.owner.some(([k]) => k === 'feedback'), true, 'owner')
+  for (const role of ['staff', 'dentist']) assert.equal(data.NAV[role].some(([k]) => k === 'feedback'), false, role)
+  const state = normalizeClinicState({
+    persons: data.INITIAL_PERSONS,
+    users: data.INITIAL_USERS,
+    branches: data.INITIAL_BRANCHES,
+    staff: data.INITIAL_STAFF,
+    dentists: data.INITIAL_DENTISTS,
+    patients: data.INITIAL_PATIENTS,
+    appointments: [], visits: [], queue: [], treatments: [], invoices: [], prescriptions: [], followups: [], hmo: [],
+  })
+  assert.equal(canAccessPage(state, sessionForRole('owner', state), 'feedback'), true, 'owner')
+  for (const role of ['staff', 'dentist']) assert.equal(canAccessPage(state, sessionForRole(role, state), 'feedback'), false, role)
   const m26 = data.MODULES.find(m => m.no === 26)
   assert.deepEqual([m26.coverage, m26.implemented, m26.area, m26.owner, m26.roles], ['partial', false, 'Quality', 'Group 3 — Shared Enhancement', ['patient']])
   assert.ok(!m26.pe && !m26.enhancement, 'M26 is a shared enhancement, never a PE')
-  assert.match(m26.coverageNote, /Patient-only technical foundation/)
-  assert.doesNotMatch(m26.coverageNote, /Owner/)
-  const app = read('src/App.jsx')
-  assert.doesNotMatch(app, /FeedbackReviewPage/)
-  assert.doesNotMatch(read('src/pages/Feedback.jsx') + read('src/feedback-api.js'), /FeedbackReviewPage|loadReviewList|owner/i)
+})
+
+test('submitting with 1-5 rating sends {visit_id, body, rating}', async () => {
+  stubFetch(json(200, {}), json(201, { data: mine(1, { rating: 5 }) }))
+  const result = await feedback.submit('01k00000000000000000000v01', 'Great clinic!', 'key-2', 5)
+  assert.equal(result.ok, true)
+  assert.deepEqual(posts()[0].body, { visit_id: '01k00000000000000000000v01', body: 'Great clinic!', rating: 5 })
 })
 
 test('dashboards and analytics show no satisfaction, feedback, rating or complaint metric', () => {

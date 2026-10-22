@@ -7,3 +7,5 @@ dist
 
 # On-device OCR files, copied from node_modules by scripts/copy-ocr-assets.mjs
 public/ocr/
+.vercel
+backend/storage/*.pem

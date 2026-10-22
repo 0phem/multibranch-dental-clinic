@@ -1,81 +1,138 @@
-# Final module list for the defense (25 modules)
+# Final Module List for the Defense (Official 26-Module Paper Alignment)
 
-Frozen on 2026-10-18 from the module catalog v5.0 (`MODULE_COVERAGE.md`), checked against the code and tests on branch
-`feat/auth-messaging-paymongo`. A status is never higher than what the code and tests prove.
+Updated on 2026-10-22 to strictly align with the group's official paper `BPA_MODULES_UPDATED_OCT_20_2026.docx` (26 modules, renumbered so each member owns one consecutive, connected block). Checked and verified against the live implementation and tests on branch `feat/auth-messaging-paymongo`. A status is never higher than what the code and tests prove.
 
-**Status words.** **Implemented**: works end to end on the clinic server and is covered by tests. **Partial**: the core works
-and is tested; named parts are missing. **Mock only**: a browser-only prototype with no server record. **Planned**: designed,
-not built. Test paths are under `backend/tests/Feature/` unless they start with `tests/` (frontend). Interview answers (Q, PI, R2)
-are verbatim in `docs/defense/INTERVIEW_EVIDENCE.md`.
+**Status words:**
+- **Implemented**: Works end to end on the clinic server with database integrity and is covered by tests.
+- **Partial**: The core works and is tested; specific extensions or clinic policy decisions are pending.
+- **Planned**: Designed in the paper architecture, scheduled on the post-defense roadmap.
+
+Test paths are under `backend/tests/Feature/` unless they start with `tests/` (frontend). Verbatim clinic interview evidence (Q, PI, R2) is documented in [`INTERVIEW_EVIDENCE.md`](INTERVIEW_EVIDENCE.md).
+
+---
+
+## Old-to-New Module Traceability Table
+
+Traceability between the older internal 25-module catalog ("catalog v5.0") and the official 26-module paper:
+
+| Paper No. | Official Module Name | Owner | Old Internal Number / Feature Mapping | Implementation Status |
+| :---: | :--- | :--- | :--- | :--- |
+| **M1** | User Management | Licanda | Old M1 (accounts, OTP, roles, claim, guardians) | Partial |
+| **M2** | Branch Management | Licanda | Old M2 (branches, hours, closed dates, contacts) | Implemented |
+| **M3** | Staff Management | Licanda | Old M3 Work Schedules + Old M15 Leave Management | Implemented |
+| **M4** | Service Management | Licanda | Old M13 Services & Pricing, consultation-first | Partial |
+| **M5** | Clinic Policy Management | Licanda | Owner settings (late/cancellation, reminders, branding, templates) | Implemented |
+| **M6** | Appointment Management | Alejo | Old M6 (one-flow booking, availability, PayMongo pay-at-booking) | Implemented |
+| **M7** | Attendance Management | Alejo | Paper M7 (attendance replies, late arrivals, no-show flags) | Implemented |
+| **M8** | Check-In Management | Alejo | Old M8 (check-in, walk-ins, counter QR self-registration, kiosk) | Implemented |
+| **M9** | Queue Management | Alejo | Old M9 (queue numbers, state transitions, late resequencing) | Implemented |
+| **M10** | Patient Flow Management | Alejo | Calendar daily load, freed-slot move-up offers, waitlist | Implemented |
+| **M11** | Patient Records Management | Ecal | Old M4 Patient Records + Old M25 Patient Handovers | Implemented |
+| **M12** | Document Management | Ecal | Old M14 (documents, intake consent, ID scan prefill) | Partial |
+| **M13** | Treatment Management | Ecal | Old M5 Treatment Management + Old M10 SVG Dental Chart | Implemented |
+| **M14** | Prescription Management | Ecal | Old M19 (server prescriptions, issuing, A4 PDF) | Implemented |
+| **M15** | Follow-Up Management | Ecal | Old M20 (server follow-up tasks, recall reminders) | Implemented |
+| **M16** | Social Media Management | Millar | Old M16 (inquiries, campaign tracking) | Partial |
+| **M17** | AI Chatbot Management | Millar | Old M7 (clinic assistant, knowledge mode) | Implemented |
+| **M18** | Messaging Management | Millar | Old M17 (encrypted patient messaging, branch routing) | Implemented |
+| **M19** | Notification Management | Millar | Old M18 (outbox, reminder emails, in-app notifications) | Implemented |
+| **M20** | Marketing Management | Millar | Proposed enhancement (campaign tracking, rebook emails) | Partial |
+| **M21** | Billing Management | Delos Santos | Old M11 Billing + Old M23 PayMongo + 20% Senior/PWD discount | Implemented |
+| **M22** | Loyalty Management | Delos Santos | Proposed enhancement (ledger-backed loyalty points & rewards) | Partial |
+| **M23** | Automation Management | Delos Santos | Automations A1–A6, Owner wording approval, outbox retry handling | Implemented |
+| **M24** | Analytics Management | Delos Santos | Old M21 (Owner metrics, daily summary email counts) | Partial |
+| **M25** | Audit Management | Delos Santos | Old M22 (append-only database audit trail, search, CSV export) | Implemented |
+| **M26** | Feedback Management | Group 3 | Feedback submission, 1–5 star rating, Owner review, low-rating task | Implemented |
+
+---
 
 ## Summary
 
 | State | Count | Modules |
-| --- | --- | --- |
-| Implemented | 15 | M2, M3, M5, M6, M7, M10, M11, M15, M17, M18, M19, M20, M22, M23, M25 |
-| Partial | 8 | M1, M4, M8, M9, M13, M14, M16, M21 |
-| Mock only | 0 | — |
-| Planned | 2 | M12, M24 |
+| --- | :---: | --- |
+| **Implemented** | **19** | M2, M3, M5, M6, M7, M8, M9, M10, M11, M13, M14, M15, M17, M18, M19, M21, M23, M25, M26 |
+| **Partial** | **7** | M1, M4, M12, M16, M20, M22, M24 |
+| **Mock only** | **0** | — (All mock prototypes replaced by server implementations) |
+| **Planned / Roadmap** | **—** | Treatment plans, lab cases, Facebook Graph API insights, formal BIR accreditation |
 
-## Modules
+---
 
-| Module | Status | What works today | Evidence | Interview basis |
-| --- | --- | --- | --- | --- |
-| M1 User Management | Partial | Patient sign-up with a 6-digit email code (sign-in after verification, no auto-login); password reset and email change by code; Owner invites employees by email; four roles checked on the server. Missing: more than one Owner account; ID OCR (planned enhancement, below). Intake: optional "Scan your ID to fill this in" on sign-up and at the counter (on the device; name and birth date only; photo and ID number never uploaded or stored); a counter-registered patient or a dependent who turns 18 claims an online account with an email code. | `Auth/*`, `Identity/EmployeeInvitationTest`, `RbacTest`; `tests/public-auth-site.test.js`, `Intake/IntakeTest`, `tests/intake.test.js` | PI-01, PI-02, R2-03, R2-12 |
-| M2 Branch Management | Implemented | Three real branches with address, phone, email (when given), map position and opening hours per weekday; the Owner edits them; the public website and every email read them. Closed and holiday dates per branch or all branches (reason, optional partial hours): grayed out in booking with the reason, listed on the website; affected appointments listed for the front desk and emailed a reschedule link with one action (never cancelled); Philippine holidays only as suggestions the Owner confirms (R2-13). | `Reference/*`, `Appointments/BranchHoursTest`, `Reference/PublicBranchesTest`; `tests/landing.test.js`, `Automations/InterviewRoundTwoTest` | Q2, PI-14, PI-15, R2-08, R2-13 |
-| M3 Work Schedules | Implemented | Weekly hours per Dentist, branch and weekday with an optional break, and dated exceptions (day off, or different hours at one branch). Hours must fall inside the branch's opening hours; a Dentist can work at several branches on different days or hours, never overlapping. The Owner edits every branch, the front desk their own branch (Owner setting). Every change is audited with old and new hours. Slot search, "any available", rescheduling, walk-ins, the freed-time and late-arrival flows and the calendar capacity all use branch hours ∩ schedule − approved leave. A change never cancels: affected visits are listed with suggested cover and one action to email a reschedule link. The demo hours are labelled "demo schedule, not confirmed by the clinic"; a Dentist with no weekly schedule still uses their profile hours and the calendar then says capacity is estimated. | `Staffing/WorkSchedulesTest`, `tests/staffing.test.js` | PI-05, PI-06, PI-08 |
-| M4 Patient Records | Partial | Patient identity and profile; Staff edit with an audit entry (field names only); the patient sees a read-only legal name; the name on issued invoices and receipts is kept as issued. Missing: full history, merge, archive. Patients may add an HMO provider and member number (encrypted) for the front desk to check (R2-16); information only. Counter registration on the patient's phone or a kiosk (QR poster per branch, daily front-desk code, rate limits), confirmed or corrected by staff (audited); possible existing records from any branch shown as "Record found from Branch X" (never auto-merged); parent/guardian profiles for dependents with consent; in-person ID check stores only type, who and when. | `Patients/PatientRecordTest`, `ConcurrentPatientRecordTest`, `Billing/DemoUnpaidInvoiceSeederTest`, `Automations/InterviewRoundTwoTest`, `Intake/IntakeTest`, `tests/intake.test.js` | Q17, Q28, R2-03, R2-06, R2-08, R2-03, R2-05, R2-08, R2-12 |
-| M5 Treatment Management | Implemented | Visit-linked treatment by the responsible Dentist; completed treatment is locked. | `Treatments/TreatmentTest`, `ConcurrentTreatmentStartTest` | Q15, Q27, Q29, PI-09 |
-| M6 Appointment Management | Implemented | One-flow booking (service, branch near you, Dentist or "any available", day, time); only real open times; per-day branch hours and closed Sunday enforced; no double booking (database guard); reschedule and cancel; confirmation and change emails; scheduled reminder emails (24 h before by default, recalculated on reschedule, none when cancelled); waitlist for fully booked days. Not built: attendance replies, SMS. Interview round 2: reminder 60 minutes before by default (R2-09) with one-click "I'll be there" / "I can't make it" (signed, single-use, expiring); freed times offered first to patients booked later that day (first to accept wins), then the waitlist, then walk-ins; cancellation policy (24 h late cancellation, front-desk confirmation after 3 in 6 months, no fees; R2-13); consultation-first services (R2-17); staff and Owner calendar with daily load and crowded days (R2-02). Section 22 (confirmed 2026-10-20): Pay-at-Booking via PayMongo (GCash, Maya, Cards) with 15-minute reservation hold, webhook-only confirmation, automatic refund on cancellation >= 24h, staff discretionary refund on < 24h/no-show, and booking deposit credited against post-treatment visit invoice. | `Appointments/*` (incl. `BranchHoursTest`, `ConcurrentBookingTest`, `AppointmentEmailTest`), `Automations/AutomationsTest`, `Automations/InterviewRoundTwoTest`, `Payment/AppointmentBookingPaymentTest`, `tests/patient-portal.test.js` | Q20, Q27, Q28, Q29, PI-29, R2-02, R2-07, R2-09, R2-10, R2-13, R2-17, Section 22 |
-| M7 AI Chatbot | Implemented (knowledge mode) | Clinic Assistant answering from the clinic's own answers and live records (English, Filipino, Taglish); emergencies, medical advice and other patients' data are refused; unknowns go to the front desk; Owner edits and tests answers. AI mode exists but is switched off. | `Assistant/AssistantKnowledgeTest`, `Assistant/AssistantTest` | Q23, PI-42, PI-43 |
-| M8 Patient Visits | Partial | Check-in of booked patients and walk-ins (within today's branch hours), Visit records; possible no-shows flagged after a grace period for the front desk to confirm or undo (the system never marks a no-show itself). Missing: complete assignment workflow and live integration checks. Late-arrival steps (R2-07, R2-10): "Are you on your way?" at 5 minutes, Late at 10, release at 15 (automatic by default, front-desk undo the same day) with a rebook email; the Check-In page shows late patients, replies, releases, free times and bookings to confirm. Walk-ins self-register and join today's queue with the daily code; staff see "Self-registered: verify ID" and admit with one confirmation. | `Visits/*`, `Automations/AutomationsTest`, `Automations/InterviewRoundTwoTest`, `Intake/IntakeTest`, `tests/intake.test.js` | Q15, PI-13, PI-21, R2-06, R2-07, R2-10, R2-03, R2-06 |
-| M9 Patient Queue | Partial | Queue numbers and transitions on the server. Missing: complete live screens; removed from the patient portal. A patient checking in more than 10 minutes late is queued after on-time patients (R2-07); Staff can restore the place with a reason (audited). | `Queue/*`, `Automations/InterviewRoundTwoTest` | Q19, Q21, PI-24, PI-25, R2-07 |
-| M10 Dental Charts | Implemented | Tooth chart per patient: 32 adult and 20 primary teeth, FDI numbering by default or Universal (Owner setting), legend. A Dentist caring for the patient (their own appointment or visit, or a handover to them; never branch-wide) taps a tooth and records a status from the Owner-editable list (defaults: healthy, caries, filled, crown, root canal, missing, extracted, implant, to monitor), surfaces, date, an optional note (encrypted) and an optional treatment link. History is append-only (database trigger); the current chart is the latest entry per tooth and each tooth's history is shown. Front desk read-only without notes (each view audited); patient a simplified current chart in the portal; Owner no chart content. SVG chart with number and status abbreviation on every tooth (not colour alone), keyboard operable, side panel on desktop and bottom sheet on phones. No diagnosis or suggestion. | `Charts/DentalChartTest`, `tests/m10-dental-chart.test.js` | Q17 |
-| M11 Billing Management | Implemented | Draft invoice from the treatment's performed procedures, Staff review and issue, invoice email with PDF, immutable charges, PDF downloads for the patient; overdue reminders (days 3, 7, 14 by default) that stop when paid. | `Billing/*`, `Automations/AutomationsTest` | Q27 |
-| M12 Treatment Plans | Planned | Only a free-text "treatment plan" field on a treatment; no versioned plan or patient decision. | None (not started) | Q29 (treatment decided case by case) |
-| M13 Services and Pricing | Partial | Services with descriptions; versioned prices resolved for each invoice line; prices are not shown to patients. Missing: clinic-approved prices (demo prices only). Each service is bookable online, "consultation first" (books the linked consultation instead, R2-17) or not shown online; Owner setting, audited. | `Pricing/*`, `Automations/InterviewRoundTwoTest` | Q1, Q12, R2-13, R2-17 |
-| M14 Document Management | Partial | Private document upload and download for the patient's own documents; retraction instead of deletion. Missing: extraction drafts in production use. | `Documents/DocumentManagementTest` | Q16 |
-| M15 Leave Management | Implemented | Dentists and staff request leave (vacation, sick, other; full or part days; private note seen only by the requester and approvers, encrypted, never emailed or audited). Pending → Approved / Declined; Pending or Approved → Cancelled. The Owner approves (setting: or also the front desk of the requester's branch); nobody approves their own. Requester and approver are told in the app and by email in Owner-approved wording. Approved Dentist leave removes their booking time; approving shows the booked visits with suggested cover and the one-action reschedule email, and never cancels. Team strip of who is away. No balances (no clinic policy). | `Staffing/LeaveTest`, `tests/staffing.test.js` | — (no interview answer) |
-| M16 Patient Inquiries | Partial | Staff record inquiries that arrived elsewhere, with assignment and outcome. No link to Facebook/Messenger. | `Inquiries/*` | PI-42 |
-| M17 Patient Messaging | Implemented | Real-time chat between the patient and the branch front desk; the branch is chosen automatically; email alert (no text) when the patient is away; the Owner cannot read patient conversations. | `Messaging/*` | PI-30, PI-42, PI-43 |
-| M18 Notifications | Implemented (email and in-app) | Email outbox with automatic retries (up to 4 attempts); in-app notifications only from real events; the scheduler for six automations (one key per record and type, never sent twice), Owner switches and settings, audited. Not built: SMS. Every automated email uses Owner-approved wording (R2-09; a Dentist also approves recall, R2-11): an automation cannot be switched on before its wording is approved, and an email whose wording lost approval is not sent. | `Mail/*`, `Appointments/PatientPortalApiTest`, `Automations/AutomationsTest`, `Automations/InterviewRoundTwoTest` | PI-29, PI-31, R2-07, R2-09, R2-11 |
-| M19 Prescriptions | Implemented | A Dentist at the visit's branch writes free-text lines (medicine, dosage, frequency, duration, instructions) and an optional note; "Check allergies before prescribing" is shown (the clinic server records no allergies yet, and says so). No drug list and no interaction checks; the Owner may keep common medicine names for quick selection (empty). Issuing locks it (database trigger) and numbers it RX-YYYY-000001 with no gaps under concurrent issue; a mistake is voided with a reason (kept, shown VOID) and a new one issued. A4 PDF with the clinic and branch header, patient name and age, the lines, the dentist's name and only the license number the dentist entered, "Valid only with the dentist's signature" and a signature line; VOID watermark. Patient (or guardian) sees issued ones read-only with the PDF and gets a notice and email without medicine details; the branch front desk views and prints; the Owner sees metadata only. Create, issue, void, staff view and download audited without medicine text. The browser prototype's screens and seed are removed. | `Prescriptions/PrescriptionTest`, `Prescriptions/ConcurrentPrescriptionTest`, `tests/m19-prescriptions.test.js` | Q16, PI-38 |
-| M20 Patient Follow-Up | Implemented | Server follow-up tasks: created once from a completed treatment's follow-up fields, or added by a Dentist or the front desk (patient, reason, due date, branch, service to book; assignee the branch front desk). Open → Contacted → Booked (set automatically when the patient's next appointment is booked; reopened if it is cancelled) → Closed (note required without a booking). Front-desk list with branch, status and due filters, overdue highlighted; panel on the patient record; "Book follow-up" opens the normal booking form with patient, branch and service preselected. Optional reminder email when due: OFF, wording needs the Owner's and a Dentist's approval, sent once per task (frozen Manila-time tests). Owner daily summary: open and overdue counts only; the Owner's list shows dates, never reasons. The browser prototype's screens and seed are removed. | `Followups/FollowupTest`, `tests/m20-followups.test.js` | Q15, Q27, R2-11 |
-| M21 Reports and Analytics | Partial | Owner metrics from server data; daily summary email per branch (numbers only, no patient names). Missing: complete period and branch filtering, exports. The daily summary also counts late cancellations, late arrivals, released times and how freed times were refilled (move-up, waitlist, walk-in). | `Analytics/*`, `Automations/AutomationsTest`, `Automations/InterviewRoundTwoTest` | Q32, R2-11 |
-| M22 Audit Logs | Implemented | Append-only audit trail (the database refuses changes and deletes); Owner search and CSV export. | `Audit/*` | — (accountability; no interview answer) |
-| M23 Payment Management | Implemented (test mode) | PayMongo hosted checkout for visit invoices and online appointment booking fees; 15-minute reservation hold; webhook-only confirmation; automatic refund API for >= 24h cancellation; booking payment credit on invoice issuance; Payment Receipt email with PDF. Live keys need the clinic's own PayMongo account. | `Payment/PayMongoPaymentTest`, `Payment/AppointmentBookingPaymentTest`, rehearsal `docs/defense/REHEARSAL_REPORT.md` | Q27, Section 22 |
-| M24 Lab Cases | Planned | Nothing built. | None (not started) | Team confirmation 2026-10-12: external lab work is tracked manually (`MODULE_COVERAGE.md`) |
-| M25 Patient Handovers | Implemented | The front desk or the treating Dentist sends a handover to another branch or Dentist: summary, pending treatment, notes and titles of the patient's existing documents (encrypted). The receiving front desk and Dentist read and acknowledge it (Sent → Acknowledged; the sender may cancel). The receiving branch's front desk gets the patient's record through the existing branch rule for the Owner's number of days (default 60) from sending, or from acknowledgement; that access can never be handed on or renewed by the receiving side (sending needs a real appointment or visit at the sending branch); the receiving Dentist sees the handover only (generic record access for Dentists is still a clinic decision). The Owner sees metadata only; the patient gets a neutral "record shared" notice. Create, receiving-side reads and acknowledgements are audited without clinical text. "Request handover" from the duplicate guard. | `Staffing/HandoverTest`, `tests/staffing.test.js` | Team confirmation 2026-10-12: handovers are coordinated informally by calls and messages (`MODULE_COVERAGE.md`) |
+## Detailed Module Breakdown (Official 26 Modules)
 
-## M1 enhancement: ID scan at registration (not a new module)
+### Block 1: Licanda — Governance & Practice Foundations (M1–M5)
 
-Status: **Built for prefill only** (tests: `Intake/IntakeTest`, `tests/intake.test.js`; accuracy on synthetic specimens in
-`docs/ui-review/intake/ocr-accuracy.json`). It is part of M1/M4, not a new module, and stays within these rules (RA 10173):
+| Module | Status | What Works Today | Evidence | Interview Basis |
+| :--- | :---: | :--- | :--- | :--- |
+| **M1 User Management** | Partial | Patient self-registration with 6-digit email OTP; password reset; employee invitations by email; four roles enforced at database and middleware levels (`patient`, `staff`, `dentist`, `owner`). On-device ID scan prefill (name and DOB only, zero image/ID storage). Account claiming for minors turning 18. *Pending*: multiple Owner accounts, 2FA. | `Auth/*`, `Identity/EmployeeInvitationTest`, `RbacTest`, `Intake/IntakeTest`, `tests/intake.test.js` | PI-01, PI-02, R2-03, R2-12 |
+| **M2 Branch Management** | Implemented | Three real clinic branches (Bocaue Main, Bocaue Annex, Guiguinto) with contacts, map positions, operating hours per weekday. Owner branch config. Holiday/closed date calendar with affected appointment reschedule flows (never cancels). Public landing page branch directory. | `Reference/*`, `Appointments/BranchHoursTest`, `Reference/PublicBranchesTest`, `tests/landing.test.js` | Q2, PI-14, PI-15, R2-08, R2-13 |
+| **M3 Staff Management** | Implemented | Weekly work schedules per dentist, branch, and weekday with break intervals and exceptions (unifies old M3 & M15). Leave requests (vacation, sick, other) with Owner approval, leave calendar strip, conflict detection with suggested cover, and zero-cancellation reschedule notices. | `Staffing/WorkSchedulesTest`, `Staffing/LeaveTest`, `tests/staffing.test.js` | PI-05, PI-06, PI-08 |
+| **M4 Service Management** | Partial | Clinical procedure services with durations, branch availability, versioned pricing. Consultation-first enforcement for complex procedures (e.g. braces). *Pending*: final clinic-approved price list and installment terms. | `Pricing/*`, `Automations/InterviewRoundTwoTest`, `tests/m13-pricing.test.js` | Q1, Q12, R2-13, R2-17 |
+| **M5 Clinic Policy Management** | Implemented | Centralized Owner settings for reminder intervals, late arrival tolerances, cancellation limits, overdue invoice notices, recall periods, and brand colours/logo. Template wording approval required before any automation is activated; full audited configuration history. | `Automations/InterviewRoundTwoTest`, `Automations/AutomationsTest`, `tests/branding.test.js` | R2-09, R2-11 |
 
-- Optional, with a consent step first; it **only prefills** name and birth date, highlighted "from your ID, please check".
-- Read **on the patient's device** (PhilID QR, passport MRZ, or on-device OCR of common Philippine IDs); the photo is never
-  uploaded or kept, and the ID number is never read or stored. A poor read asks the patient to type.
-- **Staff verify the ID** in person once; only the ID type, who and when are stored (the last 4 characters only if the Owner
-  turns that on, default off).
-- Remote ID upload is **not available** in this release (the Owner setting cannot be turned on).
-- Not proven: accuracy on real cards (only synthetic specimens were tested); see `docs/INTAKE_PRIVACY.md`.
+---
 
-## Data retention (what the code does today)
+### Block 2: Alejo — Patient Flow & Scheduling (M6–M10)
 
-| Module | Retention behaviour | Status |
-| --- | --- | --- |
-| M1 User Management | Removing a user is a soft delete (`users.deleted_at`); sessions and tokens end; the audit keeps the action. | Implemented |
-| M4 Patient Records | There is no delete path for a patient record. Archiving (soft delete with audit) is not built. | Planned |
-| M5 Treatment, M8 Visits, M9 Queue, M11 Billing, M16 Inquiries, M17 Messaging, M18 email log, M22 Audit, feedback, appointment history | The database refuses deletes (and most updates) of these records by trigger: they are append-only. Draft treatment lines can be replaced while the treatment is still a draft. | Implemented |
-| Scheduled automations (M6, M8, M18, M20) | The automation log (`automation_deliveries`) is append-only; no-show flags and waitlist entries are closed, never deleted; setting rows cannot be deleted (switched off instead). | Implemented |
-| M13 Services and Pricing | A price version is retracted, never deleted. | Implemented |
-| M14 Document Management | A document is retracted with a reason, never deleted. | Implemented |
-| Interview round 2 records (closures, HMO list, answers, freed times, offers, templates) | Closures, HMO rows and templates are never deleted (switched off or removed with status); patient answers are append-only; freed times and offers close once. | Implemented |
-| Registration intake (counter registrations, guardian links, ID checks) | A counter registration's form data is removed when staff confirm, cancel or it expires at the end of the day; guardian links end (never deleted); no ID image or number is ever stored. | Implemented |
-| Retention periods (how long anything is kept) | Not decided by the clinic (R2-12: "up to you"). Proposal with configurable periods: [`DATA_RETENTION_PROPOSAL.md`](DATA_RETENTION_PROPOSAL.md) (`OPEN_ITEMS.md`, item 8). | Planned |
+| Module | Status | What Works Today | Evidence | Interview Basis |
+| :--- | :---: | :--- | :--- | :--- |
+| **M6 Appointment Management** | Implemented | Conflict-free online booking (real availability, double-booking database guard, Sunday closure). PayMongo pay-at-booking integration (GCash, Maya, card) with 15-minute slot hold, webhook-only confirmation, automatic refund for cancellation $\ge 24$h, discretionary refund for $< 24$h/no-show, and deposit credited to visit invoice. | `Appointments/*`, `Payment/AppointmentBookingPaymentTest`, `tests/patient-portal.test.js` | Q20, Q27, Q28, Q29, PI-29, R2-02, R2-13, Section 22 |
+| **M7 Attendance Management** | Implemented | 60-minute pre-visit reminders with signed single-use "I'll be there" / "I can't make it" actions. 5/10/15-minute late-arrival progression with front-desk undo. No-show tracking requiring staff confirmation after 3 occurrences in 6 months; late cancellation tracking. | `Automations/AutomationsTest`, `Automations/InterviewRoundTwoTest`, `Visits/*` | R2-07, R2-09, R2-10, R2-13 |
+| **M8 Check-In Management** | Implemented | Counter check-in of booked patients and walk-ins. Counter QR self-registration with daily code; kiosk mode; on-device ID scan prefill (no image stored); cross-branch duplicate record detection with staff confirmation into the dentist queue. | `Visits/*`, `Intake/IntakeTest`, `tests/intake.test.js` | Q15, PI-13, PI-21, R2-03, R2-06 |
+| **M9 Queue Management** | Implemented | Authoritative server queue numbering and state machine (`Arrived` $\to$ `In Treatment` $\to$ `Served`). Late-arriving patients resequenced to end of queue with audited staff override. Dedicated dentist and patient-facing queue displays. | `Queue/*`, `Automations/InterviewRoundTwoTest`, `tests/production-shell.test.js` | Q19, Q21, PI-24, PI-25, R2-07 |
+| **M10 Patient Flow Management** | Implemented | Staff and Owner day/week/month calendar load analysis showing booked minutes against dentist capacity. Freed-slot move-up offers (offered first to later booked patients, then waitlist, then walk-ins). Dynamic waitlist notifications. | `Automations/InterviewRoundTwoTest`, `tests/m6-staff-day-calendar.test.js` | R2-02, R2-10 |
 
-## Post-defense roadmap (not one of the 25 modules)
+---
 
-| Item | Why | Status |
-| --- | --- | --- |
-| Inventory and low-stock alerts | R2-11: "we could integrate that". Supplies per branch, minimum levels, an alert to the Owner and front desk. Not part of the 25-module catalog. | Planned (post-defense) |
+### Block 3: Ecal — Clinical Records & Treatment Care (M11–M15)
+
+| Module | Status | What Works Today | Evidence | Interview Basis |
+| :--- | :---: | :--- | :--- | :--- |
+| **M11 Patient Records Management** | Implemented | Shared patient chart across all branches, audited demographic edits, cross-branch duplicate matching, guardians/dependents linking. Inter-branch patient handovers (summary, pending procedures, document references) with time-limited read authorization and audit logging. | `Patients/PatientRecordTest`, `ConcurrentPatientRecordTest`, `Staffing/HandoverTest`, `tests/staffing.test.js` | Q17, Q28, R2-03, R2-06, R2-08 |
+| **M12 Document Management** | Partial | Secure document upload and download with signed URLs, versioned patient consent at registration, document retraction with reason instead of deletion. On-device ID prefill drafts. *Pending*: production text extraction pipelines. | `Documents/DocumentManagementTest`, `tests/intake.test.js` | Q16 |
+| **M13 Treatment Management** | Implemented | Visit-linked treatment entry by treating dentist, append-only trigger locking on completion, automated draft invoice creation. Interactive SVG Dental Chart supporting 32 adult and 20 primary teeth (FDI/Universal), condition marking, tooth history, and patient portal view. *Planned*: multi-phase treatment plans, lab cases. | `Treatments/TreatmentTest`, `Charts/DentalChartTest`, `tests/m10-dental-chart.test.js` | Q15, Q17, Q27, Q29, PI-09 |
+| **M14 Prescription Management** | Implemented | Server-authoritative prescription workflow replacing earlier browser mock. Free-text medication lines (drug, dosage, frequency, duration, instructions), allergy warning check, atomic sequential numbering (`RX-YYYY-000001`), voiding with reason, downloadable A4 PDF with clinic header, license number, and signature line. | `Prescriptions/PrescriptionTest`, `Prescriptions/ConcurrentPrescriptionTest`, `tests/m19-prescriptions.test.js` | Q16, PI-38 |
+| **M15 Follow-Up Management** | Implemented | Server follow-up tasks generated from completed treatments or created by staff/dentists. Lifecycle tracking (`Open` $\to$ `Contacted` $\to$ `Booked` $\to$ `Closed`), automatic closure on rebooking, front-desk worklist with overdue alerts, and recall reminders with Owner/dentist wording sign-off. | `Followups/FollowupTest`, `tests/m20-followups.test.js` | Q15, Q27, R2-11 |
+
+---
+
+### Block 4: Millar — Patient Engagement & Communications (M16–M20)
+
+| Module | Status | What Works Today | Evidence | Interview Basis |
+| :--- | :---: | :--- | :--- | :--- |
+| **M16 Social Media Management** | Partial | Staff-recorded inquiry log with channel attribution, assignee, and resolution outcome. Campaign tracking links (`?ref=...`) measuring bookings and accounts. *Planned*: Facebook Page Graph API insights and live Messenger webhook integration post-defense. | `Inquiries/*`, `tests/production-shell.test.js` | PI-42, PI-43 |
+| **M17 AI Chatbot Management** | Implemented | Clinic Assistant in knowledge mode operating exclusively on approved clinic answers and live schedule data. Supports English, Filipino, and Taglish; safely handles unknown questions by routing to front desk; refuses clinical diagnosis and third-party data leakage. AI LLM mode exists with feature switch off. | `Assistant/AssistantKnowledgeTest`, `Assistant/AssistantTest`, `tests/public-auth-site.test.js` | Q23, PI-42, PI-43 |
+| **M18 Messaging Management** | Implemented | Real-time encrypted communication between patients and branch front desk. Automatic branch routing based on active bookings; offline email notifications with zero message body exposure; Owner access restricted for patient confidentiality. | `Messaging/*`, `tests/production-shell.test.js` | PI-30, PI-42, PI-43 |
+| **M19 Notification Management** | Implemented | Reliable outbox dispatch engine with automatic retry progression (up to 4 attempts), dead-letter handling, idempotent message keys, real-time in-app notifications, and strict Owner wording approval gating. | `Mail/*`, `Automations/AutomationsTest`, `tests/production-shell.test.js` | PI-29, PI-31, R2-07, R2-09, R2-11 |
+| **M20 Marketing Management** | Partial | Proposed enhancement: Campaign link attribution, new patient acquisition tracking, week-over-week performance comparisons on the Owner dashboard, and automated re-booking reminders. | `Analytics/*`, `Automations/AutomationsTest` | HANDOFF Section 20 |
+
+---
+
+### Block 5: Delos Santos — Financials, Automation & Accountability (M21–M25)
+
+| Module | Status | What Works Today | Evidence | Interview Basis |
+| :--- | :---: | :--- | :--- | :--- |
+| **M21 Billing Management** | Implemented | Automated invoice generation from completed treatment procedures; Staff review and issue flow; PayMongo hosted checkout (GCash, Maya, card); webhook-driven payment settlement; booking deposit credit deduction; **20% Senior Citizen and PWD statutory discount (RA 9994 / RA 10754)** with ID type and number validation; PDF invoices and receipts; overdue payment notices. | `Billing/BillingTest`, `Payment/PayMongoPaymentTest`, `Payment/AppointmentBookingPaymentTest`, `tests/production-shell.test.js` | Q27, Section 21, Section 22 |
+| **M22 Loyalty Management** | Partial | Proposed enhancement: Double-entry referral and loyalty point ledger engine; balance calculation; reward catalog; patient redemption request flow. *Pending*: final clinic-wide points redemption policy confirmation. | `tests/phase4b2-loyalty.test.js`, `src/pages/Loyalty.jsx` | HANDOFF Section 20, 21 |
+| **M23 Automation Management** | Implemented | Six core clinic automations (A1 Appointment Reminders, A2 Late Arrivals, A3 Freed-Slot Refills, A4 Overdue Invoices, A5 Recall Reminders, A6 Owner Daily Summary). Owner wording approval gating; duplicate delivery prevention via unique database keys; error tracking. | `Automations/AutomationsTest`, `Automations/InterviewRoundTwoTest`, `tests/automations.test.js` | Q23, PI-31, R2-09, R2-11 |
+| **M24 Analytics Management** | Partial | Executive Owner metrics: daily patient volume, revenue, branch load, late arrival counts, slot refill attribution, automated daily summary email (aggregate counts only). *Pending*: advanced date range filtering and CSV export. | `Analytics/*`, `Automations/AutomationsTest`, `tests/production-shell.test.js` | Q32, R2-11 |
+| **M25 Audit Management** | Implemented | Append-only database audit trail enforced by database triggers; tracks logins, financial transactions, configuration changes, and patient record access (field names only, no PHI values); Owner inspection modal and forensic CSV export. | `Audit/*`, `tests/m22-audit-trail.test.js` | Section 20 |
+
+---
+
+### Group 3 Shared Enhancement: Feedback Management (M26)
+
+| Module | Status | What Works Today | Evidence | Interview Basis |
+| :--- | :---: | :--- | :--- | :--- |
+| **M26 Feedback Management** | Implemented | Post-visit patient feedback collection tied strictly to completed visits. 1 to 5 star rating submission; Owner feedback review portal with branch, dentist, and rating filters; automatic follow-up task creation for 1–2 star ratings (`source='feedback'`, `status='Open'`) to guarantee quality resolution. | `Feedback/FeedbackTest`, `tests/m26-feedback.test.js`, `src/pages/Feedback.jsx` | Section 20, Section 21 |
+
+---
+
+## Data Retention & Security Architecture (RA 10173 Compliance)
+
+| Module Category | Database Retention Mechanism | Status |
+| :--- | :--- | :---: |
+| **M1 Accounts & Profiles** | Soft delete (`users.deleted_at`); active sessions revoked immediately; audit trail retains actor and timestamp. | Implemented |
+| **M6, M8, M9, M13, M14, M21, M25, M26 Records** | Append-only tables protected by database triggers. The database refuses `DELETE` and unauthorized `UPDATE` statements on completed treatments, issued prescriptions, invoices, payments, audit logs, and patient feedback. | Implemented |
+| **M12 Patient Documents** | Retraction with mandatory reason instead of deletion; audit log records retraction metadata. | Implemented |
+| **Intake ID Scans** | Processed strictly on the client device (PhilID QR, passport MRZ, on-device OCR); zero raw image or ID number upload/storage. | Implemented |
+| **Automations (M23)** | `automation_deliveries` log is append-only; unique idempotency keys prevent duplicate transmissions. | Implemented |

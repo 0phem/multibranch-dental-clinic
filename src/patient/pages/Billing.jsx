@@ -8,6 +8,7 @@ import { dateLong, money } from '../format.js'
 import { EmptyState, ErrorState, PageHead, Pill, Skeleton } from '../ui.jsx'
 
 const view = i => ({ id: i.id, invoiceNo: i.invoice_number, date: i.issued_at || i.created_at, branch: i.branch?.name || '', status: i.status, total: i.gross_amount,
+  discountType: i.discount_type, discountIdNumber: i.discount_id_number, discountAmount: i.discount_amount,
   hmoCoverage: i.hmo_coverage_amount, patientResponsibility: i.patient_responsibility_amount, balance: i.balance,
   items: (i.lines || []).map(l => ({ key: l.id, name: l.service?.name || 'Service', quantity: l.quantity, unit: l.unit_price, amount: l.line_total })),
   receipt: i.receipt ? { number: i.receipt.number, amount: i.receipt.amount, method: paymentMethodLabel(i.receipt.method), paidAt: i.receipt.issued_at } : null })
@@ -86,6 +87,7 @@ export function BillingPage({ context, toast }) {
       {items.map(inv => <li key={inv.id} className={`pp-card pp-invoice pp-fade ${linkId === inv.id ? 'is-focus' : ''}`}>
         <div className="pp-invoice-head"><div><h3>{inv.invoiceNo}</h3><p className="pp-muted">{stamp(inv.date)} · {inv.branch}</p></div><Pill>{inv.status}</Pill></div>
         <ul className="pp-lines" aria-label="Charges">{inv.items.map(l => <li key={l.key}><span>{l.name}<small>{l.quantity} × {money(l.unit)}</small></span><span>{money(l.amount)}</span></li>)}</ul>
+        {Number(inv.discountAmount) > 0 && <p className="pp-row"><span>Less: 20% {inv.discountType || 'Statutory'} discount{inv.discountIdNumber ? ` (${inv.discountIdNumber})` : ''}</span><span>−{money(inv.discountAmount)}</span></p>}
         {Number(inv.hmoCoverage) > 0 && <p className="pp-row"><span>Less: coverage</span><span>−{money(inv.hmoCoverage)}</span></p>}
         <p className="pp-row pp-total"><span>{inv.status === 'Paid' ? 'Paid' : 'To pay'}</span><b>{money(inv.status === 'Paid' ? inv.patientResponsibility ?? inv.total : inv.balance)}</b></p>
         <div className="pp-actions">
@@ -95,7 +97,7 @@ export function BillingPage({ context, toast }) {
           {inv.receipt && <Button size="sm" variant="soft" aria-expanded={openId === inv.id} aria-controls={`rct-${inv.id}`} onClick={() => setOpenId(openId === inv.id ? null : inv.id)}>{openId === inv.id ? 'Hide receipt' : 'View receipt'}</Button>}
         </div>
         {inv.receipt && openId === inv.id && <dl className="pp-summary pp-receipt" id={`rct-${inv.id}`}>
-          {[['Receipt', inv.receipt.number], ['Amount paid', money(inv.receipt.amount)], ['Method', inv.receipt.method], ['Paid on', stamp(inv.receipt.paidAt)]].map(([k, v]) => <div key={k}><dt>{k}</dt><dd>{v}</dd></div>)}
+          {[['Receipt', inv.receipt.number], ['Amount paid', money(inv.receipt.amount)], ['Method', inv.receipt.method], ['Paid on', stamp(inv.receipt.paidAt)], ...(Number(inv.discountAmount) > 0 ? [['Discount', `20% ${inv.discountType} (${inv.discountIdNumber})`]] : [])].map(([k, v]) => <div key={k}><dt>{k}</dt><dd>{v}</dd></div>)}
           <p className="pp-hint">The receipt PDF was also sent to your email.</p>
         </dl>}
       </li>)}

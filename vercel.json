@@ -1,0 +1,20 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://florida-convinced-carol-attended.trycloudflare.com/api/:path*"
+    },
+    {
+      "source": "/sanctum/:path*",
+      "destination": "https://florida-convinced-carol-attended.trycloudflare.com/sanctum/:path*"
+    },
+    {
+      "source": "/broadcasting/:path*",
+      "destination": "https://florida-convinced-carol-attended.trycloudflare.com/broadcasting/:path*"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}

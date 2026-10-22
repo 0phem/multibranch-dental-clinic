@@ -50,11 +50,12 @@ assert.equal(m.ModulesPage,undefined,'the professor-facing Module Coverage page 
 assert.ok(server.includes('Ask about using the clinic system')&&!server.includes('Offline demo preview'),'server-mode assistant has the question box and no demo label')
 assert.ok(demo.includes('Offline demo preview')&&!demo.includes('Ask about using the clinic system'),'the demo assistant is labelled and has no free-text box')
 assert.ok(/can.t diagnose/.test(server.replace(/&#x27;|’/g,"'")),'the scope is stated up front')}
-// M26: the Patient-only foundation screen renders its honest loading state under SSR and makes no response-time, anonymity, rating or publication promise.
+// M26: Patient feedback renders 1-5 star rating and honest loading state under SSR. Owner has Patient Feedback review authority.
 {const patient=render('feedback','patient')
 assert.ok(patient.includes('Share feedback')&&patient.includes('it is not anonymous')&&patient.includes('has not set a response time'),'Patient feedback page renders honestly')
-assert.ok(!/\bstars?\b|rating|survey|testimonial/i.test(patient),'no rating/survey/testimonial UI')
-assert.ok(!m.NAV.owner.some(([k])=>k==='feedback')&&!m.NAV.staff.some(([k])=>k==='feedback')&&!m.NAV.dentist.some(([k])=>k==='feedback'),'only Patients have a feedback entry (no reviewer authority exists)')}
+assert.ok(/stars?|rating/i.test(patient),'Patient feedback includes star rating UI')
+assert.ok(m.NAV.owner.some(([k])=>k==='feedback'),'Owner has feedback review page')
+assert.ok(!m.NAV.staff.some(([k])=>k==='feedback')&&!m.NAV.dentist.some(([k])=>k==='feedback'),'Staff and Dentist have no feedback nav entry')}
 // Scheduled automations: the Owner page renders its loading state under SSR and says nothing is sent before the wording is approved
 // (each value's "not confirmed by the clinic" label is in the row details, loaded from the server).
 {const automations=render('automations','owner');assert.ok(automations.includes('Automations')&&automations.includes('Nothing is sent until you approve its wording')&&automations.includes('Loading automations'),'automations page renders honestly')

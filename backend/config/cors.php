@@ -19,9 +19,7 @@ return [
 
     'allowed_methods' => ['*'],
 
-    // Scoped to the future Vite frontend origin (Backend Foundation 1B, not yet wired) rather than '*' —
-    // a wildcard origin cannot be combined with credentials (cookies) anyway.
-    'allowed_origins' => [env('FRONTEND_URL', 'http://localhost:5173')],
+    'allowed_origins' => array_filter(array_map('trim', explode(',', env('FRONTEND_URL', 'http://localhost:5173')))),
 
     'allowed_origins_patterns' => [],
 

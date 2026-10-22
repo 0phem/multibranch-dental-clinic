@@ -28,7 +28,7 @@ const GROUPS={
   patient:[['Overview',['dashboard']],['Booking',['book','appointments']],['Communication',['messages']],['Account',['billing','feedback','me']]],
   staff:[['Today',['dashboard','appointments','calendar','checkin','queue','capacity','closures']],['Patients & finance',['patients','handovers','prescriptions','billing','hmo']],['Team',['schedules','leave']],['Communication',['inquiries','messages','followups','engagement']]],
   dentist:[['Today',['dashboard','schedule','queue']],['Clinical',['patients','chart','handovers','treatment','prescriptions','followups']],['Team',['schedules','leave']],['Communication',['messages','wording']]],
-  owner:[['Overview',['dashboard','analytics']],['Operations',['branches','team','calendar','capacity','hmo']],['Team',['schedules','leave','handovers']],['Clinical records',['prescriptions']],['Administration',['users','pricing','automations','closures','hmos','automation','audit','branding','assistant','engagement']]],
+  owner:[['Overview',['dashboard','analytics']],['Operations',['branches','team','calendar','capacity','hmo']],['Team',['schedules','leave','handovers']],['Clinical records',['prescriptions']],['Administration',['users','pricing','automations','closures','hmos','automation','audit','branding','assistant','engagement','feedback']]],
 }
 
 // In a clinic-server session the capacity page is the factual live-queue view (src/pages/QueueCounts.jsx); the

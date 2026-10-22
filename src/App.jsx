@@ -357,7 +357,7 @@ function AppBody() {
     case 'audit': content=<AuditTrailPage store={store}/>; break
     case 'engagement': content=<EngagementPage role={role} store={store}/>; break
     case 'loyalty': content=<PatientLoyaltyPage store={store}/>; break
-    case 'feedback': content=<PatientFeedbackPage store={store}/>; break
+    case 'feedback': content=<PatientFeedbackPage role={role} store={store}/>; break
     case 'me': content=<PatientMePage store={store} setPage={setPage}/>; break
     default: content=<Notice>This screen is no longer available with your current permissions. <button onClick={()=>setPage('dashboard')}>Return home</button></Notice>;
   }
