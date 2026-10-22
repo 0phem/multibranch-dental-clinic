@@ -30,7 +30,8 @@ class DemoAccountsSeeder extends Seeder
         // No plaintext password is committed to a tracked file. DEMO_ACCOUNT_PASSWORD may be set in the
         // gitignored .env; the fallback below is a clearly-labeled, non-secret local-dev-only default,
         // documented in backend/README.md, never intended for anything but a throwaway local database.
-        $password = Hash::make(env('DEMO_ACCOUNT_PASSWORD', 'DemoPass123'));
+        $rawPassword = (string) env('DEMO_ACCOUNT_PASSWORD') ?: 'DemoPass123';
+        $password = Hash::make($rawPassword);
 
         $this->demoPatient($password);
         $this->demoStaff($password, 'staff.reception@example.test', 'Reception Staff', 'Receptionist');

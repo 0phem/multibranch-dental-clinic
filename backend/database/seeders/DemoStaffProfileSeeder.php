@@ -33,7 +33,8 @@ class DemoStaffProfileSeeder extends Seeder
             return;
         }
 
-        $password = Hash::make(env('DEMO_ACCOUNT_PASSWORD', 'DemoPass123'));
+        $rawPassword = (string) env('DEMO_ACCOUNT_PASSWORD') ?: 'DemoPass123';
+        $password = Hash::make($rawPassword);
         foreach ([
             ['email' => 'staff.assistant@example.test', 'last_name' => 'Assistant Staff', 'title' => 'Dental Assistant', 'branch' => 'b1', 'profile' => 's-demo-a1'],
             ['email' => 'staff.branchb@example.test', 'last_name' => 'Cardinal Staff', 'title' => 'Receptionist', 'branch' => 'b2', 'profile' => 's-demo-b2'],

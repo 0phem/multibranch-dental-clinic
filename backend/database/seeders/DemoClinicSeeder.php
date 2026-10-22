@@ -77,7 +77,8 @@ class DemoClinicSeeder extends Seeder
         // the email intents stay in the outbox and the mail sweeper (`mail:process-due`, run by the scheduler) sends the real ones.
         config(['queue.default' => 'null']);
         $firstDispatch = (int) MailDispatch::max('id');
-        $password = Hash::make(env('DEMO_ACCOUNT_PASSWORD', 'DemoPass123'));
+        $rawPassword = (string) env('DEMO_ACCOUNT_PASSWORD') ?: 'DemoPass123';
+        $password = Hash::make($rawPassword);
 
         // Realistic names for the demo Dentist and the demo Patient (their sign-in emails do not change).
         $dentistUser = User::where('person_id', $dentist->person_id)->first();

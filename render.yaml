@@ -11,7 +11,7 @@ services:
       - key: APP_NAME
         value: "Dr. Dana E. Roxas Dental Clinic API"
       - key: APP_ENV
-        value: production
+        value: local
       - key: APP_DEBUG
         value: "false"
       - key: APP_KEY
