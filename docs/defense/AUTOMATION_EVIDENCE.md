@@ -1,6 +1,6 @@
 # Automation Evidence: What the System Automates, Module by Module
 
-Aligned with the official 26-module paper `BPA_MODULES_UPDATED_OCT_20_2026.docx`.
+Aligned with the official 25-module paper `BPA_MODULES_UPDATED_OCT_20_2026.docx` and `BPA_MODULES_UPDATED_OCT_22_2026.docx`.
 
 **Status words:**
 - **Built**: Server-authoritative with database integrity, tested, and verifiable in the live UI.
@@ -11,7 +11,7 @@ Interview citations (Q, PI, R2) are verbatim in [`INTERVIEW_EVIDENCE.md`](INTERV
 
 ---
 
-## Summary (Official 26 Modules)
+## Summary (Official 25 Modules)
 
 | Module | Status | What the System Automates | Show It Live |
 | :--- | :---: | :--- | :--- |
@@ -34,13 +34,12 @@ Interview citations (Q, PI, R2) are verbatim in [`INTERVIEW_EVIDENCE.md`](INTERV
 | **M17 AI Chatbot Management** | Built | Clinic Assistant answering in English, Filipino, and Taglish strictly from approved clinic facts; refuses medical advice; hands off to front desk. | Patient $\to$ Ask us; Owner $\to$ Assistant |
 | **M18 Messaging Management** | Built | Real-time encrypted communication between patient and branch front desk, auto-branch routing, and offline email alerts. | Patient $\leftrightarrow$ Staff Messages |
 | **M19 Notification Management** | Built | Reliable outbox dispatch engine with automatic retry progression (up to 4 attempts), real-time in-app alerts, and Owner wording approval gating. | Patient bell; Owner $\to$ Automations |
-| **M20 Marketing Management** | Partly built | Campaign link attribution, new patient acquisition tracking, and week-over-week performance comparisons. | Owner $\to$ Analytics |
+| **M20 Marketing Management** | Built | Campaign link and referral code attribution (`?promo=...` / `?ref=...`), patient acquisition conversion tracking into Analytics dashboard, and rebooking reminders. | Owner $\to$ Analytics |
 | **M21 Billing Management** | Built | Invoices from treatment, PayMongo online payment (GCash/card), booking payment credit, 20% Senior Citizen & PWD statutory discount (RA 9994 / RA 10754), and PDF receipts. | Staff $\to$ Billing; Patient $\to$ Review and pay |
 | **M22 Loyalty Management** | Partly built | Double-entry loyalty points ledger, balance calculation, reward catalog, and patient redemption requests. | Patient $\to$ Loyalty |
-| **M23 Automation Management** | Built | Six core clinic automations (A1–A6) with Owner wording approval gating and idempotent delivery keys. | Owner $\to$ Automations |
-| **M24 Analytics Management** | Partly built | Executive Owner metrics: daily patient counts, revenue, branch load, and automated daily summary email. | Owner $\to$ Analytics |
-| **M25 Audit Management** | Built | Append-only database audit trail enforced by database triggers; Owner search and forensic CSV export. | Owner $\to$ Audit Trail $\to$ Export CSV |
-| **M26 Feedback Management** | Built | Post-visit 1–5 star rating and feedback collection, Owner review screen with branch/dentist filters, and auto follow-up tasks for 1–2 star ratings. | Patient $\to$ Feedback; Owner $\to$ Feedback |
+| **M23 Archives & Historical Records Management** | Built | Cross-branch archive and retrieval for completed visit summaries, issued prescriptions, settled receipts, and inactive records; patient self-service portal (`#p/archives`), record restore, and CSV export. | Patient $\to$ Archives; Owner/Staff $\to$ Archives |
+| **M24 Analytics Management** | Built | Executive Owner metrics: daily patient counts, revenue, branch load, slot refill attribution, promo/campaign tracking, and daily summary email counts. | Owner $\to$ Analytics |
+| **M25 Audit Management** | Built | Append-only database audit trail enforced by database triggers; tracks logins, financial transactions, configuration changes, policy and archive actions; Owner search and forensic CSV export. | Owner $\to$ Audit Trail $\to$ Export CSV |
 
 ---
 
@@ -62,10 +61,10 @@ Interview citations (Q, PI, R2) are verbatim in [`INTERVIEW_EVIDENCE.md`](INTERV
 - **Automates:** Authoritative prescription creation by treating dentists with atomic gapless numbering (`RX-YYYY-000001`), signed A4 PDF generation, and automatic follow-up task generation from completed treatments. Rebooking the patient automatically transitions follow-up tasks to `Booked`.
 - **Proof:** `Prescriptions/PrescriptionTest`, `Followups/FollowupTest`, `tests/m19-prescriptions.test.js`, `tests/m20-followups.test.js`.
 
-### 5. Patient Feedback & Automatic Quality Recovery (M26)
-- **Automates:** 1 to 5 star rating submission tied strictly to completed visits. Ratings of 1 or 2 stars automatically trigger a high-priority follow-up task (`status='Open'`, `source='feedback'`) assigned to the branch front desk for corrective action.
-- **Proof:** `Feedback/FeedbackTest`, `tests/m26-feedback.test.js`.
+### 5. Cross-Branch Historical Records & Receipts Archive (M23)
+- **Automates:** Cross-branch archive and retrieval for completed visit summaries, issued prescriptions, settled receipts, and inactive patient/HMO records. Dedicated self-service patient portal archives view (`#p/archives`) with downloadable PDF receipts and records; Staff/Dentist/Owner dashboard with search, filtering, record restore, and compliance export.
+- **Proof:** `Archives/*`, `tests/m23-archives.test.js`, `src/pages/ArchivesPage.jsx`, `src/patient/pages/Archives.jsx`.
 
-### 6. Email Outbox with Retries & Duplicate Protection (M19, M23)
+### 6. Email Outbox with Retries & Duplicate Protection (M19, M5)
 - **Automates:** Outbox dispatch engine with exponential backoff (up to 4 attempts); unique idempotency keys per record and action ensure no reminder, notice, or invoice is ever delivered twice.
 - **Proof:** `Mail/MailOutboxTest`, `Automations/AutomationsTest`.

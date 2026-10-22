@@ -119,14 +119,14 @@ with a named contact and the pre-defense style health check (`scripts/predefense
 ## E. Hard questions
 
 **25. Which modules are not finished?**
-We align strictly with the official 26-module paper (`BPA_MODULES_UPDATED_OCT_20_2026.docx`):
-- **19 Implemented**: M2 Branch, M3 Staff (schedules & leave), M5 Clinic Policy, M6 Appointments (with PayMongo pay-at-booking), M7 Attendance, M8 Check-In, M9 Queue, M10 Patient Flow, M11 Patient Records (with Handovers), M13 Treatment (with SVG Dental Chart), M14 Prescriptions, M15 Follow-Up Tasks, M17 AI Chatbot, M18 Messaging, M19 Notifications, M21 Billing (PayMongo, deposit credit, 20% Senior/PWD discount), M23 Automations, M25 Audit Trail, M26 Feedback.
-- **7 Partial**: M1 User Management (multiple owners & 2FA planned), M4 Service Management (clinic-approved prices pending), M12 Document Management (intake & consent live; text extraction pipeline planned), M16 Social Media (inquiries built; live Meta API planned), M20 Marketing Management (campaign links built; Facebook insights planned), M22 Loyalty Management (ledger engine built; clinic policy pending), M24 Analytics Management (Owner metrics built; date range export planned).
+We align strictly with the official 25-module paper (`BPA_MODULES_UPDATED_OCT_20_2026.docx` and `BPA_MODULES_UPDATED_OCT_22_2026.docx`):
+- **20 Implemented**: M2 Branch, M3 Staff (schedules & leave), M5 Clinic Policy, M6 Appointments (with PayMongo pay-at-booking), M7 Attendance, M8 Check-In, M9 Queue, M10 Patient Flow, M11 Patient Records (with Handovers), M13 Treatment (with SVG Dental Chart), M14 Prescriptions, M15 Follow-Up Tasks, M17 AI Chatbot (Gemini with knowledge fallback), M18 Messaging, M19 Notifications, M20 Marketing (campaign tracking & promo attribution), M21 Billing (PayMongo, deposit credit, 20% Senior/PWD discount), M23 Archives & Historical Records Management, M24 Analytics (Owner metrics & campaign tracking), M25 Audit Trail.
+- **5 Partial**: M1 User Management (multiple owners & 2FA planned), M4 Service Management (clinic-approved prices pending), M12 Document Management (intake & consent live; text extraction pipeline planned), M16 Social Media (inquiries built; live Meta API planned), M22 Loyalty Management (ledger engine built; clinic policy pending).
 - **0 Mock only**: Every former browser mock has been replaced by a tested PostgreSQL server module.
 - **Roadmap**: Multi-phase treatment plans, external lab case tracking, and live Meta Messenger webhooks. Full matrix: `MODULES_FINAL.md`.
 
 **26. Why did you restructure the patient portal modules?**
-Earlier prototypes relied on browser-only mock tabs for prescriptions, follow-ups, and dental charts with no real clinic database. We removed the ungrounded mocks and built M13 (Dental Chart), M14 (Prescriptions), M15 (Follow-Up Tasks), and M26 (Feedback) as real, server-authoritative modules with PostgreSQL tables, API endpoints, authorization checks, and PDF generation. Features are exposed to patients only when real clinic records back them.
+Earlier prototypes relied on browser-only mock tabs for prescriptions, follow-ups, and dental charts with no real clinic database. We removed the ungrounded mocks and built M13 (Dental Chart), M14 (Prescriptions), M15 (Follow-Up Tasks), and M23 (Archives & Historical Records) as real, server-authoritative modules with PostgreSQL tables, API endpoints, authorization checks, and PDF generation. Features are exposed to patients only when real clinic records back them.
 
 **27. Is there a known bug?**
 Yes: some timestamps written by the framework are stored 8 hours early because the app and the database disagree on the time

@@ -39,7 +39,7 @@ One web system for patients, front desk, dentists and the owner, across all bran
 | Patients | Email confirmations, notifications, reschedule and cancel themselves | Built: `M6`, `M19`, `PatientPortalApiTest`, `AppointmentEmailTest` |
 | Patients | Message the front desk in real time; branch routing handled automatically | Built: `M18`, `Messaging/*` |
 | Patients | Pay online (GCash, card…) with PayMongo; 20% Senior Citizen / PWD statutory discount (RA 9994 / RA 10754) with verified ID; receipt emailed with PDF | Built: `M21`, `Billing/*`, `PayMongoPaymentTest` |
-| Patients | Share visit feedback with 1–5 star ratings; low ratings auto-spawn follow-up care | Built: `M26`, `Feedback/*`, `tests/m26-feedback.test.js` |
+| Patients | Self-service access to historical visit care summaries, prescriptions, and official payment receipts | Built: `M23`, `Archives/*`, `tests/m23-archives.test.js` |
 | Patients | A clinic assistant answering in English, Filipino and Taglish from approved information | Built (knowledge mode): `M17`, `AssistantKnowledgeTest` |
 | Front desk | Conflict-free calendar, check-in, queue, billing from treatment, Senior/PWD discounts | Built: `M8`, `M9`, `M10`, `M21` |
 | Dentists | Visit-linked treatment records, locked when completed, append-only history | Built: `M13`, `Treatments/*` |
@@ -47,7 +47,7 @@ One web system for patients, front desk, dentists and the owner, across all bran
 | Dentists & Patients | Prescriptions issued by dentist (locked once issued, numbered RX-YYYY-000001, voidable with reason), A4 PDF | Built: `M14`, `Prescriptions/*` |
 | Front desk | Server follow-up tasks from treatment notes, rebooking integration, recall reminders | Built: `M15`, `Followups/FollowupTest` |
 | Front desk & Dentists | Patient handovers between branches or dentists, acknowledged, time-limited access | Built: `M11`, `Staffing/HandoverTest` |
-| Owner | Branches, staff schedules, leave approvals, branding, wording approval, audit trail | Built: `M2`, `M3`, `M5`, `M23`, `M25` |
+| Owner | Branches, staff schedules, leave approvals, branding, cross-branch archives, audit trail | Built: `M2`, `M3`, `M5`, `M23`, `M25` |
 
 Not finished, and we say so: multi-phase treatment plans, external lab cases, and live Meta Messenger integration are post-defense roadmap items. Full traceability in `docs/defense/MODULES_FINAL.md`.
 
@@ -102,6 +102,6 @@ else to the front desk. It runs as the clinic's own branded installation, with i
 7. **Paying without paperwork** — invoice from the treatment; PayMongo; automatic receipt PDF.
 8. **Messages and the assistant** — real-time front desk; assistant in English/Filipino/Taglish; never invents, hands off.
 9. **Security and privacy** — roles, branch scope, audit trail; codes for sign-in; nothing leaves the system in knowledge mode.
-10. **Status, honestly** — 19 Implemented, 7 Partial, 0 Mock only (all 26 modules from the official paper BPA_MODULES_UPDATED_OCT_20_2026.docx mapped in `MODULES_FINAL.md`); before/after process per module (`PROCESS_DOCUMENTATION.pdf`); known issues (timezone, BIR, reminders).
+10. **Status, honestly** — 20 Implemented, 5 Partial, 0 Mock only (all 25 modules from the official paper BPA_MODULES_UPDATED_OCT_20_2026.docx and BPA_MODULES_UPDATED_OCT_22_2026.docx mapped in `MODULES_FINAL.md`); before/after process per module (`PROCESS_DOCUMENTATION.pdf`); known issues (timezone, BIR, reminders).
 11. **Deployment and proposal** — one install per clinic; clinic's own PayMongo and email; pricing proposal; open decisions.
 12. **Post-defense roadmap (not built)** — Multi-phase treatment plans, external lab case tracking, and live Meta Messenger integration; each documented in `MODULES_FINAL.md`.

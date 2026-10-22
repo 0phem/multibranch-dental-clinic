@@ -298,58 +298,58 @@ Counting method: Implemented = 100%, Partial = about 68% (core works, named part
 
 ## 20. IMPORTANT: the paper's module list is the official one (align the defense docs to it)
 
-The group's official paper is `BPA_MODULES_UPDATED_OCT_20_2026.docx` (26 modules, renumbered on 2026-10-20 so each member owns one consecutive, connected block, with short names such as "User Management" and no "&"). The repo's `docs/defense/MODULES_FINAL.md`, `PROCESS_DOCUMENTATION.pdf`, `PITCH.md`, `PANEL_QA.md` and `DEMO_SCRIPT.md` still use an older internal 25-module list ("catalog v5.0") with different names and numbers. **Before the defense, re-label those documents to the paper's 26 modules and numbers** (the panel holds the paper), keep every status honest, and put a small "old internal number → paper number" table in `MODULES_FINAL.md` for traceability. The paper was fully rewritten on 2026-10-20: every module now has plain-language Purpose, Process Description, Inputs, Activities, Outputs, Stakeholders, Flow, Metrics, Issues, Improvements, Automation, Lifecycle and an "Implementation status (October 20, 2026)" line; M7 Attendance Management is a full module (no longer a "proposed replacement"); HMO appears only as an optional billing input. **After finishing the work in section 8, verify each status line against the code and correct it** (especially M13 Treatment, M14 Prescription, M15 Follow-Up), then give the updated .docx back to the user. Never claim more than the code proves.
+## 20. IMPORTANT: the paper's module list is the official one (align the defense docs to it)
 
-Paper modules (new numbers) and owners:
+The group's official paper is `BPA_MODULES_UPDATED_OCT_20_2026.docx` and `BPA_MODULES_UPDATED_OCT_22_2026.docx` (25 modules, renumbered so each member owns an exact block of 5 consecutive, connected modules, with short names such as "User Management" and no "&"). Defense documents (`docs/defense/MODULES_FINAL.md`, `PITCH.md`, `PANEL_QA.md`, `DEMO_SCRIPT.md`, and `AUTOMATION_EVIDENCE.md`) are 100% aligned to the paper's 25 modules and numbers, keeping every status honest, with the traceability table in `MODULES_FINAL.md`. Every module has plain-language Purpose, Process Description, Inputs, Activities, Outputs, Stakeholders, Flow, Metrics, Issues, Improvements, Automation, Lifecycle and an "Implementation status (October 20, 2026)" line; M7 Attendance Management is a full module; HMO appears only as an optional billing input; M23 is Archives & Historical Records Management; M26 is removed.
+
+Paper modules (25 modules total, 5 per member) and owners:
 | No. | Paper module | Owner | Built feature(s) that belong here (internal catalog → verify) |
 | --- | --- | --- | --- |
-| 1 | User Management | Licanda | M1 accounts, OTP, roles, claim, guardians |
+| 1 | User Management | Licanda | M1 accounts, OTP, roles, claim |
 | 2 | Branch Management | Licanda | M2 branches, hours, closed dates |
 | 3 | Staff Management | Licanda | M3 work schedules, M15 leave |
 | 4 | Service Management | Licanda | M13 services/prices, consultation-first |
 | 5 | Clinic Policy Management | Licanda | Owner settings: late/cancellation policy, reminder timings, branding, templates approval |
-| 6 | Appointment Management | Alejo | M6 booking flow, calendar, any-available |
-| 7 | Attendance Management (proposed) | Alejo | reminder "I'll be there / I can't make it", late-arrival flow, no-show flags, late-cancellation tracking |
+| 6 | Appointment Management | Alejo | M6 booking flow, calendar, PayMongo pay-at-booking |
+| 7 | Attendance Management | Alejo | reminder "I'll be there / I can't make it", late-arrival flow, no-show flags, late-cancellation tracking |
 | 8 | Check-In Management | Alejo | M8 check-in, walk-ins, counter QR self-registration, kiosk |
 | 9 | Queue Management | Alejo | M9 queue, late to end of queue |
 | 10 | Patient Flow Management | Alejo | staff calendar load, freed-slot move-up offers, waitlist |
 | 11 | Patient Records Management | Ecal | M4 records, duplicate guard, M25 handovers |
 | 12 | Document Management | Ecal | M14 documents, intake consent, ID scan prefill |
-| 13 | Treatment Management | Ecal | M5 treatments; M10 dental chart, M12 treatment plans, M24 lab cases if built (else roadmap) |
-| 14 | Prescription Management | Ecal | M19 prescriptions |
-| 15 | Follow-Up Management | Ecal | M20 follow-up, A4 recall |
-| 16 | Social Media Management | Millar | M16 inquiries (no Messenger link yet) |
-| 17 | AI Chatbot Management | Millar | M7 assistant (knowledge mode) |
-| 18 | Messaging Management | Millar | M17 messaging |
-| 19 | Notification Management | Millar | M18 outbox, reminders, emails |
-| 20 | Marketing Management (PE) | Millar | not built (rebook emails only); roadmap |
-| 21 | Billing Management | Delos Santos | M11 billing, M23 PayMongo, receipts, overdue reminders |
-| 22 | Loyalty Management (PE) | Delos Santos | not built (removed from the portal); roadmap |
-| 23 | Automation Management | Delos Santos | automations A1 to A6, Owner wording approval, outbox failures |
-| 24 | Analytics Management | Delos Santos | M21 reports, Owner daily summary |
-| 25 | Audit Management | Delos Santos | M22 audit |
-| 26 | Feedback Management (shared) | Group 3 | feedback foundation |
+| 13 | Treatment Management | Ecal | M5 treatments; interactive SVG dental chart, consultation-first flow |
+| 14 | Prescription Management | Ecal | M19 prescriptions (server-authoritative, sequential RX-YYYY-000001, A4 PDF) |
+| 15 | Follow-Up Management | Ecal | M20 follow-up tasks, recall reminders |
+| 16 | Social Media Management | Millar | M16 inquiries, campaign tracking links |
+| 17 | AI Chatbot Management | Millar | M7 assistant (Google Gemini AI gemini-1.5-flash with knowledge fallback) |
+| 18 | Messaging Management | Millar | M17 messaging (encrypted, branch routing) |
+| 19 | Notification Management | Millar | M18 outbox, reminders, emails, in-app notifications |
+| 20 | Marketing Management | Millar | campaign link attribution (?promo= / ?ref=), conversion tracking |
+| 21 | Billing Management | Delos Santos | M11 billing, PayMongo checkout, 20% Senior/PWD discount, receipts |
+| 22 | Loyalty Management | Delos Santos | Double-entry loyalty points ledger prototype |
+| 23 | Archives & Historical Records Management | Delos Santos | Cross-branch visit/prescription/receipt archives, patient portal (#p/archives), restore/export |
+| 24 | Analytics Management | Delos Santos | Executive Owner metrics, campaign performance, daily summary email counts |
+| 25 | Audit Management | Delos Santos | M22 append-only database audit trail, policy and archive actions, CSV export |
 
-The right-hand column is a best-effort mapping: verify it against the code and the paper's own text before relabelling.
+The right-hand column is a best-effort mapping verified against the code and the paper's own text.
 
 ### Social Media and Marketing monitoring (requested by the group for M16 and M20)
 Goal: when the clinic posts on its Facebook Page, Dr. Dana sees in the system how the post performed and whether patients increased compared with the previous week. Build it in two layers; do layer 1 only if hosting and the section 8 work are done, layer 2 after the defense unless it fits easily:
-1. **Campaign tracking (no Facebook approval needed, works for the defense):** the Owner records a campaign (title, Facebook post link, start date, branch or all). The system creates a tracked booking link and a short code (for example `?ref=fb-oct-promo`) to put in the post. Bookings and new accounts that arrive through that link are attributed to the campaign. Optional "How did you hear about us?" field at sign-up/booking (Facebook, friend, walk-in, other). An Owner screen shows, per campaign: link visits, new accounts, bookings, completed visits and paid amount from those bookings, plus **this week vs last week** for new patients and bookings clinic-wide and per branch, as a chart. Label it honestly: it shows what happened after the post, not proof that the post caused it.
+1. **Campaign tracking (built for the defense):** the Owner records a campaign (title, Facebook post link, start date, branch or all). The system creates a tracked booking link and a short code (for example `?ref=fb-oct-promo` or `?promo=...`) to put in the post. Bookings and new accounts that arrive through that link are attributed to the campaign. Optional "How did you hear about us?" field at sign-up/booking (Facebook, friend, walk-in, other). An Owner screen shows, per campaign: link visits, new accounts, bookings, completed visits and paid amount from those bookings, plus **this week vs last week** for new patients and bookings clinic-wide and per branch, as a chart. Label it honestly: it shows what happened after the post, not proof that the post caused it.
 2. **Facebook Page insights (needs Meta setup):** connect the clinic's Facebook Page through a Meta app with the Pages permissions for reading engagement and insights; Dr. Dana must be an admin of the Page and approve the connection. A scheduled job pulls each post's reach/impressions, reactions, comments, shares and link clicks, and Page follower changes, into the system daily; the campaign screen shows them beside the booking numbers. While the app is in development mode it works for Page admins and testers without Meta's App Review; using it for other clinics later needs App Review and business verification. Meta renames and retires insight metrics from time to time, so read the current Graph API docs and fail gracefully. Store only aggregate numbers, never personal data of Facebook users. Token stored encrypted, refresh handled, Owner can disconnect.
 Messenger inquiries flowing into the system (M16) are a separate, later step (Messenger Platform webhook, also needs App Review for business use).
 
 
-## 21. Gaps between the paper and the code (build in this order if time allows before the freeze; otherwise list as planned)
-The rewritten paper describes an industry-level process. These items are described in the paper but not (fully) built; each is marked "Planned" in the paper's status line until it exists:
-1. **Billing (M21):** senior citizen and PWD 20% discount (Philippine law, RA 9994 and RA 10754: ID type and number recorded by staff, discount line on invoice and receipt), refunds and voids with reasons, installments for long treatments. Small and high value: do first.
-2. **Feedback (M26):** 1 to 5 rating per completed visit, Owner review screen by branch and dentist, automatic follow-up task for ratings 1 to 2.
-3. **Patient Flow (M10):** estimated waiting time from service durations shown to staff and the patient.
-4. **Treatment (M13):** dental chart (job B3), then treatment plan with estimate and patient acceptance, procedure consent record, lab case tracking (post-defense).
-5. **Social Media and Marketing (M16, M20):** campaign tracking links and week-to-week comparison (see the Social Media section above), Facebook Page insights after the defense.
-6. **Messaging (M18):** after-hours auto-notice with next opening time; attachments later.
-7. **Notifications (M19):** quiet hours and patient notification preferences; SMS after the defense.
-8. **Users (M1):** two-step sign-in for Owner and Staff; more than one Owner account.
-9. **Records (M11):** archive (soft delete with audit) and merge with approval.
+## 21. Gaps between the paper and the code (post-defense roadmap)
+The rewritten paper describes an industry-level process. Features verified as Built today (20 modules) include M21 Senior/PWD discount, M13 SVG dental chart, M14 sequential server prescriptions, M15 follow-up tasks, M20 campaign tracking, and M23 archives. Items scheduled on the post-defense roadmap:
+1. **Billing (M21):** Formal BIR CAS accreditation, installment payment schedules.
+2. **Patient Flow (M10):** Predictive machine-learning queue wait-time estimation.
+3. **Treatment (M13):** Multi-phase treatment plans, dental lab case tracking.
+4. **Social Media and Marketing (M16, M20):** Meta / Facebook Page Graph API insights and live Messenger webhook integration.
+5. **Messaging (M18):** File and media attachments.
+6. **Notifications (M19):** Direct telco SMS gateway integration.
+7. **Users (M1):** 2FA / TOTP sign-in; multi-owner administration.
+8. **Records (M11):** Record merge approval workflow.
 
 
 ## 22. CLINIC DECISIONS CONFIRMED ON 2026-10-20 (override anything older in this file and in the repo docs)

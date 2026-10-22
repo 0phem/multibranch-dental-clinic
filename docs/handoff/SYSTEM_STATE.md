@@ -78,7 +78,7 @@ Counting methodology:
 1. **Host on Vercel + Railway + Supabase** (first priority).
 2. **Online payment at booking via PayMongo** (Implemented in Section 22; verified with 884 tests and appointment payment feature suite).
 3. **End-to-end dress rehearsal** on the hosted URL following `DEMO_SCRIPT.md`.
-4. **Align defense documents** with the official paper's 26-module numbering.
+4. **Align defense documents** with the official paper's 25-module numbering.
 
 ---
 
@@ -91,6 +91,6 @@ Counting methodology:
 5. Run database migration and seeders on the hosted Supabase database.
 6. Configure PayMongo test webhook URL to the live Railway domain.
 7. Perform the 10-point Hosted Verification Checklist.
-8. Implement online payment at booking (M6 + M23).
-9. Align documentation with the 26-module academic paper catalog.
+8. Implement online payment at booking (M6 + M21).
+9. Align documentation with the 25-module academic paper catalog.
 10. Conduct full timed dress rehearsal (target ~14 min) on Friday Oct 23.
