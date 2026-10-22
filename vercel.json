@@ -2,15 +2,15 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://florida-convinced-carol-attended.trycloudflare.com/api/:path*"
+      "destination": "https://dental-clinic-backend.onrender.com/api/:path*"
     },
     {
       "source": "/sanctum/:path*",
-      "destination": "https://florida-convinced-carol-attended.trycloudflare.com/sanctum/:path*"
+      "destination": "https://dental-clinic-backend.onrender.com/sanctum/:path*"
     },
     {
       "source": "/broadcasting/:path*",
-      "destination": "https://florida-convinced-carol-attended.trycloudflare.com/broadcasting/:path*"
+      "destination": "https://dental-clinic-backend.onrender.com/broadcasting/:path*"
     },
     {
       "source": "/(.*)",
