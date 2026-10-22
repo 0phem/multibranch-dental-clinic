@@ -21,6 +21,20 @@
         ['Service', $appointment->service?->name],
         ['Status', $appointment->status],
     ]])
+
+    @if ($appointment->booking_payment_status === 'paid' && (float) ($appointment->booking_fee_php ?? 0) > 0)
+        @include('emails.v2.partials.details', ['title' => 'Booking payment & deposit receipt', 'rows' => [
+            ['Receipt number', 'DEP-'.$appointment->appointment_code],
+            ['Deposit paid', \App\Support\Brand::money($appointment->booking_fee_php)],
+            ['Payment method', $appointment->booking_payment_method ?: 'PayMongo (Online)'],
+            ['Payment reference', $appointment->booking_payment_ref],
+            ['Payment status', 'Paid (Credited toward treatment)'],
+        ]])
+        <p class="t-muted" style="margin:8px 0 16px; font-size:14px; line-height:21px; color:#5b6b7f;">
+            &#128206;&nbsp; A PDF copy of your <strong>Booking Deposit Receipt</strong> is attached for your records.
+        </p>
+    @endif
+
     @include('emails.v2.partials.button', ['url' => \App\Support\Brand::forEmail()['portal_url'], 'label' => 'View in your patient portal'])
     <p class="t-muted" style="margin:0 0 8px; font-size:14px; line-height:21px; color:#5b6b7f;">Need to reschedule? Manage your appointment in your patient portal or call your clinic branch.</p>
     {{-- F4: the clinic's cancellation policy, as the Owner set it (shown only while it is switched on). --}}

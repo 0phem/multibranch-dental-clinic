@@ -17,6 +17,8 @@ use App\Models\DentistProfile;
 use App\Models\Patient;
 use App\Models\Service;
 use App\Services\Appointments\AppointmentService;
+use App\Services\Billing\BillingDocuments;
+use App\Services\Payment\PayMongoService;
 use App\Services\Scheduling\SchedulingService;
 use App\Services\Scheduling\SlotRequest;
 use App\Support\ClinicClock;
@@ -24,6 +26,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpFoundation\Response;
 
 // M6 Appointment API. Controllers only resolve references and authorize; every scheduling rule lives in
 // SchedulingService and every state change in AppointmentService's named commands.
@@ -55,6 +58,17 @@ class AppointmentController extends Controller
         if ($from && ClinicClock::at($from, '00:00')->diffInDays(ClinicClock::at($to, '00:00')) >= self::MAX_RANGE_DAYS) {
             throw ValidationException::withMessages(['to' => 'A date range may cover at most '.self::MAX_RANGE_DAYS.' days.']);
         }
+
+        $user = $request->user();
+        if ($user && $user->role === Role::Patient && $user->patient) {
+            $held = Appointment::where('patient_id', $user->patient->id)->where('booking_payment_status', 'held')->get();
+            foreach ($held as $h) {
+                try {
+                    app(PayMongoService::class)->syncSessionForAppointment($h);
+                } catch (\Throwable) {}
+            }
+        }
+
         $query = Appointment::visibleTo($request->user())->with(self::RELATIONS)
             ->when($validated['status'] ?? null, fn ($q, $status) => $q->where('status', $status))
             ->when($from, fn ($q) => $q->where('starts_at', '>=', SchedulingService::ts(ClinicClock::at($from, '00:00')))
@@ -68,7 +82,27 @@ class AppointmentController extends Controller
     {
         Gate::authorize('view', $appointment);
 
+        if ($appointment->booking_payment_status === 'held') {
+            try {
+                app(PayMongoService::class)->syncSessionForAppointment($appointment);
+                $appointment->refresh();
+            } catch (\Throwable) {}
+        }
+
         return new AppointmentResource($appointment->load([...self::RELATIONS, 'history']));
+    }
+
+    public function receiptPdf(Request $request, Appointment $appointment, BillingDocuments $documents): Response
+    {
+        Gate::authorize('view', $appointment);
+        abort_unless($appointment->booking_payment_status === 'paid' && (float) ($appointment->booking_fee_php ?? 0) > 0, 404);
+
+        return response($documents->bookingDepositPdf($appointment), 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="'.BillingDocuments::bookingDepositFileName($appointment).'"',
+            'Cache-Control' => 'private, no-store',
+            'X-Content-Type-Options' => 'nosniff',
+        ]);
     }
 
     public function store(StoreAppointmentRequest $request): JsonResponse

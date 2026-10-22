@@ -19,9 +19,13 @@
 
 @media (min-width: 960px) {
   .pp-shell { display: grid; grid-template-columns: 264px minmax(0, 1fr); }
-  .pp-side { position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; gap: 16px; padding: 20px 14px; background: #fff; border-right: 1px solid var(--line); }
-  .pp-brand { padding: 4px 8px 12px; }
+  .pp-side { position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; gap: 16px; padding: 10px 14px 20px; background: #fff; border-right: 1px solid var(--line); }
+  .pp-brand { padding: 0 8px 8px; }
   .pp-side nav { flex: 1; overflow-y: auto; }
+  .pp-nav-groups { display: flex; flex-direction: column; }
+  .pp-nav-group { display: grid; }
+  .pp-nav-group + .pp-nav-group { margin-top: 8px; padding-top: 10px; border-top: 1px solid var(--line); }
+  .pp-nav-group-title { display: block; padding: 0 12px 6px; font-size: .6875rem; font-weight: 750; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); user-select: none; }
   .pp-side ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
   .pp-nav { width: 100%; display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 0 12px; border: 0; border-radius: 12px; background: none; color: var(--text); font-weight: 600; text-align: left; }
   .pp-nav:hover { background: var(--surface-2); color: var(--ink); }

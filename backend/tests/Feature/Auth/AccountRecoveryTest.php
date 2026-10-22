@@ -361,6 +361,38 @@ class AccountRecoveryTest extends TestCase
         $this->assertTrue(Hash::check('Passw0rd!', $user->fresh()->password));
     }
 
+    public function test_three_step_password_reset_flow_with_ticket_otp_verification_and_signed_reset_token(): void
+    {
+        $user = $this->account();
+        $this->clearLimits($user->email);
+
+        // Step 1: POST /api/password/forgot receives session verification ticket
+        $res1 = $this->postJson('/api/password/forgot', ['email' => $user->email])->assertOk();
+        $ticket = $res1->json('data.ticket');
+        $this->assertNotEmpty($ticket);
+        $code = $this->codeSentTo($user->email);
+
+        // Step 2: POST /api/password/verify-otp with wrong OTP fails
+        $this->postJson('/api/password/verify-otp', ['ticket' => $ticket, 'otp' => '000000'])
+            ->assertStatus(422)
+            ->assertJsonPath('code', 'invalid_otp');
+
+        // Step 2: POST /api/password/verify-otp with correct OTP returns signed reset token
+        $res2 = $this->postJson('/api/password/verify-otp', ['ticket' => $ticket, 'otp' => $code])->assertOk();
+        $resetToken = $res2->json('data.reset_token');
+        $this->assertNotEmpty($resetToken);
+
+        // Step 3: POST /api/password/reset with signed reset token sets new password
+        $this->postJson('/api/password/reset', [
+            'reset_token' => $resetToken,
+            'password' => 'FreshPass123',
+            'password_confirmation' => 'FreshPass123',
+        ])->assertOk();
+
+        $this->assertTrue(Hash::check('FreshPass123', $user->fresh()->password));
+        $this->postJson('/api/login', ['email' => $user->email, 'password' => 'FreshPass123'])->assertOk();
+    }
+
     // ---- dev preview ------------------------------------------------------------------------------------------
 
     public function test_every_account_email_has_a_text_part_and_stays_small(): void

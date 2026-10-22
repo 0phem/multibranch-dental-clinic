@@ -318,6 +318,95 @@ class PayMongoService
     }
 
     /**
+     * Checks open checkout sessions against PayMongo directly for an appointment booking
+     * (crucial for local development where webhooks cannot reach localhost, and when webhooks are delayed).
+     */
+    public function syncSessionForAppointment(Appointment $appointment): ?Appointment
+    {
+        if ($appointment->booking_payment_status === 'paid') {
+            return $appointment;
+        }
+
+        $session = PaymentCheckoutSession::where('appointment_id', $appointment->id)->where('status', 'Open')->latest('id')->first();
+        if (! $session) {
+            return null;
+        }
+
+        try {
+            $paid = $this->confirmWithProvider($session, []);
+        } catch (\Throwable) {
+            return null;
+        }
+
+        if (! is_array($paid)) {
+            return null;
+        }
+
+        if ($paid['currency'] !== self::CURRENCY || $paid['centavos'] !== $this->billing->centavos((string) $session->amount)) {
+            return null;
+        }
+
+        return DB::transaction(function () use ($session, $paid) {
+            $appointment = $session->appointment()->lockForUpdate()->firstOrFail();
+            if ($appointment->booking_payment_status === 'paid') {
+                return $appointment;
+            }
+            if ($appointment->status === 'Cancelled') {
+                return null;
+            }
+
+            $from = $appointment->status;
+            $method = 'PayMongo ('.(self::METHOD_LABELS[$paid['method']] ?? 'ONLINE').')';
+            $appointment->update([
+                'status' => 'Confirmed',
+                'booking_payment_status' => 'paid',
+                'booking_payment_method' => $method,
+                'booking_payment_ref' => $paid['id'],
+                'booking_paid_at' => ClinicClock::now(),
+                'booking_hold_expires_at' => null,
+                'revision' => $appointment->revision + 1,
+            ]);
+
+            app(\App\Services\Appointments\AppointmentService::class)->record($appointment, null, 'appointment.booking_paid', $from);
+            \App\Services\Automations\FillFreedSlots::claimByBooking($appointment);
+            \App\Services\Followups\Followups::booked($appointment);
+
+            try {
+                app(\App\Services\Mail\MailOutbox::class)->queue(
+                    'appointment_confirmation',
+                    "appointment_confirmation:{$appointment->public_id}:r{$appointment->revision}",
+                    $appointment,
+                    $appointment->revision,
+                    $appointment->patient?->contactUser(),
+                    null
+                );
+            } catch (\Throwable $e) {
+                report($e);
+            }
+            app(\App\Services\Notifications\NotificationCenter::class)->appointment($appointment, 'appointment_confirmation');
+
+            $this->audit->record([
+                'action' => 'billing.booking_payment_received',
+                'category' => 'financial',
+                'severity' => 'info',
+                'actor' => null,
+                'target' => $appointment,
+                'branch_id' => $appointment->branch_id,
+                'payload' => [
+                    'appointment_code' => $appointment->appointment_code,
+                    'amount' => (string) $session->amount,
+                    'method' => $method,
+                    'provider_payment_id' => $paid['id'],
+                ],
+            ]);
+
+            $session->update(['status' => 'Settled']);
+
+            return $appointment;
+        });
+    }
+
+    /**
      * Creates a hosted checkout session for an appointment booking fee (Section 22.3).
      * The slot is held as Pending during checkout; only a verified webhook confirms it.
      */

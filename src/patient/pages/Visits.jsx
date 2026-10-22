@@ -19,6 +19,17 @@ export function VisitsPage({ context, onNavigate, toast }) {
   const [action, setAction] = useState(null) // {kind: 'cancel'|'reschedule', appointment}
   const { upcoming, past } = splitAppointments(list.data)
   const focusId = context?.appointmentId || context?.id || null
+  const notifiedPayment = useRef(false)
+  useEffect(() => {
+    if (notifiedPayment.current) return
+    if (context?.appointmentId && context?.payment === 'success') {
+      notifiedPayment.current = true
+      toast?.('Payment confirmed! Your appointment and booking deposit receipt have been sent to your email.', 'success')
+    } else if (context?.payment === 'cancelled') {
+      notifiedPayment.current = true
+      toast?.('Payment was cancelled. Your slot hold will expire.', 'warning')
+    }
+  }, [context?.appointmentId, context?.payment, toast])
   useEffect(() => {
     if (!focusId || list.status !== 'ready') return
     if (past.some(a => a.id === focusId)) setTab('past')

@@ -62,6 +62,41 @@ export function shiftPeriod(view, date, direction) {
   return iso(ny, nm, Math.min(d, daysInMonth(ny, nm)))
 }
 export const periodContains = (view, date, day) => { const { from, to } = periodRange(view, date); return day >= from && day <= to }
+export const shiftMonth = (date, direction) => shiftPeriod('month', date, direction)
+export const monthContains = (date, day) => periodContains('month', date, day)
+
+/** Explicit, configurable appointment-count-based busyness classification thresholds. */
+export const COUNT_BUSYNESS_THRESHOLDS = Object.freeze({
+  low: 3,       // 1-3 appointments: Low activity
+  moderate: 6,  // 4-6 appointments: Moderate activity
+  busy: 9,      // 7-9 appointments: Busy
+  // 10+: Very busy
+})
+
+/**
+ * Evaluates busyness for a date from either server capacity metrics (loadBand) or count-based thresholds.
+ * Color is accompanied by an accessible text label in every state.
+ */
+export function busynessStatus({ dayLoad, count = 0, crowded = 80 } = {}) {
+  if (dayLoad?.closed) {
+    return { band: 'closed', label: 'Closed', shortLabel: 'Closed', detail: dayLoad.reason || 'Closed' }
+  }
+  if (dayLoad && typeof dayLoad.percent === 'number') {
+    const band = dayLoad.percent >= crowded ? 'crowded' : dayLoad.percent >= 50 ? 'busy' : dayLoad.percent > 0 ? 'light' : 'free'
+    const shortLabel = band === 'crowded' ? 'Very busy' : band === 'busy' ? 'Busy' : band === 'light' ? 'Low activity' : 'Free'
+    return {
+      band,
+      label: `${dayLoad.percent}% booked${band === 'crowded' ? ' · crowded' : ''}`,
+      shortLabel,
+      detail: `${dayLoad.appointments ?? count} appointment${(dayLoad.appointments ?? count) === 1 ? '' : 's'}, ${dayLoad.booked_minutes || 0} of ${dayLoad.capacity_minutes || 0} dentist minutes`,
+    }
+  }
+  if (count === 0) return { band: 'free', label: 'No appointments', shortLabel: 'No activity', detail: '0 appointments' }
+  if (count <= COUNT_BUSYNESS_THRESHOLDS.low) return { band: 'light', label: 'Low activity', shortLabel: 'Low activity', detail: `${count} appointment${count === 1 ? '' : 's'}` }
+  if (count <= COUNT_BUSYNESS_THRESHOLDS.moderate) return { band: 'busy', label: 'Moderate activity', shortLabel: 'Moderate activity', detail: `${count} appointments` }
+  if (count <= COUNT_BUSYNESS_THRESHOLDS.busy) return { band: 'busy', label: 'Busy', shortLabel: 'Busy', detail: `${count} appointments` }
+  return { band: 'crowded', label: 'Very busy', shortLabel: 'Very busy', detail: `${count} appointments` }
+}
 
 /** The seven dates of a week view. */
 export const weekDays = date => { const { from } = weekRange(date); return Array.from({ length: 7 }, (_, i) => addDays(from, i)) }

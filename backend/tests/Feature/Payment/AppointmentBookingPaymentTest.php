@@ -272,14 +272,24 @@ class AppointmentBookingPaymentTest extends TestCase
         $session = PaymentCheckoutSession::where('appointment_id', $appointment->id)->first();
         $this->assertSame('Settled', $session->status);
 
-        // Triggers appointment confirmation email with .ics calendar file
+        // Triggers appointment confirmation email with .ics calendar file and attached booking deposit PDF receipt
         Mail::assertSent(AppointmentConfirmationMail::class, function (AppointmentConfirmationMail $mail) use ($fresh) {
-            $hasIcs = collect($mail->attachments())->contains(function ($attachment) {
-                return $attachment->as === 'appointment.ics' && $attachment->mime === 'text/calendar';
-            });
+            $attachments = collect($mail->attachments());
+            $hasIcs = $attachments->contains(fn ($a) => $a->as === 'appointment.ics' && $a->mime === 'text/calendar');
+            $hasPdf = $attachments->contains(fn ($a) => str_starts_with($a->as, 'Booking-Deposit-Receipt') && $a->mime === 'application/pdf');
 
-            return $mail->appointment->id === $fresh->id && $hasIcs;
+            $html = $mail->render();
+            $hasDepositInfo = str_contains($html, 'pay_apt_1')
+                && str_contains($html, 'DEP-'.$fresh->appointment_code);
+
+            return $mail->appointment->id === $fresh->id && $hasIcs && $hasPdf && $hasDepositInfo;
         });
+
+        // Patient can download the deposit receipt PDF from the API
+        $pdfRes = $this->get("/api/appointments/{$fresh->public_id}/receipt-pdf");
+        $pdfRes->assertOk();
+        $this->assertSame('application/pdf', $pdfRes->headers->get('Content-Type'));
+        $this->assertStringContainsString('Booking-Deposit-Receipt', (string) $pdfRes->headers->get('Content-Disposition'));
     }
 
     public function test_expired_hold_is_released_and_frees_slot(): void

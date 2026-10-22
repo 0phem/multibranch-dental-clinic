@@ -13,7 +13,7 @@ import {
   APPOINTMENT_STATUSES, DAY_MAX_PAGES, DAY_PAGE_SIZE, createDayLoader, defaultCalendarDate, groupByDentist, isCompletedStatus,
   isValidClinicDate, loadDayAppointments, sourceLabel,
   RANGE_MAX_PAGES, SERVER_MAX_RANGE_DAYS, dayTotals, groupByDate, loadPeriod, loadRangeAppointments, monthCells, monthRange, periodContains, periodRange,
-  periodTarget, rangeDays, rangeWithinServerLimit, shiftPeriod, weekDays, weekRange, weekdayIndex, mapDayAppointment, shiftClinicDate, statusMeaning,
+  periodTarget, rangeDays, rangeWithinServerLimit, shiftPeriod, weekDays, weekRange, weekdayIndex, mapDayAppointment, shiftClinicDate, statusMeaning, daysInMonth, busynessStatus, COUNT_BUSYNESS_THRESHOLDS, shiftMonth, monthContains,
 } from '../src/day-calendar.js'
 
 // M6 read-only Staff Day Calendar. Fixture/unit checks only: the Laravel endpoint itself is covered by backend/tests/Feature/Appointments.
@@ -215,12 +215,11 @@ test('Staff and the Owner may open the Day Calendar (F6, interview R2-02); Denti
   assert.match(read('src/App.jsx'), /canAccessPage\(store\.state,store\.session,page\)\?page:'unavailable'/)
 })
 
-test('the page contains no appointment command and does not touch the shared appointment window', () => {
+test('appointment management operations: reschedule, cancel, no-show, create actions are wired to appointmentFlow and store', () => {
   const page = read('src/pages/StaffDayCalendar.jsx'), lib = read('src/day-calendar.js')
-  for (const source of [page, lib]) {
-    assert.doesNotMatch(source, /appointmentFlow\.(book|reschedule|cancel|noShow|create)|apiClient\.(post|command)|\bPOST\b|method: 'POST'|reschedule|cancelAppointment|markNoShow|setAppointments|applyServerRows|refreshAppointments/i)
-  }
-  assert.doesNotMatch(page, /store\.(state\.appointments|appointmentFlow)/)
+  assert.match(page, /store\.appointmentFlow\.(cancel|noShow)/)
+  assert.match(page, /AppointmentForm/)
+  assert.match(page, /ConfirmDialog/)
   assert.doesNotMatch(lib, /from '\.\/store\.jsx'/)
 })
 
@@ -235,17 +234,20 @@ const ui = await import(bundleFile.href)
 ui.setBundledClock(() => new Date('2026-09-19T02:08:00Z'))
 const store = session => ({ session, state: { branches: [{ id: 'b1', name: 'Dr. Dana Roxas Dental Clinic' }, { id: 'b2', name: 'Roxas - Cardinal Dental Center' }] } })
 
-test('offline demo shows an honest notice and no calendar; a server session paints loading, never an empty state, before data arrives', () => {
+test('offline demo shows an honest notice and no calendar; a server session paints loading, month navigation, and removes Day/Week view toggles', () => {
   const demo = renderToString(React.createElement(ui.StaffDayCalendar, { store: store({ role: 'staff' }) }))
   assert.match(demo, /isn’t available in the offline demo/); assert.doesNotMatch(demo, /No appointments/)
   const live = renderToString(React.createElement(ui.StaffDayCalendar, { store: store({ role: 'staff', serverUserId: 'u1', branchScopes: ['b1', 'b2'] }) })).replace(/<!-- -->/g, '')
   assert.match(live, /Loading appointments/)
-  assert.doesNotMatch(live, /No appointments on this date/)
-  assert.match(live, /Previous day/); assert.match(live, /Next day/); assert.match(live, /Today/)
-  assert.match(live, /Saturday, September 19, 2026|September 19, 2026/)
+  assert.match(live, /Previous month/); assert.match(live, /Next month/); assert.match(live, /Today/)
+  assert.match(live, /September 2026/)
   assert.match(live, /All my branches/) // several branches: a filter exists
+  // Day, Week, and Month view-switching controls are removed (AC2)
+  assert.doesNotMatch(live, /class="[^"]*daycal-views/)
+  assert.doesNotMatch(live, /aria-label="Calendar view"/)
+  assert.doesNotMatch(live, />Day</)
+  assert.doesNotMatch(live, />Week</)
   const single = renderToString(React.createElement(ui.StaffDayCalendar, { store: store({ role: 'staff', serverUserId: 'u1', branchScopes: ['b1'] }) }))
-  for (const v of ['Day', 'Week', 'Month']) assert.match(live, new RegExp(`aria-pressed="${v === 'Day'}"[^>]*>${v}<`)) // the view toggle exists, Day first
   assert.doesNotMatch(single, /All my branches/)
 })
 
@@ -365,4 +367,91 @@ test('the navigation label is "Appointment Calendar" for Staff only; the page ke
   assert.deepEqual(data.NAV.staff.find(([k]) => k === 'calendar'), ['calendar', 'Appointment Calendar'])
   assert.match(read('src/safeguards.js'), /staff:\['dashboard','appointments','calendar','checkin'/)
   assert.match(read('src/App.jsx'), /case 'calendar': content=<StaffDayCalendar store=\{store\}\/>/)
+})
+
+// ======================================= Interactive Calendar Acceptance Tests =======================================
+test('AC1 & AC3: month navigation controls and current month header', () => {
+  assert.equal(defaultCalendarDate(), '2026-09-19')
+  assert.equal(shiftPeriod('month', '2026-09-19', -1), '2026-08-19')
+  assert.equal(shiftPeriod('month', '2026-09-19', 1), '2026-10-19')
+  assert.equal(periodContains('month', '2026-09-19', '2026-09-19'), true)
+  assert.equal(periodContains('month', '2026-09-19', '2026-10-01'), false)
+})
+
+test('AC4 & AC5: month transitions cross December and January in past and future without artificial limits', () => {
+  // December -> January across different years
+  assert.equal(shiftPeriod('month', '2026-12-15', 1), '2027-01-15')
+  assert.equal(shiftPeriod('month', '2029-12-31', 1), '2030-01-31')
+  // January -> December across different years
+  assert.equal(shiftPeriod('month', '2027-01-15', -1), '2026-12-15')
+  assert.equal(shiftPeriod('month', '2025-01-01', -1), '2024-12-01')
+  // Indefinite forward navigation (years into the future)
+  let cursor = '2026-10-15'
+  for (let i = 0; i < 24; i++) cursor = shiftPeriod('month', cursor, 1)
+  assert.equal(cursor, '2028-10-15')
+  // Indefinite backward navigation
+  for (let i = 0; i < 24; i++) cursor = shiftPeriod('month', cursor, -1)
+  assert.equal(cursor, '2026-10-15')
+})
+
+test('AC6: leap years and months of different lengths render correctly', () => {
+  // Leap year Feb 2028 has 29 days
+  assert.equal(daysInMonth(2028, 2), 29)
+  assert.equal(monthRange('2028-02-15').to, '2028-02-29')
+  // Non-leap year Feb 2027 has 28 days
+  assert.equal(daysInMonth(2027, 2), 28)
+  assert.equal(monthRange('2027-02-15').to, '2027-02-28')
+  // 30-day and 31-day months
+  assert.equal(daysInMonth(2026, 4), 30)
+  assert.equal(daysInMonth(2026, 5), 31)
+  // Day clamping when shifting from a 31-day month to a 30-day or 28/29-day month
+  assert.equal(shiftPeriod('month', '2027-01-31', 1), '2027-02-28')
+  assert.equal(shiftPeriod('month', '2028-01-31', 1), '2028-02-29')
+  assert.equal(shiftPeriod('month', '2026-05-31', 1), '2026-06-30')
+})
+
+test('AC7 & AC8: appointment count and busyness indicators per day, including zero appointments', () => {
+  const rows = [
+    mapDayAppointment(row(1, { date: '2026-10-12' })),
+    mapDayAppointment(row(2, { date: '2026-10-12' })),
+    mapDayAppointment(row(3, { date: '2026-10-14' })),
+  ]
+  const totals = dayTotals(rows, true)
+  assert.equal(totals.get('2026-10-12'), 2)
+  assert.equal(totals.get('2026-10-14'), 1)
+  assert.equal(totals.get('2026-10-13'), undefined) // 0 appointments on this date
+
+  // Busyness indicator calculation
+  // Closed date
+  const closed = busynessStatus({ dayLoad: { closed: true, reason: 'Renovation' }, count: 0 })
+  assert.deepEqual([closed.band, closed.label], ['closed', 'Closed'])
+  // 0 appointments with no capacity
+  const zero = busynessStatus({ count: 0 })
+  assert.deepEqual([zero.band, zero.label], ['free', 'No appointments'])
+  // Low activity (1-3)
+  const low = busynessStatus({ count: 2 })
+  assert.deepEqual([low.band, low.label], ['light', 'Low activity'])
+  // Moderate activity (4-6)
+  const mod = busynessStatus({ count: 5 })
+  assert.deepEqual([mod.band, mod.label], ['busy', 'Moderate activity'])
+  // High / Very busy (10+)
+  const veryBusy = busynessStatus({ count: 12 })
+  assert.deepEqual([veryBusy.band, veryBusy.label], ['crowded', 'Very busy'])
+})
+
+test('AC9 & AC10: chronological sorting of appointments and date switching in expanded view', () => {
+  const rows = [
+    mapDayAppointment(row(1, { date: '2026-10-12', start_time: '14:00', code: 'APT-2026-000001' })),
+    mapDayAppointment(row(2, { date: '2026-10-12', start_time: '09:00', code: 'APT-2026-000002' })),
+    mapDayAppointment(row(3, { date: '2026-10-12', start_time: '09:00', code: 'APT-2026-000003' })),
+    mapDayAppointment(row(4, { date: '2026-10-13', start_time: '10:00', code: 'APT-2026-000004' })),
+  ]
+  const byDate = groupByDate(rows)
+  const day12 = byDate.get('2026-10-12')
+  // Chronological order: 09:00 before 14:00, secondary by code
+  assert.deepEqual(day12.map(r => r.code), ['APT-2026-000002', 'APT-2026-000003', 'APT-2026-000001'])
+  // Day 13 does not contain day 12 records
+  const day13 = byDate.get('2026-10-13')
+  assert.deepEqual(day13.map(r => r.code), ['APT-2026-000004'])
+  assert.equal(byDate.get('2026-10-14'), undefined)
 })

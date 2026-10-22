@@ -55,4 +55,10 @@ return [
         'webhook_tolerance_seconds' => (int) env('PAYMONGO_WEBHOOK_TOLERANCE_SECONDS', 300),
     ],
 
+    'gemini' => [
+        'api_key' => env('GEMINI_API_KEY'),
+        'model' => env('GEMINI_MODEL', 'gemini-1.5-flash'),
+        'timeout_seconds' => (int) env('GEMINI_TIMEOUT_SECONDS', 25),
+    ],
+
 ];

@@ -37,7 +37,7 @@ return new class extends Migration
         });
 
         DB::statement('ALTER TABLE invoices DROP CONSTRAINT IF EXISTS invoices_settlement_type_check');
-        DB::statement("ALTER TABLE invoices ADD CONSTRAINT invoices_settlement_type_check CHECK (settlement_type IS NULL OR (settlement_type = 'full_hmo_coverage' AND status = 'Paid' AND paid_amount = 0 AND patient_responsibility_amount = 0) OR (settlement_type IN ('booking_deposit', 'partial_booking_deposit')))");
+        DB::statement("ALTER TABLE invoices ADD CONSTRAINT invoices_settlement_type_check CHECK (settlement_type IS NULL OR (settlement_type = 'full_hmo_coverage' AND status = 'Paid' AND paid_amount = 0 AND patient_responsibility_amount = 0) OR (settlement_type IN ('booking_deposit', 'partial_booking_deposit'))) NOT VALID");
     }
 
     public function down(): void

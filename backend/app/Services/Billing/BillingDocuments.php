@@ -2,9 +2,11 @@
 
 namespace App\Services\Billing;
 
+use App\Models\Appointment;
 use App\Models\Invoice;
 use App\Models\Receipt;
 use App\Support\Brand;
+use App\Support\ClinicClock;
 use Barryvdh\DomPDF\Facade\Pdf;
 
 /**
@@ -102,6 +104,33 @@ class BillingDocuments
     public static function invoiceFileName(Invoice $invoice): string
     {
         return 'Invoice-'.preg_replace('/[^A-Za-z0-9-]/', '', $invoice->invoice_number).'.pdf';
+    }
+
+    public function bookingDepositPdf(Appointment $appointment): string
+    {
+        $appointment->loadMissing(['patient.person', 'patient.user', 'branch', 'service', 'dentist.person']);
+        $person = $appointment->patient?->person;
+        $depositNumber = 'DEP-'.$appointment->appointment_code;
+        $paidAt = $appointment->booking_paid_at ? ClinicClock::local($appointment->booking_paid_at) : ClinicClock::local($appointment->starts_at);
+
+        return $this->documentPdf('pdf.booking-deposit-receipt', [
+            'appointment' => $appointment,
+            'branch' => $appointment->branch,
+            'patientName' => $person ? trim($person->first_name.' '.$person->last_name) : 'Patient',
+            'patientEmail' => $appointment->patient?->user?->email ?? $person?->email,
+            'depositNumber' => $depositNumber,
+            'date' => $paidAt->format('F j, Y'),
+            'paidAt' => $paidAt->format('F j, Y \a\t g:i A'),
+            'amount' => Brand::money($appointment->booking_fee_php ?? 0),
+            'method' => $appointment->booking_payment_method ?: 'PayMongo (Online)',
+            'reference' => $appointment->booking_payment_ref,
+            'bir' => Brand::bir($appointment->branch),
+        ], 'Booking Deposit Receipt '.$depositNumber);
+    }
+
+    public static function bookingDepositFileName(Appointment $appointment): string
+    {
+        return 'Booking-Deposit-Receipt-'.preg_replace('/[^A-Za-z0-9-]/', '', $appointment->appointment_code).'.pdf';
     }
 
     /** Pages of the marked rows in the last PDF made (pdf-tail, pdf-totals, pdf-end); used by tests to check the totals stay together. */

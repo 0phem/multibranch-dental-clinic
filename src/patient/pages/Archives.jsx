@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { Button, Icon } from '../../components.jsx'
-import { downloadBillingPdf, downloadPrescriptionPdf, listAppointments, myBillingInvoices, myPrescriptions } from '../../api-client.js'
+import { downloadAppointmentReceiptPdf, downloadBillingPdf, downloadPrescriptionPdf, listAppointments, myBillingInvoices, myPrescriptions, myTreatments } from '../../api-client.js'
 import { dateLong, money, time12, todayManila } from '../format.js'
 import { EmptyState, ErrorState, PageHead, Pill, Skeleton } from '../ui.jsx'
 
@@ -15,14 +15,45 @@ export function ArchivesPage({ toast = () => {} }) {
 
   useEffect(() => {
     const today = todayManila()
-    // Load completed past visits
-    listAppointments({ from: addDays(today, -180), to: today, per_page: 50 }).then(r => {
-      if (r.ok && Array.isArray(r.data)) {
-        const completed = r.data.filter(a => ['Completed', 'Served'].includes(a.status) || a.date < today)
-        setVisits({ loading: false, data: completed, error: '' })
-      } else {
-        setVisits({ loading: false, data: [], error: r.message || 'Could not load past visits.' })
+    // Load completed past visits and treatments
+    Promise.allSettled([
+      listAppointments({ from: addDays(today, -180), to: today, per_page: 50 }),
+      myTreatments({ per_page: 50 }),
+    ]).then(([apptSettled, trtSettled]) => {
+      const apptRes = apptSettled.status === 'fulfilled' ? apptSettled.value : null
+      const trtRes = trtSettled.status === 'fulfilled' ? trtSettled.value : null
+
+      const apptList = (apptRes && apptRes.ok && Array.isArray(apptRes.data))
+        ? apptRes.data.filter(a => ['Completed', 'Served'].includes(a.status) || a.date < today)
+        : []
+
+      const trtList = (trtRes && trtRes.ok && Array.isArray(trtRes.data))
+        ? trtRes.data.map(t => ({
+            id: t.id,
+            date: t.date,
+            service: { name: t.procedure_summary || t.services?.[0]?.name || 'Dental Treatment' },
+            dentist: t.dentist,
+            branch: { name: 'Dr. Dana Roxas Dental Clinic' },
+            code: (t.id || '').slice(-8).toUpperCase(),
+            status: 'Completed',
+          }))
+        : []
+
+      // Merge and deduplicate by date
+      const merged = [...apptList]
+      for (const t of trtList) {
+        if (!merged.some(m => m.date === t.date)) {
+          merged.push(t)
+        }
       }
+
+      setVisits({
+        loading: false,
+        data: merged,
+        error: (merged.length === 0 && apptRes && !apptRes.ok && (!trtRes || !trtRes.ok))
+          ? (apptRes.message || 'Could not load past visits.')
+          : '',
+      })
     }).catch(() => setVisits({ loading: false, data: [], error: 'Could not load past visits.' }))
 
     // Load past prescriptions
@@ -34,13 +65,45 @@ export function ArchivesPage({ toast = () => {} }) {
       }
     }).catch(() => setPrescriptions({ loading: false, data: [], error: 'Could not load prescriptions.' }))
 
-    // Load archived invoices & receipts
-    myBillingInvoices({ per_page: 50 }).then(r => {
-      if (r.ok && Array.isArray(r.data)) {
-        setInvoices({ loading: false, data: r.data, error: '' })
-      } else {
-        setInvoices({ loading: false, data: [], error: r.message || 'Could not load billing archives.' })
-      }
+    // Load archived invoices & receipts (clinical invoices + paid PayMongo booking deposits)
+    Promise.allSettled([
+      myBillingInvoices({ per_page: 50 }),
+      listAppointments({ per_page: 50 }),
+    ]).then(([invSettled, apptSettled]) => {
+      const invRes = invSettled.status === 'fulfilled' ? invSettled.value : null
+      const apptRes = apptSettled.status === 'fulfilled' ? apptSettled.value : null
+
+      const clinicalInvoices = (invRes && invRes.ok && Array.isArray(invRes.data)) ? invRes.data : []
+
+      // Extract paid PayMongo booking deposits from appointments
+      const bookingReceipts = (apptRes && apptRes.ok && Array.isArray(apptRes.data))
+        ? apptRes.data
+            .filter(a => a.booking_payment_status === 'paid' && Number(a.booking_fee_php) > 0)
+            .map(a => ({
+              id: `booking-${a.id}`,
+              appointmentId: a.id,
+              appointmentCode: a.code,
+              isBookingDeposit: true,
+              invoice_number: `DEP-${a.code || (a.id || '').slice(0, 8).toUpperCase()}`,
+              branch: a.branch,
+              serviceName: a.service?.name,
+              date: a.booking_paid_at ? a.booking_paid_at.slice(0, 10) : a.date,
+              receipt: {
+                number: `DEP-${a.code || (a.id || '').slice(0, 8).toUpperCase()}`,
+                amount: Number(a.booking_fee_php),
+                method: a.booking_payment_method || 'PayMongo',
+                issued_at: a.booking_paid_at || a.date,
+                reference: a.booking_payment_ref,
+              },
+            }))
+        : []
+
+      const mergedInvoices = [...clinicalInvoices, ...bookingReceipts]
+      setInvoices({
+        loading: false,
+        data: mergedInvoices,
+        error: (mergedInvoices.length === 0 && invRes && !invRes.ok) ? (invRes.message || 'Could not load billing archives.') : '',
+      })
     }).catch(() => setInvoices({ loading: false, data: [], error: 'Could not load billing archives.' }))
   }, [])
 
@@ -49,6 +112,13 @@ export function ArchivesPage({ toast = () => {} }) {
     const r = await downloadBillingPdf(id, kind)
     setDownloading('')
     if (!r.ok) toast(r.message || 'The PDF could not be downloaded.', 'warning')
+  }
+
+  const handleDownloadBookingDeposit = async (apptId, code) => {
+    setDownloading(`${apptId}:receipt`)
+    const r = await downloadAppointmentReceiptPdf(apptId, code)
+    setDownloading('')
+    if (!r.ok) toast(r.message || 'The booking deposit receipt could not be downloaded.', 'warning')
   }
 
   const handleDownloadRx = async (id, number) => {
@@ -170,30 +240,53 @@ export function ArchivesPage({ toast = () => {} }) {
                 <li key={inv.id} className="pp-card pp-fade">
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '8px' }}>
                     <div>
-                      <p className="pp-eyebrow">Receipt {inv.receipt.number}</p>
-                      <h3>Invoice #{inv.invoice_number}</h3>
-                      <p className="pp-muted">{inv.receipt.issued_at ? dateLong(inv.receipt.issued_at.slice(0, 10)) : ''} · {inv.branch?.name}</p>
-                      <p><b>Paid: {money(inv.receipt.amount)}</b> · Via {inv.receipt.method || 'Cash / Online'}</p>
+                      <p className="pp-eyebrow">{inv.isBookingDeposit ? 'Booking Deposit' : `Receipt ${inv.receipt.number}`}</p>
+                      <h3>{inv.isBookingDeposit ? `Deposit Ref #${inv.receipt.number}` : `Invoice #${inv.invoice_number}`}</h3>
+                      <p className="pp-muted">
+                        {inv.receipt.issued_at ? dateLong(inv.receipt.issued_at.slice(0, 10)) : ''} · {inv.branch?.name || 'Dr. Dana Roxas Dental Clinic'}
+                        {inv.serviceName ? ` · ${inv.serviceName}` : ''}
+                      </p>
+                      <p>
+                        <b>Paid: {money(inv.receipt.amount)}</b> · Via {inv.receipt.method || 'PayMongo'}
+                        {inv.receipt.reference ? ` (${inv.receipt.reference})` : ''}
+                      </p>
                     </div>
-                    <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
-                      <Button
-                        size="sm"
-                        variant="soft"
-                        icon="download"
-                        disabled={downloading === `${inv.id}:receipt`}
-                        onClick={() => handleDownloadPdf(inv.id, 'receipt')}
-                      >
-                        {downloading === `${inv.id}:receipt` ? 'Downloading…' : 'Download Receipt'}
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        icon="file"
-                        disabled={downloading === `${inv.id}:invoice`}
-                        onClick={() => handleDownloadPdf(inv.id, 'invoice')}
-                      >
-                        Invoice PDF
-                      </Button>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px', flexWrap: 'wrap' }}>
+                      {inv.isBookingDeposit ? (
+                        <>
+                          <Pill tone="ok">Deposit Paid</Pill>
+                          <Button
+                            size="sm"
+                            variant="soft"
+                            icon="download"
+                            disabled={downloading === `${inv.appointmentId || inv.id}:receipt`}
+                            onClick={() => handleDownloadBookingDeposit(inv.appointmentId || inv.id, inv.receipt?.number)}
+                          >
+                            {downloading === `${inv.appointmentId || inv.id}:receipt` ? 'Downloading…' : 'Download Receipt'}
+                          </Button>
+                        </>
+                      ) : (
+                        <>
+                          <Button
+                            size="sm"
+                            variant="soft"
+                            icon="download"
+                            disabled={downloading === `${inv.id}:receipt`}
+                            onClick={() => handleDownloadPdf(inv.id, 'receipt')}
+                          >
+                            {downloading === `${inv.id}:receipt` ? 'Downloading…' : 'Download Receipt'}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            icon="file"
+                            disabled={downloading === `${inv.id}:invoice`}
+                            onClick={() => handleDownloadPdf(inv.id, 'invoice')}
+                          >
+                            Invoice PDF
+                          </Button>
+                        </>
+                      )}
                     </div>
                   </div>
                 </li>

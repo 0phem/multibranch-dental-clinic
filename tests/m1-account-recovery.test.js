@@ -18,6 +18,8 @@ const lastBody = () => JSON.parse(calls.at(-1).options.body)
 
 test('#forgot-password opens the reset page', () => {
   assert.equal(publicViewFromHash('#forgot-password'), 'forgot')
+  assert.equal(publicViewFromHash('#forgot-password/verify'), 'forgot')
+  assert.equal(publicViewFromHash('#forgot-password/new-password'), 'forgot')
 })
 
 test('password reset and email change call their endpoints with the server field names', async () => {

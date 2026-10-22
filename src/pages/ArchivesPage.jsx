@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react'
 import { Button, Card, Field, Icon, Notice, PageHeader, Status, Table, Tabs } from '../components.jsx'
-import { peso } from '../logic.js'
+import { makeCsv, peso } from '../logic.js'
 import { clinicDate } from '../clock.js'
 
 export function ArchivesPage({ store, activeBranch = 'All Branches' }) {
@@ -11,10 +11,13 @@ export function ArchivesPage({ store, activeBranch = 'All Branches' }) {
 
   const branches = useMemo(() => ['All Branches', ...(state.branches || []).map(b => b.name)], [state.branches])
 
-  // Filter helper
+  // Filter helper supporting both string and object branch references
   const branchFilter = item => {
     if (selectedBranch === 'All Branches') return true
-    return (item.branch || item.branchName) === selectedBranch
+    const bName = typeof item.branch === 'object' && item.branch !== null
+      ? (item.branch.name || item.branch.id)
+      : (item.branch || item.branchName)
+    return bName === selectedBranch
   }
 
   // 1. Archived completed visits
@@ -60,6 +63,48 @@ export function ArchivesPage({ store, activeBranch = 'All Branches' }) {
     )
   }, [state.invoices, selectedBranch, query])
 
+  const handleExportCsv = () => {
+    const scopeSlug = selectedBranch.toLowerCase().replace(/[^a-z0-9]+/g, '-')
+    if (tab === 'visits') {
+      const rows = archivedVisits.map(v => ({
+        'Visit Date': v.date || '',
+        'Reference Code': v.code || v.id || '',
+        'Patient Name': v.patientName || v.patient?.name || 'Patient',
+        'Service': v.serviceName || v.service?.name || 'General Treatment',
+        'Dentist': v.dentistName || v.dentist?.name || '',
+        'Branch': typeof v.branch === 'object' && v.branch ? v.branch.name : (v.branch || v.branchName || 'Main'),
+        'Outcome Status': v.status || 'Completed',
+      }))
+      makeCsv(`archives-completed-visits-${scopeSlug}.csv`, rows)
+      toast?.('Completed visits archive exported to CSV.', 'success')
+    } else if (tab === 'prescriptions') {
+      const rows = archivedPrescriptions.map(p => ({
+        'Rx Number': p.number || '',
+        'Issued Date': p.issued_at || p.date || '',
+        'Patient Name': p.patientName || (typeof p.patient === 'object' ? p.patient?.name : p.patient) || '',
+        'Prescribing Doctor': p.dentistName || (typeof p.dentist === 'object' ? p.dentist?.name : p.dentist) || '',
+        'Branch': typeof p.branch === 'object' && p.branch ? p.branch.name : (p.branch || p.branchName || 'Main'),
+        'Medicines': (p.lines || []).map(l => `${l.medicine || ''} (${[l.dosage, l.frequency, l.duration].filter(Boolean).join(', ')})`).join('; '),
+        'Status': p.status || 'Issued',
+      }))
+      makeCsv(`archives-prescriptions-${scopeSlug}.csv`, rows)
+      toast?.('Archived prescriptions exported to CSV.', 'success')
+    } else if (tab === 'financials') {
+      const rows = archivedInvoices.map(i => ({
+        'Invoice Number': i.invoiceNumber || i.invoice_number || i.id || '',
+        'Receipt Number': i.receiptNumber || i.receipt?.number || '',
+        'Patient Name': i.patientName || '',
+        'Issued Date': i.issued_at || i.date || '',
+        'Gross Amount': i.gross_amount || i.total || 0,
+        'Paid Amount': i.paid_amount || i.total || 0,
+        'Branch': typeof i.branch === 'object' && i.branch ? i.branch.name : (i.branch || 'Main'),
+        'Settlement Status': i.status || 'Paid',
+      }))
+      makeCsv(`archives-financial-receipts-${scopeSlug}.csv`, rows)
+      toast?.('Settled financial records exported to CSV.', 'success')
+    }
+  }
+
   return (
     <div className="archives-page" aria-label="Archives and Historical Records">
       <PageHeader
@@ -89,6 +134,11 @@ export function ArchivesPage({ store, activeBranch = 'All Branches' }) {
             Clear
           </Button>
         )}
+        <div style={{ marginLeft: 'auto' }}>
+          <Button variant="secondary" icon="download" onClick={handleExportCsv}>
+            Export Archive CSV
+          </Button>
+        </div>
       </div>
 
       <Tabs
@@ -112,7 +162,7 @@ export function ArchivesPage({ store, activeBranch = 'All Branches' }) {
               { key: 'patientName', label: 'Patient', render: r => r.patientName || r.patient?.name || 'Patient' },
               { key: 'serviceName', label: 'Service / Procedure', render: r => r.serviceName || r.service?.name || 'General Treatment' },
               { key: 'dentistName', label: 'Attending Dentist', render: r => r.dentistName || r.dentist?.name || 'Dr. Reyes' },
-              { key: 'branch', label: 'Branch', render: r => r.branch || r.branchName || 'Main' },
+              { key: 'branch', label: 'Branch', render: r => (typeof r.branch === 'object' && r.branch ? r.branch.name : (r.branch || r.branchName || 'Main')) },
               { key: 'status', label: 'Outcome Status', render: r => <Status tone={r.status === 'Completed' || r.status === 'Served' ? 'success' : 'neutral'}>{r.status}</Status> },
             ]}
           />
@@ -127,8 +177,9 @@ export function ArchivesPage({ store, activeBranch = 'All Branches' }) {
             columns={[
               { key: 'number', label: 'Rx Number', render: r => <b>{r.number}</b> },
               { key: 'issued_at', label: 'Issued Date', render: r => r.issued_at || r.date || '—' },
-              { key: 'patientName', label: 'Patient', render: r => r.patientName || 'Patient' },
-              { key: 'dentistName', label: 'Prescribing Doctor', render: r => r.dentistName || 'Dentist' },
+              { key: 'patientName', label: 'Patient', render: r => r.patientName || (typeof r.patient === 'object' ? r.patient?.name : r.patient) || 'Patient' },
+              { key: 'dentistName', label: 'Prescribing Doctor', render: r => r.dentistName || (typeof r.dentist === 'object' ? r.dentist?.name : r.dentist) || 'Dentist' },
+              { key: 'branch', label: 'Branch', render: r => (typeof r.branch === 'object' && r.branch ? r.branch.name : (r.branch || r.branchName || 'Main')) },
               { key: 'medicines', label: 'Medicines', render: r => (r.lines || []).map(l => l.medicine).join(', ') || 'Medication list' },
               { key: 'status', label: 'Status', render: r => <Status tone={r.status === 'Void' ? 'danger' : 'neutral'}>{r.status || 'Issued'}</Status> },
             ]}
@@ -147,7 +198,7 @@ export function ArchivesPage({ store, activeBranch = 'All Branches' }) {
               { key: 'date', label: 'Issued Date', render: r => r.issued_at || r.date || '—' },
               { key: 'total', label: 'Gross Total', render: r => peso.format(r.gross_amount || r.total || 0) },
               { key: 'paid', label: 'Paid Amount', render: r => peso.format(r.paid_amount || r.total || 0) },
-              { key: 'branch', label: 'Branch', render: r => r.branch || 'Main' },
+              { key: 'branch', label: 'Branch', render: r => (typeof r.branch === 'object' && r.branch ? r.branch.name : (r.branch || 'Main')) },
               { key: 'status', label: 'Settlement Status', render: r => <Status tone="success">{r.status || 'Paid'}</Status> },
             ]}
           />

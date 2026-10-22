@@ -132,12 +132,22 @@ export function resendRegistrationEmail(email) {
 }
 
 // M1 password reset by emailed code (same answer whether or not the email has an account) and sign-in email change.
-export function requestPasswordReset(email) {
-  return request('/api/password/forgot', { method: 'POST', body: JSON.stringify({ email }) })
+export function requestPasswordReset(identifier) {
+  const body = typeof identifier === 'object' && identifier !== null
+    ? identifier
+    : (typeof identifier === 'string' && identifier.includes('@') ? { email: identifier } : { identifier })
+  return request('/api/password/forgot', { method: 'POST', body: JSON.stringify(body) })
 }
 
-export function resetPassword({ email, otp, password, passwordConfirmation }) {
-  return request('/api/password/reset', { method: 'POST', body: JSON.stringify({ email, otp, password, password_confirmation: passwordConfirmation }) })
+export function verifyPasswordResetOtp({ ticket, otp }) {
+  return request('/api/password/verify-otp', { method: 'POST', body: JSON.stringify({ ticket, otp }) })
+}
+
+export function resetPassword({ email, otp, resetToken, password, passwordConfirmation }) {
+  const body = resetToken
+    ? { reset_token: resetToken, password, password_confirmation: passwordConfirmation }
+    : { email, otp, password, password_confirmation: passwordConfirmation }
+  return request('/api/password/reset', { method: 'POST', body: JSON.stringify(body) })
 }
 
 export function requestEmailChange({ newEmail, currentPassword }) {
@@ -397,6 +407,23 @@ export async function downloadBillingPdf(invoiceId, kind = 'invoice') {
   setTimeout(() => URL.revokeObjectURL(url), 1000)
   return { ok: true }
 }
+/** Downloads an appointment booking deposit receipt PDF and saves it in the browser. */
+export async function downloadAppointmentReceiptPdf(appointmentId, code = null) {
+  let response
+  try {
+    response = await rawFetch(`/api/appointments/${encodeURIComponent(appointmentId)}/receipt-pdf`, { headers: { Accept: 'application/pdf' } })
+  } catch {
+    return { ok: false, kind: 'network', message: 'Could not reach the clinic system. Check your connection and try again.' }
+  }
+  if (!response.ok) return response.status === 404 ? { ok: false, kind: 'not_found', message: 'This deposit receipt is not available.' } : parseFailure(response)
+  const name = /filename="([^"]+)"/.exec(response.headers.get('Content-Disposition') || '')?.[1] || `Booking-Deposit-Receipt${code ? `-${code}` : ''}.pdf`
+  const url = URL.createObjectURL(await response.blob())
+  const a = Object.assign(document.createElement('a'), { href: url, download: name })
+  document.body.appendChild(a); a.click(); a.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+  return { ok: true }
+}
+
 /** M19: downloads a prescription PDF (issued or void) the signed-in person may read. */
 export async function downloadPrescriptionPdf(id, number = null) {
   let response

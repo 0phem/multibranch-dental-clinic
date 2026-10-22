@@ -9,9 +9,16 @@ export function readInvoiceLink(search) {
   let params
   try { params = new URLSearchParams(search || '') } catch { return null }
   const invoiceId = (params.get('invoice') || '').trim()
-  if (!ID.test(invoiceId)) return null
+  const appointmentId = (params.get('appointment') || '').trim()
   const payment = params.get('payment')
-  return { invoiceId: invoiceId.toLowerCase(), payment: payment === 'success' || payment === 'cancelled' ? payment : null }
+  const validPayment = payment === 'success' || payment === 'cancelled' ? payment : null
+  if (ID.test(invoiceId)) {
+    return { invoiceId: invoiceId.toLowerCase(), payment: validPayment }
+  }
+  if (ID.test(appointmentId)) {
+    return { appointmentId: appointmentId.toLowerCase(), payment: validPayment }
+  }
+  return null
 }
 
 export function rememberInvoiceLink(link, storage = globalThis.sessionStorage) {
@@ -26,7 +33,9 @@ export function takeInvoiceLink(storage = globalThis.sessionStorage) {
   if (!raw) return null
   try {
     const parsed = JSON.parse(raw)
-    return readInvoiceLink(`?invoice=${encodeURIComponent(parsed?.invoiceId || '')}${parsed?.payment ? `&payment=${encodeURIComponent(parsed.payment)}` : ''}`)
+    const param = parsed?.invoiceId ? `invoice=${encodeURIComponent(parsed.invoiceId)}` : (parsed?.appointmentId ? `appointment=${encodeURIComponent(parsed.appointmentId)}` : '')
+    if (!param) return null
+    return readInvoiceLink(`?${param}${parsed?.payment ? `&payment=${encodeURIComponent(parsed.payment)}` : ''}`)
   } catch { return null }
 }
 
@@ -34,8 +43,9 @@ export function takeInvoiceLink(storage = globalThis.sessionStorage) {
 export function clearInvoiceLinkFromUrl(win = globalThis.window) {
   try {
     const url = new URL(win.location.href)
-    if (!url.searchParams.has('invoice') && !url.searchParams.has('payment')) return
+    if (!url.searchParams.has('invoice') && !url.searchParams.has('appointment') && !url.searchParams.has('payment')) return
     url.searchParams.delete('invoice')
+    url.searchParams.delete('appointment')
     url.searchParams.delete('payment')
     url.hash = ''
     win.history.replaceState(win.history.state, '', `${url.pathname}${url.search}`)

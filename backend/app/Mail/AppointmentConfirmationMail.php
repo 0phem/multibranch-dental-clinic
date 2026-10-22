@@ -39,9 +39,18 @@ class AppointmentConfirmationMail extends Mailable
 
     public function attachments(): array
     {
-        return [
+        $attachments = [
             Attachment::fromData(fn () => Ics::appointment($this->appointment), 'appointment.ics')
                 ->withMime('text/calendar'),
         ];
+
+        if ($this->appointment->booking_payment_status === 'paid' && (float) ($this->appointment->booking_fee_php ?? 0) > 0) {
+            $attachments[] = Attachment::fromData(
+                fn () => app(\App\Services\Billing\BillingDocuments::class)->bookingDepositPdf($this->appointment),
+                \App\Services\Billing\BillingDocuments::bookingDepositFileName($this->appointment)
+            )->withMime('application/pdf');
+        }
+
+        return $attachments;
     }
 }

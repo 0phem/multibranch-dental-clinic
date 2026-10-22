@@ -22,6 +22,32 @@ const PatientMePage = lazy(() => import('../pages/PatientMe.jsx').then(m => ({ d
 
 // Only screens backed by real clinic-server data (decision 5): no HMO, prescriptions, loyalty or follow-up placeholders.
 const NAV = [['home', 'home', 'Home'], ['book', 'plusCalendar', 'Book a visit'], ['visits', 'calendar', 'My visits'], ['messages', 'message', 'Messages'], ['billing', 'receipt', 'Billing'], ['prescriptions', 'file', 'Prescriptions'], ['teeth', 'star', 'My teeth'], ['archives', 'archive', 'Archives'], ['documents', 'file', 'Documents']]
+export const NAV_SECTIONS = [
+  {
+    title: null,
+    items: [
+      ['home', 'home', 'Home'],
+    ],
+  },
+  {
+    title: 'Appointments & Care',
+    items: [
+      ['book', 'plusCalendar', 'Book a visit'],
+      ['visits', 'calendar', 'My visits'],
+      ['messages', 'message', 'Messages'],
+    ],
+  },
+  {
+    title: 'Records & Billing',
+    items: [
+      ['billing', 'receipt', 'Billing'],
+      ['prescriptions', 'file', 'Prescriptions'],
+      ['teeth', 'star', 'My teeth'],
+      ['archives', 'archive', 'Archives'],
+      ['documents', 'file', 'Documents'],
+    ],
+  },
+]
 const PHONE_NAV = [['home', 'home', 'Home'], ['book', 'plusCalendar', 'Book'], ['visits', 'calendar', 'Visits'], ['messages', 'message', 'Messages'], ['more', 'menu', 'More']]
 const TITLES = { home: 'Home', book: 'Book a visit', visits: 'My visits', messages: 'Messages', billing: 'Billing', prescriptions: 'Prescriptions', teeth: 'My teeth', archives: 'Archives', documents: 'Documents', profile: 'Profile', security: 'Account security' }
 export const PORTAL_PAGES = Object.keys(TITLES)
@@ -35,7 +61,7 @@ export function portalPageFromHash(hash = typeof window !== 'undefined' ? window
 
 /** The Patient portal: server data only. `store` is used only for toasts and the reused Messages/Feedback/Documents screens. */
 export function PatientPortal({ me, store, initialPage = 'home', initialContext = null, onLogout, onSignedOut }) {
-  const [page, setPage] = useState(() => portalPageFromHash() || (PORTAL_PAGES.includes(initialPage) ? initialPage : 'home'))
+  const [page, setPage] = useState(() => portalPageFromHash() || (initialContext?.appointmentId ? 'visits' : (PORTAL_PAGES.includes(initialPage) ? initialPage : 'home')))
   const [context, setContext] = useState(initialContext)
   const [visit, setVisit] = useState(0) // remounts a page when it is opened again with new context
   const [menu, setMenu] = useState(false), [more, setMore] = useState(false), [bell, setBell] = useState(false)
@@ -74,10 +100,21 @@ export function PatientPortal({ me, store, initialPage = 'home', initialContext 
     <a className="skip-link" href="#pp-main">Skip to content</a>
     <aside className="pp-side" aria-label="Patient portal">
       <Brand className="pp-brand"/>
-      <nav aria-label="Main"><ul>{NAV.map(([key, icon, label]) => <li key={key}>
-        <button type="button" className={`pp-nav ${page === key ? 'is-active' : ''}`} aria-current={page === key ? 'page' : undefined} onClick={() => navigate(key)}>
-          <Icon name={icon} size={20}/><span>{label}</span>
-        </button></li>)}</ul></nav>
+      <nav aria-label="Main" className="pp-nav-groups">
+        {NAV_SECTIONS.map((section, idx) => {
+          const groupId = section.title ? `pp-nav-group-${section.title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}` : undefined
+          return <div key={section.title || `group-${idx}`} className="pp-nav-group">
+            {section.title && <span id={groupId} className="pp-nav-group-title">{section.title}</span>}
+            <ul aria-labelledby={groupId}>
+              {section.items.map(([key, icon, label]) => <li key={key}>
+                <button type="button" className={`pp-nav ${page === key ? 'is-active' : ''}`} aria-current={page === key ? 'page' : undefined} onClick={() => navigate(key)}>
+                  <Icon name={icon} size={20}/><span>{label}</span>
+                </button>
+              </li>)}
+            </ul>
+          </div>
+        })}
+      </nav>
       <div className="pp-me">
         <button type="button" className="pp-me-btn" aria-haspopup="menu" aria-expanded={menu} onClick={() => setMenu(m => !m)}>
           <span className="pp-avatar" aria-hidden="true">{initials(me.name)}</span><span className="pp-me-text"><b>{me.name}</b><small>{me.email}</small></span><Icon name="chevron" size={16}/>

@@ -42,6 +42,7 @@ Route::post('/register/resend', [EmailVerificationController::class, 'resend'])-
 Route::post('/login', [AuthenticatedSessionController::class, 'store'])->middleware('throttle:m1-login');
 // M1 password reset by emailed one-time code (every role; same answer whether or not the email has an account).
 Route::post('/password/forgot', [\App\Http\Controllers\Auth\PasswordResetController::class, 'forgot'])->middleware('throttle:m1-otp');
+Route::post('/password/verify-otp', [\App\Http\Controllers\Auth\PasswordResetController::class, 'verifyOtp'])->middleware('throttle:m1-otp');
 Route::post('/password/reset', [\App\Http\Controllers\Auth\PasswordResetController::class, 'reset'])->middleware('throttle:m1-otp');
 
 // Public white-label branding (decision 12): name, contact, design, colours and logo for every screen.
@@ -61,6 +62,10 @@ Route::get('/public/closures', [\App\Http\Controllers\BranchClosureController::c
 Route::get('/public/hmos', [\App\Http\Controllers\AcceptedHmoController::class, 'publicIndex'])->middleware('throttle:60,1');
 Route::get('/public/respond', [\App\Http\Controllers\AppointmentResponseController::class, 'describe'])->middleware('throttle:30,1');
 Route::post('/public/respond', [\App\Http\Controllers\AppointmentResponseController::class, 'perform'])->middleware('throttle:20,1');
+
+// Gemini Chatbot Integration: prompt-response and SSE streaming
+Route::post('/gemini/chat', [\App\Http\Controllers\GeminiChatController::class, 'chat'])->middleware('throttle:m7-assistant');
+Route::post('/gemini/stream', [\App\Http\Controllers\GeminiChatController::class, 'stream'])->middleware('throttle:m7-assistant');
 
 // Public Payment Gateway Webhook (PayMongo HMAC-SHA256 signature verified)
 Route::post('/webhooks/paymongo', [PayMongoController::class, 'webhook']);
@@ -345,6 +350,7 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureAccountAccess::cla
         Route::get('/calendar', [AppointmentController::class, 'calendar'])->middleware('role:patient,staff,owner');
         Route::post('/', [AppointmentController::class, 'store'])->middleware('role:patient,staff,owner');
         Route::get('/{appointment}', [AppointmentController::class, 'show'])->middleware('role:patient,staff,dentist,owner');
+        Route::get('/{appointment}/receipt-pdf', [AppointmentController::class, 'receiptPdf'])->middleware(['role:patient,staff,owner', 'throttle:30,1']);
         Route::post('/{appointment}/reschedule', [AppointmentController::class, 'reschedule'])->middleware('role:patient,staff,owner');
         Route::post('/{appointment}/cancel', [AppointmentController::class, 'cancel'])->middleware('role:patient,staff,owner');
         // The pre-arrival No-show (the Patient did not arrive; no Visit). Check-In and treatment start/completion are
