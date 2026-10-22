@@ -4,6 +4,8 @@ import { downloadBillingPdf, downloadPrescriptionPdf, listAppointments, myBillin
 import { dateLong, money, time12, todayManila } from '../format.js'
 import { EmptyState, ErrorState, PageHead, Pill, Skeleton } from '../ui.jsx'
 
+const addDays = (d, n) => { const x = new Date(`${d}T00:00:00Z`); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10) }
+
 export function ArchivesPage({ toast = () => {} }) {
   const [tab, setTab] = useState('visits') // visits | prescriptions | receipts
   const [visits, setVisits] = useState({ loading: true, data: [], error: '' })
@@ -14,7 +16,7 @@ export function ArchivesPage({ toast = () => {} }) {
   useEffect(() => {
     const today = todayManila()
     // Load completed past visits
-    listAppointments({ to: today, per_page: 50 }).then(r => {
+    listAppointments({ from: addDays(today, -180), to: today, per_page: 50 }).then(r => {
       if (r.ok && Array.isArray(r.data)) {
         const completed = r.data.filter(a => ['Completed', 'Served'].includes(a.status) || a.date < today)
         setVisits({ loading: false, data: completed, error: '' })
@@ -96,8 +98,8 @@ export function ArchivesPage({ toast = () => {} }) {
               {visits.data.map(v => (
                 <li key={v.id} className="pp-card pp-visit pp-fade">
                   <div className="pp-visit-date" aria-hidden="true">
-                    <b>{Number(v.date.slice(8))}</b>
-                    <span>{new Date(`${v.date}T00:00:00Z`).toLocaleDateString('en-PH', { month: 'short', timeZone: 'UTC' })}</span>
+                    <b>{v.date ? Number(v.date.slice(8)) : '—'}</b>
+                    <span>{v.date ? new Date(`${v.date}T00:00:00Z`).toLocaleDateString('en-PH', { month: 'short', timeZone: 'UTC' }) : ''}</span>
                   </div>
                   <div className="pp-visit-body">
                     <h3>{v.service?.name || 'Dental Treatment'}</h3>
