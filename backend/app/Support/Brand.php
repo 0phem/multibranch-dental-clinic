@@ -55,7 +55,7 @@ final class Brand
             'branch_address' => $branch?->address,
             'branch_phone' => $branch?->phone,
             'bir' => self::bir($branch),
-            'portal_url' => rtrim((string) config('app.frontend_url'), '/').'/#sign-in',
+            'portal_url' => self::frontendUrl().'/#sign-in',
             'design' => self::design(),
             // "Dental Clinic · Dr. Dana Roxas Dental Clinic": the subtitle plus the branch, shown under the clinic name in the v2 header.
             'tagline' => implode(' · ', array_filter([self::text('subtitle'), $branch?->name])),
@@ -65,20 +65,42 @@ final class Brand
     /** The patient portal opened on one invoice (after sign-in when needed): the target of the receipt and invoice buttons. */
     public static function invoiceUrl(string $invoicePublicId): string
     {
-        return rtrim((string) config('app.frontend_url'), '/').'/?invoice='.rawurlencode($invoicePublicId).'#sign-in';
+        return self::frontendUrl().'/?invoice='.rawurlencode($invoicePublicId).'#sign-in';
     }
 
     /** True when the Owner uploaded a logo (otherwise the supplied clinic logo is used everywhere). */
     /** The patient portal opened on one appointment in My visits (reschedule or cancel there), after sign-in when needed. */
     public static function appointmentUrl(string $appointmentPublicId): string
     {
-        return rtrim((string) config('app.frontend_url'), '/').'/?appointment='.rawurlencode($appointmentPublicId).'#sign-in';
+        return self::frontendUrl().'/?appointment='.rawurlencode($appointmentPublicId).'#sign-in';
     }
 
     /** The portal opened on one page after sign-in: 'book' (patients) or 'reports' (the Owner's analytics). */
     public static function pageUrl(string $page): string
     {
-        return rtrim((string) config('app.frontend_url'), '/').'/?open='.rawurlencode($page).'#sign-in';
+        return self::frontendUrl().'/?open='.rawurlencode($page).'#sign-in';
+    }
+
+    /** Resolves the active frontend URL cleanly, handling multiple comma-separated origins from FRONTEND_URL. */
+    public static function frontendUrl(): string
+    {
+        $raw = (string) config('app.frontend_url', 'http://localhost:5173');
+        $origins = array_values(array_filter(array_map('trim', explode(',', $raw))));
+        if (empty($origins)) {
+            return 'http://localhost:5173';
+        }
+        $request = request();
+        $origin = rtrim((string) ($request?->header('Origin') ?: $request?->header('Referer')), '/');
+        if ($origin) {
+            foreach ($origins as $allowed) {
+                $allowedClean = rtrim($allowed, '/');
+                if ($allowedClean === $origin || str_starts_with($origin, $allowedClean)) {
+                    return $allowedClean;
+                }
+            }
+        }
+
+        return rtrim($origins[0], '/');
     }
 
     public static function hasCustomLogo(): bool

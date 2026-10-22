@@ -198,7 +198,7 @@ class PayMongoService
                 $invoice->patient->forceFill(['billing_address' => $address])->save();
             }
 
-            $frontend = rtrim((string) config('app.frontend_url'), '/');
+            $frontend = \App\Support\Brand::frontendUrl();
             $billing = array_filter([
                 'name' => trim(($invoice->patient?->person?->first_name ?? '').' '.($invoice->patient?->person?->last_name ?? '')) ?: null,
                 // Only a real address: a placeholder would send the provider's messages to a stranger.
@@ -271,6 +271,53 @@ class PayMongoService
     }
 
     /**
+     * Checks open checkout sessions against PayMongo directly (useful when webhooks are delayed or in local development).
+     */
+    public function syncSessionForInvoice(Invoice $invoice): ?Invoice
+    {
+        if ($invoice->status === 'Paid') {
+            return $invoice;
+        }
+
+        $session = PaymentCheckoutSession::where('invoice_id', $invoice->id)->where('status', 'Open')->latest('id')->first();
+        if (! $session) {
+            return null;
+        }
+
+        try {
+            $paid = $this->confirmWithProvider($session, []);
+        } catch (\Throwable) {
+            return null;
+        }
+
+        if (! is_array($paid)) {
+            return null;
+        }
+
+        if ($paid['currency'] !== self::CURRENCY || $paid['centavos'] !== $this->billing->centavos((string) $session->amount)) {
+            return null;
+        }
+
+        return DB::transaction(function () use ($session, $paid) {
+            $invoice = $session->invoice()->lockForUpdate()->firstOrFail();
+            if ($invoice->status === 'Paid') {
+                return $invoice;
+            }
+
+            $settled = $this->billing->payOnline(
+                $invoice,
+                'PayMongo ('.(self::METHOD_LABELS[$paid['method']] ?? 'ONLINE').')',
+                $paid['id'],
+                $session->initiatedBy()->firstOrFail(),
+                (string) $session->amount
+            );
+            $session->update(['status' => 'Settled']);
+
+            return $settled;
+        });
+    }
+
+    /**
      * Creates a hosted checkout session for an appointment booking fee (Section 22.3).
      * The slot is held as Pending during checkout; only a verified webhook confirms it.
      */
@@ -303,7 +350,7 @@ class PayMongoService
                 throw new BillingException(422, 'amount_below_minimum', 'Online payment needs an amount of at least PHP 1.00.');
             }
 
-            $frontend = rtrim((string) config('app.frontend_url', 'http://localhost:5173'), '/');
+            $frontend = \App\Support\Brand::frontendUrl();
             $billing = array_filter([
                 'name' => trim(($appointment->patient?->person?->first_name ?? '').' '.($appointment->patient?->person?->last_name ?? '')) ?: null,
                 'email' => $appointment->patient?->user?->email ?? $appointment->patient?->person?->email,
