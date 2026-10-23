@@ -215,7 +215,9 @@ function MyLeave({ toast, onChanged }) {
   useEffect(() => { load() }, [])
   if (denied) return null
   const submit = async e => {
-    e.preventDefault(); setBusy('add'); setErr('')
+    e.preventDefault(); setErr('')
+    if (f.type === 'other' && !f.private_note.trim()) return setErr('Please explain the reason for “Other” leave.')
+    setBusy('add')
     const r = await requestLeave({ type: f.type, start_date: f.start_date, end_date: f.end_date || f.start_date, private_note: f.private_note.trim() || null, ...(f.partial ? { start_time: f.start_time, end_time: f.end_time } : {}) })
     setBusy('')
     if (!r.ok) return setErr(firstError(r))
@@ -229,9 +231,9 @@ function MyLeave({ toast, onChanged }) {
       <label className="au-check"><input type="checkbox" checked={f.partial} onChange={e => set('partial', e.target.checked)}/> Only part of the day</label>
       {f.partial && <div className="st-pair"><Field label="From (time, first day)"><input type="time" value={f.start_time} onChange={e => set('start_time', e.target.value)}/></Field>
         <Field label="Until (time, last day)"><input type="time" value={f.end_time} onChange={e => set('end_time', e.target.value)}/></Field></div>}
-      <Field label="Private note (optional)" hint="Seen only by you and the approver. Never emailed."><textarea maxLength={500} value={f.private_note} onChange={e => set('private_note', e.target.value)}/></Field>
+      <Field label={f.type === 'other' ? 'Reason' : 'Private note (optional)'} required={f.type === 'other'} hint="Seen only by you and the approver. Never emailed."><textarea maxLength={500} value={f.private_note} onChange={e => set('private_note', e.target.value)}/></Field>
       {err && <p className="au-error" role="alert">{err}</p>}
-      <div className="au-actions"><Button type="submit" disabled={busy === 'add' || !f.start_date}>{busy === 'add' ? 'Sending…' : 'Request leave'}</Button></div>
+      <div className="au-actions"><Button type="submit" disabled={busy === 'add' || !f.start_date || (f.type === 'other' && !f.private_note.trim())}>{busy === 'add' ? 'Sending…' : 'Request leave'}</Button></div>
     </form>
     {!rows ? <p className="au-muted" role="status">Loading…</p> : !rows.length ? <p className="au-muted">No leave requested yet.</p> : <ul className="fd-list">{rows.map(l => <li key={l.id}>
       <div><b>{l.label}</b><span>{l.type_label} · <span className={`fd-badge ${STATUS_TONE[l.status]}`}>{l.status}</span>{l.decided_by ? ` · by ${l.decided_by}` : ''}</span>{l.private_note && <span>Note: {l.private_note}</span>}</div>

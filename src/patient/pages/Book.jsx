@@ -201,9 +201,10 @@ function Review({ choice, forPerson, onEdit, onBooked }) {
     onBooked({ ...result.row, serviceName: choice.service.name, branchName: choice.branch.name, branchAddress: choice.branch.address })
   }
   const rows = [...(forPerson ? [['Patient', `${forPerson.name} (${forPerson.relationship.toLowerCase()})`, 0]] : []), ['Service', choice.service.name, 0], ['Branch', <>{choice.branch.name}<small>{choice.branch.address}</small></>, 1],
-    ['Dentist', choice.slot?.dentist?.name || choice.dentist?.name || 'Assigned by the clinic', 2], ['Date', dateLong(choice.date), 3], ['Time', time12(choice.slot?.start_time), 4]]
+    ['Dentist', choice.slot?.dentist?.name || choice.dentist?.name || 'Assigned by the clinic', 2], ['Date', dateLong(choice.date), 3], ['Time', time12(choice.slot?.start_time), 4],
+    ['Payment', 'Online booking fee via PayMongo (GCash, Maya or card). Any remaining balance is paid at the clinic after the visit.', null]]
   return <>
-    <dl className="pp-summary">{rows.map(([k, v, s]) => <div key={k}><dt>{k}</dt><dd>{v}</dd><button type="button" className="link-button" onClick={() => onEdit(s)} aria-label={`Change ${k.toLowerCase()}`}>Change</button></div>)}</dl>
+    <dl className="pp-summary">{rows.map(([k, v, s]) => <div key={k}><dt>{k}</dt><dd>{v}</dd>{s !== null && <button type="button" className="link-button" onClick={() => onEdit(s)} aria-label={`Change ${k.toLowerCase()}`}>Change</button>}</div>)}</dl>
     <p className="pp-note"><Icon name="wallet" size={18}/> Pay at booking via PayMongo (GCash, Maya, Cards). Your slot is held for 15 minutes. Cancellations at least 24 hours in advance are fully refunded.</p>
     {policy && <p className="pp-note pp-policy"><Icon name="calendar" size={18}/> {policy}</p>}
     {error && <p className="pp-error-text" role="alert">{error}</p>}

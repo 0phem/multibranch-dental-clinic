@@ -50,7 +50,7 @@ class LeaveController extends Controller
         abort_unless($dentist || $staff, 403, 'Only dentists and staff members request leave.');
         $data = $request->validate(['type' => ['required', 'in:vacation,sick,other'], 'start_date' => ['required', 'date_format:Y-m-d'], 'end_date' => ['required', 'date_format:Y-m-d', 'after_or_equal:start_date'],
             'start_time' => ['nullable', 'date_format:H:i', 'required_with:end_time'], 'end_time' => ['nullable', 'date_format:H:i', 'required_with:start_time'],
-            'private_note' => ['nullable', 'string', 'max:500']]);
+            'private_note' => ['nullable', 'required_if:type,other', 'string', 'max:500']]);
         if ($data['start_date'] < ClinicClock::today()) throw ValidationException::withMessages(['start_date' => ['Choose today or a later date.']]);
         if (ClinicClock::addDays($data['start_date'], 366) < $data['end_date']) throw ValidationException::withMessages(['end_date' => ['Choose at most one year.']]);
         // Partial: from start_time on the first day to end_time on the last day. Full days: midnight to midnight (Asia/Manila).
