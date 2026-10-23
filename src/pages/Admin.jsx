@@ -23,6 +23,7 @@ export function BranchesPage({ store }) {
   const [selected,setSelected]=useState(state.branches[0]?.id||'')
   const branch=state.branches.find(b=>b.id===selected)
   const [form,setForm]=useState(branch||{})
+  const [configTab,setConfigTab]=useState('details')
   React.useEffect(()=>setForm(branch||{}),[branch])
   // Phase 2A: branches/branchServices are backend-authoritative — the API call happens first, and only its
   // confirmed response is adopted into local state (never an optimistic local success ahead of the
@@ -41,6 +42,12 @@ export function BranchesPage({ store }) {
     const adopted=actions.adoptBranchServiceFromServer(selected,serviceId,result.record)
     if(!adopted.ok)toast(adopted.message,'warning')
   }
+  const activeServicesCount=state.services.filter(s=>s.status==='Active'&&serviceActive(s.id)).length
+  const configTabs=[
+    {key:'details',label:'Details & Contact'},
+    {key:'hours',label:'Opening Hours'},
+    {key:'services',label:`Services (${activeServicesCount})`},
+  ]
   return <>
     <PageHeader title="Multi-Branch Clinic Management" text="Clinic locations and operational branch information."/>
     <Notice tone="warning">Branch names, addresses, phones, emails and opening hours were given by the clinic (October 2026). Capacity settings still need clinic confirmation, and holiday or temporary-closure schedules have not been supplied.</Notice>
@@ -48,26 +55,36 @@ export function BranchesPage({ store }) {
       <Card title="Branches" subtitle="Branch identity, location, hours, status, and capacity">
         <div className="branch-selector">{state.branches.map(b=><button key={b.id} className={selected===b.id?'selected':''} onClick={()=>setSelected(b.id)}><div><b>{b.name}</b><small>{b.branchCode} • {b.city}</small></div><Status>{b.status}</Status></button>)}</div>
       </Card>
-      {branch&&<Card title={`Configure ${branch.name}`}><div className="form-grid">
-        <Field label="Branch name"><input value={form.name||''} onChange={e=>setForm({...form,name:e.target.value})}/></Field>
-        <Field label="Branch code"><input value={form.branchCode||''} onChange={e=>setForm({...form,branchCode:e.target.value})}/></Field>
-        <Field label="City"><input value={form.city||''} onChange={e=>setForm({...form,city:e.target.value})}/></Field>
-        <Field label="Branch status"><select value={form.status||'Open'} onChange={e=>setForm({...form,status:e.target.value})}><option>Open</option><option>Temporarily Closed</option><option>Inactive</option></select></Field>
-        <Field label="Capacity threshold (unconfirmed)"><input type="number" min="1" max="100" value={form.threshold??''} onChange={e=>setForm({...form,threshold:Number(e.target.value)})}/></Field>
-        <Field label="Phone"><input value={form.phone||''} onChange={e=>setForm({...form,phone:e.target.value})}/></Field>
-        <Field label="Email (optional)"><input type="email" value={form.email||''} onChange={e=>setForm({...form,email:e.target.value})}/></Field>
-        <Field label="Address"><textarea value={form.address||''} onChange={e=>setForm({...form,address:e.target.value})}/></Field>
-        <div className="span-2"><label className="field-label">Opening hours <small>Per day; a closed day cannot be booked and is greyed out in the booking calendar</small></label>
+      {branch&&<Card title={`Configure ${branch.name}`} subtitle={`${branch.branchCode} • ${branch.city}`}>
+        <Tabs tabs={configTabs} active={configTab} onChange={setConfigTab}/>
+        {configTab==='details'&&<div className="form-grid" style={{marginTop:'12px'}}>
+          <Field label="Branch name"><input value={form.name||''} onChange={e=>setForm({...form,name:e.target.value})}/></Field>
+          <Field label="Branch code"><input value={form.branchCode||''} onChange={e=>setForm({...form,branchCode:e.target.value})}/></Field>
+          <Field label="City"><input value={form.city||''} onChange={e=>setForm({...form,city:e.target.value})}/></Field>
+          <Field label="Branch status"><select value={form.status||'Open'} onChange={e=>setForm({...form,status:e.target.value})}><option>Open</option><option>Temporarily Closed</option><option>Inactive</option></select></Field>
+          <Field label="Capacity threshold (unconfirmed)"><input type="number" min="1" max="100" value={form.threshold??''} onChange={e=>setForm({...form,threshold:Number(e.target.value)})}/></Field>
+          <Field label="Phone"><input value={form.phone||''} onChange={e=>setForm({...form,phone:e.target.value})}/></Field>
+          <Field label="Email (optional)"><input type="email" value={form.email||''} onChange={e=>setForm({...form,email:e.target.value})}/></Field>
+          <Field label="Address"><textarea value={form.address||''} onChange={e=>setForm({...form,address:e.target.value})}/></Field>
+          <Field label="Map latitude (optional)" hint="For the nearest-branch suggestion. Copy it from the branch's map pin."><input inputMode="decimal" value={form.latitude??''} onChange={e=>setForm({...form,latitude:e.target.value})}/></Field>
+          <Field label="Map longitude (optional)"><input inputMode="decimal" value={form.longitude??''} onChange={e=>setForm({...form,longitude:e.target.value})}/></Field>
+        </div>}
+        {configTab==='hours'&&<div style={{marginTop:'12px'}}>
+          <label className="field-label">Opening hours <small>Per day; a closed day cannot be booked and is greyed out in the booking calendar</small></label>
           <div className="hours-editor">{[[1,'Monday'],[2,'Tuesday'],[3,'Wednesday'],[4,'Thursday'],[5,'Friday'],[6,'Saturday'],[7,'Sunday']].map(([day,label])=>{const week=form.weeklyHours||{};const h=week[day]||week[String(day)]||null;const setDay=value=>setForm({...form,weeklyHours:{...week,[day]:value}});const openDays=Object.values(week).filter(Boolean).length;return <div key={day} className="hours-row">
             <span className="hours-day">{label}</span>
             <label className="hours-closed"><input type="checkbox" checked={!h} disabled={h&&openDays===1} onChange={e=>setDay(e.target.checked?null:{open:form.open||'08:00',close:form.close||'17:00'})}/> Closed</label>
             {h&&<><label><span className="sr-only">{label} opens</span><input type="time" value={h.open} onChange={e=>setDay({...h,open:e.target.value})}/></label><span aria-hidden="true">to</span><label><span className="sr-only">{label} closes</span><input type="time" value={h.close} onChange={e=>setDay({...h,close:e.target.value})}/></label></>}
-          </div>})}</div></div>
-        <Field label="Map latitude (optional)" hint="For the nearest-branch suggestion. Copy it from the branch's map pin."><input inputMode="decimal" value={form.latitude??''} onChange={e=>setForm({...form,latitude:e.target.value})}/></Field>
-        <Field label="Map longitude (optional)"><input inputMode="decimal" value={form.longitude??''} onChange={e=>setForm({...form,longitude:e.target.value})}/></Field>
-        <div className="span-2"><label className="field-label">Available services <small>Branch services • scheduling reads this catalog directly</small></label><div className="permission-list">{state.services.filter(s=>s.status==='Active').map(service=><label className="check-control" key={service.id}><input type="checkbox" checked={serviceActive(service.id)} onChange={()=>toggleService(service.id)}/><span><b>{service.name}</b><small>{service.category} • {service.duration} min</small></span></label>)}</div></div>
-        <Button className="span-2" onClick={save}>Publish Branch Changes</Button>
-      </div></Card>}
+          </div>})}</div>
+        </div>}
+        {configTab==='services'&&<div style={{marginTop:'12px'}}>
+          <label className="field-label">Available services <small>Branch services • scheduling reads this catalog directly</small></label>
+          <div className="permission-list">{state.services.filter(s=>s.status==='Active').map(service=><label className="check-control" key={service.id}><input type="checkbox" checked={serviceActive(service.id)} onChange={()=>toggleService(service.id)}/><span><b>{service.name}</b><small>{service.category} • {service.duration} min</small></span></label>)}</div>
+        </div>}
+        <div style={{marginTop:'16px',display:'flex',justifyContent:'flex-end'}}>
+          <Button onClick={save}>Publish Branch Changes</Button>
+        </div>
+      </Card>}
     </div>
   </>
 }

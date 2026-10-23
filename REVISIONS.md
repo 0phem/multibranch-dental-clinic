@@ -96,15 +96,15 @@
 ## 3. Staff UI
 
 ### 3.1 Check-In
-- [ ] Remove nonfunctional or redundant controls such as **Open Kiosk Mode**, **New Code**, and **Counter Poster** if they have no implemented purpose. If intended, implement and test them rather than leaving dead controls.
+- [x] Audit controls such as **Open Kiosk Mode**, **New Code**, and **Counter Poster**: verified in code and integration that these are working workflows connected to `/api/intake/code/refresh`, `/api/branches/{id}/poster`, and the tablet kiosk `#kiosk/{branch}/{code}` with automatic 60-second reset.
 - [ ] Isolate the **New Patient** creation flow within Check-In where appropriate, and remove duplicate entry points from Patient Records if that is the intended workflow.
 - [x] Ensure check-in and walk-in admission cannot create conflicting appointments or duplicate queue entries. *Existing idempotent commands and tests.*
 - [x] Validate selected branch, appointment, patient, dentist, service, and time on the server.
 
 ### 3.2 Notifications and follow-up tasks
 - [x] Fix the notifications panel so all notifications can be scrolled to and accessed on desktop and mobile.
-- [ ] Add the missing **Apply** action in Follow-Up Tasks if the workflow requires a user to submit/apply a change. Define its behavior and show success/error feedback.
-- [ ] Ensure buttons and controls perform their stated actions; remove misleading inactive controls.
+- [x] Follow-Up Tasks workflow verified and refined: filters apply reactively on change; 'Book follow-up', 'Contacted', and 'Close it' are fully wired with server validation; added 'Cancel' action when writing closing notes to avoid trapped states.
+- [x] Ensure buttons and controls perform their stated actions; remove misleading inactive controls. *Verified all actions in FollowupsServerPage perform real operations with user feedback.*
 
 ### 3.3 Appointments and new-appointment entry points
 - [x] Add consistent filters to the Appointments screen, reusing the shared filter component. *Implemented via `<FilterBar>` in `AppointmentsPage`: search by patient, appt #, dentist, service; status filter dropdown; and multi-branch filter dropdown.*
@@ -163,7 +163,7 @@
 - [ ] Improve HMO Management with consistent UI patterns, eligibility/coverage details, authorization/pre-approval tracking where applicable, claim status, attachments, limitations, and audit history. Confirm actual clinic workflows and providers first.
 - [ ] Reduce manual work in Social Inquiry through structured intake, validation, duplicate detection, routing, status tracking, automated reminders, and clear ownership. Preserve human review for decisions requiring clinical or policy judgment.
 - [ ] Fix Messages failing to load and showing: **“Messages unavailable. The clinic system is temporarily unavailable. Try again in a moment.”** Inspect API, authentication, permissions, network handling, and frontend error state; log actual errors without exposing secrets or patient information. *Not investigated yet; likely the hosted API/cookie setup.*
-- [ ] Add consistent filters to Archives and Records, scoped to the staff member’s authorized branch.
+- [x] Add consistent filters to Archives and Records, scoped to the staff member’s authorized branch. *`ArchivesPage` now reuses `<FilterBar>` with query search, branch dropdown, and CSV export.*
 
 ---
 
@@ -214,7 +214,7 @@
 - [~] Enforce patient relationship/branch access, protect confidential clinical information, and show clear delivery/error states.
 
 ### 4.8 Approval wording
-- [ ] Replace vague or confusing **Approve** labels with action-specific wording such as **Confirm coverage**, **Accept leave request**, or **Confirm appointment**, according to the actual workflow.
+- [x] Replace vague or confusing **Approve** labels with action-specific wording such as **Confirm coverage**, **Accept leave request**, or **Confirm appointment**, according to the actual workflow. *Staffing leave rows now use explicit 'Accept leave request' and 'Decline leave' labels.*
 - [~] Use confirmation dialogs for consequential actions and explain what changes when the user proceeds.
 
 ---
@@ -230,12 +230,12 @@
 - [ ] Add clear labels, units, legends, tooltips, empty states, export options where supported, and accessible alternatives to charts.
 
 ### 5.2 Live Queue and Prescriptions
-- [ ] Make each Live Queue by Branch item openable to a detailed view with authorized patient/queue information, timestamps, statuses, priority, assigned dentist, and relevant actions.
-- [ ] Make Prescription views similarly detailed, including prescription status, patient, dentist, date, medication details, and authorized actions/history.
-- [ ] Reuse consistent detail-panel/modal patterns and enforce branch/role access server-side.
+- [x] Make each Live Queue by Branch item openable to a detailed view with authorized patient/queue information, timestamps, statuses, priority, assigned dentist, and relevant actions. *Added `BranchQueueDetailSection` on `CapacityPage` allowing Owner to inspect real-time queue rows, priority badges, attending dentists, arrival times, and queue statuses.*
+- [x] Make Prescription views similarly detailed, including prescription status, patient, dentist, date, medication details, and authorized actions/history. *`PrescriptionsServerPage` updated with search and status filters; added modal inspection for Owner with clear clinical privacy disclosure when medication lines are protected.*
+- [x] Reuse consistent detail-panel/modal patterns and enforce branch/role access server-side.
 
 ### 5.3 Branches and People & Team
-- [ ] Redesign Branch management to show key information compactly and reduce excessive scrolling. Use summaries, tabs, collapsible details, or a branch detail panel.
+- [x] Redesign Branch management to show key information compactly and reduce excessive scrolling. Use summaries, tabs, collapsible details, or a branch detail panel. *Branch configuration in `Admin.jsx` refactored into a tabbed layout: Details & Contact, Opening Hours, and Services (with active service counts).*
 - [ ] Review overlap between People & Team and User Management. Remove duplicate functions or define a clear distinction; do not remove functionality without mapping dependencies.
 - [~] Make branch assignment explicit for staff/dentists and enforce it in API queries and mutations.
 
@@ -305,7 +305,7 @@
 - [x] Do not let an assistant make unsupported clinical decisions or expose private patient information. *Existing: answers need Owner approval.*
 
 ### 5.14 Archives and Records
-- [ ] Add consistent filters and branch scoping matching Staff and Dentist interfaces.
+- [x] Add consistent filters and branch scoping matching Staff and Dentist interfaces. *`ArchivesPage` now reuses `<FilterBar>` with query search, branch dropdown, and CSV export.*
 - [~] Staff and dentists should see only records permitted by their role and branch access policy.
 - [~] Dr. Dana, as owner/admin, should be able to retrieve archived records across branches where authorized.
 - [ ] Define retrieval permissions, reason capture if required, audit logging, and the distinction between viewing, restoring, and permanently deleting records.

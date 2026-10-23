@@ -28,9 +28,21 @@ const COMMON_PRESETS = [
 export function PrescriptionsServerPage({ store, role }) {
   const toast = store?.toast || (() => {})
   const [rows, setRows] = useState(null), [error, setError] = useState(''), [openId, setOpenId] = useState(null), [writing, setWriting] = useState(null)
+  const [query, setQuery] = useState(''), [statusFilter, setStatusFilter] = useState('all')
   const load = () => listPrescriptions().then(r => { if (r.ok) { setRows(r.data); setError('') } else setError(r.message || 'Prescriptions could not be loaded.') })
   useEffect(() => { load() }, [])
   const dentist = role === 'dentist', owner = role === 'owner'
+  const filteredRows = (rows || []).filter(p => {
+    if (statusFilter !== 'all' && p.status !== statusFilter) return false
+    if (!query.trim()) return true
+    const q = query.toLowerCase()
+    return (
+      (p.number || '').toLowerCase().includes(q) ||
+      (p.patient?.name || '').toLowerCase().includes(q) ||
+      (p.dentist || '').toLowerCase().includes(q) ||
+      (p.branch || '').toLowerCase().includes(q)
+    )
+  })
   return <div className="st-page">
     <PageHeader kicker={owner ? 'Administration' : 'Clinical'} title="Prescriptions"
       text={owner ? 'Prescriptions issued at the clinic: number, date, dentist and branch. The medicines are visible only to the dentists, the branch front desk and the patient.'
@@ -40,14 +52,40 @@ export function PrescriptionsServerPage({ store, role }) {
     {dentist && <LicenseCard toast={toast}/>}
     {error && <Notice tone="warning" title="Unavailable">{error}</Notice>}
     <Card title={owner ? 'Issued prescriptions' : 'Prescriptions'}>
-      {!rows ? <p className="au-muted" role="status">Loading…</p> : !rows.length ? <p className="au-muted">No prescriptions yet.</p>
-        : <ul className="fd-list">{rows.map(p => <li key={p.id}>
+      {rows && rows.length > 0 && (
+        <div className="st-filters" style={{ marginBottom: '1rem', display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <Field label="Search">
+            <input
+              type="search"
+              placeholder="Search by number, patient, dentist, or branch…"
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              style={{ minWidth: '240px' }}
+            />
+          </Field>
+          <Field label="Status">
+            <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
+              <option value="all">All statuses</option>
+              <option value="Issued">Issued</option>
+              <option value="Draft">Draft</option>
+              <option value="Void">Void</option>
+            </select>
+          </Field>
+          {(query || statusFilter !== 'all') && (
+            <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+              <Button size="sm" variant="ghost" onClick={() => { setQuery(''); setStatusFilter('all') }}>Clear</Button>
+            </div>
+          )}
+        </div>
+      )}
+      {!rows ? <p className="au-muted" role="status">Loading…</p> : !filteredRows.length ? <p className="au-muted">No prescriptions found.</p>
+        : <ul className="fd-list">{filteredRows.map(p => <li key={p.id}>
           <div><b>{p.number || 'Draft'}{p.patient ? ` · ${p.patient.name}` : ''}</b>
             <span><span className={`fd-badge ${TONE[p.status]}`}>{p.status === 'Void' ? 'VOID' : p.status}</span> · {p.date ? day(p.date) : 'not issued'} · {p.dentist} · {p.branch}</span></div>
-          {!owner && <div className="ns-actions">
+          <div className="ns-actions">
             {p.can_edit && <Button size="sm" variant="soft" onClick={() => setWriting(p.id)}>Edit draft</Button>}
-            <Button size="sm" variant="ghost" onClick={() => setOpenId(p.id)}>Open</Button>
-          </div>}
+            <Button size="sm" variant={owner ? 'soft' : 'ghost'} onClick={() => setOpenId(p.id)}>{owner ? 'View record' : 'Open'}</Button>
+          </div>
         </li>)}</ul>}
     </Card>
     {openId && <PrescriptionDialog id={openId} toast={toast} onClose={() => setOpenId(null)} onChanged={load}/>}
@@ -151,9 +189,10 @@ export function PrescriptionDialog({ id, toast, onClose, onChanged }) {
     {!p ? !error && <p className="au-muted" role="status">Loading…</p> : <div className="st-handover">
       <p className="au-muted"><span className={`fd-badge ${TONE[p.status]}`}>{p.status === 'Void' ? 'VOID' : p.status}</span> {p.date ? day(p.date) : ''} · {p.dentist} · {p.branch}{p.license_no ? ` · License no. ${p.license_no}` : ''}</p>
       {p.voided && <Notice tone="warning" title="Void">Reason: {p.voided.reason}</Notice>}
-      {p.lines && <ol className="rx-view">{p.lines.map((l, i) => <li key={i}><b>{l.medicine}</b>
+      {p.lines && p.lines.length > 0 ? <ol className="rx-view">{p.lines.map((l, i) => <li key={i}><b>{l.medicine}</b>
         <span>{[l.dosage && `Dosage: ${l.dosage}`, l.frequency && `Frequency: ${l.frequency}`, l.duration && `Duration: ${l.duration}`].filter(Boolean).join(' · ')}</span>
-        {l.instructions && <span>Instructions: {l.instructions}</span>}</li>)}</ol>}
+        {l.instructions && <span>Instructions: {l.instructions}</span>}</li>)}</ol>
+        : !p.lines && <p className="au-muted" style={{ padding: '0.75rem', background: 'var(--surface-muted, #f8fafc)', borderRadius: '6px' }}>Medication details and instructions are private clinical records accessible only to the treating dentist, authorized branch front desk, and the patient.</p>}
       {p.note && <p><b>Note:</b> {p.note}</p>}
       {voiding && <Field label="Reason for voiding" required><input value={reason} maxLength={300} onChange={e => setReason(e.target.value)}/></Field>}
       <div className="ns-actions">

@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react'
-import { Button, Card, Field, Icon, Notice, PageHeader, Status, Table, Tabs } from '../components.jsx'
+import { Button, Card, Field, FilterBar, Icon, Notice, PageHeader, Status, Table, Tabs } from '../components.jsx'
 import { makeCsv, peso } from '../logic.js'
 import { clinicDate } from '../clock.js'
 
@@ -113,33 +113,26 @@ export function ArchivesPage({ store, activeBranch = 'All Branches' }) {
         text="Central repository for long-term clinical retention, completed visit logs, past prescription histories, and settled financial records in compliance with medical data privacy regulations."
       />
 
-      <div className="filter-row" style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: '16px' }}>
-        <Field label="Search archive" style={{ flex: '1 1 240px', minWidth: '200px' }}>
-          <input
-            type="search"
-            placeholder="Search by patient, code, number, dentist…"
-            value={query}
-            onChange={e => setQuery(e.target.value)}
-          />
-        </Field>
-        <Field label="Branch filter" style={{ width: '200px' }}>
-          <select value={selectedBranch} onChange={e => setSelectedBranch(e.target.value)}>
-            {branches.map(b => (
-              <option key={b} value={b}>{b}</option>
-            ))}
-          </select>
-        </Field>
-        {query && (
-          <Button variant="ghost" onClick={() => setQuery('')}>
-            Clear
-          </Button>
-        )}
-        <div style={{ marginLeft: 'auto' }}>
-          <Button variant="secondary" icon="download" onClick={handleExportCsv}>
-            Export Archive CSV
-          </Button>
-        </div>
-      </div>
+      <FilterBar
+        search={query}
+        onSearchChange={setQuery}
+        searchPlaceholder="Search by patient, code, number, dentist…"
+        onClear={(query || selectedBranch !== 'All Branches') ? () => { setQuery(''); setSelectedBranch('All Branches') } : null}
+      >
+        <select
+          className="filter-select"
+          aria-label="Filter archive by branch"
+          value={selectedBranch}
+          onChange={e => setSelectedBranch(e.target.value)}
+        >
+          {branches.map(b => (
+            <option key={b} value={b}>{b}</option>
+          ))}
+        </select>
+        <Button size="sm" variant="secondary" icon="download" onClick={handleExportCsv}>
+          Export Archive CSV
+        </Button>
+      </FilterBar>
 
       <Tabs
         tabs={[

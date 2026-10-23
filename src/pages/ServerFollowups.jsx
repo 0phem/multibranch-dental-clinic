@@ -60,7 +60,10 @@ function FollowupRow({ t, owner, role, store, toast, onChanged }) {
       {t.can_book && role === 'staff' && <Button size="sm" onClick={() => setBooking(true)}>Book follow-up</Button>}
       {t.can_contact && <Button size="sm" variant="soft" disabled={!!busy} onClick={() => act('contacted')}>Contacted</Button>}
       {t.can_close && !closing && <Button size="sm" variant="ghost" onClick={() => (t.appointment ? act('close') : setClosing(true))}>Close</Button>}
-      {closing && <Button size="sm" disabled={!!busy || note.trim().length < 3} onClick={() => act('close', { note })}>Close it</Button>}
+      {closing && <>
+        <Button size="sm" disabled={!!busy || note.trim().length < 3} onClick={() => act('close', { note })}>{busy === 'close' ? 'Closing…' : 'Close it'}</Button>
+        <Button size="sm" variant="ghost" onClick={() => { setClosing(false); setNote('') }}>Cancel</Button>
+      </>}
     </div>}
     {booking && <Modal open wide title={`Book a follow-up for ${t.patient.name}`} onClose={() => setBooking(false)}>
       <AppointmentForm role={role} store={store} prefill={{ patientPublicId: t.patient.id, patientName: `${t.patient.name} • ${t.patient.code}`, branchId: t.branch.id, serviceId: t.service?.id || '', date: t.due_on }}

@@ -320,6 +320,7 @@ export function CapacityPage({ activeBranch, store }) {
   if(vis.mode!=='demo')return <>
     <PageHeader title="Live Queue by Branch" text="Counts of today’s queue entries by status, from the clinic server. The clinic has not approved waiting-time estimates, workload percentages or capacity limits, so none is shown."/>
     <QueueByBranch store={store} activeBranch={activeBranch} vis={vis} title="Today’s queue"/>
+    <BranchQueueDetailSection store={store} activeBranch={activeBranch}/>
   </>
   const { state }=store
   const branches=state.branches.filter(b=>activeBranch==='All Branches'||b.name===activeBranch)
@@ -332,3 +333,68 @@ export function CapacityPage({ activeBranch, store }) {
   </>
 }
 function Metric({label,value}){return <div><span>{label}</span><b>{value}</b></div>}
+
+function BranchQueueDetailSection({ store, activeBranch }) {
+  const { state } = store
+  const [selectedBranchId, setSelectedBranchId] = useState('All')
+  const [statusFilter, setStatusFilter] = useState('All')
+  const branches = state.branches.filter(b => activeBranch === 'All Branches' || b.name === activeBranch)
+  const queueEntries = (state.queue || []).filter(q => {
+    if (!isTodayQueue(q)) return false
+    if (selectedBranchId !== 'All' && q.branchId !== selectedBranchId && q.branch !== selectedBranchId) return false
+    if (activeBranch !== 'All Branches' && q.branch !== activeBranch) return false
+    if (statusFilter !== 'All' && q.status !== statusFilter) return false
+    return true
+  }).sort((a, b) => (a.position || 999) - (b.position || 999) || (a.queueNumber || 0) - (b.queueNumber || 0))
+
+  return (
+    <Card
+      className="top-gap"
+      title="Live Queue Details"
+      subtitle="Authorized patient queue records for today, organized by branch."
+    >
+      <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center', marginBottom: '14px' }}>
+        {branches.length > 1 && (
+          <select
+            className="filter-select"
+            aria-label="Filter queue details by branch"
+            value={selectedBranchId}
+            onChange={e => setSelectedBranchId(e.target.value)}
+          >
+            <option value="All">All visible branches</option>
+            {branches.map(b => (
+              <option key={b.id} value={b.id}>{b.name}</option>
+            ))}
+          </select>
+        )}
+        <select
+          className="filter-select"
+          aria-label="Filter queue details by status"
+          value={statusFilter}
+          onChange={e => setStatusFilter(e.target.value)}
+        >
+          <option value="All">All statuses ({queueEntries.length})</option>
+          <option value="Waiting">Waiting</option>
+          <option value="Called">Called</option>
+          <option value="Treatment Ready">Treatment Ready</option>
+          <option value="Temporarily Away">Temporarily Away</option>
+          <option value="Served">Served</option>
+        </select>
+      </div>
+
+      <Table
+        rows={queueEntries}
+        empty="No patients matching your filter in today's live queue."
+        columns={[
+          { key: 'queueNumber', label: '#', render: q => <b>{q.queueNumber ? `#${q.queueNumber}` : (q.code || '—')}</b> },
+          { key: 'patient', label: 'Patient', render: q => <div><b>{q.patientName || patientName(q.patientId, state.patients)}</b>{q.priority && q.priority !== 'Normal' && <span className={`mini-chip ${['Urgent', 'Emergency'].includes(q.priority) ? 'danger' : 'info'}`} style={{ marginLeft: 6 }}>{q.priority}</span>}</div> },
+          { key: 'service', label: 'Service', render: q => q.service || q.serviceName || 'Consultation' },
+          { key: 'dentist', label: 'Dentist', render: q => q.dentistName || dentistName(q.dentistId, state.dentists) || 'Unassigned' },
+          { key: 'branch', label: 'Branch', render: q => q.branch || 'Main' },
+          { key: 'time', label: 'Time / Arrival', render: q => <small className="block-muted">{displayTime(q.time || q.start || q.arrival)}</small> },
+          { key: 'status', label: 'Status', render: q => <Status>{q.status}</Status> },
+        ]}
+      />
+    </Card>
+  )
+}

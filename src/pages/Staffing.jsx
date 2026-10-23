@@ -276,8 +276,8 @@ function LeaveRow({ l, open, onToggle, toast, onChanged, wordingApproved }) {
       <span>{l.type_label} · <span className={`fd-badge ${STATUS_TONE[l.status]}`}>{l.status}</span>{l.decided_by ? ` · by ${l.decided_by}` : ''}</span>
       {l.private_note && <span>Private note: {l.private_note}</span>}</div>
     <div className="ns-actions">
-      {l.can_decide && <><Button size="sm" disabled={!!busy} onClick={() => decide('approve')}>{busy === 'approve' ? 'Approving…' : 'Approve'}</Button>
-        <Button size="sm" variant="ghost" disabled={!!busy} onClick={() => decide('decline')}>Decline</Button></>}
+      {l.can_decide && <><Button size="sm" disabled={!!busy} onClick={() => decide('approve')}>{busy === 'approve' ? 'Accepting…' : 'Accept leave request'}</Button>
+        <Button size="sm" variant="ghost" disabled={!!busy} onClick={() => decide('decline')}>{busy === 'decline' ? 'Declining…' : 'Decline leave'}</Button></>}
       {l.requester.role === 'Dentist' && l.status !== 'Declined' && l.status !== 'Cancelled' && <Button size="sm" variant="soft" onClick={onToggle} aria-expanded={open}>{open ? 'Hide bookings' : 'Booked appointments'}</Button>}
       {l.can_cancel && l.status === 'Approved' && <Button size="sm" variant="ghost" disabled={!!busy} onClick={async () => { setBusy('cancel'); const r = await cancelLeave(l.id); setBusy(''); if (!r.ok) return toast(firstError(r), 'warning'); toast('Leave cancelled. The time is bookable again.', 'success'); onChanged() }}>Cancel leave</Button>}
     </div>
