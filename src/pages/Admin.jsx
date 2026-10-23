@@ -6,7 +6,7 @@ import React, { useMemo, useRef, useState } from 'react'
 import { ROLE_INFO } from '../data.js'
 import { eventModuleLabel, ruleTargetLabel } from '../module-map.js'
 import { LOYALTY_PROGRAM, canManageLoyalty, ledgerIssue } from '../loyalty.js'
-import { Button, Card, ConfirmDialog, Field, Modal, Notice, PageHeader, Progress, StatCard, Status, Table, Tabs } from '../components.jsx'
+import { Button, Card, ConfirmDialog, Field, FilterBar, Modal, Notice, PageHeader, Progress, StatCard, Status, Table, Tabs } from '../components.jsx'
 import { clinicDate } from '../clock.js'
 import { branchCapacity, dateLabel, dentistName, makeCsv, patientName, peso, uid } from '../logic.js'
 import { syncBranchUpdate, syncBranchServiceToggle, syncPersonnelUpdate } from '../reference-data-bridge.js'
@@ -340,6 +340,8 @@ export function UsersPage({ store }) {
   const [editPhoneLocal,setEditPhoneLocal]=useState('')
   const [deleteTarget,setDeleteTarget]=useState(null)
   const [scopeTarget,setScopeTarget]=useState(null)
+  const [search,setSearch]=useState('')
+  const [roleFilter,setRoleFilter]=useState('all')
   const localPhone=value=>{
     const digits=String(value||'').replace(/\D/g,'')
     if(digits.startsWith('63'))return digits.slice(2,12)
@@ -349,7 +351,7 @@ export function UsersPage({ store }) {
   const load=async()=>{
     setLoading(true);setError('')
     const result=await fetchUserAccounts()
-    if(result.ok)setRecords(result.records)
+    if(result.ok)setRecords([...(result.records||[])].sort((a,b)=>String(b.id||'').localeCompare(String(a.id||''))))
     else setError(result.message||'Could not load user accounts.')
     setLoading(false)
   }
@@ -361,7 +363,7 @@ export function UsersPage({ store }) {
     const result=await createUserAccountRemote({...form,phone:phone.e164})
     setSubmitting(false)
     if(!result.ok)return toast(result.message||'Could not create the Patient account.','warning')
-    setRecords(rows=>[...rows,result.record]);setForm(empty);setPhoneLocal('')
+    setRecords(rows=>[result.record,...rows]);setForm(empty);setPhoneLocal('')
     toast('Patient account created.','success')
   }
   const saveEdit=async()=>{
@@ -384,7 +386,18 @@ export function UsersPage({ store }) {
     setRecords(rows=>rows.filter(row=>row.id!==deleteTarget.id));setDeleteTarget(null)
     toast('User account deleted.','success')
   }
-  return <>
+    const filteredRecords=useMemo(()=>{
+      return records
+        .filter(u=>{
+          if(roleFilter!=='all'&&u.role!==roleFilter)return false
+          if(!search.trim())return true
+          const q=search.trim().toLowerCase()
+          return (u.name||'').toLowerCase().includes(q)||(u.email||'').toLowerCase().includes(q)||(u.phone||'').includes(q)
+        })
+        .sort((a,b)=>String(b.id||'').localeCompare(String(a.id||'')))
+    },[records,search,roleFilter])
+
+    return <>
     <PageHeader title="User Management" text="Manage user accounts, roles, and account information."/>
     <Notice tone="info" title="Current scope">Patient accounts can be created here directly. Staff and Dentists are invited by email below and set their own password. Roles are read-only after creation.</Notice>
     <div className="grid-2 top-gap">
@@ -404,7 +417,30 @@ export function UsersPage({ store }) {
     </div>
     <EmployeeInvitations store={store}/>
     <Card className="top-gap" title="User accounts" subtitle="Only real backend login accounts appear here.">
-      {loading?<p className="muted-copy" role="status">Loading user accounts…</p>:error?<Notice tone="warning" title="Couldn’t load user accounts">{error}<Button size="sm" variant="ghost" onClick={load}>Try again</Button></Notice>:<Table rows={records} caption="User accounts" columns={[
+      <FilterBar
+        search={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Search accounts by name, email, or phone…"
+        filters={[
+          {
+            key: 'role',
+            label: 'Role',
+            value: roleFilter,
+            onChange: setRoleFilter,
+            options: [
+              { value: 'all', label: 'All roles' },
+              { value: 'patient', label: 'Patient' },
+              { value: 'staff', label: 'Staff' },
+              { value: 'dentist', label: 'Dentist' },
+              { value: 'owner', label: 'Owner' },
+            ],
+          },
+        ]}
+        count={filteredRecords.length}
+        totalCount={records.length}
+        onReset={()=>{setSearch('');setRoleFilter('all')}}
+      />
+      {loading?<p className="muted-copy" role="status">Loading user accounts…</p>:error?<Notice tone="warning" title="Couldn’t load user accounts">{error}<Button size="sm" variant="ghost" onClick={load}>Try again</Button></Notice>:<Table rows={filteredRecords} caption="User accounts" columns={[
         {key:'name',label:'Name'}, {key:'email',label:'Email'}, {key:'phone',label:'Phone',render:u=>u.phone||'—'},
         {key:'role',label:'Role',render:u=>u.role==='owner'?'Owner':u.role==='dentist'?'Dentist':u.role==='staff'?'Staff':'Patient'},
         {key:'action',label:'Actions',render:u=><div className="row-actions">{u.role==='staff'&&<Button size="sm" variant="soft" onClick={()=>setScopeTarget(u)}>Branch access</Button>}<Button size="sm" variant="ghost" onClick={()=>{setEdit({...u});setEditPhoneLocal(localPhone(u.phone))}}>Edit</Button><Button size="sm" variant="danger" onClick={()=>setDeleteTarget(u)}>Delete</Button></div>}
@@ -748,8 +784,8 @@ export function EngagementPage({ role, store }) {
   }
   return <>
     <PageHeader title="Patient Engagement" text="Referral & loyalty administration, and the preview of optional marketing and reactivation campaigns, kept separate from core clinic operations."/>
-    <Notice tone="info" title="Optional engagement programs">Referral & Loyalty (M24) is a team-designed prototype program for demonstration; it is not an established clinic program. Marketing & Reactivation (M25) has only a limited campaign-draft preview today, and full management is planned for a later phase. Neither blocks core care operations.</Notice>
-    <Tabs tabs={[{key:'loyalty',label:'Referral & Loyalty • M24'},{key:'campaigns',label:'Marketing & Reactivation • M25'}]} active={tab} onChange={setTab}/>
+    <Notice tone="info" title="Optional engagement programs">Referral & Loyalty is a team-designed prototype program for demonstration; it is not an established clinic program. Marketing & Reactivation has only a limited campaign-draft preview today, and full management is planned for a later phase. Neither blocks core care operations.</Notice>
+    <Tabs tabs={[{key:'loyalty',label:'Referral & Loyalty'},{key:'campaigns',label:'Marketing & Reactivation'}]} active={tab} onChange={setTab}/>
     {tab==='loyalty'?<>
       <div className="grid-2">
         <Card title="Record qualified referral / loyalty activity" subtitle="Validates activity before applying a configured reward once"><div className="form-grid"><Field label="Patient"><select value={loyaltyForm.patientId} onChange={e=>setLoyaltyForm({...loyaltyForm,patientId:e.target.value})}>{patients.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></Field><Field label="Activity"><select value={loyaltyForm.activity} onChange={e=>setLoyaltyForm({...loyaltyForm,activity:e.target.value})}><option>Qualified Visit</option><option>Qualified Referral</option></select></Field><Field label="Reward / points"><input type="number" min="1" step="1" value={loyaltyForm.points} onChange={e=>setLoyaltyForm({...loyaltyForm,points:e.target.value})}/></Field><Button onClick={applyLoyalty}>Validate & Apply Reward Once</Button></div></Card>

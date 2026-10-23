@@ -7,6 +7,18 @@ const day = d => d ? new Date(`${d}T00:00:00Z`).toLocaleDateString('en-PH', { mo
 const EMPTY_LINE = { medicine: '', dosage: '', frequency: '', duration: '', instructions: '' }
 const TONE = { Draft: 'is-late', Issued: 'is-ok', Void: 'is-bad' }
 
+const COMMON_PRESETS = [
+  { name: 'Amoxicillin 500mg', dosage: '1 capsule (500mg)', frequency: 'Every 8 hours (3x daily)', duration: '7 days', instructions: 'Take with or after meals. Complete the entire course.' },
+  { name: 'Mefenamic Acid 500mg', dosage: '1 capsule (500mg)', frequency: 'Every 8 hours as needed', duration: '3 to 5 days', instructions: 'Take with food for pain or swelling.' },
+  { name: 'Paracetamol 500mg', dosage: '1 tablet (500mg)', frequency: 'Every 4 to 6 hours as needed', duration: '3 days', instructions: 'For mild to moderate pain. Maximum 4000mg per day.' },
+  { name: 'Ibuprofen 400mg', dosage: '1 tablet (400mg)', frequency: 'Every 6 to 8 hours with meals', duration: '3 to 5 days', instructions: 'Take immediately after food or with milk.' },
+  { name: 'Co-amoxiclav 625mg', dosage: '1 tablet (625mg)', frequency: 'Every 12 hours (2x daily)', duration: '7 days', instructions: 'Take at the start of a meal. Complete the course.' },
+  { name: 'Clindamycin 300mg', dosage: '1 capsule (300mg)', frequency: 'Every 6 to 8 hours', duration: '7 days', instructions: 'Take with a full glass of water. Alternative for penicillin allergy.' },
+  { name: 'Tranexamic Acid 500mg', dosage: '1 capsule (500mg)', frequency: 'Every 8 hours', duration: '2 to 3 days', instructions: 'For post-extraction bleeding control.' },
+  { name: 'Celecoxib 200mg', dosage: '1 capsule (200mg)', frequency: 'Once or twice daily', duration: '3 to 5 days', instructions: 'Take with food for acute dental pain and inflammation.' },
+  { name: 'Chlorhexidine 0.12% Oral Rinse', dosage: '15 mL rinse', frequency: 'Twice daily after brushing', duration: '7 to 14 days', instructions: 'Swish for 30 seconds then expectorate. Do not swallow.' },
+]
+
 /**
  * M19 Prescriptions (clinic server). Dentists at the branch write a prescription for a recent visit: free-text lines, no drug list
  * and no interaction checks (the Owner may keep common names for quick selection), then issue it, which locks it and numbers it.
@@ -69,13 +81,34 @@ function WriteCard({ toast, onDone, editing, onEdited }) {
       {!draft && <Field label="Visit" required hint="Visits at your branches in the last 30 days."><select value={visitId} onChange={e => setVisitId(e.target.value)} required>
         <option value="">Choose a visit…</option>{visits.map(v => <option key={v.id} value={v.id}>{day(v.date)} · {v.patient.name}{v.patient.age !== null ? ` (${v.patient.age})` : ''} · {v.branch}</option>)}</select></Field>}
       {(visit || draft) && <Notice tone="warning" title="Check allergies before prescribing">{meta.allergies?.length ? meta.allergies.join(', ') : meta.allergy_notice}</Notice>}
-      <datalist id="rx-common">{(meta.common_medicines || []).map(m => <option key={m} value={m}/>)}</datalist>
+      <datalist id="rx-common">{[...new Set([...(meta.common_medicines || []), ...COMMON_PRESETS.map(p => p.name)])].map(m => <option key={m} value={m}/>)}</datalist>
       {lines.map((l, i) => <fieldset key={i} className="rx-line"><legend>Medicine {i + 1}</legend>
-        <Field label="Medicine" required><input list="rx-common" value={l.medicine} maxLength={200} onChange={e => set(i, 'medicine', e.target.value)}/></Field>
-        <div className="st-pair"><Field label="Dosage"><input value={l.dosage} maxLength={120} onChange={e => set(i, 'dosage', e.target.value)}/></Field>
-          <Field label="Frequency"><input value={l.frequency} maxLength={120} onChange={e => set(i, 'frequency', e.target.value)}/></Field></div>
-        <Field label="Duration"><input value={l.duration} maxLength={120} onChange={e => set(i, 'duration', e.target.value)}/></Field>
-        <Field label="Instructions"><textarea value={l.instructions} maxLength={500} onChange={e => set(i, 'instructions', e.target.value)}/></Field>
+        <Field label="Quick template (optional)" hint="Choose a dental preset to populate standard dosage & frequency, or enter custom details">
+          <select
+            value=""
+            onChange={e => {
+              const found = COMMON_PRESETS.find(p => p.name === e.target.value)
+              if (found) {
+                setLines(ls => ls.map((line, j) => j === i ? {
+                  ...line,
+                  medicine: found.name,
+                  dosage: found.dosage,
+                  frequency: found.frequency,
+                  duration: found.duration,
+                  instructions: found.instructions
+                } : line))
+              }
+            }}
+          >
+            <option value="">Choose a common template…</option>
+            {COMMON_PRESETS.map(p => <option key={p.name} value={p.name}>{p.name}</option>)}
+          </select>
+        </Field>
+        <Field label="Medicine" required><input list="rx-common" value={l.medicine} maxLength={200} onChange={e => set(i, 'medicine', e.target.value)} placeholder="e.g. Amoxicillin 500mg"/></Field>
+        <div className="st-pair"><Field label="Dosage"><input value={l.dosage} maxLength={120} onChange={e => set(i, 'dosage', e.target.value)} placeholder="e.g. 1 capsule (500mg)"/></Field>
+          <Field label="Frequency"><input value={l.frequency} maxLength={120} onChange={e => set(i, 'frequency', e.target.value)} placeholder="e.g. Every 8 hours"/></Field></div>
+        <Field label="Duration"><input value={l.duration} maxLength={120} onChange={e => set(i, 'duration', e.target.value)} placeholder="e.g. 7 days"/></Field>
+        <Field label="Instructions"><textarea value={l.instructions} maxLength={500} onChange={e => set(i, 'instructions', e.target.value)} placeholder="e.g. Take with food"/></Field>
         {lines.length > 1 && <Button size="sm" variant="ghost" onClick={() => setLines(ls => ls.filter((_, j) => j !== i))}>Remove medicine {i + 1}</Button>}
       </fieldset>)}
       <Button size="sm" variant="soft" onClick={() => setLines(ls => [...ls, { ...EMPTY_LINE }])}>Add another medicine</Button>

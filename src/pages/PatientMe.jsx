@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Button, Field, Modal, Notice, PageHeader, Status } from '../components.jsx'
+import { Button, Empty, Field, Modal, Notice, PageHeader, Status } from '../components.jsx'
 import { dateLabel } from '../logic.js'
 import { patientContext } from '../patient-view.js'
 import { DefinitionList, RecordCard } from '../patient-ui.jsx'
@@ -162,11 +162,14 @@ export function PatientMePage({ store, setPage, documentsOnly = false }) {
       {loading ? <Notice>Loading documents...</Notice> : docError ? (
         <Notice tone="warning" title="Documents unavailable">{docError} <Button size="sm" variant="ghost" onClick={reload}>Retry</Button></Notice>
       ) : docs.length === 0 ? (
-        <Notice tone="info">You haven't uploaded any documents yet. Use the upload button above to share a valid ID or another document the clinic asked for.</Notice>
+        <Empty title="No documents on file yet" text="You haven't uploaded any documents yet. Use the upload button above to share a valid ID, X-Ray, referral letter, or lab result with the clinic."/>
       ) : (
         <div className="pt-list" style={{ marginTop: '12px' }}>
           {docs.map(doc => (
-            <RecordCard key={doc.id} title={doc.title} subtitle={`${doc.originalFilename} • ${doc.fileSizeFormatted} • ${doc.category?.replace(/_/g, ' ')} • Uploaded ${dateLabel(doc.createdAt)}`} status={doc.status}>
+            <RecordCard key={doc.id} title={doc.title} subtitle={`${doc.originalFilename} • ${doc.fileSizeFormatted} • Uploaded ${dateLabel(doc.createdAt)}`} status={doc.status}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', marginTop: '6px' }}>
+                <span className="split-badge info"><b>Type</b><span>{doc.category ? doc.category.replace(/_/g, ' ') : 'document'}</span></span>
+              </div>
               <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
                 {doc.status === 'Active' && <Button size="sm" variant="soft" onClick={() => handleDownload(doc)}>Download</Button>}
                 {doc.status === 'Active' && doc.uploadedByPatient && <Button size="sm" variant="ghost" onClick={() => { setRetractTarget(doc); setRetractReason('') }}>Retract</Button>}
@@ -201,9 +204,12 @@ export function PatientMePage({ store, setPage, documentsOnly = false }) {
         </Field>
         <Field label="Category" required>
           <select value={uploadCategory} onChange={e => setUploadCategory(e.target.value)}>
-            <option value="valid_id">Valid ID</option>
+            <option value="valid_id">Valid ID (Passport, Driver's License, Senior/PWD ID)</option>
+            <option value="clinical_attachment">Medical / Dental Record, Lab Result, X-Ray</option>
+            <option value="referral">Referral Letter / Note</option>
+            <option value="consent_document">Consent Form</option>
+            <option value="treatment_request">Treatment Request</option>
             {!documentsOnly && <option value="hmo_card">HMO / Insurance Card</option>}
-            <option value="clinical_attachment">Medical / Dental Record</option>
             <option value="other">Other Document</option>
           </select>
         </Field>

@@ -174,8 +174,12 @@
 .tc-quadrant { margin: 0; min-width: 0; }
 .tc-quadrant figcaption { font-size: .8rem; color: var(--muted, #5b6b7f); font-weight: 700; }
 .tc-quadrant svg { width: 100%; height: auto; display: block; }
-.tc-tooth { cursor: pointer; outline: none; }
-.tc-tooth:focus-visible rect { stroke: #1865ac; stroke-width: 3.5; }
+.tc-tooth { cursor: pointer; outline: none; transition: transform .15s ease; }
+.tc-tooth:hover { transform: translateY(-2px); }
+.tc-tooth:focus-visible rect, .tc-tooth:focus-visible path { stroke: #1865ac; stroke-width: 2.5; }
+.tc-tooth-backdrop { transition: all .15s ease; }
+.tc-tooth:hover .tc-tooth-backdrop { fill: #f1f5f9; stroke: #94a3b8; }
+.tc-tooth.is-picked .tc-tooth-backdrop { fill: #eff6ff; stroke: #1865ac; stroke-width: 2.5; }
 .tc-num { font-size: 13px; font-weight: 700; fill: #14283d; }
 .tc-abbr { font-size: 12px; font-weight: 800; fill: #3a4e63; }
 .tc-legend { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: .85rem; }

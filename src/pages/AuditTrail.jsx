@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Button, Card, Field, Modal, Notice, PageHeader, Status, Table } from '../components.jsx'
+import { Button, Card, Field, FilterBar, Modal, Notice, PageHeader, Status, Table } from '../components.jsx'
 import { dateLabel } from '../logic.js'
 import { fetchAuditLogs, downloadAuditLogsCsv } from '../audit-api.js'
 
@@ -97,9 +97,14 @@ export function AuditTrailPage({ store }) {
         title="Audit Trail & Activity Monitoring"
         text="Append-only record of significant events written by the clinic server. The Owner can review and export it; nothing in this screen can change or delete an entry. Details are kept minimal and credentials are redacted."
         aside={
-          <Button size="sm" variant="soft" onClick={handleExport} disabled={exporting}>
-            {exporting ? 'Generating Export...' : 'Export Audit Trail (CSV)'}
-          </Button>
+          <div className="row-actions">
+            <Button size="sm" variant="soft" onClick={handleExport} disabled={exporting}>
+              {exporting ? 'Generating Export...' : 'Export Audit Trail (CSV)'}
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => window.print()} icon="file">
+              Print / PDF
+            </Button>
+          </div>
         }
       />
 
@@ -123,50 +128,70 @@ export function AuditTrailPage({ store }) {
       </div>
 
       <Card title="Audit Event Filters">
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px' }}>
-          <Field label="Search">
-            <input
-              type="search"
-              placeholder="Action, actor, target ID, IP…" maxLength={100}
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-            />
-          </Field>
-          <Field label="Category">
-            <select value={category} onChange={e => setCategory(e.target.value)}>
-              <option value="all">All Categories</option>
-              <option value="security">Security</option>
-              <option value="clinical">Clinical</option>
-              <option value="financial">Financial</option>
-              <option value="administrative">Administrative</option>
-              <option value="automation">Automation</option>
-              <option value="general">General</option>
-            </select>
-          </Field>
-          <Field label="Severity">
-            <select value={severity} onChange={e => setSeverity(e.target.value)}>
-              <option value="all">All Severities</option>
-              <option value="info">Info</option>
-              <option value="warning">Warning</option>
-              <option value="critical">Critical</option>
-            </select>
-          </Field>
-          <Field label="Branch">
-            <select value={branchId} onChange={e => setBranchId(e.target.value)}>
-              <option value="">All Branches</option>
-              {state.branches.map(b => (
-                <option key={b.id} value={b.id}>{b.name}</option>
-              ))}
-            </select>
-          </Field>
-          <Field label="From Date">
-            <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} />
-          </Field>
-          <Field label="To Date">
-            <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} />
-          </Field>
+        <FilterBar
+          search={search}
+          onSearchChange={setSearch}
+          searchPlaceholder="Action, actor, target ID, IP…"
+          filters={[
+            {
+              key: 'category',
+              label: 'Category',
+              value: category,
+              onChange: setCategory,
+              options: [
+                { value: 'all', label: 'All Categories' },
+                { value: 'security', label: 'Security' },
+                { value: 'clinical', label: 'Clinical' },
+                { value: 'financial', label: 'Financial' },
+                { value: 'administrative', label: 'Administrative' },
+                { value: 'automation', label: 'Automation' },
+                { value: 'general', label: 'General' },
+              ],
+            },
+            {
+              key: 'severity',
+              label: 'Severity',
+              value: severity,
+              onChange: setSeverity,
+              options: [
+                { value: 'all', label: 'All Severities' },
+                { value: 'info', label: 'Info' },
+                { value: 'warning', label: 'Warning' },
+                { value: 'critical', label: 'Critical' },
+              ],
+            },
+            {
+              key: 'branch',
+              label: 'Branch',
+              value: branchId,
+              onChange: setBranchId,
+              options: [
+                { value: '', label: 'All Branches' },
+                ...state.branches.map(b => ({ value: b.id, label: b.name })),
+              ],
+            },
+          ]}
+          count={logs.length}
+          onReset={() => {
+            setSearch('')
+            setCategory('all')
+            setSeverity('all')
+            setBranchId('')
+            setDateFrom('')
+            setDateTo('')
+          }}
+        />
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginTop: '12px', flexWrap: 'wrap', paddingTop: '10px', borderTop: '1px solid var(--line)' }}>
+          <label style={{ fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ fontWeight: '600', color: 'var(--muted)' }}>From:</span>
+            <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} style={{ padding: '4px 8px', borderRadius: '6px', border: '1px solid var(--line)', fontSize: '13px' }}/>
+          </label>
+          <label style={{ fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ fontWeight: '600', color: 'var(--muted)' }}>To:</span>
+            <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} style={{ padding: '4px 8px', borderRadius: '6px', border: '1px solid var(--line)', fontSize: '13px' }}/>
+          </label>
+          {rangeInvalid && <span style={{ color: '#dc2626', fontSize: '12px', fontWeight: '600' }}>The end date is before the start date.</span>}
         </div>
-        {rangeInvalid && <div style={{ marginTop: '12px' }}><Notice tone="warning">The end date is before the start date.</Notice></div>}
       </Card>
 
       <div style={{ marginTop: '20px' }}>

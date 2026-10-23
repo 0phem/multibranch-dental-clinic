@@ -69,7 +69,12 @@ export function BookingCalendar({ branchId, serviceId, dentistId = null, appoint
   </div>
 }
 
-/** Time chips for one day, grouped Morning / Afternoon, from GET /api/appointments/availability (the real scheduling rules). */
+const STANDARD_SLOTS = [
+  '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
+  '13:00', '13:30', '14:00', '14:30', '15:00', '15:30', '16:00', '16:30'
+]
+
+/** Time chips for one day, grouped Morning / Afternoon, from GET /api/appointments/availability. */
 export function TimeSlots({ branchId, serviceId, dentistId = null, appointmentId = null, date, value, onChange }) {
   const [state, setState] = useState({ status: 'loading', slots: [], error: '' })
   const [attempt, setAttempt] = useState(0)
@@ -86,17 +91,53 @@ export function TimeSlots({ branchId, serviceId, dentistId = null, appointmentId
   if (!date) return null
   if (state.status === 'loading') return <Skeleton lines={2} card={false} label="Loading times"/>
   if (state.status === 'error') return <ErrorState text={state.error} onRetry={() => setAttempt(a => a + 1)}/>
-  if (!state.slots.length) return <p className="pp-hint">This day just filled up. Please choose another day.</p>
-  const groups = [['Morning', state.slots.filter(s => s.start_time < '12:00')], ['Afternoon', state.slots.filter(s => s.start_time >= '12:00')]].filter(([, list]) => list.length)
+
+  const availableMap = new Map((state.slots || []).map(s => [s.start_time, s]))
+  const allTimes = Array.from(new Set([...STANDARD_SLOTS, ...(state.slots || []).map(s => s.start_time)])).sort()
+
+  const items = allTimes.map(t => ({
+    time: t,
+    available: availableMap.has(t),
+    slot: availableMap.get(t) || { start_time: t }
+  }))
+
+  const groups = [
+    ['Morning', items.filter(i => i.time < '12:00')],
+    ['Afternoon', items.filter(i => i.time >= '12:00')]
+  ].filter(([, list]) => list.length)
 
   return <div className="pp-times pp-fade">
+    {!state.slots.length && <p className="pp-hint">All appointment slots for this day are currently booked. Unavailable times are shown below.</p>}
     {groups.map(([label, list]) => <fieldset key={label} className="pp-time-group">
       <legend>{label}</legend>
       <div className="pp-chips">
-        {list.map(slot => <button key={slot.start_time} type="button" className={`pp-chip ${value?.start_time === slot.start_time ? 'is-selected' : ''}`}
-          aria-pressed={value?.start_time === slot.start_time} onClick={() => onChange(slot)}>
-          <b>{time12(slot.start_time)}</b>{!dentistId && slot.dentist?.name && <small>{slot.dentist.name}</small>}
-        </button>)}
+        {list.map(item => {
+          if (item.available) {
+            const slot = item.slot
+            return <button
+              key={slot.start_time}
+              type="button"
+              className={`pp-chip ${value?.start_time === slot.start_time ? 'is-selected' : ''}`}
+              aria-pressed={value?.start_time === slot.start_time}
+              onClick={() => onChange(slot)}
+            >
+              <b>{time12(slot.start_time)}</b>
+              {!dentistId && slot.dentist?.name && <small>{slot.dentist.name}</small>}
+            </button>
+          }
+          return <button
+            key={item.time}
+            type="button"
+            className="pp-chip is-unavailable"
+            disabled
+            aria-disabled="true"
+            title="Unavailable / Booked"
+            aria-label={`${time12(item.time)}, unavailable`}
+          >
+            <b>{time12(item.time)}</b>
+            <small>Unavailable</small>
+          </button>
+        })}
       </div>
     </fieldset>)}
   </div>

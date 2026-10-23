@@ -37,21 +37,34 @@ export function ToothChart({ data, onPick, picked }) {
     <div className="st-tabs" role="tablist" aria-label="Teeth">
       {[['adult', 'Adult (32)'], ['primary', 'Primary (20)']].map(([k, l]) => <button key={k} type="button" role="tab" aria-selected={set === k} className={set === k ? 'is-on' : ''} onClick={() => setSet(k)}>{l}</button>)}
     </div>
-    <div className="tc-quadrants">{rows.map((teeth, qi) => <figure key={qi} className="tc-quadrant">
-      <figcaption>{QUADRANT[qi]}</figcaption>
-      <svg viewBox={`0 0 ${teeth.length * W} ${H}`} role="group" aria-label={`${QUADRANT[qi]} teeth`}>
-        {teeth.map((t, i) => {
-          const c = current[t], label = toothLabel(t, data.settings?.numbering)
-          return <g key={t} role="button" tabIndex={0} className={`tc-tooth ${picked === t ? 'is-picked' : ''}`} transform={`translate(${i * W + 3},4)`}
-            aria-label={`Tooth ${label}${c ? `: ${c.status}${c.surfaces?.length ? `, surfaces ${c.surfaces.join(' ')}` : ''}, ${day(c.recorded_on)}` : ': nothing recorded'}`}
-            onClick={() => onPick(t)} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onPick(t) } }}>
-            <rect width={W - 6} height={H - 10} rx="10" fill={c ? colour(c.status) : '#ffffff'} stroke={picked === t ? '#1865ac' : '#9fb3c8'} strokeWidth={picked === t ? 3 : 1.4}/>
-            <text x={(W - 6) / 2} y="20" textAnchor="middle" className="tc-num">{label}</text>
-            <text x={(W - 6) / 2} y="42" textAnchor="middle" className="tc-abbr">{c ? abbr(c.status) : '·'}</text>
-          </g>
-        })}
-      </svg>
-    </figure>)}</div>
+    <div className="tc-quadrants">{rows.map((teeth, qi) => {
+      const isUpper = qi < 2
+      return <figure key={qi} className="tc-quadrant">
+        <figcaption>{QUADRANT[qi]}</figcaption>
+        <svg viewBox={`0 0 ${teeth.length * W} ${H}`} role="group" aria-label={`${QUADRANT[qi]} teeth`}>
+          {teeth.map((t, i) => {
+            const c = current[t], label = toothLabel(t, data.settings?.numbering)
+            const toothColor = c ? colour(c.status) : '#ffffff'
+            const isMissing = c && /missing|extracted/i.test(c.status)
+            const toothPath = isUpper
+              ? "M 15 5 C 17 5, 19 11, 20 18 C 21 11, 23 5, 25 5 C 29 9, 27 20, 28 26 C 29 29, 31 34, 31 40 C 31 47, 26 49, 20 47 C 14 49, 9 47, 9 40 C 9 34, 11 29, 12 26 C 13 20, 11 9, 15 5 Z"
+              : "M 9 14 C 9 7, 14 5, 20 7 C 26 5, 31 7, 31 14 C 31 20, 29 25, 28 28 C 27 34, 29 45, 25 49 C 23 49, 21 43, 20 36 C 19 43, 17 49, 15 49 C 11 45, 13 34, 12 28 C 11 25, 9 20, 9 14 Z"
+            const cervicalLine = isUpper ? "M 12 26 C 16 28, 24 28, 28 26" : "M 12 28 C 16 26, 24 26, 28 28"
+
+            return <g key={t} role="button" tabIndex={0} className={`tc-tooth ${picked === t ? 'is-picked' : ''}`} transform={`translate(${i * W + 3},4)`}
+              aria-label={`Tooth ${label}${c ? `: ${c.status}${c.surfaces?.length ? `, surfaces ${c.surfaces.join(' ')}` : ''}, ${day(c.recorded_on)}` : ': nothing recorded'}`}
+              onClick={() => onPick(t)} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onPick(t) } }}>
+              <rect width={W - 6} height={H - 10} rx="10" className="tc-tooth-backdrop" fill="#f8fafc" stroke={picked === t ? '#1865ac' : '#e2e8f0'} strokeWidth={picked === t ? 2.5 : 1}/>
+              <path d={toothPath} fill={toothColor} stroke={picked === t ? '#1865ac' : (c ? '#475569' : '#94a3b8')} strokeWidth={picked === t ? 2.2 : 1.4} strokeDasharray={isMissing ? "3 2" : "none"}/>
+              <path d={cervicalLine} fill="none" stroke={picked === t ? '#1865ac' : '#cbd5e1'} strokeWidth="1" strokeDasharray="1.5 1.5"/>
+              {isMissing && <line x1="10" y1="10" x2="30" y2="44" stroke="#ef4444" strokeWidth="2"/>}
+              <text x={(W - 6) / 2} y={isUpper ? 42 : 19} textAnchor="middle" className="tc-num">{label}</text>
+              <text x={(W - 6) / 2} y={isUpper ? 21 : 41} textAnchor="middle" className="tc-abbr">{c ? abbr(c.status) : '·'}</text>
+            </g>
+          })}
+        </svg>
+      </figure>
+    })}</div>
     <ul className="tc-legend" aria-label="Legend">{statuses.map(s => <li key={s}><span className="tc-swatch" style={{ background: colour(s) }} aria-hidden="true"/>{abbr(s)} = {s}</li>)}<li><span className="tc-swatch" aria-hidden="true"/>· = nothing recorded</li></ul>
     <p className="au-muted">Numbering: {data.settings?.numbering === 'universal' ? 'Universal' : 'FDI'}. Surfaces: M mesial, O occlusal or incisal, D distal, B buccal, L lingual.</p>
   </div>

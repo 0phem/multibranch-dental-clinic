@@ -209,6 +209,9 @@
 .pp-chip:hover { border-color: var(--brand); }
 .pp-chip.is-selected { background: var(--brand); border-color: var(--brand); color: #fff; }
 .pp-chip.is-selected small { color: #e5effa; }
+.pp-chip.is-unavailable { background: #f1f5f8; border-color: #dce4e8; color: #8c9ba5; opacity: 0.6; cursor: not-allowed; }
+.pp-chip.is-unavailable:hover { border-color: #dce4e8; }
+.pp-chip.is-unavailable small { color: #8c9ba5; }
 
 /* Success */
 .pp-success-card { display: grid; justify-items: center; text-align: center; padding: 32px 20px; background: linear-gradient(160deg, var(--pp-mint) 0%, var(--pp-sky) 60%, #fff 100%); }

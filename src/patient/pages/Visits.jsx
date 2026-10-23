@@ -74,19 +74,63 @@ export function VisitsPage({ context, onNavigate, toast }) {
 }
 
 function CancelDialog({ appointment, onClose, onDone }) {
+  const [reason, setReason] = useState('Schedule conflict')
+  const [customReason, setCustomReason] = useState('')
+  const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false), [error, setError] = useState('')
   const key = useRef(commandKey())
+
+  const effectiveReason = reason === 'Other' ? customReason.trim() : reason
+
   const go = async () => {
+    if (reason === 'Other' && !customReason.trim()) {
+      return setError('Please provide a reason for cancelling.')
+    }
     setBusy(true); setError('')
-    const r = await cancelAppointment(appointment, key.current)
+    const r = await cancelAppointment(appointment, key.current, { reason: effectiveReason, note: note.trim() })
     setBusy(false)
     if (!r.ok) return setError(r.message)
     onDone()
   }
   return <Modal open title="Cancel this visit?" subtitle={`${appointment.service?.name} · ${dateLong(appointment.date)} at ${time12(appointment.start_time)}`} onClose={onClose}>
     <p>Your time will be released for other patients. You can book again any time.</p>
-    {error && <p className="pp-error-text" role="alert">{error}</p>}
-    <div className="form-actions"><Button variant="ghost" onClick={onClose}>Keep it</Button><Button className="pp-danger-solid" disabled={busy} onClick={go}>{busy ? 'Cancelling…' : 'Cancel visit'}</Button></div>
+    <div style={{ marginTop: '14px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+      <label className="field">
+        <span>Reason for cancellation <b className="required" aria-hidden="true">*</b></span>
+        <select value={reason} onChange={e => { setReason(e.target.value); setError('') }}>
+          <option value="Schedule conflict">Schedule conflict</option>
+          <option value="No longer need the appointment">No longer need the appointment</option>
+          <option value="Feeling unwell">Feeling unwell / Medical reason</option>
+          <option value="Booked the wrong date, time, branch, or service">Booked wrong date/time/branch/service</option>
+          <option value="Found another appointment">Found another appointment</option>
+          <option value="Other">Other (specify below)</option>
+        </select>
+      </label>
+      {reason === 'Other' && (
+        <label className="field">
+          <span>Specify reason <b className="required" aria-hidden="true">*</b></span>
+          <input
+            type="text"
+            required
+            placeholder="Please tell us why you need to cancel"
+            value={customReason}
+            onChange={e => { setCustomReason(e.target.value); setError('') }}
+            autoFocus
+          />
+        </label>
+      )}
+      <label className="field">
+        <span>Optional note</span>
+        <textarea
+          rows={2}
+          placeholder="Any additional details for the clinic staff (optional)"
+          value={note}
+          onChange={e => setNote(e.target.value)}
+        />
+      </label>
+    </div>
+    {error && <p className="pp-error-text" role="alert" style={{ marginTop: '10px' }}>{error}</p>}
+    <div className="form-actions" style={{ marginTop: '18px' }}><Button variant="ghost" onClick={onClose}>Keep it</Button><Button className="pp-danger-solid" disabled={busy || (reason === 'Other' && !customReason.trim())} onClick={go}>{busy ? 'Cancelling…' : 'Cancel visit'}</Button></div>
   </Modal>
 }
 

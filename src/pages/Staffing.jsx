@@ -60,6 +60,7 @@ export function WorkSchedulesPage({ store, role }) {
   useEffect(() => { setAffected(null); refreshAffected() }, [selected])
   const after = r => { if (r.data?.affected) setAffected(r.data.affected); load() }
   const editable = dentist?.branches.some(b => b.editable)
+  const canEdit = role !== 'dentist' && editable
 
   return <div className="st-page">
     <PageHeader kicker={role === 'dentist' ? 'My hours' : role === 'owner' ? 'Administration' : 'Team'} title="Work schedules"
@@ -68,24 +69,25 @@ export function WorkSchedulesPage({ store, role }) {
     {!data ? <p className="au-muted" role="status">Loading…</p> : !data.dentists.length ? <Notice>No dentists to show for your branches.</Notice> : <>
       <Card>
         <Field label="Dentist"><select value={selected} onChange={e => setSelected(e.target.value)}>{data.dentists.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</select></Field>
+        {role === 'dentist' && <Notice tone="info" title="Roster and working hours are managed by the Clinic Owner and Front Desk staff">Dentists view rostered schedules and shift hours read-only. To request time off or coverage, submit a request under Leave.</Notice>}
         {dentist?.demo && <Notice tone="info" title="Demo schedule, not confirmed by the clinic">These hours were made up for the demonstration. The clinic still has to give each dentist’s real hours.</Notice>}
         {dentist?.profile_hours && <Notice tone="info" title="No weekly schedule yet">Booking uses the hours on the profile ({t12(dentist.profile_hours.start)}–{t12(dentist.profile_hours.end)}) on every day the branch is open, and the calendar marks its capacity as estimated.
-          {editable && <div className="ns-actions st-gap">{dentist.branches.filter(b => b.editable).map(b => <Button key={b.id} size="sm" variant="soft" onClick={async () => {
+          {canEdit && <div className="ns-actions st-gap">{dentist.branches.filter(b => b.editable).map(b => <Button key={b.id} size="sm" variant="soft" onClick={async () => {
             const r = await copyProfileHours(dentist.id, b.id); if (!r.ok) return toast(firstError(r), 'warning'); toast(`${r.data.created} day(s) added at ${b.name}. Edit any day below.`, 'success'); after(r)
           }}>Start from these hours at {b.name}</Button>)}</div>}
-          {editable && <p className="au-muted">Once a dentist has a weekly schedule, a day without hours is a day off.</p>}</Notice>}
+          {canEdit && <p className="au-muted">Once a dentist has a weekly schedule, a day without hours is a day off.</p>}</Notice>}
       </Card>
-      {dentist && <WeeklyGrid dentist={dentist} data={data} toast={toast} onSaved={after}/>}
+      {dentist && <WeeklyGrid dentist={dentist} data={data} toast={toast} onSaved={after} canEdit={canEdit}/>}
       {dentist && <Card title="Affected appointments" subtitle="The next 90 days: booked times this dentist no longer covers.">
         <AffectedAppointments rows={affected} wordingApproved={approved} toast={toast} canAct={role !== 'dentist'} onChanged={() => { refreshAffected() }}
           onNotify={() => notifyScheduleAffected(dentist.id)}/>
       </Card>}
-      <Exceptions data={data} dentist={dentist} toast={toast} onSaved={after}/>
+      <Exceptions data={data} dentist={dentist} toast={toast} onSaved={after} canEdit={canEdit}/>
     </>}
   </div>
 }
 
-function WeeklyGrid({ dentist, data, toast, onSaved }) {
+function WeeklyGrid({ dentist, data, toast, onSaved, canEdit = true }) {
   const [editing, setEditing] = useState(null)
   const rowFor = (branch, day) => dentist.weekly.find(w => w.branch.id === branch.id && w.weekday === Number(day))
   const hours = (branchId, day) => data.branches.find(b => b.id === branchId)?.hours?.[day]
@@ -103,7 +105,7 @@ function WeeklyGrid({ dentist, data, toast, onSaved }) {
             setEditing(null); toast(remove ? `${name} removed: a day off at ${b.name}.` : `${name} saved.`, 'success'); onSaved(r); return null
           }}/> : <>
             <span>{label}</span>
-            {b.editable && open && <Button size="sm" variant="ghost" onClick={() => setEditing(key)} aria-label={`Change ${name} at ${b.name}`}>Change</Button>}
+            {canEdit && b.editable && open && <Button size="sm" variant="ghost" onClick={() => setEditing(key)} aria-label={`Change ${name} at ${b.name}`}>Change</Button>}
           </>}
         </div>
       })}</div>
@@ -134,7 +136,7 @@ function HoursForm({ row, open, onSave, onCancel }) {
   </form>
 }
 
-function Exceptions({ data, dentist, toast, onSaved }) {
+function Exceptions({ data, dentist, toast, onSaved, canEdit = true }) {
   const editableBranches = dentist?.branches.filter(b => b.editable) || []
   const [f, setF] = useState({ date: '', kind: 'day_off', branch_ref: '', start_time: '09:00', end_time: '12:00', reason: '' })
   const [err, setErr] = useState(''), [busy, setBusy] = useState(false)
@@ -150,9 +152,9 @@ function Exceptions({ data, dentist, toast, onSaved }) {
   return <Card title="Exceptions" subtitle="One date: a day off (every branch) or different hours at one branch.">
     {!rows.length ? <p className="au-muted">No upcoming exceptions{dentist ? ` for ${dentist.name}` : ''}.</p> : <ul className="fd-list">{rows.map(x => <li key={x.id}>
       <div><b>{longDate(x.date)} · {x.kind === 'day_off' ? 'Day off' : `${t12(x.start)}–${t12(x.end)} at ${x.branch?.name}`}</b><span>{x.dentist.name}{x.reason ? ` · ${x.reason}` : ''}</span></div>
-      {x.editable && <Button size="sm" variant="ghost" onClick={async () => { const r = await removeScheduleException(x.id); if (!r.ok) return toast(firstError(r), 'warning'); toast('Exception removed.', 'success'); onSaved(r) }}>Remove</Button>}
+      {canEdit && x.editable && <Button size="sm" variant="ghost" onClick={async () => { const r = await removeScheduleException(x.id); if (!r.ok) return toast(firstError(r), 'warning'); toast('Exception removed.', 'success'); onSaved(r) }}>Remove</Button>}
     </li>)}</ul>}
-    {dentist && editableBranches.length > 0 && <form className="au-form st-exception" onSubmit={add}>
+    {canEdit && dentist && editableBranches.length > 0 && <form className="au-form st-exception" onSubmit={add}>
       <h3 className="st-sub">Add an exception for {dentist.name}</h3>
       <Field label="Date" required><input type="date" min={manilaToday()} value={f.date} onChange={e => set('date', e.target.value)} required/></Field>
       <Field label="Kind"><select value={f.kind} onChange={e => set('kind', e.target.value)}><option value="day_off">Day off</option><option value="custom_hours">Different hours</option></select></Field>

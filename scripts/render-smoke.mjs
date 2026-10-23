@@ -508,7 +508,7 @@ assert.ok(!/nav-proposed|Rewards|Proposed/.test(render('dashboard','patient')),'
 // Staff/Owner Engagement keeps its page but its M24 controls are command-backed and its status copy is aligned.
 withState({loyalty:[account(60,[requestEntry,earning(60)]),{...account(10,[earning(30)]),id:'loy2',patientId:'p2',referralCode:'DANA-JOHN-01'}]})
 const engagement=render('engagement','owner')
-for(const text of ['Optional engagement programs','team-designed','Process request','Under review','Marketing &amp; Reactivation • M25'])assert.ok(engagement.includes(text),`engagement: ${text}`)
+for(const text of ['Optional engagement programs','team-designed','Process request','Under review','Marketing &amp; Reactivation'])assert.ok(engagement.includes(text),`engagement: ${text}`)
 assert.ok(!/Proposed Enhancement|\bPE\b|Engagement • PE/.test(engagement+render('dashboard','owner')+render('dashboard','staff')),'Owner and Staff carry no PE copy')
 // New canonical modules that are not built yet must never be claimed as represented (canonical module data).
 for(const text of ['Patient AI Support & Clinic Knowledge Management','Limited preview: a rule-based Clinic Assistant','Planned: only HMO document metadata','Planned: clinic settings are still fixed','Planned: only a limited in-browser activity history'])assert.ok(m.MODULES.some(mod=>mod.coverageNote?.includes(text)||mod.name===text),`module coverage: ${text}`)

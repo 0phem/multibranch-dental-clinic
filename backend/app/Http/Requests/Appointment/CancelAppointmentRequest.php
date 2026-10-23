@@ -15,6 +15,8 @@ class CancelAppointmentRequest extends FormRequest
     {
         return [
             'expected_revision' => ['required', 'integer', 'min:1'],
+            'reason' => ['nullable', 'string', 'max:255'],
+            'note' => ['nullable', 'string', 'max:500'],
             'status' => ['prohibited'],
         ];
     }

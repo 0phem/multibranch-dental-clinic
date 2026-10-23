@@ -179,3 +179,21 @@ export function SectionLabel({ children }) { return <div className="section-labe
 export function SplitBadge({ left, right, tone='neutral' }) {
   return <span className={`split-badge ${tone}`}><b>{left}</b><span>{right}</span></span>
 }
+
+export function FilterBar({ search, onSearchChange, searchPlaceholder='Search…', onClear, children, className='', ariaLabel='Search and filters' }) {
+  return <div className={`filter-bar ${className}`.trim()} role="search" aria-label={ariaLabel}>
+    {onSearchChange && <div className="filter-bar-search">
+      <Icon name="search" size={16} className="filter-search-icon"/>
+      <input
+        type="search"
+        className="filter-search-input"
+        value={search || ''}
+        onChange={e => onSearchChange(e.target.value)}
+        placeholder={searchPlaceholder}
+        aria-label={searchPlaceholder}
+      />
+    </div>}
+    {children && <div className="filter-bar-controls">{children}</div>}
+    {onClear && <button type="button" className="btn ghost sm filter-bar-clear" onClick={onClear}>Clear filters</button>}
+  </div>
+}

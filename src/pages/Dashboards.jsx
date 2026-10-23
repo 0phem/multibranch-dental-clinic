@@ -86,13 +86,39 @@ function DentistDashboard({ setPage, state, session }) {
     <PageHeader kicker="Clinical workspace" title="Your day, without the clutter" text="See who is next, open the chart, document treatment and keep follow-up tasks moving." aside={next?<Button onClick={()=>setPage('queue')} icon="queue">Open my queue</Button>:null}/>
     {activeTreatment&&<div className="active-treatment-banner"><div className="pulse-dot"/><div><span>Active treatment</span><b>{patientName(activeTreatment.patientId,state.patients)}</b><small>{activeTreatment.procedure||activeTreatment.plan||'Treatment in progress'}</small></div><Button variant="soft" onClick={()=>setPage('treatment',encounterContext(state.queue.find(q=>q.id===activeTreatment.queueEntryId)))} icon="tooth">Continue treatment</Button></div>}
     <div className="dentist-command-grid">
-      <Card className="next-patient-card" title="Next patient" subtitle="Your live queue">
-        {next?<><div className="next-patient-top"><div className="avatar xl">{patientName(next.patientId,state.patients).split(' ').map(x=>x[0]).slice(0,2).join('')}</div><div><h2>{patientName(next.patientId,state.patients)}</h2><p>Checked in {displayTime(next.checkedIn)} • Position #{next.position}</p></div><Status>{next.status}</Status></div><div className="next-patient-actions"><Button onClick={()=>setPage('queue')} icon="queue">Open queue</Button><Button variant="soft" onClick={()=>setPage('patients',encounterContext(next))} icon="file">Open chart</Button></div></>:<Notice tone="success" title="Queue clear">No patient is currently waiting for you.</Notice>}
+      <Card className="next-patient-card" title="Ready for Treatment" subtitle="Current waiting queue at chair-side">
+        {next ? <>
+          <div className="next-patient-top">
+            <div className="avatar xl">{patientName(next.patientId,state.patients).split(' ').map(x=>x[0]).slice(0,2).join('')}</div>
+            <div>
+              <h2>{patientName(next.patientId,state.patients)}</h2>
+              <p>Checked in at {displayTime(next.checkedIn)} • Queue #{next.number || next.position || 1} {next.priority && next.priority !== 'Standard' ? `• ${next.priority}` : ''}</p>
+            </div>
+            <Status>{next.status}</Status>
+          </div>
+          <div className="next-patient-actions">
+            <Button onClick={()=>setPage('treatment',encounterContext(next))} icon="tooth">Start Treatment</Button>
+            <Button variant="soft" onClick={()=>setPage('patients',encounterContext(next))} icon="file">Open chart</Button>
+            <Button variant="ghost" onClick={()=>setPage('queue')} icon="queue">My queue</Button>
+          </div>
+        </> : <Notice tone="info" title="No patients currently waiting in queue">All checked-in patients have been seen, or no patient has arrived yet. See your upcoming schedule below.</Notice>}
       </Card>
       <div className="clinical-stat-stack"><div><span><Icon name="calendar" size={18}/></span><div><b>{today.length}</b><small>scheduled today</small></div></div><div><span><Icon name="pill" size={18}/></span><div><b>{pendingRx}</b><small>prescription tasks</small></div></div><div><span><Icon name="followup" size={18}/></span><div><b>{follow}</b><small>open follow-ups</small></div></div></div>
     </div>
     <div className="grid-2 top-gap">
-      <Card title="Today’s schedule" subtitle="Your validated appointments" actions={<button className="text-link" onClick={()=>setPage('schedule')}>Open schedule</button>}><div className="day-list">{today.slice(0,5).map(a=><div className="day-list-row" key={a.id}><div className="day-time">{displayTime(a.start)}</div><div><b>{patientName(a.patientId,state.patients)}</b><small>{a.service} • {a.duration} min</small></div><Status>{a.status}</Status></div>)}</div></Card>
+      <Card title="Upcoming Schedule Today" subtitle="Appointments scheduled for today (not yet checked in)" actions={<button className="text-link" onClick={()=>setPage('schedule')}>Open schedule</button>}>
+        <div className="day-list">
+          {today.filter(a => ['Confirmed', 'Pending'].includes(a.status)).length === 0 ? (
+            <p className="muted-copy">No more upcoming scheduled appointments waiting to arrive today.</p>
+          ) : (
+            today.filter(a => ['Confirmed', 'Pending'].includes(a.status)).slice(0,5).map(a => <div className="day-list-row" key={a.id}>
+              <div className="day-time">{displayTime(a.start)}</div>
+              <div><b>{patientName(a.patientId,state.patients)}</b><small>{a.service} • {a.duration} min</small></div>
+              <Status>{a.status}</Status>
+            </div>)
+          )}
+        </div>
+      </Card>
       <Card title="Clinical task list" subtitle="Handoffs created by completed treatment"><div className="task-list"><button onClick={()=>setPage('prescriptions')}><span><Icon name="pill" size={18}/></span><div><b>Prescription tasks</b><small>{pendingRx?`${pendingRx} awaiting authorization`:'No outstanding prescription tasks'}</small></div><Icon name="chevron" size={16}/></button><button onClick={()=>setPage('followups')}><span><Icon name="followup" size={18}/></span><div><b>Follow-up care</b><small>{follow?`${follow} return-visit obligation${follow>1?'s':''}`:'No unscheduled follow-ups'}</small></div><Icon name="chevron" size={16}/></button><button onClick={()=>setPage('messages')}><span><Icon name="message" size={18}/></span><div><b>Patient messages</b><small>Clinical conversations assigned to you</small></div><Icon name="chevron" size={16}/></button></div></Card>
     </div>
   </>

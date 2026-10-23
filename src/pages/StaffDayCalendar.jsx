@@ -74,7 +74,7 @@ export function StaffDayCalendar({ store }) {
   const [date, setDate] = useState(defaultCalendarDate)
   const [branchId, setBranchId] = useState('all')
   const [selectedId, setSelectedId] = useState(null)
-  const [selectedDate, setSelectedDate] = useState(null)
+  const [selectedDate, setSelectedDate] = useState(() => clinicNow().date)
   const [newOpen, setNewOpen] = useState(false)
   const [reschedule, setReschedule] = useState(null)
   const [cancelling, setCancelling] = useState(null)
@@ -266,118 +266,139 @@ export function StaffDayCalendar({ store }) {
     {complete && filtered.length === 0 && <Card><p className="muted-copy" role="status">{activeBranch && rows.length ? `No appointments for this branch this month (${rows.length} at your other branches).` : 'No appointments this month.'}</p></Card>}
     {complete && filtered.length > 0 && <p className="muted-copy" role="status">{filtered.length} appointment{filtered.length === 1 ? '' : 's'} this month</p>}
 
-    <div className="daycal-month-grid" role="grid" aria-label={`${monthTitle(date)} by day`}>
-      {WEEKDAYS.map(w => <div key={w} className="daycal-weekday" aria-hidden="true">{w.slice(0, 3)}</div>)}
-      {monthCells(date).map(c => {
-        if (!c.fetched) return <div key={c.date} className="daycal-cell is-outside" onClick={() => goto(c.date)} role="gridcell"><span className="daycal-cell-date">{Number(c.date.slice(8))}</span><span className="daycal-none daycal-unverified">Not loaded</span></div>
-        const list = rowsOn(c.date)
-        const shown = list.slice(0, 3)
-        const band = loadBand(loadOf(c.date), load.crowded)
-        const isSelected = selectedDate === c.date
+    <div className="daycal-master-detail">
+      <div className="daycal-calendar-pane">
+        <div className="daycal-month-grid" role="grid" aria-label={`${monthTitle(date)} by day`}>
+          {WEEKDAYS.map(w => <div key={w} className="daycal-weekday" aria-hidden="true">{w.slice(0, 3)}</div>)}
+          {monthCells(date).map(c => {
+            if (!c.fetched) return <div key={c.date} className="daycal-cell is-outside" onClick={() => goto(c.date)} role="gridcell"><span className="daycal-cell-date">{Number(c.date.slice(8))}</span><span className="daycal-none daycal-unverified">Not loaded</span></div>
+            const list = rowsOn(c.date)
+            const shown = list.slice(0, 3)
+            const band = loadBand(loadOf(c.date), load.crowded)
+            const isSelected = selectedDate === c.date
 
-        return <div
-          key={c.date}
-          className={`daycal-cell${c.date === today ? ' is-today' : ''}${isSelected ? ' is-selected' : ''}${band ? ` load-${band.band}` : ''}`}
-          onClick={() => setSelectedDate(prev => prev === c.date ? null : c.date)}
-          role="gridcell"
-          aria-selected={isSelected}
-          tabIndex={0}
-          onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedDate(prev => prev === c.date ? null : c.date) } }}
-        >
-          <div className="daycal-cell-head">
-            <button
-              type="button"
-              className="daycal-daylink"
-              onClick={e => { e.stopPropagation(); setSelectedDate(prev => prev === c.date ? null : c.date) }}
-              aria-label={`Select ${longDate(c.date)}`}
+            return <div
+              key={c.date}
+              className={`daycal-cell${c.date === today ? ' is-today' : ''}${isSelected ? ' is-selected' : ''}${band ? ` load-${band.band}` : ''}`}
+              onClick={() => setSelectedDate(prev => prev === c.date ? null : c.date)}
+              role="gridcell"
+              aria-selected={isSelected}
+              tabIndex={0}
+              onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedDate(prev => prev === c.date ? null : c.date) } }}
             >
-              {Number(c.date.slice(8))}
-            </button>
-            {c.date === today && <span className="daycal-today daycal-today-tag">Today</span>}
-            {totals && list.length > 0 && <span className="daycal-count" aria-label={`${list.length} appointment${list.length === 1 ? '' : 's'}`}>{list.length}</span>}
-          </div>
+              <div className="daycal-cell-head">
+                <button
+                  type="button"
+                  className="daycal-daylink"
+                  onClick={e => { e.stopPropagation(); setSelectedDate(prev => prev === c.date ? null : c.date) }}
+                  aria-label={`Select ${longDate(c.date)}`}
+                >
+                  {Number(c.date.slice(8))}
+                </button>
+                {c.date === today && <span className="daycal-today daycal-today-tag">Today</span>}
+                {totals && list.length > 0 && <span className="daycal-count" aria-label={`${list.length} appointment${list.length === 1 ? '' : 's'}`}>{list.length}</span>}
+              </div>
 
-          <div className="daycal-cell-meta">
-            {totals && (
-              list.length > 0
-                ? <span className="daycal-count-label">{list.length} {list.length === 1 ? 'appointment' : 'appointments'}</span>
-                : <span className="daycal-none">No appointments</span>
-            )}
-            {!totals && list.length === 0 && <span className="daycal-none daycal-unverified">Not verified</span>}
-            <LoadBadge day={loadOf(c.date)} count={list.length} crowded={load.crowded}/>
-          </div>
+              <div className="daycal-cell-meta">
+                {totals && (
+                  list.length > 0
+                    ? <span className="daycal-count-label">{list.length} {list.length === 1 ? 'appointment' : 'appointments'}</span>
+                    : <span className="daycal-none">No appointments</span>
+                )}
+                {!totals && list.length === 0 && <span className="daycal-none daycal-unverified">Not verified</span>}
+                <LoadBadge day={loadOf(c.date)} count={list.length} crowded={load.crowded}/>
+              </div>
 
-          <div className="daycal-cell-chips">
-            {shown.map(a => <AppointmentButton key={a.id} a={a} onSelect={setSelectedId}/>)}
-            {totals && list.length > shown.length && <button type="button" className="daycal-more" onClick={e => { e.stopPropagation(); setSelectedDate(c.date) }}>+{list.length - shown.length} more</button>}
-          </div>
-        </div>
-      })}
-    </div>
-
-    {selectedDate && <Card className="daycal-expanded-day" aria-labelledby="daycal-selected-heading">
-      <div className="daycal-expanded-header">
-        <div>
-          <h3 id="daycal-selected-heading" className="daycal-expanded-title">
-            Appointments for {longDate(selectedDate)}
-            {selectedDate === today && <span className="daycal-today daycal-today-tag">Today</span>}
-          </h3>
-          <p className="daycal-expanded-meta">
-            {verified
-              ? (selectedRows.length === 0 ? 'No appointments scheduled on this date.' : `${selectedRows.length} appointment${selectedRows.length === 1 ? '' : 's'} scheduled`)
-              : 'Reading appointment details from the clinic server…'}
-            {selectedLoad?.closed && ` · Closed (${selectedLoad.reason || 'Closed'})`}
-          </p>
-        </div>
-        <div className="row-actions">
-          {canManage && <Button size="sm" onClick={() => setNewOpen(true)} icon="plusCalendar">New appointment</Button>}
-          <Button size="sm" variant="ghost" onClick={() => setSelectedDate(null)}>Close</Button>
+              <div className="daycal-cell-chips">
+                {shown.map(a => <AppointmentButton key={a.id} a={a} onSelect={setSelectedId}/>)}
+                {totals && list.length > shown.length && <button type="button" className="daycal-more" onClick={e => { e.stopPropagation(); setSelectedDate(c.date) }}>+{list.length - shown.length} more</button>}
+              </div>
+            </div>
+          })}
         </div>
       </div>
 
-      {verified && selectedRows.length === 0 && <div className="daycal-expanded-empty">
-        <p className="muted-copy">No appointments are scheduled for this date.</p>
-        {canManage && <Button size="sm" variant="soft" onClick={() => setNewOpen(true)} icon="plusCalendar">Book an appointment on {shortDay(selectedDate)}</Button>}
-      </div>}
+      <aside className="daycal-details-pane">
+        {selectedDate ? (
+          <Card className="daycal-expanded-day" aria-labelledby="daycal-selected-heading">
+            <div className="daycal-expanded-header">
+              <div>
+                <h3 id="daycal-selected-heading" className="daycal-expanded-title">
+                  Appointments for {longDate(selectedDate)}
+                  {selectedDate === today && <span className="daycal-today daycal-today-tag">Today</span>}
+                </h3>
+                <p className="daycal-expanded-meta">
+                  {verified
+                    ? (selectedRows.length === 0 ? 'No appointments scheduled on this date.' : `${selectedRows.length} appointment${selectedRows.length === 1 ? '' : 's'} scheduled`)
+                    : 'Reading appointment details from the clinic server…'}
+                  {selectedLoad?.closed && ` · Closed (${selectedLoad.reason || 'Closed'})`}
+                </p>
+              </div>
+              <div className="row-actions">
+                {canManage && <Button size="sm" onClick={() => setNewOpen(true)} icon="plusCalendar">New appointment</Button>}
+                <Button size="sm" variant="ghost" onClick={() => setSelectedDate(null)}>Close</Button>
+              </div>
+            </div>
 
-      {selectedRows.length > 0 && <ul className="daycal-expanded-list">
-        {selectedRows.map(a => <li key={a.id} className="daycal-expanded-card">
-          <div className="daycal-expanded-main">
-            <span className="daycal-avatar" aria-hidden="true" style={{ background: avatarColour(a.patientId || a.patientCode) }}>{initials(a.patientName)}</span>
-            <div className="daycal-expanded-info">
-              <div className="daycal-expanded-patient">
-                <strong>{a.patientName || 'Patient'}</strong>
-                {a.patientCode && <small className="block-muted">{a.patientCode}</small>}
-              </div>
-              <div className="daycal-expanded-time">
-                <span className="daycal-time-badge">{displayTime(a.start)}–{displayTime(a.end)}</span>
-                {a.duration && <small className="block-muted">({a.duration} min)</small>}
-              </div>
-              <div className="daycal-expanded-details">
-                <span className="daycal-service-name">{a.serviceName || 'Consultation'}</span>
-                <span className="daycal-meta-dot" aria-hidden="true">·</span>
-                <span className="daycal-dentist-name">{a.dentistName || 'Unassigned Dentist'}</span>
-                {branches.length > 1 && a.branchName && <>
-                  <span className="daycal-meta-dot" aria-hidden="true">·</span>
-                  <span className="daycal-branch-name">{a.branchName}</span>
-                </>}
+            {verified && selectedRows.length === 0 && <div className="daycal-expanded-empty">
+              <p className="muted-copy">No appointments are scheduled for this date.</p>
+              {canManage && <Button size="sm" variant="soft" onClick={() => setNewOpen(true)} icon="plusCalendar">Book an appointment on {shortDay(selectedDate)}</Button>}
+            </div>}
+
+            {selectedRows.length > 0 && <ul className="daycal-expanded-list">
+              {selectedRows.map(a => <li key={a.id} className="daycal-expanded-card">
+                <div className="daycal-expanded-main">
+                  <span className="daycal-avatar" aria-hidden="true" style={{ background: avatarColour(a.patientId || a.patientCode) }}>{initials(a.patientName)}</span>
+                  <div className="daycal-expanded-info">
+                    <div className="daycal-expanded-patient">
+                      <strong>{a.patientName || 'Patient'}</strong>
+                      {a.patientCode && <small className="block-muted">{a.patientCode}</small>}
+                    </div>
+                    <div className="daycal-expanded-time">
+                      <span className="daycal-time-badge">{displayTime(a.start)}–{displayTime(a.end)}</span>
+                      {a.duration && <small className="block-muted">({a.duration} min)</small>}
+                    </div>
+                    <div className="daycal-expanded-details">
+                      <span className="daycal-service-name">{a.serviceName || 'Consultation'}</span>
+                      <span className="daycal-meta-dot" aria-hidden="true">·</span>
+                      <span className="daycal-dentist-name">{a.dentistName || 'Unassigned Dentist'}</span>
+                      {branches.length > 1 && a.branchName && <>
+                        <span className="daycal-meta-dot" aria-hidden="true">·</span>
+                        <span className="daycal-branch-name">{a.branchName}</span>
+                      </>}
+                    </div>
+                  </div>
+                  <div className="daycal-expanded-status">
+                    <Status>{a.status}</Status>
+                  </div>
+                </div>
+                <div className="daycal-expanded-actions">
+                  <Button size="sm" variant="ghost" onClick={() => setSelectedId(a.id)}>Details</Button>
+                  {canManage && ['Confirmed', 'Pending'].includes(a.status) && <>
+                    <Button size="sm" variant="soft" onClick={() => onStartReschedule(a)}>Reschedule</Button>
+                    <Button size="sm" variant="ghost" onClick={() => onStartCancel(a)}>Cancel</Button>
+                    {a.date === clinicDate() && <Button size="sm" variant="ghost" onClick={() => onStartNoShow(a)}>No-show</Button>}
+                  </>}
+                </div>
+              </li>)}
+            </ul>}
+          </Card>
+        ) : (
+          <Card className="daycal-expanded-day daycal-details-empty">
+            <div className="daycal-expanded-header">
+              <div>
+                <h3 className="daycal-expanded-title">Day Schedule</h3>
+                <p className="daycal-expanded-meta">Select a date on the calendar</p>
               </div>
             </div>
-            <div className="daycal-expanded-status">
-              <Status>{a.status}</Status>
+            <div className="daycal-expanded-empty">
+              <p className="muted-copy">Click any calendar date to inspect scheduled appointments and dentist capacity.</p>
+              <Button size="sm" variant="soft" onClick={() => setSelectedDate(today)}>View Today ({shortDay(today)})</Button>
             </div>
-          </div>
-          <div className="daycal-expanded-actions">
-            <Button size="sm" variant="ghost" onClick={() => setSelectedId(a.id)}>Details</Button>
-            {canManage && ['Confirmed', 'Pending'].includes(a.status) && <>
-              <Button size="sm" variant="soft" onClick={() => onStartReschedule(a)}>Reschedule</Button>
-              <Button size="sm" variant="ghost" onClick={() => onStartCancel(a)}>Cancel</Button>
-              {a.date === clinicDate() && <Button size="sm" variant="ghost" onClick={() => onStartNoShow(a)}>No-show</Button>}
-            </>}
-          </div>
-        </li>)}
-      </ul>}
-    </Card>}
+          </Card>
+        )}
+      </aside>
+    </div>
 
     <Modal open={newOpen} title="Create appointment" subtitle="The clinic server validates the slot and assigns an eligible Dentist unless you choose one." wide onClose={() => setNewOpen(false)}>
       <AppointmentForm role={role} store={store} prefill={selectedDate ? { date: selectedDate } : null} onSaved={() => { setNewOpen(false); handleRefresh() }}/>

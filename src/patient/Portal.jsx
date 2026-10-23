@@ -1,5 +1,5 @@
 import React, { lazy, Suspense, useEffect, useRef, useState } from 'react'
-import { Icon } from '../components.jsx'
+import { ConfirmDialog, Icon } from '../components.jsx'
 import { Brand } from '../Brand.jsx'
 import { listNotifications, readAllNotifications, readNotification } from '../api-client.js'
 import { useVisibleRefresh } from '../use-visible-refresh.js'
@@ -64,7 +64,7 @@ export function PatientPortal({ me, store, initialPage = 'home', initialContext 
   const [page, setPage] = useState(() => portalPageFromHash() || (initialContext?.appointmentId ? 'visits' : (PORTAL_PAGES.includes(initialPage) ? initialPage : 'home')))
   const [context, setContext] = useState(initialContext)
   const [visit, setVisit] = useState(0) // remounts a page when it is opened again with new context
-  const [menu, setMenu] = useState(false), [more, setMore] = useState(false), [bell, setBell] = useState(false)
+  const [menu, setMenu] = useState(false), [more, setMore] = useState(false), [bell, setBell] = useState(false), [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false)
   const notes = useNotifications()
   const main = useRef(null)
   const toast = store.toast
@@ -119,7 +119,7 @@ export function PatientPortal({ me, store, initialPage = 'home', initialContext 
         <button type="button" className="pp-me-btn" aria-haspopup="menu" aria-expanded={menu} onClick={() => setMenu(m => !m)}>
           <span className="pp-avatar" aria-hidden="true">{initials(me.name)}</span><span className="pp-me-text"><b>{me.name}</b><small>{me.email}</small></span><Icon name="chevron" size={16}/>
         </button>
-        {menu && <ProfileMenu onPick={navigate} onLogout={onLogout} onClose={() => setMenu(false)}/>}
+        {menu && <ProfileMenu onPick={navigate} onLogout={() => { setMenu(false); setLogoutConfirmOpen(true) }} onClose={() => setMenu(false)}/>}
       </div>
     </aside>
 
@@ -147,7 +147,7 @@ export function PatientPortal({ me, store, initialPage = 'home', initialContext 
         <div className="pp-sheet-me"><span className="pp-avatar" aria-hidden="true">{initials(me.name)}</span><span><b>{me.name}</b><small>{me.email}</small></span></div>
         {[['billing', 'receipt', 'Billing'], ['prescriptions', 'file', 'Prescriptions'], ['teeth', 'star', 'My teeth'], ['archives', 'archive', 'Archives'], ['documents', 'file', 'Documents'], ['profile', 'user', 'Profile'], ['security', 'lock', 'Account security']].map(([key, icon, label]) =>
           <button key={key} type="button" className="pp-sheet-item" onClick={() => navigate(key)}><Icon name={icon} size={20}/>{label}</button>)}
-        <button type="button" className="pp-sheet-item pp-danger" onClick={onLogout}><Icon name="logout" size={20}/>Sign out</button>
+        <button type="button" className="pp-sheet-item pp-danger" onClick={() => { setMore(false); setLogoutConfirmOpen(true) }}><Icon name="logout" size={20}/>Sign out</button>
       </div>
     </div>}
 
@@ -158,6 +158,9 @@ export function PatientPortal({ me, store, initialPage = 'home', initialContext 
       navigate(t.page, t.page === 'billing' ? { invoiceId: t.id } : t.page === 'messages' ? { conversationId: t.id } : { appointmentId: t.id })
     }}/>}
     <AssistantLauncher onNavigate={navigate}/>
+    <ConfirmDialog open={logoutConfirmOpen} title="Log out?" tone="default" confirmLabel="Log out" cancelLabel="Cancel" className="patient-logout-dialog" onConfirm={() => { setLogoutConfirmOpen(false); onLogout() }} onCancel={() => setLogoutConfirmOpen(false)}>
+      Are you sure you want to log out of your account?
+    </ConfirmDialog>
   </div>
 }
 

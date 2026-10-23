@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react'
-import { Button, Card, Field, Icon, Notice, PageHeader, Progress, Status, Table } from '../components.jsx'
+import { Button, Card, Field, Icon, Modal, Notice, PageHeader, Progress, Status, Table } from '../components.jsx'
 import { branchCapacity, dentistName, displayTime, patientName, queueWaitEstimate } from '../logic.js'
 import { commandKey } from '../appointments-api.js'
 import { useVisibleRefresh } from '../use-visible-refresh.js'
@@ -159,13 +159,25 @@ export function QueuePage({ role, activeBranch, store, setPage }) {
     toast(result.ok?label:result.message,result.ok?'success':'warning')
   }
   const update=(entry,name,label)=>run(entry,label,key=>flow.queueCommand(entry,name,key))
-  const priority=entry=>{
-    const reason=window.prompt('Reason for urgent queue priority (operational, not a clinical assessment):')
-    if(reason?.trim())run(entry,'Queue priority updated.',key=>flow.queuePriority(entry,'Urgent',reason.trim(),key))
+  const [priorityModalEntry, setPriorityModalEntry] = useState(null)
+  const [restoreModalEntry, setRestoreModalEntry] = useState(null)
+  const priority = entry => {
+    setPriorityModalEntry(entry)
   }
-  const restore=entry=>{
-    const reason=window.prompt('Reason for giving this late arrival their normal place in the queue:')
-    if(reason?.trim())run(entry,'Normal queue place restored.',key=>flow.queueRestoreOrder(entry,reason.trim(),key))
+  const submitPriority = (entry, priorityLevel, reason) => {
+    setPriorityModalEntry(null)
+    if (priorityLevel === 'Urgent') {
+      run(entry,'Queue priority updated.',key=>flow.queuePriority(entry,'Urgent',reason.trim(),key))
+    } else {
+      run(entry,'Queue priority updated.',key=>flow.queuePriority(entry,priorityLevel,reason.trim(),key))
+    }
+  }
+  const restore = entry => {
+    setRestoreModalEntry(entry)
+  }
+  const submitRestore = (entry, reason) => {
+    setRestoreModalEntry(null)
+    run(entry, 'Normal queue place restored.', key => flow.queueRestoreOrder(entry, reason.trim(), key))
   }
   const operational=['staff','owner'].includes(role)
   const vis=useQueueVisibility(store)
@@ -183,7 +195,14 @@ export function QueuePage({ role, activeBranch, store, setPage }) {
       <Table rows={visible} columns={[
         {key:'position',label:'Pos.',render:q=>q.position?`#${q.position}`:'—'},
         {key:'queueNumber',label:'Queue no.',render:q=>q.queueNumber||'—'},
-        {key:'patient',label:'Patient',render:q=><div><b>{q.patientName||patientName(q.patientId,state.patients)}</b><small className="block-muted">{q.lateArrival&&<span className="fd-badge is-late">Late arrival · queued last</span>} {q.priority} priority{q.priorityReason?` (${q.priorityReason})`:''} • {q.appointmentCode||(q.walkIn?'Walk-in visit':'Scheduled visit')}</small></div>},
+        {key:'patient',label:'Patient',render:q=><div>
+          <div style={{display:'flex',alignItems:'center',gap:'6px',flexWrap:'wrap'}}>
+            <b>{q.patientName||patientName(q.patientId,state.patients)}</b>
+            {q.priority==='Urgent'&&<span className="status danger" style={{fontSize:'10px',padding:'2px 6px'}}><i aria-hidden="true"/>Urgent</span>}
+            {q.priority==='Priority'&&<span className="status warning" style={{fontSize:'10px',padding:'2px 6px'}}><i aria-hidden="true"/>{q.priorityReason?.includes('Senior')?'Senior Priority':q.priorityReason?.includes('PWD')?'PWD Priority':'Priority'}</span>}
+          </div>
+          <small className="block-muted">{q.lateArrival&&<span className="fd-badge is-late">Late arrival · queued last</span>} {q.priority} priority{q.priorityReason?` (${q.priorityReason})`:''} • {q.appointmentCode||(q.walkIn?'Walk-in visit':'Scheduled visit')}</small>
+        </div>},
         {key:'branch',label:'Branch'},{key:'dentist',label:'Dentist',render:q=>dentistName(q.dentistId,state.dentists)},
         {key:'checkedIn',label:'Checked in',render:q=>displayTime(q.checkedIn)},
         ...(demo?[{key:'wait',label:'Est. wait (demo)',render:q=>`${queueWaitEstimate(q,state.queue,state.appointments,state.treatments,state.dentists)} min`}]:[]),
@@ -203,7 +222,94 @@ export function QueuePage({ role, activeBranch, store, setPage }) {
 
       ]}/>
     </Card>
+    {priorityModalEntry&&<PriorityModal entry={priorityModalEntry} onClose={()=>setPriorityModalEntry(null)} onConfirm={submitPriority}/>}
+    {restoreModalEntry&&<RestoreModal entry={restoreModalEntry} onClose={()=>setRestoreModalEntry(null)} onConfirm={submitRestore}/>}
   </>
+}
+
+export function PriorityModal({ entry, onClose, onConfirm }) {
+  const [category, setCategory] = useState('Senior Citizen')
+  const [reason, setReason] = useState('Senior citizen priority')
+  if (!entry) return null
+  const isUrgent = category === 'Urgent'
+  const priorityLevel = isUrgent ? 'Urgent' : 'Priority'
+
+  const handleSubmit = e => {
+    e.preventDefault()
+    if (!reason.trim()) return
+    onConfirm(entry, priorityLevel, reason.trim())
+  }
+
+  return (
+    <Modal open title="Assign Queue Priority" subtitle="Prioritize queue position for special needs or medical urgency" onClose={onClose}>
+      <form onSubmit={handleSubmit}>
+        <Notice tone="info">
+          Operational priority reorders the queue for seniors, PWD, or urgent medical needs. This is an operational accommodation, not a clinical assessment.
+        </Notice>
+        <div style={{ marginTop: '14px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <Field label="Priority Category" required>
+            <select value={category} onChange={e => {
+              const val = e.target.value
+              setCategory(val)
+              if (val === 'Senior Citizen') setReason('Senior citizen priority')
+              else if (val === 'PWD') setReason('Person with disability (PWD) priority')
+              else if (val === 'Urgent') setReason('Urgent medical priority')
+            }}>
+              <option value="Senior Citizen">Senior Citizen (Priority)</option>
+              <option value="PWD">Person with Disability - PWD (Priority)</option>
+              <option value="Urgent">Urgent / Medical Priority (Urgent)</option>
+            </select>
+          </Field>
+          <Field label="Operational Reason" required hint="Required for operational and audit records.">
+            <input
+              type="text"
+              required
+              placeholder="e.g. Elderly patient, wheelchair assistance, acute pain"
+              value={reason}
+              onChange={e => setReason(e.target.value)}
+              autoFocus
+            />
+          </Field>
+        </div>
+        <div className="row-actions" style={{ marginTop: '20px' }}>
+          <Button variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button type="submit" variant={isUrgent ? 'danger' : 'primary'} disabled={!reason.trim()}>
+            Apply {priorityLevel}
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  )
+}
+
+export function RestoreModal({ entry, onClose, onConfirm }) {
+  const [reason, setReason] = useState('Front desk schedule review')
+  if (!entry) return null
+  const handleSubmit = e => {
+    e.preventDefault()
+    if (!reason.trim()) return
+    onConfirm(entry, reason.trim())
+  }
+  return (
+    <Modal open title="Restore Normal Queue Place" subtitle="Staff override of late arrival order" onClose={onClose}>
+      <form onSubmit={handleSubmit}>
+        <Field label="Reason for Restoring Queue Order" required hint="Required for audit and operational records.">
+          <input
+            type="text"
+            required
+            placeholder="Reason for giving this late arrival their normal place..."
+            value={reason}
+            onChange={e => setReason(e.target.value)}
+            autoFocus
+          />
+        </Field>
+        <div className="row-actions" style={{ marginTop: '20px' }}>
+          <Button variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button type="submit" variant="primary" disabled={!reason.trim()}>Restore Normal Place</Button>
+        </div>
+      </form>
+    </Modal>
+  )
 }
 
 export function CapacityPage({ activeBranch, store }) {
