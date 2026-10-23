@@ -374,4 +374,36 @@ class MessagingRealtimeTest extends TestCase
         $this->postJson('/api/conversations/presence')->assertForbidden();
         $this->assertSame(1, ConversationParticipant::count());
     }
+
+    public function test_undecryptable_message_returns_neutral_placeholder_for_patient_and_staff_without_crashing(): void
+    {
+        \Illuminate\Support\Facades\Log::spy();
+        $conv = $this->start(body: 'Hello')->json('data.conversation');
+        $convId = $conv['id'];
+        $convModel = \App\Models\Conversation::where('public_id', $convId)->firstOrFail();
+
+        // Insert message with undecryptable body_encrypted payload
+        $msgId = (string) strtolower((string) \Illuminate\Support\Str::ulid());
+        \Illuminate\Support\Facades\DB::table('conversation_messages')->insert([
+            'public_id' => $msgId,
+            'conversation_id' => $convModel->id,
+            'sender_user_id' => $this->u['patientA']->id,
+            'body' => null,
+            'body_encrypted' => 'eyJpdiI6ImludmFsaWQiLCJ2YWx1ZSI6ImludmFsaWQiLCJtYWMiOiJpbnZhbGlkIn0=',
+            'created_at' => now(),
+        ]);
+
+        // Patient view returns 200 with neutral text
+        $this->actingAsUser('patientA');
+        $patientRes = $this->getJson("/api/conversations/{$convId}/messages")->assertOk();
+        $this->assertSame("This message can't be displayed", $patientRes->json('data.0.body'));
+
+        // Staff view returns 200 with neutral text
+        $this->actingAsUser('staffB1');
+        $staffRes = $this->getJson("/api/conversations/{$convId}/messages")->assertOk();
+        $this->assertSame("This message can't be displayed", $staffRes->json('data.0.body'));
+
+        \Illuminate\Support\Facades\Log::shouldHaveReceived('warning')
+            ->with('Undecryptable conversation message encountered', ['message_id' => $msgId]);
+    }
 }

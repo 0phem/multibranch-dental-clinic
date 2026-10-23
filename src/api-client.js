@@ -407,6 +407,10 @@ export async function downloadBillingPdf(invoiceId, kind = 'invoice') {
   setTimeout(() => URL.revokeObjectURL(url), 1000)
   return { ok: true }
 }
+/** Requests a rate-limited, audited resend of a paid invoice's receipt email. Returns truthful mail transport status. */
+export function resendBillingReceipt(invoiceId) {
+  return request(`/api/invoices/${encodeURIComponent(invoiceId)}/resend-receipt`, { method: 'POST' })
+}
 /** Downloads an appointment booking deposit receipt PDF and saves it in the browser. */
 export async function downloadAppointmentReceiptPdf(appointmentId, code = null) {
   let response

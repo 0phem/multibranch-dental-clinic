@@ -74,9 +74,9 @@ export function StatCard({ label, value, hint, tone='teal', icon }) {
 }
 
 export function PageHeader({ title, text, aside, kicker }) {
-  return <div className="page-header">
-    <div className="page-title-block">{kicker&&<span className="page-kicker">{kicker}</span>}<h1>{title}</h1>{text&&<p>{text}</p>}</div>
-    <div className="page-header-right">{aside}</div>
+  return <div className="page-header page-header-compact">
+    <div className="page-title-block">{kicker&&<span className="page-kicker">{kicker}</span>}<h1>{title}</h1>{text&&<p className="page-header-desc sr-only">{text}</p>}</div>
+    {aside&&<div className="page-header-right">{aside}</div>}
   </div>
 }
 
@@ -180,7 +180,9 @@ export function SplitBadge({ left, right, tone='neutral' }) {
   return <span className={`split-badge ${tone}`}><b>{left}</b><span>{right}</span></span>
 }
 
-export function FilterBar({ search, onSearchChange, searchPlaceholder='Search…', onClear, children, className='', ariaLabel='Search and filters' }) {
+export function FilterBar({ search, onSearchChange, searchPlaceholder='Search…', filters=[], count, totalCount, onClear, onReset, children, className='', ariaLabel='Search and filters' }) {
+  const clearHandler = onClear || onReset
+  const hasFilters = Array.isArray(filters) && filters.length > 0
   return <div className={`filter-bar ${className}`.trim()} role="search" aria-label={ariaLabel}>
     {onSearchChange && <div className="filter-bar-search">
       <Icon name="search" size={16} className="filter-search-icon"/>
@@ -193,7 +195,22 @@ export function FilterBar({ search, onSearchChange, searchPlaceholder='Search…
         aria-label={searchPlaceholder}
       />
     </div>}
-    {children && <div className="filter-bar-controls">{children}</div>}
-    {onClear && <button type="button" className="btn ghost sm filter-bar-clear" onClick={onClear}>Clear filters</button>}
+    {(hasFilters || children) && <div className="filter-bar-controls">
+      {hasFilters && filters.map(f => (
+        <label key={f.key || f.label} className="field">
+          <span>{f.label}</span>
+          <select aria-label={f.label} value={f.value} disabled={f.disabled} onChange={e => f.onChange?.(e.target.value)}>
+            {(f.options || []).map(opt => {
+              const val = typeof opt === 'object' ? opt.value : opt
+              const lbl = typeof opt === 'object' ? opt.label : opt
+              return <option key={val} value={val}>{lbl}</option>
+            })}
+          </select>
+        </label>
+      ))}
+      {children}
+    </div>}
+    {count != null && totalCount != null && <span className="filter-bar-count block-muted" aria-live="polite">{count} of {totalCount}</span>}
+    {clearHandler && <button type="button" className="btn ghost sm filter-bar-clear" onClick={clearHandler}>Clear filters</button>}
   </div>
 }

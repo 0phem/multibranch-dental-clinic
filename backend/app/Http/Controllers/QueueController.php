@@ -74,8 +74,16 @@ class QueueController extends Controller
     {
         Gate::authorize('operate', $queueEntry);
 
-        return $this->queue->priority($request->user(), $queueEntry, $request->validated('priority'), $request->validated('reason'),
-            (int) $request->validated('expected_revision'), $this->idempotencyKey($request, true));
+        return $this->queue->priority(
+            $request->user(),
+            $queueEntry,
+            $request->validated('priority'),
+            $request->validated('reason'),
+            (int) $request->validated('expected_revision'),
+            $this->idempotencyKey($request, true),
+            $request->validated('category'),
+            $request->validated('verification_status'),
+        );
     }
 
     /** F2: restore a late arrival's normal place (Staff override of R2-07, reason required, audited). */

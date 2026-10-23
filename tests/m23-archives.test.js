@@ -574,4 +574,7 @@ test('Archives component source contracts: verify PDF triggers, empty states, an
   assert.match(staffPage, /archivedVisits/)
   assert.match(staffPage, /archivedPrescriptions/)
   assert.match(staffPage, /archivedInvoices/)
+  assert.match(staffPage, /archive\.viewed/)
+  assert.match(staffPage, /archive\.restored_for_followup/)
+  assert.match(staffPage, /Permanent deletion/)
 })

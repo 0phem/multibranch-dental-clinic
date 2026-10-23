@@ -1,4 +1,5 @@
 *.log
+junit_*.xml
 .DS_Store
 .env
 .env.backup

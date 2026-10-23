@@ -40,8 +40,8 @@ export function ErrorState({ text, onRetry }) {
 }
 
 export function PageHead({ eyebrow, title, text, actions }) {
-  return <header className="pp-head pp-fade">
-    <div>{eyebrow && <p className="pp-eyebrow">{eyebrow}</p>}<h1>{title}</h1>{text && <p className="pp-lead">{text}</p>}</div>
+  return <header className="pp-head pp-head-compact pp-fade">
+    <div className="pp-head-title">{eyebrow && <p className="pp-eyebrow">{eyebrow}</p>}<h1>{title}</h1>{text && <p className="pp-lead sr-only">{text}</p>}</div>
     {actions && <div className="pp-head-actions">{actions}</div>}
   </header>
 }

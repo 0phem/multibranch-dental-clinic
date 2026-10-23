@@ -1,5 +1,5 @@
 import React, { useId, useRef, useState } from 'react'
-import { Button, Field, Modal, Notice, PageHeader, Status } from '../components.jsx'
+import { Button, ConfirmDialog, Field, FilterBar, Modal, Notice, PageHeader, Status } from '../components.jsx'
 import { patientName } from '../logic.js'
 import { visibleHmo, HMO_PROVIDERS, pendingHmo } from '../phase3-contracts.js'
 import { sessionForRole } from '../contracts.js'
@@ -33,9 +33,24 @@ export function HmoPage({ role, activeBranch, store, context }) {
   const selected = all.find(h => h.id === selectedId) || null
   const [tab, setTab] = useState(role === 'owner' ? 'action' : 'all')
   const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState('All')
+  const [providerFilter, setProviderFilter] = useState('All')
   const viewId = useId(), detailHeading = useRef(null)
   const attention = h => getHmoAttention(h, state.clock)
-  const shown = hmoCasesForView(live, tab, state.clock).filter(h => (h.patientName || patientName(h.patientId, state.patients)).toLowerCase().includes(search.trim().toLowerCase()))
+  const shown = hmoCasesForView(live, tab, state.clock).filter(h => {
+    if (statusFilter !== 'All') {
+      const targetStatus = statusFilter === 'Self-Pay' ? 'Withdrawn' : statusFilter
+      if (h.status !== targetStatus) return false
+    }
+    if (providerFilter !== 'All' && providerOf(h) !== providerFilter && h.providerId !== providerFilter) return false
+    if (search.trim()) {
+      const q = search.trim().toLowerCase()
+      const pName = (h.patientName || patientName(h.patientId, state.patients)).toLowerCase()
+      const prov = providerOf(h).toLowerCase()
+      if (!pName.includes(q) && !prov.includes(q)) return false
+    }
+    return true
+  })
   const [busy, setBusy] = useState(false)
   const [operation, setOperation] = useState(null)
   const [form, setForm] = useState({})
@@ -84,7 +99,29 @@ export function HmoPage({ role, activeBranch, store, context }) {
       const count = hmoCasesForView(live, key, state.clock).length
       return <button type="button" aria-pressed={tab === key} key={key} aria-describedby={`${viewId}-${key}`} onClick={() => { setTab(key); setSelectedId('') }}>{name}<span aria-hidden="true">{count}</span><span hidden id={`${viewId}-${key}`}>{count} {count === 1 ? 'case' : 'cases'}</span></button>
     })}</div>
-    <div className="hmo-filters"><label>Search patient<input type="search" value={search} onChange={e => setSearch(e.target.value)} placeholder="Patient name"/></label></div>
+    <FilterBar
+      className="hmo-filters"
+      ariaLabel="Filter HMO cases"
+      search={search}
+      onSearchChange={setSearch}
+      searchPlaceholder="Filter cases by patient name or provider…"
+      onClear={(search || statusFilter !== 'All' || providerFilter !== 'All') ? () => { setSearch(''); setStatusFilter('All'); setProviderFilter('All') } : null}
+    >
+      <select aria-label="Filter HMO cases by status" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
+        <option value="All">All statuses</option>
+        <option value="Missing Requirements">Missing Requirements</option>
+        <option value="Ready for Submission">Ready for Submission</option>
+        <option value="Pending">Pending</option>
+        <option value="Approved">Approved</option>
+        <option value="Rejected">Rejected</option>
+        <option value="Returned">Returned</option>
+        <option value="Self-Pay">Self-Pay</option>
+      </select>
+      <select aria-label="Filter HMO cases by provider" value={providerFilter} onChange={e => setProviderFilter(e.target.value)}>
+        <option value="All">All providers</option>
+        {HMO_PROVIDERS.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
+      </select>
+    </FilterBar>
     <div className="hmo-workspace">
       <section className="hmo-case-list" aria-label="HMO cases">
         {!shown.length && <Notice>{live.length ? 'No cases match this view.' : 'No server HMO cases are available in your scope.'}</Notice>}
@@ -186,6 +223,7 @@ function MembershipPanel({ store, busy, setBusy }) {
 }
 
 function CaseDetail({ h, staff, busy, state, headingRef, onClose, operate, onEscalate }) {
+  const [confirmEscalate, setConfirmEscalate] = useState(false)
   const requirements = h.requirements || []
   const events = h.events || []
   const contacted = (h.contacts || []).some(c => c.submissionCycle === h.submissionCycle)
@@ -211,8 +249,18 @@ function CaseDetail({ h, staff, busy, state, headingRef, onClose, operate, onEsc
         {pendingHmo(h) && <p>Follow-up due: {stamp(h.followUpDueAt)}{due ? ' — due now' : ''}</p>}
         <p className="block-muted">Project follow-up threshold: 12 hours after submission. This is a clinic-side project setting, not a provider promise; nothing is sent or escalated automatically.</p>
         {(h.contacts || []).map(c => <p key={c.id}><b>{stamp(c.at)} · {c.method}</b><br/>{c.note}<br/>Next action: {c.nextAction}</p>)}
-        {staff && pendingHmo(h) && <div className="row-actions"><Button size="sm" variant="ghost" disabled={busy} onClick={() => operate('contact', h)}>Record Contact Attempt</Button>{h.status === 'Pending' && due && contacted && <Button size="sm" variant="danger" disabled={busy} onClick={() => onEscalate(h)}>Escalate Case</Button>}</div>}
+        {staff && pendingHmo(h) && <div className="row-actions"><Button size="sm" variant="ghost" disabled={busy} onClick={() => operate('contact', h)}>Record Contact Attempt</Button>{h.status === 'Pending' && due && contacted && <Button size="sm" variant="danger" disabled={busy} onClick={() => setConfirmEscalate(true)}>Escalate Case</Button>}</div>}
       </section>
+      {confirmEscalate && <ConfirmDialog
+        open={confirmEscalate}
+        title="Escalate HMO case?"
+        confirmLabel="Escalate case"
+        tone="danger"
+        onConfirm={() => { setConfirmEscalate(false); onEscalate(h) }}
+        onCancel={() => setConfirmEscalate(false)}
+      >
+        <p>Are you sure you want to escalate this case for immediate supervisory review? This marks the case as escalated in the case history.</p>
+      </ConfirmDialog>}
       {h.server && <section><h3>Case history</h3>{events.length ? <ol className="hmo-timeline">{events.map((e, i) => <li key={i}><b>{EVENT_LABEL[e.kind] || e.kind}{e.outcome ? `: ${e.outcome}` : ''}</b><time>{stamp(e.occurred_at)}{e.actor?.name ? ` • ${e.actor.name}` : ''}</time>{e.kind === 'withdrawal' && e.note && <small className="block-muted">Reason: {e.note}</small>}</li>)}</ol> : <p>{h.summaryOnly ? 'History is visible to clinic Staff.' : 'No events.'}</p>}</section>}
     </div>
   </section>

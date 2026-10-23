@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { Button, Card, Field, Modal, Notice, PageHeader } from '../components.jsx'
+import { Button, Card, ConfirmDialog, Field, Modal, Notice, PageHeader } from '../components.jsx'
 import { acknowledgeHandover, cancelHandover, createHandover, handover, handovers, listBranches, listDentists, listDocuments } from '../api-client.js'
 
 const firstError = r => (r.kind === 'validation' ? Object.values(r.errors || {})[0]?.[0] || r.message : r.message) || 'That did not work.'
@@ -40,7 +40,7 @@ export function HandoversPage({ store, role }) {
 }
 
 export function HandoverDialog({ id, toast, onClose, onChanged }) {
-  const [h, setH] = useState(null), [error, setError] = useState(''), [busy, setBusy] = useState('')
+  const [h, setH] = useState(null), [error, setError] = useState(''), [busy, setBusy] = useState(''), [confirmCancel, setConfirmCancel] = useState(false)
   useEffect(() => { handover(id).then(r => (r.ok ? setH(r.data) : setError(r.message || 'This handover could not be opened.'))) }, [id])
   const act = async (fn, done) => {
     setBusy(done)
@@ -61,9 +61,18 @@ export function HandoverDialog({ id, toast, onClose, onChanged }) {
       </dl> : <Notice tone="info">The clinical notes are visible only to the sending and receiving teams.</Notice>}
       <div className="ns-actions">
         {h.can_acknowledge && <Button disabled={!!busy} onClick={() => act(acknowledgeHandover, 'ack')}>{busy === 'ack' ? 'Saving…' : 'Acknowledge'}</Button>}
-        {h.can_cancel && <Button variant="ghost" disabled={!!busy} onClick={() => act(cancelHandover, 'cancel')}>Cancel handover</Button>}
+        {h.can_cancel && <Button variant="ghost" disabled={!!busy} onClick={() => setConfirmCancel(true)}>Cancel handover</Button>}
         <Button variant="ghost" onClick={onClose}>Close</Button>
       </div>
+      <ConfirmDialog
+        open={confirmCancel}
+        title="Cancel patient handover?"
+        confirmLabel="Cancel handover"
+        onConfirm={() => { setConfirmCancel(false); act(cancelHandover, 'cancel') }}
+        onCancel={() => setConfirmCancel(false)}
+      >
+        <p>Cancelling withdraws this handover to <b>{h.to?.branch?.name || 'the receiving branch'}</b> and revokes temporary cross-branch handover access.</p>
+      </ConfirmDialog>
     </div>}
   </Modal>
 }

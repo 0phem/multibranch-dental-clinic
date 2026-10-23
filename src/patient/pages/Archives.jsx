@@ -133,7 +133,7 @@ export function ArchivesPage({ toast = () => {} }) {
       <PageHead
         eyebrow="Medical Records"
         title="Archives"
-        hint="Historical records of your care, past completed appointments, digital prescriptions, and settled receipts."
+        text="Historical records of your care, past completed appointments, digital prescriptions, and settled receipts."
       />
 
       <div className="pp-tabs" role="tablist" aria-label="Archive categories">

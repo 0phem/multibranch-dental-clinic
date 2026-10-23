@@ -34,6 +34,7 @@ class StoreAppointmentRequest extends FormRequest
             // check that the Dentist works at the branch, does the service and is free.
             'dentist_ref' => ['nullable', 'string', 'exists:dentist_profiles,legacy_ref'],
             'pay_at_clinic' => ['nullable', 'boolean'],
+            'consultation_acknowledged' => $patient ? ['prohibited'] : ['nullable', 'boolean'],
 
             'id' => ['prohibited'],
             'status' => ['prohibited'],

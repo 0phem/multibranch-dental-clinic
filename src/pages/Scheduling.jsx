@@ -20,22 +20,25 @@ export function bookableBranches(state,session){
   return open
 }
 
-// `prefill` (M20 server follow-up task): {patientPublicId, patientName, branchId, serviceId, date} preselected; the patient and branch are fixed.
+// `prefill` (M20 server follow-up task or calendar click): prefilled parameters; patient/branch locked only when patient is specified.
 export function AppointmentForm({ role, store, appointment=null, followup=null, prefill=null, onSaved, submitLabel='Confirm appointment' }) {
   const { state, toast }=store
   const session=store.session||sessionForRole(role,state)
   const key=useRef(commandKey())
   const branches=bookableBranches(state,session)
   const followupPatient=followup?publicPatientIdFor(followup.patientId,{session,users:state.users,patients:state.patients}):null
+  const lockedPatient=!!(appointment||followup||prefill?.patientPublicId||prefill?.patientName)
+  const lockedBranch=!!(appointment||followup||(prefill?.patientPublicId&&prefill?.branchId))
   const [form,setFormState]=useState(()=>{
     if(appointment)return {patientPublicId:appointment.patientPublicId,branchId:appointment.branchId,serviceId:appointment.serviceId,dentistId:appointment.dentistId,date:appointment.date>=clinicDate()?appointment.date:clinicDate(),start:'',notes:''}
-    if(prefill)return {patientPublicId:prefill.patientPublicId,branchId:prefill.branchId,serviceId:prefill.serviceId||'',dentistId:'',date:prefill.date&&prefill.date>=clinicDate()?prefill.date:clinicDate(),start:'',notes:''}
     if(followup)return {patientPublicId:followupPatient,branchId:followup.branchId,serviceId:'',dentistId:followup.dentistId,date:followup.recommendedDate&&followup.recommendedDate>=clinicDate()?followup.recommendedDate:clinicDate(),start:'',notes:followup.reason||''}
+    if(prefill)return {patientPublicId:prefill.patientPublicId,branchId:prefill.branchId,serviceId:prefill.serviceId||'',dentistId:prefill.dentistId||'',date:prefill.date&&prefill.date>=clinicDate()?prefill.date:clinicDate(),start:'',notes:prefill.notes||''}
     return {patientPublicId:'',branchId:branches[0]?.id||'',serviceId:'',dentistId:'',date:clinicDate(),start:'',notes:''}
   })
   const [search,setSearch]=useState('')
   const [failure,setFailure]=useState(null)
   const [saving,setSaving]=useState(false)
+  const [authConfirmed,setAuthConfirmed]=useState(false)
   const setForm=next=>{key.current=commandKey();setFailure(null);setFormState(next)}
   const update=(name,value)=>setForm(previous=>{
     const next={...previous,[name]:value}
@@ -44,11 +47,14 @@ export function AppointmentForm({ role, store, appointment=null, followup=null, 
     if(['date','dentistId'].includes(name))next.start=''
     return next
   })
-  useEffect(()=>{if(!appointment&&!followup&&search.trim().length>=2){const t=setTimeout(()=>store.appointmentFlow?.searchPatients(search),250);return ()=>clearTimeout(t)}},[search])
+  useEffect(()=>{if(!lockedPatient&&search.trim().length>=2){const t=setTimeout(()=>store.appointmentFlow?.searchPatients(search),250);return ()=>clearTimeout(t)}},[search,lockedPatient])
+  useEffect(()=>{if(!lockedPatient){store.appointmentFlow?.searchPatients?.('')}},[lockedPatient])
 
   const services=servicesAt(state,form.branchId)
   const dentists=form.serviceId?dentistsFor(state,form.branchId,form.serviceId):[]
   const lockedDentist=!!followup
+  const selectedService=services.find(s=>s.id===form.serviceId)
+  const isRestricted=selectedService?.onlineBooking==='consultation_first'||selectedService?.onlineBooking==='hidden'
   const day=useDayAvailability({branchId:form.branchId,serviceId:form.serviceId,date:form.date,patientPublicId:form.patientPublicId||null,
     ignoreAppointmentId:appointment?.id||null,dentistId:form.dentistId||null,enabled:!!form.serviceId})
   const directory=(store.directoryPatients||[]).filter(p=>!search.trim()||`${p.name} ${p.patientCode} ${p.phone}`.toLowerCase().includes(search.trim().toLowerCase()))
@@ -62,7 +68,7 @@ export function AppointmentForm({ role, store, appointment=null, followup=null, 
     setSaving(true);setFailure(null)
     const result=appointment
       ?await store.appointmentFlow.reschedule(appointment,{date:form.date,start:form.start,dentistId:form.dentistId&&form.dentistId!==appointment.dentistId?form.dentistId:null},key.current)
-      :await store.appointmentFlow.create({branchId:form.branchId,serviceId:form.serviceId,date:form.date,start:form.start,notes:form.notes||null,patientPublicId:form.patientPublicId,dentistId:form.dentistId||null},{key:key.current,followupId:followup?.id||null})
+      :await store.appointmentFlow.create({branchId:form.branchId,serviceId:form.serviceId,date:form.date,start:form.start,notes:form.notes||null,patientPublicId:form.patientPublicId,dentistId:form.dentistId||null,consultationAcknowledged:isRestricted?authConfirmed:null},{key:key.current,followupId:followup?.id||null})
     setSaving(false)
     if(!result.ok){
       setFailure(result);toast(result.message,'warning')
@@ -73,12 +79,12 @@ export function AppointmentForm({ role, store, appointment=null, followup=null, 
     toast(appointment?'Appointment rescheduled.':followup?'Follow-up appointment scheduled.':'Appointment confirmed.','success')
     onSaved?.(result.record)
   }
-  const canSave=!!form.patientPublicId&&!!form.branchId&&!!form.serviceId&&!!form.date&&!!form.start&&!saving
+  const canSave=!!form.patientPublicId&&!!form.branchId&&!!form.serviceId&&!!form.date&&!!form.start&&(!isRestricted||authConfirmed)&&!saving
 
   return <div className="booking-layout">
     <form className="form-grid" onSubmit={e=>{e.preventDefault();if(canSave)save()}}>
-      {appointment||followup||prefill
-        ?<Field label="Patient"><input value={appointment?`${appointment.patientName||patientName(appointment.patientId,state.patients)} • ${appointment.patientCode||''}`:prefill?prefill.patientName:patientName(followup.patientId,state.patients)} disabled/></Field>
+      {lockedPatient
+        ?<Field label="Patient"><input value={appointment?`${appointment.patientName||patientName(appointment.patientId,state.patients)} • ${appointment.patientCode||''}`:prefill?prefill.patientName||prefill.patientPublicId:patientName(followup.patientId,state.patients)} disabled/></Field>
         :<>
           <Field label="Find patient" hint="Search the clinic Patient directory by name, code or phone."><input value={search} placeholder="Type at least 2 characters" onChange={e=>setSearch(e.target.value)}/></Field>
           <Field label="Patient" required><select value={form.patientPublicId} onChange={e=>update('patientPublicId',e.target.value)}>
@@ -86,14 +92,26 @@ export function AppointmentForm({ role, store, appointment=null, followup=null, 
             {directory.map(p=><option key={p.id} value={p.id}>{p.name} • {p.patientCode}{p.phone?` • ${p.phone}`:''}</option>)}
           </select></Field>
         </>}
-      <Field label="Branch" required><select disabled={!!appointment||!!followup||!!prefill} value={form.branchId} onChange={e=>update('branchId',e.target.value)}>
+      <Field label="Branch" required><select disabled={lockedBranch} value={form.branchId} onChange={e=>update('branchId',e.target.value)}>
         {!branches.length&&<option value="">No authorized branch</option>}
-        {(appointment||followup||prefill?state.branches.filter(b=>b.id===form.branchId):branches).map(b=><option key={b.id} value={b.id}>{b.name}</option>)}
+        {(lockedBranch?state.branches.filter(b=>b.id===form.branchId):branches).map(b=><option key={b.id} value={b.id}>{b.name}</option>)}
       </select></Field>
       <Field label="Service" required><select disabled={!!appointment} value={form.serviceId} onChange={e=>update('serviceId',e.target.value)}>
         <option value="">Select a service</option>
         {(appointment?state.services.filter(s=>s.id===appointment.serviceId):services).map(s=><option key={s.id} value={s.id}>{s.name} • {s.duration} min</option>)}
       </select></Field>
+      {isRestricted&&<div className="span-2">
+        <Notice tone="warning" title="Restricted / Preliminary Consultation Required">
+          <b>{selectedService?.name}</b> is marked for preliminary consultation or clinical authorization.
+          {selectedService?.consultationServiceId&&<div style={{marginTop:'6px'}}>
+            <Button size="sm" variant="soft" type="button" onClick={()=>update('serviceId',selectedService.consultationServiceId)}>Switch to Dental Consultation</Button>
+          </div>}
+          <label className="check-control" style={{marginTop:'8px',display:'flex',alignItems:'center',gap:'8px'}}>
+            <input type="checkbox" checked={authConfirmed} onChange={e=>setAuthConfirmed(e.target.checked)}/>
+            <span>Prior consultation / dentist clinical authorization confirmed by front desk</span>
+          </label>
+        </Notice>
+      </div>}
       <Field label="Dentist" hint={lockedDentist?'The requesting Dentist.':'Leave on automatic to let the clinic assign an eligible Dentist.'}>
         <select disabled={lockedDentist} value={form.dentistId} onChange={e=>update('dentistId',e.target.value)}>
           {!lockedDentist&&<option value="">Assign automatically</option>}
@@ -145,12 +163,14 @@ export function AppointmentsPage({ role, store, setPage, context }) {
   const [search,setSearch]=useState('')
   const [statusFilter,setStatusFilter]=useState('All')
   const [branchFilter,setBranchFilter]=useState('All')
+  const [dateFilter,setDateFilter]=useState('')
   if(role==='patient')return <PatientAppointmentsPage store={store} setPage={setPage} context={context}/>
   const branches=bookableBranches(state,session)
   const visible=state.appointments.filter(a=>{
     if(!inScope(a,session,state))return false
     if(statusFilter!=='All'&&a.status!==statusFilter)return false
     if(branchFilter!=='All'&&a.branchId!==branchFilter&&a.branch!==branchFilter)return false
+    if(dateFilter&&a.date!==dateFilter)return false
     if(search.trim()){
       const q=search.trim().toLowerCase()
       const pName=(a.patientName||patientName(a.patientId,state.patients)||'').toLowerCase()
@@ -182,8 +202,9 @@ export function AppointmentsPage({ role, store, setPage, context }) {
       search={search}
       onSearchChange={setSearch}
       searchPlaceholder="Search patient, appointment #, dentist, service…"
-      onClear={(search||statusFilter!=='All'||branchFilter!=='All')?()=>{setSearch('');setStatusFilter('All');setBranchFilter('All')}:null}
+      onClear={(search||statusFilter!=='All'||branchFilter!=='All'||dateFilter)?()=>{setSearch('');setStatusFilter('All');setBranchFilter('All');setDateFilter('')}:null}
     >
+      <input type="date" aria-label="Filter by appointment date" className="filter-date-input" value={dateFilter} onChange={e=>setDateFilter(e.target.value)}/>
       <select aria-label="Filter by appointment status" value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}>
         <option value="All">All statuses</option>
         <option value="Confirmed">Confirmed</option>
@@ -203,7 +224,10 @@ export function AppointmentsPage({ role, store, setPage, context }) {
         {key:'date',label:'Date & time',render:a=><div><b>{dateLabel(a.date)}</b><small className="block-muted">{displayTime(a.start)}–{displayTime(addMinutes(a.start,a.duration))}</small></div>},
         {key:'patient',label:'Patient',render:a=>a.patientName||patientName(a.patientId,state.patients)},
         {key:'service',label:'Service'},{key:'dentist',label:'Dentist',render:a=>a.dentistName||dentistName(a.dentistId,state.dentists)},
-        {key:'status',label:'Status',render:a=><Status>{a.status}</Status>},
+        {key:'status',label:'Status',render:a=><div>
+          <Status>{a.status}</Status>
+          <small className="block-muted">{a.bookingPaymentStatus==='paid'?`Deposit paid${a.bookingPaymentMethod?` (${a.bookingPaymentMethod})`:''}`:a.bookingPaymentStatus==='held'?'Held':a.bookingPaymentStatus==='refunded'?'Refunded':a.bookingPaymentStatus==='forfeited'?'Forfeited':'Unpaid'}</small>
+        </div>},
         {key:'actions',label:'Actions',render:a=><div className="row-actions">{['Confirmed','Pending'].includes(a.status)&&<><Button size="sm" variant="soft" onClick={()=>setReschedule(a)}>Reschedule</Button><Button size="sm" variant="ghost" onClick={()=>setCancelling(a)}>Cancel</Button>{a.date===clinicDate()&&<Button size="sm" variant="ghost" onClick={()=>setMissed(a)}>No-show</Button>}</>}</div>}
       ]}/>
     </Card>
@@ -225,6 +249,7 @@ export function SchedulePage({ store }) {
   const [search,setSearch]=useState('')
   const [statusFilter,setStatusFilter]=useState('All')
   const baseRows=state.appointments.filter(a=>a.dentistId===did&&a.date===date&&a.status!=='Cancelled').sort((a,b)=>a.start.localeCompare(b.start))
+  const todayWalkins=(date===clinicDate()?state.queue.filter(q=>q.dentistId===did&&isTodayQueue(q)&&q.walkIn):[])
   const rows=baseRows.filter(a=>{
     if(statusFilter!=='All'&&a.status!==statusFilter)return false
     if(search.trim()){
@@ -252,8 +277,21 @@ export function SchedulePage({ store }) {
         <option value="Completed">Completed</option>
       </select>
     </FilterBar>
-    <Card title={`${dateLabel(date)} schedule`} subtitle={`${rows.length} appointment${rows.length===1?'':'s'} for ${dateLabel(date)}`}>
-      <div className="day-schedule">{rows.length?rows.map(a=><div className="schedule-slot" key={a.id}><div className="schedule-time"><b>{displayTime(a.start)}–{displayTime(addMinutes(a.start,a.duration))}</b><small>{a.duration} min</small></div><div className="schedule-line"/><div className="schedule-visit"><div><strong>{a.patientName||patientName(a.patientId,state.patients)}</strong><span>{a.service}</span><small>{a.branch} • {a.notes||'No booking note'}</small></div><Status>{a.status}</Status></div></div>):<Notice>No appointments are scheduled for this date.</Notice>}</div>
+    <Card title={`${dateLabel(date)} schedule`} subtitle={`${rows.length} scheduled appointment${rows.length===1?'':'s'} for ${dateLabel(date)}${todayWalkins.length?` • ${todayWalkins.length} walk-in visit${todayWalkins.length===1?'':'s'} in queue`:''}`}>
+      <div className="day-schedule">
+        {todayWalkins.length>0&&<div className="walkin-schedule-section" style={{marginBottom:'16px'}}>
+          <h4 style={{fontSize:'13px',fontWeight:600,margin:'0 0 8px',color:'var(--muted)'}}>Assigned Walk-in Visits Today ({todayWalkins.length})</h4>
+          {todayWalkins.map(w=><div className="schedule-slot" key={w.id} style={{borderLeft:'3px solid var(--accent, #0284c7)'}}>
+            <div className="schedule-time"><b>Queue #{w.queueNumber||'—'}</b><small>{displayTime(w.checkedIn||w.arrivedAt)}</small></div>
+            <div className="schedule-line"/>
+            <div className="schedule-visit">
+              <div><strong>{w.patientName||patientName(w.patientId,state.patients)}</strong><span>{w.service||'Walk-in consultation'}</span><small>{w.branch} • Admitted walk-in</small></div>
+              <Status>{w.status}</Status>
+            </div>
+          </div>)}
+        </div>}
+        {rows.length?rows.map(a=><div className="schedule-slot" key={a.id}><div className="schedule-time"><b>{displayTime(a.start)}–{displayTime(addMinutes(a.start,a.duration))}</b><small>{a.duration} min</small></div><div className="schedule-line"/><div className="schedule-visit"><div><strong>{a.patientName||patientName(a.patientId,state.patients)}</strong><span>{a.service}</span><small>{a.branch} • {a.notes||'No booking note'}</small></div><Status>{a.status}</Status></div></div>):!todayWalkins.length?<Notice>No appointments are scheduled for this date.</Notice>:null}
+      </div>
     </Card>
   </>
 }

@@ -46,3 +46,24 @@ test('a portal address (#p/<page>) opens sign-in when signed out, never the land
   assert.equal(publicViewFromHash('#p/visits'), 'login')
   assert.equal(publicViewFromHash('#p/family'), 'login')
 })
+
+test('Batch 1 UI foundation: compact PageHeader/PageHead, declarative + child FilterBar, and ConfirmDialog on consequential actions', () => {
+  const components = read('src/components.jsx')
+  const patientUi = read('src/patient/ui.jsx')
+  assert.match(components, /page-header-compact/)
+  assert.match(components, /page-header-desc sr-only/)
+  assert.match(components, /const clearHandler = onClear \|\| onReset/)
+  assert.match(patientUi, /pp-head-compact/)
+  assert.match(patientUi, /pp-lead sr-only/)
+
+  assert.match(read('src/pages/Staffing.jsx'), /<ConfirmDialog/)
+  assert.match(read('src/pages/ClosedDates.jsx'), /title="Remove clinic closure\?"/)
+  assert.match(read('src/pages/Handovers.jsx'), /title="Cancel patient handover\?"/)
+  assert.match(read('src/pages/ServerPrescriptions.jsx'), /title="Issue and lock prescription\?"/)
+})
+
+test('Batch 2 priority verification status is sent to server in queue-api.js', () => {
+  const queueApi = read('src/queue-api.js')
+  assert.match(queueApi, /payload\.verification_status = meta\.verificationStatus/)
+  assert.match(queueApi, /payload\.category = meta\.category/)
+})

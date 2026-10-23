@@ -388,4 +388,45 @@ class PatientRecordTest extends TestCase
         }
         $this->postJson('/api/documents', ['file' => $file(), 'patient_id' => $this->p['A']->public_id, 'branch_id' => 'b1', 'category' => 'consent_document'])->assertCreated();
     }
+
+    public function test_changing_a_staff_members_assigned_branch_enforces_updated_scope_server_side(): void
+    {
+        $this->relate('A', 'd1', 'b1', '10:00');
+        $this->relate('B', 'd3', 'b2', '11:00');
+
+        $staffProfile = \App\Models\StaffProfile::create([
+            'legacy_ref' => 's1',
+            'legacy_user_ref' => 'u2',
+            'title' => 'Receptionist',
+            'person_id' => $this->u['staffB1']->person_id,
+            'branch_id' => $this->b['b1']->id,
+            'shift_start' => '09:00',
+            'shift_end' => '18:00',
+            'available' => true,
+        ]);
+
+        // Initially staffB1 is assigned to b1: full access to A (in b1), identity-only (no edit) on B (in b2).
+        $this->actingAsUser('staffB1');
+        $this->getJson($this->url('A'))->assertOk()->assertJsonPath('data.profile_access', 'full');
+        $this->edit('A', ['phone' => '+639171111111'])->assertOk();
+        $this->getJson($this->url('B'))->assertOk()->assertJsonPath('data.profile_access', 'identity');
+        $this->edit('B', ['phone' => '+639172222222'])->assertForbidden();
+
+        // Owner changes staffB1's assigned branch to b2 via StaffProfile update.
+        $this->actingAsUser('owner');
+        $this->patchJson('/api/staff/'.$staffProfile->legacy_ref, ['branch_ref' => 'b2'])
+            ->assertOk()
+            ->assertJsonPath('data.branchId', 'b2');
+
+        // Immediately enforced server-side: staffB1 can no longer edit or view full profile/records of A in b1,
+        // and now has full profile and edit access to B in b2.
+        $this->actingAsUser('staffB1');
+        $this->getJson($this->url('A'))->assertOk()->assertJsonPath('data.profile_access', 'identity');
+        $this->edit('A', ['phone' => '+639173333333'])->assertForbidden();
+        $this->assertCount(0, $this->getJson($this->url('A', '/records'))->assertOk()->json('data.appointments'));
+
+        $this->getJson($this->url('B'))->assertOk()->assertJsonPath('data.profile_access', 'full');
+        $this->edit('B', ['phone' => '+639172222222'])->assertOk()->assertJsonPath('data.phone', '+639172222222');
+        $this->assertCount(1, $this->getJson($this->url('B', '/records'))->assertOk()->json('data.appointments'));
+    }
 }

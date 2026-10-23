@@ -30,7 +30,7 @@ export const MODULES = [
   { no: 22, name: 'Audit Trail & Activity Monitoring Management', owner: 'Delos Santos, Joevan', area: 'Governance', roles: ['owner'], coverage: 'implemented', coverageNote: 'Backend-authoritative immutable audit trail with forensic inspection and CSV export (Planned: only a limited in-browser activity history exists in legacy client)', implemented: true },
   { no: 23, name: 'Archives & Historical Records Management', owner: 'Delos Santos, Joevan', area: 'Archives', roles: ['patient','staff','dentist','owner'], implemented: true, coverage: 'implemented', coverageNote: 'Centralized historical completed visits, past prescriptions, archived receipts, and medical retention compliance.' },
   { no: 24, name: 'Referral & Loyalty Management', owner: 'Millar, John Yzhekiel', area: 'Engagement', roles: ['patient','staff','owner'], enhancement: true, pe: true, implemented: true },
-  { no: 25, name: 'Marketing Campaign & Patient Reactivation Management', owner: 'Millar, John Yzhekiel', area: 'Engagement', roles: ['staff','owner'], enhancement: true, pe: true, implemented: false, preview: true },
+  { no: 25, name: 'Marketing Campaign & Patient Reactivation Management', owner: 'Millar, John Yzhekiel', area: 'Engagement', roles: ['staff','owner'], enhancement: true, pe: true, implemented: false, preview: true },
 ]
 
 export const ROLE_INFO = {

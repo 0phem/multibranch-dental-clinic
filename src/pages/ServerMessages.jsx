@@ -1,5 +1,6 @@
 import React, { useEffect, useReducer, useRef, useState } from 'react'
-import { Button, Empty, Field, Icon, Notice, PageHeader, Status } from '../components.jsx'
+import { Button, ConfirmDialog, Empty, Field, Icon, Notice, PageHeader, Status } from '../components.jsx'
+import { PageHead } from '../patient/ui.jsx'
 import { commandKey } from '../appointments-api.js'
 import { useVisibleRefresh } from '../use-visible-refresh.js'
 import { createDrafts } from '../message-drafts.js'
@@ -45,6 +46,7 @@ export function ServerMessagesPage({ store, role, initial = null }) {
   const logRef = useRef(null)
   const selected = list?.find(c => c.id === selectedId) || null
   const thread = selectedId ? threads[selectedId] : null
+  const [confirmClose, setConfirmClose] = useState(false)
 
   const refreshList = async () => {
     const result = await loadConversations()
@@ -164,9 +166,12 @@ export function ServerMessagesPage({ store, role, initial = null }) {
   const subtitle = c => (patient ? (c.assignedName ? `With ${c.assignedName}` : 'Waiting for the front desk') : `${c.branchName}${c.assignedName ? ` · ${c.assignedToMe ? 'Handled by you' : `Handled by ${c.assignedName}`}` : ' · Not answered yet'}`)
 
   return <div className={patient ? 'pt-page is-wide' : undefined}>
-    <PageHeader kicker={patient ? 'Your care' : undefined} title="Messages"
-      text={patient ? 'Write to the front desk of any branch. Reminders and updates are in Notifications.' : 'Conversations with Patients for the branches you work at. Everyone at the branch front desk can see and reply.'}
-      aside={<div className="chat-head-actions"><LiveStatus state={live}/>{patient && <Button icon="message" onClick={() => { setComposing(true); setSelectedId(null) }}>New message</Button>}</div>}/>
+    {patient
+      ? <PageHead eyebrow="Appointments & Care" title="Messages" text="Write to the front desk of any branch. Reminders and updates are in Notifications."
+          actions={<div className="chat-head-actions"><LiveStatus state={live}/><Button icon="message" onClick={() => { setComposing(true); setSelectedId(null) }}>New message</Button></div>}/>
+      : <PageHeader title="Messages"
+          text="Conversations with Patients for the branches you work at. Everyone at the branch front desk can see and reply."
+          aside={<div className="chat-head-actions"><LiveStatus state={live}/></div>}/>}
     <p className="muted-copy">These messages stay inside this application. Nothing is sent by SMS or social media, and “unread” only means not yet opened here.{patient ? ' If you are away when the clinic writes, we email you a short alert — never the message itself.' : ''}</p>
     {error && <Notice tone="warning" title="Conversations unavailable">{error} <Button size="sm" onClick={refreshList}>Retry</Button></Notice>}
     {!list && !error && <div className="chat-skeleton" aria-busy="true"><Notice>Loading conversations…</Notice></div>}
@@ -187,7 +192,7 @@ export function ServerMessagesPage({ store, role, initial = null }) {
           <header className="chat-thread-head">
             <button type="button" className="chat-back" onClick={() => setSelectedId(null)} aria-label="Back to conversations"><Icon name="chevron" size={18}/></button>
             <div><b>{title(selected)}</b><small>{subtitle(selected)}{selected.participants.some(p => p.role === 'Dentist') ? ` · Dentist: ${selected.participants.filter(p => p.role === 'Dentist').map(p => p.name).join(', ')}` : ''}</small></div>
-            <div className="chat-thread-actions">{staff && !selected.closed && <AddDentist conversationId={selected.id} onAdded={refreshList} toast={toast}/>}{!patient && !selected.closed && <Button size="sm" variant="ghost" onClick={close}>Close</Button>}</div>
+            <div className="chat-thread-actions">{staff && !selected.closed && <AddDentist conversationId={selected.id} onAdded={refreshList} toast={toast}/>}{!patient && !selected.closed && <Button size="sm" variant="ghost" onClick={() => setConfirmClose(true)}>Close</Button>}</div>
           </header>
           {thread?.error && <Notice tone="warning" title="Messages unavailable">{thread.error} <Button size="sm" onClick={() => openThread(selected.id)}>Retry</Button></Notice>}
           {!thread?.messages && !thread?.error && <Notice>Loading messages…</Notice>}
@@ -214,6 +219,17 @@ export function ServerMessagesPage({ store, role, initial = null }) {
         </>}
       </section>
     </div>}
+    <ConfirmDialog
+      open={confirmClose}
+      title="Close this conversation?"
+      confirmLabel="Close conversation"
+      cancelLabel="Keep open"
+      tone="danger"
+      onConfirm={() => { setConfirmClose(false); close() }}
+      onCancel={() => setConfirmClose(false)}
+    >
+      <p>Are you sure you want to close this conversation? Once closed, neither the clinic nor the patient can post new messages in this thread.</p>
+    </ConfirmDialog>
   </div>
 }
 

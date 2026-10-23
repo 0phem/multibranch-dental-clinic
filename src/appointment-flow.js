@@ -94,8 +94,8 @@ export function createAppointmentFlow({ getState, getSession, getActions, refres
       return { ok: true, row: result.row }
     },
 
-    async queuePriority(entry, priority, reason, key) {
-      const result = await queue.setQueuePriority(entry, priority, reason, key)
+    async queuePriority(entry, priority, reason, key, meta = {}) {
+      const result = await queue.setQueuePriority(entry, priority, reason, key, meta)
       if (!result.ok) return afterServerCommand(result)
       await refresh()
       return { ok: true, row: result.row }

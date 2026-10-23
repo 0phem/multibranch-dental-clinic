@@ -2,9 +2,14 @@
 
 namespace App\Http\Controllers;
 
+use App\Mail\PaymentReceiptMail;
 use App\Models\Invoice;
+use App\Services\Audit\AuditService;
 use App\Services\Billing\BillingDocuments;
+use App\Services\Mail\MailDispatcher;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\RateLimiter;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
@@ -29,6 +34,88 @@ class BillingDocumentController extends Controller
         abort_unless($receipt !== null, 404);
 
         return $this->pdf($documents->receiptPdf($receipt), BillingDocuments::receiptFileName($receipt));
+    }
+
+    public function resendReceipt(Request $request, string $invoice, MailDispatcher $dispatcher, AuditService $audit): JsonResponse
+    {
+        $request->validate([
+            'email' => ['prohibited'],
+            'recipient' => ['prohibited'],
+            'recipient_email' => ['prohibited'],
+            'to' => ['prohibited'],
+        ]);
+
+        $row = $this->visible($request, $invoice);
+        $receipt = $row->receipt;
+        if ($row->status !== 'Paid' || $receipt === null) {
+            return response()->json([
+                'code' => 'receipt_not_available',
+                'message' => 'A receipt can only be resent for a paid invoice.',
+            ], 422);
+        }
+
+        $row->loadMissing(['patient.person', 'patient.user', 'branch', 'lines']);
+        $email = $row->patient?->contactUser()?->email ?? $row->patient?->person?->email;
+        if (! $email) {
+            return response()->json([
+                'code' => 'recipient_email_missing',
+                'message' => 'No email address is on file for this patient.',
+            ], 422);
+        }
+
+        $rateKey = 'resend-receipt:'.$request->user()->id.':'.$row->id;
+        if (RateLimiter::tooManyAttempts($rateKey, 3)) {
+            $seconds = RateLimiter::availableIn($rateKey);
+
+            return response()->json([
+                'code' => 'rate_limited',
+                'message' => 'Please wait before requesting another receipt email.',
+                'retry_after' => $seconds,
+            ], 429, ['Retry-After' => (string) $seconds]);
+        }
+        RateLimiter::hit($rateKey, 3600);
+
+        $result = $dispatcher->send(
+            $email,
+            new PaymentReceiptMail($row, $receipt),
+            'payment_receipt',
+            $request->user(),
+            $receipt
+        );
+
+        $audit->record([
+            'action' => 'billing.receipt_resent',
+            'category' => 'financial',
+            'severity' => $result['status'] === 'failed' ? 'warning' : 'info',
+            'actor' => $request->user(),
+            'target' => $row,
+            'branch_id' => $row->branch_id,
+            'payload' => [
+                'invoice_number' => $row->invoice_number,
+                'receipt_number' => $receipt->receipt_number,
+                'mail_status' => $result['status'],
+                'transport_kind' => $result['transport_kind'],
+            ],
+        ]);
+
+        if ($result['status'] === 'failed') {
+            return response()->json([
+                'code' => 'mail_send_failed',
+                'status' => $result['status'],
+                'transport_kind' => $result['transport_kind'],
+                'message' => $result['message'],
+            ], 502);
+        }
+
+        return response()->json([
+            'data' => [
+                'invoice_id' => $row->public_id,
+                'receipt_number' => $receipt->receipt_number,
+                'status' => $result['status'],
+                'transport_kind' => $result['transport_kind'],
+                'message' => $result['message'],
+            ],
+        ]);
     }
 
     private function visible(Request $request, string $publicId): Invoice

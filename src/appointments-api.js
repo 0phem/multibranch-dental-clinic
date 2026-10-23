@@ -63,6 +63,11 @@ export function mapAppointment(row, patientIdFor = id => id) {
     source: SOURCE_LABELS[row.source] || row.source,
     assignmentMethod: row.assignment_method,
     notes: row.notes || '',
+    bookingFeePhp: row.booking_fee_php ?? null,
+    bookingPaymentStatus: row.booking_payment_status ?? 'unpaid',
+    bookingPaymentMethod: row.booking_payment_method ?? null,
+    bookingPaidAt: row.booking_paid_at ?? null,
+    bookingHoldExpiresAt: row.booking_hold_expires_at ?? null,
     history: row.history || null,
     server: true,
   }
@@ -153,12 +158,13 @@ export async function fetchRecommendation({ serviceId, branchId = null, coords =
 
 const commandResult = result => (result.ok ? { ok: true, row: result.data } : normalizeFailure(result))
 
-export async function createAppointment({ branchId, serviceId, date, start, notes = null, patientPublicId = null, dentistId = null, forPatientId = null }, key) {
+export async function createAppointment({ branchId, serviceId, date, start, notes = null, patientPublicId = null, dentistId = null, forPatientId = null, consultationAcknowledged = null }, key) {
   const payload = { branch_ref: branchId, service_ref: serviceId, date, start_time: start }
   if (notes) payload.notes = notes
   if (patientPublicId) payload.patient_id = patientPublicId
   if (forPatientId) payload.for_patient_id = forPatientId // a guardian booking for a dependent
   if (dentistId) payload.dentist_ref = dentistId
+  if (consultationAcknowledged !== null) payload.consultation_acknowledged = !!consultationAcknowledged
   return commandResult(await api.createAppointment(payload, key))
 }
 

@@ -190,6 +190,41 @@ class QueueTest extends TestCase
         $this->assertSame(['Normal', 'Urgent', 'Front desk request', 'Waiting', 'Waiting'], [$history->from_priority, $history->to_priority, $history->priority_reason, $history->from_status, $history->to_status]);
     }
 
+    public function test_priority_does_not_reorder_patients_already_called_or_treatment_ready(): void
+    {
+        $this->actingAsUser('staffB1');
+        foreach (['A', 'B', 'C'] as $i => $patient) {
+            $this->travelTo(CarbonImmutable::parse('2026-09-28 10:00:00', 'Asia/Manila')->addSeconds($i));
+            $this->walkIn($patient)->assertCreated();
+        }
+        $entryA = $this->entryFor('A');
+        $entryC = $this->entryFor('C');
+
+        // Call patient A: A is now Called at position 1.
+        $this->command($entryA, 'call')->assertOk()->assertJsonPath('data.status', 'Called');
+
+        // Prioritize waiting patient C to Urgent: C moves ahead of waiting patient B (to position 2),
+        // but NEVER displaces patient A who is already Called at position 1.
+        $this->command($entryC, 'priority', null, null, [
+            'priority' => 'Urgent',
+            'reason' => 'Senior citizen priority [Senior Citizen · ID/eligibility verified]',
+        ])->assertOk()->assertJsonPath('data.position', 2);
+        $this->assertEquals(['A' => 1, 'C' => 2, 'B' => 3], $this->positions());
+
+        // Attempting to change priority on a patient already Called or Treatment Ready is rejected.
+        $this->command($entryA, 'priority', null, null, [
+            'priority' => 'Priority',
+            'reason' => 'Late priority attempt',
+        ])->assertStatus(422)->assertJsonPath('code', 'already_called');
+
+        $this->command($entryA, 'ready')->assertOk()->assertJsonPath('data.status', 'Treatment Ready');
+        $this->assertEquals(['A' => 1, 'C' => 2, 'B' => 3], $this->positions());
+        $this->command($entryA, 'priority', null, null, [
+            'priority' => 'Urgent',
+            'reason' => 'Late priority attempt',
+        ])->assertStatus(422)->assertJsonPath('code', 'already_called');
+    }
+
     // ---- STATE -----------------------------------------------------------------------------------------------------
 
     public function test_transition_table(): void
@@ -422,5 +457,74 @@ class QueueTest extends TestCase
         $this->walkIn('A')->assertCreated();
         $this->expectException(QueryException::class);
         DB::table('queue_entry_history')->delete();
+    }
+
+    public function test_priority_validates_and_persists_category_and_verification_status_server_side(): void
+    {
+        $this->actingAsUser('staffB1');
+        $this->walkIn('A')->assertCreated();
+        $entry = $this->entryFor('A');
+
+        // Reject invalid verification_status or missing verification_status when category is sent
+        $this->postJson(
+            "/api/queue/{$entry->public_id}/priority",
+            [
+                'expected_revision' => 1,
+                'priority' => 'Priority',
+                'reason' => 'Senior citizen priority',
+                'category' => 'Senior Citizen',
+                'verification_status' => 'unverified-bogus',
+            ],
+            ['Idempotency-Key' => 'prio-invalid-verif']
+        )->assertStatus(422)->assertJsonValidationErrors(['verification_status']);
+
+        $this->postJson(
+            "/api/queue/{$entry->public_id}/priority",
+            [
+                'expected_revision' => 1,
+                'priority' => 'Priority',
+                'reason' => 'Senior citizen priority',
+                'category' => 'Senior Citizen',
+            ],
+            ['Idempotency-Key' => 'prio-missing-verif']
+        )->assertStatus(422)->assertJsonValidationErrors(['verification_status']);
+
+        // Reject unapproved 'Other' category
+        $this->postJson(
+            "/api/queue/{$entry->public_id}/priority",
+            [
+                'expected_revision' => 1,
+                'priority' => 'Priority',
+                'reason' => 'Other priority',
+                'category' => 'Other',
+                'verification_status' => 'verified',
+            ],
+            ['Idempotency-Key' => 'prio-unapproved-other']
+        )->assertStatus(422)->assertJsonValidationErrors(['category']);
+
+        // Valid category + verification_status ('verified') persists canonical tag and logs administrative audit metadata
+        $this->postJson(
+            "/api/queue/{$entry->public_id}/priority",
+            [
+                'expected_revision' => 1,
+                'priority' => 'Priority',
+                'reason' => 'Senior citizen accommodation',
+                'category' => 'Senior Citizen',
+                'verification_status' => 'verified',
+            ],
+            ['Idempotency-Key' => 'prio-valid-verif']
+        )->assertOk()
+            ->assertJsonPath('data.priority', 'Priority')
+            ->assertJsonPath('data.priority_reason', 'Senior citizen accommodation [Senior Citizen · ID/eligibility verified]');
+
+        $audit = DB::table('audit_logs')
+            ->where('action', 'queue.priority_changed')
+            ->where('auditable_public_id', $entry->public_id)
+            ->orderByDesc('id')
+            ->first();
+        $this->assertNotNull($audit);
+        $meta = json_decode($audit->payload, true);
+        $this->assertSame('Senior Citizen', $meta['category'] ?? null);
+        $this->assertSame('verified', $meta['verification_status'] ?? null);
     }
 }

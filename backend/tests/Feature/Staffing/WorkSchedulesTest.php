@@ -153,4 +153,32 @@ class WorkSchedulesTest extends TestCase
         $this->actingAsUser('owner');
         $this->assertTrue($this->getJson('/api/calendar/load?from=2026-09-30&to=2026-09-30')->json('data.capacity_estimated')); // d3 (b2) has no weekly schedule yet
     }
+
+    public function test_dentists_and_staff_cannot_freely_edit_their_own_assigned_work_schedules(): void
+    {
+        $staffProfile = \App\Models\StaffProfile::create([
+            'legacy_ref' => 's1',
+            'legacy_user_ref' => 'u2',
+            'title' => 'Receptionist',
+            'person_id' => $this->u['staffB1']->person_id,
+            'branch_id' => $this->b['b1']->id,
+            'shift_start' => '09:00',
+            'shift_end' => '18:00',
+            'available' => true,
+        ]);
+
+        // Dentist cannot mutate their own weekly schedule, profile hours, exceptions, or dentist profile.
+        $this->actingAsUser('dentist1');
+        $this->getJson('/api/work-schedules')->assertOk()->assertJsonPath('data.dentists.0.branches.0.editable', false);
+        $this->week('d1', 'b1', 3, '09:00', '12:00')->assertForbidden();
+        $this->postJson('/api/work-schedules/d1/from-profile', ['branch_ref' => 'b1'])->assertForbidden();
+        $this->postJson('/api/work-schedules/d1/exceptions', ['date' => '2026-10-07', 'kind' => 'day_off'])->assertForbidden();
+        $this->postJson('/api/work-schedules/d1/notify')->assertForbidden();
+        $this->patchJson('/api/dentists/d1', ['shift_start' => '10:00', 'shift_end' => '16:00'])->assertForbidden();
+
+        // Staff cannot edit their own assigned StaffProfile shift or branch assignment.
+        $this->actingAsUser('staffB1');
+        $this->patchJson('/api/staff/'.$staffProfile->legacy_ref, ['shift_start' => '10:00', 'shift_end' => '17:00'])->assertForbidden();
+        $this->assertSame('09:00', substr((string) $staffProfile->fresh()->shift_start, 0, 5));
+    }
 }

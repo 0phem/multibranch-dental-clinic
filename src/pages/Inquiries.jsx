@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { Button, Card, Field, Modal, Notice, PageHeader, Status, Table } from '../components.jsx'
+import { Button, Card, ConfirmDialog, Field, FilterBar, Modal, Notice, PageHeader, Status, Table } from '../components.jsx'
 import { dateLabel, displayTime, patientName } from '../logic.js'
 import { commandKey } from '../appointments-api.js'
 import { isServerId } from '../appointments-api.js'
@@ -20,6 +20,11 @@ export function ServerInquiriesPage({ store }) {
   const [error, setError] = useState('')
   const [moreError, setMoreError] = useState('')
   const [loadingMore, setLoadingMore] = useState(false)
+  const [filterSearch, setFilterSearch] = useState('')
+  const [filterStatus, setFilterStatus] = useState('All')
+  const [filterSource, setFilterSource] = useState('All')
+  const [filterBranch, setFilterBranch] = useState('All')
+  const [closingInquiry, setClosingInquiry] = useState(null)
   const [form, setForm] = useState(() => emptyForm(branches.length === 1 ? branches[0].id : ''))
   const [busy, setBusy] = useState(false)
   const [linking, setLinking] = useState(null)
@@ -74,32 +79,90 @@ export function ServerInquiriesPage({ store }) {
       <Field label="Contact name" required><input value={form.name} maxLength={LIMITS.name} onChange={e => edit({ name: e.target.value })}/></Field>
       <Field label="Contact handle or number"><input value={form.contact} maxLength={LIMITS.contact} autoComplete="off" onChange={e => edit({ contact: e.target.value })}/></Field>
       <Field label="What they asked" required><textarea value={form.topic} maxLength={LIMITS.topic} onChange={e => edit({ topic: e.target.value })}/></Field>
+      {(()=>{
+        const pot = (form.name.trim() || form.contact.trim()) ? (rows || []).find(r => {
+          if (form.branchId && r.branchId && r.branchId !== form.branchId) return false
+          const n = form.name.trim().toLowerCase()
+          const c = form.contact.trim().toLowerCase()
+          if (n && r.name?.toLowerCase() === n) return true
+          if (c && r.contact && r.contact.toLowerCase() === c) return true
+          return false
+        }) : null
+        return pot ? <div className="span-2"><Notice tone="info">Potential duplicate: An inquiry from this contact ({pot.source}, status: {pot.status}) was already recorded for this branch on {when(pot.receivedAt)}.</Notice></div> : null
+      })()}
       <Button className="span-2" disabled={busy} onClick={add}>Record inquiry</Button>
     </div></Card>
     {error && <Notice tone="warning" title="Inquiries could not be loaded">{error} <Button size="sm" onClick={load}>Retry</Button></Notice>}
     {!rows && !error && <Notice>Loading inquiries…</Notice>}
-    {rows && <Card className="top-gap" title="Inquiry worklist" subtitle="Newest first">
-      {!rows.length && <Notice>No inquiries are assigned to you yet.</Notice>}
-      {rows.length > 0 && <Table rows={rows} columns={[
-        { key: 'source', label: 'Reported source', render: i => <div><b>{i.source}</b><small className="block-muted">{i.capture}</small></div> },
-        { key: 'name', label: 'Contact', render: i => <div><b>{i.name}</b>{i.contact && <small className="block-muted">{i.contact}</small>}</div> },
-        { key: 'topic', label: 'Inquiry', render: i => <span style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{i.topic}</span> },
-        { key: 'branch', label: 'Branch', render: i => i.branchName },
-        { key: 'receivedAt', label: 'Recorded', render: i => when(i.receivedAt) },
-        { key: 'status', label: 'Status', render: i => <div><Status>{i.status}</Status>{i.status === 'Responded' && <small className="block-muted">Replied outside this system {when(i.respondedAt)}</small>}</div> },
-        { key: 'link', label: 'Appointment', render: i => (i.appointmentCode ? <div>{i.appointmentCode}{i.patientName && <small className="block-muted">{i.patientName}</small>}</div> : '—') },
-        { key: 'actions', label: 'Actions', render: i => <div className="row-actions">
-          {i.status === 'Open' && <Button size="sm" disabled={busy} onClick={() => run(() => respondToInquiry(i, commandKey()), 'Recorded that you responded outside this system.')}>Mark responded</Button>}
-          {['Open', 'Responded'].includes(i.status) && <Button size="sm" variant="ghost" disabled={busy} onClick={() => { setLinking(i); setAppointmentId('') }}>Link existing appointment</Button>}
-          {['Open', 'Responded'].includes(i.status) && <Button size="sm" variant="ghost" disabled={busy} onClick={() => run(() => closeInquiry(i, commandKey()), 'Inquiry closed.')}>Close</Button>}
-        </div> },
-      ]}/>}
-      <div style={{ marginTop: 12, textAlign: 'center' }}>
-        <p className="muted" role="status">Showing {rows.length} inquir{rows.length === 1 ? 'y' : 'ies'}{nextCursor ? '. Older inquiries are available.' : '. That is all of them.'}</p>
-        {moreError && <Notice tone="warning" title="Older inquiries unavailable">{moreError} <Button size="sm" variant="ghost" onClick={loadOlder}>Retry</Button></Notice>}
-        {nextCursor && !moreError && <Button variant="soft" disabled={loadingMore} onClick={loadOlder}>{loadingMore ? 'Loading…' : 'Load older inquiries'}</Button>}
-      </div>
-    </Card>}
+    {rows && (()=>{
+      const visibleRows = (rows || []).filter(i => {
+        if (filterStatus !== 'All' && i.status !== filterStatus) return false
+        if (filterSource !== 'All' && i.source !== filterSource) return false
+        if (filterBranch !== 'All' && i.branchName !== filterBranch && i.branchId !== filterBranch) return false
+        if (filterSearch.trim()) {
+          const q = filterSearch.trim().toLowerCase()
+          const n = (i.name || '').toLowerCase()
+          const t = (i.topic || '').toLowerCase()
+          const c = (i.contact || '').toLowerCase()
+          if (!n.includes(q) && !t.includes(q) && !c.includes(q)) return false
+        }
+        return true
+      })
+      return <Card className="top-gap" title="Inquiry worklist" subtitle="Newest first">
+        <FilterBar
+          search={filterSearch}
+          onSearchChange={setFilterSearch}
+          searchPlaceholder="Filter inquiries by contact or topic…"
+          onClear={(filterSearch || filterStatus !== 'All' || filterSource !== 'All' || filterBranch !== 'All') ? () => { setFilterSearch(''); setFilterStatus('All'); setFilterSource('All'); setFilterBranch('All') } : null}
+        >
+          <select aria-label="Filter inquiries by status" value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
+            <option value="All">All statuses</option>
+            <option value="Open">Open</option>
+            <option value="Responded">Responded</option>
+            <option value="Closed">Closed</option>
+            <option value="Converted">Converted</option>
+          </select>
+          <select aria-label="Filter inquiries by source" value={filterSource} onChange={e => setFilterSource(e.target.value)}>
+            <option value="All">All sources</option>
+            {SOURCES.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+          {branches.length > 1 && <select aria-label="Filter inquiries by branch" value={filterBranch} onChange={e => setFilterBranch(e.target.value)}>
+            <option value="All">All branches</option>
+            {branches.map(b => <option key={b.id} value={b.name}>{b.name}</option>)}
+          </select>}
+        </FilterBar>
+        {!rows.length && <Notice>No inquiries are assigned to you yet.</Notice>}
+        {rows.length > 0 && !visibleRows.length && <Notice>No inquiries match your selected filters.</Notice>}
+        {visibleRows.length > 0 && <Table rows={visibleRows} columns={[
+          { key: 'source', label: 'Reported source', render: i => <div><b>{i.source}</b><small className="block-muted">{i.capture}</small></div> },
+          { key: 'name', label: 'Contact', render: i => <div><b>{i.name}</b>{i.contact && <small className="block-muted">{i.contact}</small>}</div> },
+          { key: 'topic', label: 'Inquiry', render: i => <span style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{i.topic}</span> },
+          { key: 'branch', label: 'Branch', render: i => i.branchName },
+          { key: 'receivedAt', label: 'Recorded', render: i => when(i.receivedAt) },
+          { key: 'status', label: 'Status', render: i => <div><Status>{i.status}</Status>{i.status === 'Responded' && <small className="block-muted">Replied outside this system {when(i.respondedAt)}</small>}</div> },
+          { key: 'link', label: 'Appointment', render: i => (i.appointmentCode ? <div>{i.appointmentCode}{i.patientName && <small className="block-muted">{i.patientName}</small>}</div> : '—') },
+          { key: 'actions', label: 'Actions', render: i => <div className="row-actions">
+            {i.status === 'Open' && <Button size="sm" disabled={busy} onClick={() => run(() => respondToInquiry(i, commandKey()), 'Recorded that you responded outside this system.')}>Mark responded</Button>}
+            {['Open', 'Responded'].includes(i.status) && <Button size="sm" variant="ghost" disabled={busy} onClick={() => { setLinking(i); setAppointmentId('') }}>Link existing appointment</Button>}
+            {['Open', 'Responded'].includes(i.status) && <Button size="sm" variant="ghost" disabled={busy} onClick={() => setClosingInquiry(i)}>Close</Button>}
+          </div> },
+        ]}/>}
+        <div style={{ marginTop: 12, textAlign: 'center' }}>
+          <p className="muted" role="status">Showing {visibleRows.length} of {rows.length} inquir{rows.length === 1 ? 'y' : 'ies'}{nextCursor ? '. Older inquiries are available.' : '. That is all of them.'}</p>
+          {moreError && <Notice tone="warning" title="Older inquiries unavailable">{moreError} <Button size="sm" variant="ghost" onClick={loadOlder}>Retry</Button></Notice>}
+          {nextCursor && !moreError && <Button variant="soft" disabled={loadingMore} onClick={loadOlder}>{loadingMore ? 'Loading…' : 'Load older inquiries'}</Button>}
+        </div>
+        {closingInquiry && <ConfirmDialog
+          open={!!closingInquiry}
+          title="Close this inquiry?"
+          confirmLabel="Close inquiry"
+          onConfirm={() => { const target = closingInquiry; setClosingInquiry(null); run(() => closeInquiry(target, commandKey()), 'Inquiry closed.') }}
+          onCancel={() => setClosingInquiry(null)}
+        >
+          <p>Are you sure you want to close this inquiry from <b>{closingInquiry.name}</b> ({closingInquiry.source})? This records the inquiry as closed.</p>
+        </ConfirmDialog>}
+      </Card>
+    })()}
     <Modal open={!!linking} onClose={() => !busy && setLinking(null)} title="Link an existing appointment" subtitle="Choose an appointment that already exists in this branch. This records the link only; it does not book, change or cancel anything.">
       <Field label="Existing appointment"><select value={appointmentId} onChange={e => setAppointmentId(e.target.value)}><option value="">Select appointment</option>{linkable.map(a => <option key={a.id} value={a.id}>{dateLabel(a.date)} • {displayTime(a.start)} • {patientName(a.patientId, state.patients)} • {a.service}</option>)}</select></Field>
       {!linkable.length && <Notice>No linkable appointments are loaded for this branch.</Notice>}

@@ -31,7 +31,7 @@ const CANONICAL=[
   [19,'Digital Prescription Management','Ecal'],[20,'Clinical Follow-Up & Recall Management','Ecal'],
   [21,'Operational Analytics & Executive Intelligence','Delos Santos'],[22,'Audit Trail & Activity Monitoring Management','Delos Santos'],
   [23,'Archives & Historical Records Management','Delos Santos'],[24,'Referral & Loyalty Management','Millar'],
-  [25,'Marketing Campaign & Patient Reactivation Management','Millar'],
+  [25,'Marketing Campaign & Patient Reactivation Management','Millar'],
 ]
 
 test('MODULES matches the canonical 25-module structure, owners and PE designation',()=>{
@@ -41,7 +41,7 @@ test('MODULES matches the canonical 25-module structure, owners and PE designati
   const m23=data.MODULES.find(m=>m.no===23)
   assert.equal(DOMAIN_MODULE.archives,23,'M23 uses the stable domain key archives')
   assert.equal(m23.implemented,true)
-  assert.deepEqual(m23.roles,['patient','staff','dentist','owner'])
+  assert.deepEqual(m23.roles,['patient','staff','dentist','owner'])
   assert.equal(Object.keys(DOMAIN_MODULE).length,25)
   // Newly defined modules that are not built yet must not claim full representation.
   for(const no of [7,13,14,15,22])assert.ok(data.MODULES.find(m=>m.no===no).coverage,`M${no} states its real coverage`)

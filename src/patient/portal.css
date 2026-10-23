@@ -84,10 +84,12 @@
 .pp-page { max-width: 880px; margin: 0 auto; display: grid; gap: 16px; }
 .pp-page.pp-legacy { max-width: 1040px; display: block; }
 .pp-card { background: #fff; border: 1px solid var(--pp-edge); border-radius: var(--pp-r); padding: 18px; box-shadow: 0 1px 2px rgba(16,37,54,.04); }
-.pp-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px; }
-.pp-head h1, .pp-hello h1 { margin: 0; font-size: clamp(1.5rem, 5vw, 2rem); letter-spacing: -.02em; color: var(--ink); }
-.pp-eyebrow { margin: 0 0 4px; font-size: .75rem; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; color: var(--brand); }
-.pp-lead { margin: 6px 0 0; color: var(--text); }
+.pp-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding-bottom: 6px; border-bottom: 1px solid var(--pp-edge); }
+.pp-head-title { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; }
+.pp-head h1, .pp-hello h1 { margin: 0; font-size: clamp(1.25rem, 3.2vw, 1.55rem); letter-spacing: -.02em; color: var(--ink); line-height: 1.25; }
+.pp-eyebrow { margin: 0; font-size: .75rem; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; color: var(--brand); }
+.pp-eyebrow::after { content: "/"; margin-left: 8px; color: var(--line-strong); font-weight: 400; }
+.pp-lead:not(.sr-only) { margin: 4px 0 0; color: var(--text); flex-basis: 100%; }
 .pp-hint { margin: 8px 0; color: var(--muted); font-size: .875rem; }
 .pp-muted { color: var(--muted); }
 .pp-error-text { margin: 8px 0; color: var(--red); font-weight: 600; }

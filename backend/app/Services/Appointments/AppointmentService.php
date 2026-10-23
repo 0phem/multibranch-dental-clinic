@@ -47,6 +47,9 @@ final class AppointmentService
                 throw AppointmentCommandException::rule('service_not_bookable_online', $service->online_booking === 'consultation_first'
                     ? 'This service starts with a consultation. Please book the consultation instead.' : 'This service cannot be booked online. Please message the front desk.', 'service_ref');
             }
+            if (! $isPatient && ($service->online_booking ?? 'bookable') === 'consultation_first' && empty($input['consultation_acknowledged'])) {
+                throw AppointmentCommandException::rule('consultation_acknowledgement_required', 'This service requires preliminary consultation or clinical authorization acknowledgement.', 'consultation_acknowledged');
+            }
             $request = new SlotRequest($patient, $branch, $service, $dentist, $input['date'], $input['start_time'], $isPatient);
 
             if ($dentist) {
@@ -102,6 +105,12 @@ final class AppointmentService
                 'updated_by_user_id' => $actor->id,
             ]);
             $this->record($appointment, $actor, 'appointment.created', null);
+            if (! $isPatient && ($service->online_booking ?? 'bookable') === 'consultation_first') {
+                app(\App\Services\Audit\AuditService::class)->recordClinical('appointment.consultation_authorized', $actor, $appointment, [
+                    'service_id' => $service->id,
+                    'staff_id' => $actor->id,
+                ]);
+            }
 
             if ($payOnline) {
                 $checkout = $payMongo->createAppointmentCheckoutSession($appointment, $actor);

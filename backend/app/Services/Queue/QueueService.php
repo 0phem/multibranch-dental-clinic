@@ -123,19 +123,51 @@ final class QueueService
     }
 
     /** Operational priority (not clinical triage): Normal / Priority / Urgent with a required reason; the state never changes. */
-    public function priority(User $actor, QueueEntry $entry, string $priority, string $reason, int $expectedRevision, string $key): JsonResponse
-    {
-        $payload = ['entry' => $entry->id, 'expected_revision' => $expectedRevision, 'priority' => $priority, 'reason' => $reason];
+    public function priority(
+        User $actor,
+        QueueEntry $entry,
+        string $priority,
+        string $reason,
+        int $expectedRevision,
+        string $key,
+        ?string $category = null,
+        ?string $verificationStatus = null,
+    ): JsonResponse {
+        $persistedReason = $reason;
+        if ($category !== null && $verificationStatus !== null) {
+            $verificationLabel = $verificationStatus === 'verified' ? 'ID/eligibility verified' : 'Pending verification';
+            if (! str_contains($persistedReason, $verificationLabel)) {
+                $persistedReason = "{$persistedReason} [{$category} · {$verificationLabel}]";
+            }
+        }
+        $payload = [
+            'entry' => $entry->id,
+            'expected_revision' => $expectedRevision,
+            'priority' => $priority,
+            'reason' => $persistedReason,
+            'category' => $category,
+            'verification_status' => $verificationStatus,
+        ];
 
-        return $this->idempotent($actor, $key, 'queue.priority', $payload, function () use ($actor, $entry, $priority, $reason, $expectedRevision) {
+        return $this->idempotent($actor, $key, 'queue.priority', $payload, function () use ($actor, $entry, $priority, $persistedReason, $expectedRevision, $category, $verificationStatus) {
             [$visit, $current] = $this->lock($entry);
-            if ($current->priority === $priority && $current->priority_reason === $reason) {
+            if ($current->priority === $priority && $current->priority_reason === $persistedReason) {
                 return $current;
             }
             $this->assertCurrent($current, $visit, $expectedRevision);
+            if (in_array($current->status, ['Called', 'Treatment Ready'], true)) {
+                throw VisitCommandException::rule('already_called', 'This patient has already been called and cannot be reordered by priority.', 'status');
+            }
             $previous = $current->priority;
-            $current->update(['priority' => $priority, 'priority_reason' => $reason, 'revision' => $current->revision + 1, 'updated_by_user_id' => $actor->id]);
+            $current->update(['priority' => $priority, 'priority_reason' => $persistedReason, 'revision' => $current->revision + 1, 'updated_by_user_id' => $actor->id]);
             $this->history($current, $actor, 'queue.priority_changed', $current->status, $previous);
+            app(\App\Services\Audit\AuditService::class)->recordAdministrative('queue.priority_changed', $actor, $current, array_filter([
+                'from_priority' => $previous,
+                'to_priority' => $priority,
+                'reason' => $persistedReason,
+                'category' => $category,
+                'verification_status' => $verificationStatus,
+            ], fn ($v) => $v !== null));
 
             return $current;
         });
@@ -163,9 +195,10 @@ final class QueueService
     }
 
     /**
-     * Server-computed positions for the given Dentist queues: only Waiting / Called / Treatment Ready hold a place,
-     * ordered by priority (Urgent, Priority, Normal), then on-time before late arrivals (R2-07), then the Visit's exact arrival
-     * time, then the unique queue number.
+     * Server-computed positions for the given Dentist queues: only Waiting / Called / Treatment Ready hold a place.
+     * Patients already Called or Treatment Ready keep their front position and are never silently pushed behind Waiting
+     * patients; Waiting entries are ordered by priority (Urgent, Priority, Normal), then on-time before late arrivals
+     * (R2-07), then the Visit's exact arrival time, then the unique queue number.
      *
      * @param  list<int>  $dentistQueueIds
      * @return array<int,int> queue_entries.id => position
@@ -179,7 +212,9 @@ final class QueueService
         $rows = DB::select(
             "SELECT q.id, ROW_NUMBER() OVER (
                  PARTITION BY q.dentist_queue_id
-                 ORDER BY CASE q.priority WHEN 'Urgent' THEN 0 WHEN 'Priority' THEN 1 ELSE 2 END, q.late_arrival, v.arrived_at, q.queue_number
+                 ORDER BY CASE WHEN q.status = 'Treatment Ready' THEN 0 WHEN q.status = 'Called' THEN 1 ELSE 2 END,
+                          CASE q.priority WHEN 'Urgent' THEN 0 WHEN 'Priority' THEN 1 ELSE 2 END,
+                          q.late_arrival, v.arrived_at, q.queue_number
              ) AS position
              FROM queue_entries q JOIN visits v ON v.id = q.visit_id
              WHERE q.dentist_queue_id IN ({$placeholders}) AND q.status IN ('Waiting','Called','Treatment Ready')",

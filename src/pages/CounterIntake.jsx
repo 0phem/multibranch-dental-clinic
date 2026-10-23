@@ -120,7 +120,7 @@ function ReviewDialog({ row, idTypes, toast, onClose, onDone, store }) {
   </Modal>
 }
 
-const ID_TYPES = { philid: 'PhilID / ePhilID', drivers_license: 'Driver’s license', umid: 'UMID', passport: 'Passport', postal: 'Postal ID', prc: 'PRC ID', voters: 'Voter’s ID', senior: 'Senior citizen ID', other: 'Other valid ID' }
+const ID_TYPES = { philid: 'PhilID / ePhilID', drivers_license: 'Driver’s license', umid: 'UMID', passport: 'Passport', postal: 'Postal ID', prc: 'PRC ID', voters: 'Voter’s ID', senior: 'Senior citizen ID', pwd: 'PWD ID', other: 'Other valid ID' }
 
 /** One click at Check-In: the patient's physical ID was checked (first visit). Only the type, who and when are saved. */
 /**
@@ -149,7 +149,7 @@ export function IdCheck({ patientId, toast = () => {} }) {
   useEffect(() => { setRecord(null); getPatientRecord(patientId).then(r => { if (r.ok) setRecord(r.data) }) }, [patientId])
   if (!record) return null
   const minor = record.minor ? <p className="fd-badge is-late">Minor{record.guardians?.length ? `: guardian ${record.guardians.map(g => g.name).join(', ')}` : ': no guardian linked yet'}</p> : null
-  if (record.id_check) return <div className="ci-idcheck">{minor}<p className="au-muted">ID checked: {ID_TYPES[record.id_check.type] || record.id_check.type}{record.id_check.by ? ` by ${record.id_check.by}` : ''}.</p>
+  if (record.id_check) return <div className="ci-idcheck">{minor}<p className="au-muted">ID checked: {ID_TYPES[record.id_check.type] || record.id_check.type}{record.id_check.by ? ` by ${record.id_check.by}` : ''}. {record.id_check.type === 'senior' && <span className="fd-badge is-info">Senior Citizen Priority Eligible</span>}{record.id_check.type === 'pwd' && <span className="fd-badge is-info">PWD Priority Eligible</span>}</p>
     {!record.has_online_account && (record.minor
       ? <p className="au-muted">Under 18: no online account of their own. Their guardian’s account books and pays for them; they can claim their own account at 18.</p>
       : <OfferAccount patientId={patientId} email={record.email} toast={toast}/>)}</div>

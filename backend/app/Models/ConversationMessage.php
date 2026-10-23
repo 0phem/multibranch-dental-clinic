@@ -31,7 +31,20 @@ class ConversationMessage extends Model
     protected function body(): Attribute
     {
         return Attribute::make(
-            get: fn (?string $value, array $attributes) => isset($attributes['body_encrypted']) ? Crypt::decryptString($attributes['body_encrypted']) : $value,
+            get: function (?string $value, array $attributes): ?string {
+                if (! isset($attributes['body_encrypted'])) {
+                    return $value;
+                }
+                try {
+                    return Crypt::decryptString($attributes['body_encrypted']);
+                } catch (\Illuminate\Contracts\Encryption\DecryptException) {
+                    \Illuminate\Support\Facades\Log::warning('Undecryptable conversation message encountered', [
+                        'message_id' => $attributes['public_id'] ?? $attributes['id'] ?? null,
+                    ]);
+
+                    return "This message can't be displayed";
+                }
+            },
             set: fn (string $value) => ['body' => null, 'body_encrypted' => Crypt::encryptString($value)],
         );
     }

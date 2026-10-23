@@ -9,3 +9,11 @@ dist
 public/ocr/
 .vercel
 backend/storage/*.pem
+HANDOFF_PROGRESS.md
+MODULE_AUDIT.md
+scratch/
+scratch_*
+junit_*.xml
+backend/junit_*.xml
+backend/run_tests.ps1
+backend/run_phpunit.ps1

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { Button, Card, Field, Notice, PageHeader } from '../components.jsx'
+import { Button, Card, ConfirmDialog, Field, FilterBar, Notice, PageHeader } from '../components.jsx'
 import { changeClosure, closureAffected, createClosure, listClosures, notifyClosurePatients, suggestHolidays } from '../api-client.js'
 
 const longDate = d => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-PH', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
@@ -16,18 +16,30 @@ export function ClosedDatesPage({ store, role }) {
   const owner = role === 'owner'
   const branches = (store?.state?.branches || []).filter(b => b.status !== 'Closed')
   const [rows, setRows] = useState(null), [error, setError] = useState(''), [busy, setBusy] = useState('')
-  const [form, setForm] = useState({ branch_ref: '', date: '', reason: '', partial: false, open_time: '09:00', close_time: '12:00' })
+  const [filterSearch, setFilterSearch] = useState(''), [filterBranch, setFilterBranch] = useState('All')
+  const [form, setForm] = useState({ branch_ref: '', date: '', end_date: '', reason: '', partial: false, open_time: '09:00', close_time: '12:00' })
   const [formError, setFormError] = useState('')
   const load = () => listClosures().then(r => { if (r.ok) { setRows(r.data || []); setError('') } else setError(r.message || 'Closed dates could not be loaded.') })
   useEffect(() => { load() }, [])
 
+  const preSaveConflicts = (form.date && store?.state?.appointments) ? store.state.appointments.filter(a => {
+    if (['Cancelled'].includes(a.status)) return false
+    const matchDate = form.end_date ? (a.date >= form.date && a.date <= form.end_date) : a.date === form.date
+    if (!matchDate) return false
+    if (form.branch_ref) {
+      const bObj = branches.find(b => b.id === form.branch_ref)
+      if (a.branchId !== form.branch_ref && a.branch !== bObj?.name) return false
+    }
+    return true
+  }) : []
+
   const add = async e => {
     e.preventDefault()
     setBusy('add'); setFormError('')
-    const r = await createClosure({ branch_ref: form.branch_ref || null, date: form.date, reason: form.reason.trim() || null, ...(form.partial ? { open_time: form.open_time, close_time: form.close_time } : {}) })
+    const r = await createClosure({ branch_ref: form.branch_ref || null, date: form.date, ...(form.end_date ? { end_date: form.end_date } : {}), reason: form.reason.trim() || null, ...(form.partial ? { open_time: form.open_time, close_time: form.close_time } : {}) })
     setBusy('')
     if (!r.ok) return setFormError(firstError(r))
-    toast('Date closed. Booking shows it greyed out now.', 'success'); setForm(f => ({ ...f, date: '', reason: '' })); load()
+    toast('Date closed. Booking shows it greyed out now.', 'success'); setForm(f => ({ ...f, date: '', end_date: '', reason: '' })); load()
   }
   const change = async (row, action, done) => {
     setBusy(row.id)
@@ -55,7 +67,21 @@ export function ClosedDatesPage({ store, role }) {
           <option value="">All branches</option>{branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
         </select></Field>
         <Field label="Date" required><input type="date" value={form.date} onChange={e => setForm(f => ({ ...f, date: e.target.value }))} required/></Field>
+        <Field label="End date (optional for range)" hint="Leave blank for single-day closure."><input type="date" min={form.date || undefined} value={form.end_date} onChange={e => setForm(f => ({ ...f, end_date: e.target.value }))}/></Field>
         <Field label="Reason (shown to patients)" hint="Optional, for example “Staff training”."><input value={form.reason} maxLength={120} onChange={e => setForm(f => ({ ...f, reason: e.target.value }))}/></Field>
+        {preSaveConflicts.length > 0 && <div className="au-error-notice" style={{marginTop:'8px',marginBottom:'8px'}}>
+          <Notice tone="warning" title="Existing appointments found">
+            <p style={{margin:0}}>{preSaveConflicts.length} scheduled appointment(s) already exist on this date/range. A closure never cancels appointments automatically; front desk must notify or reschedule affected patients.</p>
+            <ul style={{margin:'6px 0 0 16px',padding:0,fontSize:'12px'}}>
+              {preSaveConflicts.slice(0, 10).map(a => (
+                <li key={a.id}>
+                  <b>{a.date} {a.time || a.start ? `at ${a.time || a.start}` : ''}</b> — {a.patientName || a.patientCode || 'Patient'}{a.serviceName || a.service ? ` (${a.serviceName || a.service})` : ''}
+                </li>
+              ))}
+              {preSaveConflicts.length > 10 && <li>...and {preSaveConflicts.length - 10} more</li>}
+            </ul>
+          </Notice>
+        </div>}
         <label className="au-check"><input type="checkbox" checked={form.partial} onChange={e => setForm(f => ({ ...f, partial: e.target.checked }))}/> Open only part of the day</label>
         {form.partial && <>
           <Field label="Opens"><input type="time" value={form.open_time} onChange={e => setForm(f => ({ ...f, open_time: e.target.value }))}/></Field>
@@ -66,8 +92,29 @@ export function ClosedDatesPage({ store, role }) {
       </form>
     </Card>}
     <Card title={`Upcoming closures (${active.length})`}>
+      <FilterBar
+        search={filterSearch}
+        onSearchChange={setFilterSearch}
+        searchPlaceholder="Filter closures by date or reason…"
+        onClear={(filterSearch || filterBranch !== 'All') ? () => { setFilterSearch(''); setFilterBranch('All') } : null}
+      >
+        {branches.length > 1 && <select aria-label="Filter closures by branch" value={filterBranch} onChange={e => setFilterBranch(e.target.value)}>
+          <option value="All">All branches</option>
+          {branches.map(b => <option key={b.id} value={b.name}>{b.name}</option>)}
+        </select>}
+      </FilterBar>
       {!rows ? <p className="au-muted" role="status">Loading…</p> : !active.length ? <p className="au-muted">No upcoming closures.</p>
-        : <ul className="fd-list">{active.map(c => <ClosureRow key={c.id} row={c} owner={owner} busy={busy} toast={toast} onRemove={() => change(c, 'remove', 'Closure removed. The date is bookable again.')}/>)}</ul>}
+        : <ul className="fd-list">{active.filter(r => {
+          if (filterBranch !== 'All' && r.branch?.name !== filterBranch && r.branch?.legacy_ref !== filterBranch) return false
+          if (filterSearch.trim()) {
+            const q = filterSearch.trim().toLowerCase()
+            const d = (r.date || '').toLowerCase()
+            const re = (r.reason || '').toLowerCase()
+            const b = (r.branch?.name || '').toLowerCase()
+            if (!d.includes(q) && !re.includes(q) && !b.includes(q)) return false
+          }
+          return true
+        }).map(c => <ClosureRow key={c.id} row={c} owner={owner} busy={busy} toast={toast} onRemove={() => change(c, 'remove', 'Closure removed. The date is bookable again.')}/>)}</ul>}
     </Card>
     {owner && <Card title={`Holiday suggestions (${suggested.length})`} subtitle="Philippine national holidays from the usual rules. Suggestions only: nothing closes until you confirm a date. Check the official proclamation for the year."
       actions={<Button size="sm" variant="soft" disabled={busy === 'suggest'} onClick={suggest}>{busy === 'suggest' ? 'Adding…' : 'Suggest holidays'}</Button>}>
@@ -83,7 +130,7 @@ export function ClosedDatesPage({ store, role }) {
 }
 
 function ClosureRow({ row, owner, busy, toast, onRemove }) {
-  const [affected, setAffected] = useState(null), [meta, setMeta] = useState({}), [sending, setSending] = useState(false)
+  const [affected, setAffected] = useState(null), [meta, setMeta] = useState({}), [sending, setSending] = useState(false), [confirmRemove, setConfirmRemove] = useState(false)
   useEffect(() => { closureAffected(row.id).then(r => { if (r.ok) { setAffected(r.data || []); setMeta(r.meta || {}) } }) }, [row.id])
   const notify = async () => {
     setSending(true)
@@ -103,7 +150,16 @@ function ClosureRow({ row, owner, busy, toast, onRemove }) {
     <div className="ns-actions">
       {affected?.length > 0 && <Button size="sm" variant="soft" icon="mail" disabled={sending || meta.wording_approved === false} title={meta.wording_approved === false ? 'The Owner must approve the “Closed date” email wording first' : undefined}
         onClick={notify}>{sending ? 'Sending…' : 'Email them a reschedule link'}</Button>}
-      {owner && <Button size="sm" variant="ghost" disabled={busy === row.id} onClick={onRemove}>Remove</Button>}
+      {owner && <Button size="sm" variant="ghost" disabled={busy === row.id} onClick={() => setConfirmRemove(true)}>Remove</Button>}
     </div>
+    <ConfirmDialog
+      open={confirmRemove}
+      title="Remove clinic closure?"
+      confirmLabel="Remove closure"
+      onConfirm={() => { setConfirmRemove(false); onRemove() }}
+      onCancel={() => setConfirmRemove(false)}
+    >
+      <p>Removing the closure for <b>{longDate(row.date)}</b> reopens <b>{row.branch?.name || 'All branches'}</b> for online and front-desk booking on that date.</p>
+    </ConfirmDialog>
   </li>
 }

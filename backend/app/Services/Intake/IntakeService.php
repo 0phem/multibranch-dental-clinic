@@ -33,7 +33,7 @@ final class IntakeService
     public const CONSENT_VERSION = 'intake-2026-10';
 
     public const ID_TYPES = ['philid' => 'PhilID / ePhilID', 'drivers_license' => 'Driver’s license', 'umid' => 'UMID', 'passport' => 'Passport',
-        'postal' => 'Postal ID', 'prc' => 'PRC ID', 'voters' => 'Voter’s ID', 'senior' => 'Senior citizen ID', 'other' => 'Other valid ID'];
+        'postal' => 'Postal ID', 'prc' => 'PRC ID', 'voters' => 'Voter’s ID', 'senior' => 'Senior citizen ID', 'pwd' => 'PWD ID', 'other' => 'Other valid ID'];
 
     public const PREFILLABLE = ['first_name', 'last_name', 'date_of_birth'];
 

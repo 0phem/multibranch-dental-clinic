@@ -252,6 +252,7 @@ a{color:inherit}
 .daycal-expanded-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 
 @media (max-width:768px){
+  .daycal-calendar-pane{overflow-x:auto;-webkit-overflow-scrolling:touch}
   .daycal-month-grid{gap:3px}
   .daycal-cell{min-height:64px;padding:4px}
   .daycal-cell-chips{display:none}
@@ -265,5 +266,9 @@ a{color:inherit}
   .daycal-bar{display:grid;grid-template-columns:1fr 1fr}
   .daycal-bar .daycal-date{grid-column:1/-1}
   .daycal-bar .daycal-branch{grid-column:1/-1}
+  .daycal-cell-meta .daycal-none{display:none}
+  .daycal-cell-meta .daycal-load{font-size:0;padding:2px;gap:0}
+  .daycal-cell-meta .daycal-load i{width:8px;height:8px}
+  .daycal-legend{flex-wrap:wrap;gap:6px}
 }
 .scope-list{border:0;padding:0;margin:0;display:grid;gap:8px}.scope-option{display:flex;align-items:center;gap:10px;min-height:44px;padding:0 12px;border:1px solid var(--line);border-radius:10px}.scope-option input{width:18px;height:18px}

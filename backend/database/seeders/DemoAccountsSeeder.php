@@ -21,6 +21,11 @@ class DemoAccountsSeeder extends Seeder
 
             return;
         }
+        if (! app()->environment(['local', 'testing'])) {
+            $this->command?->error('DemoAccountsSeeder only runs in local or testing environments.');
+
+            return;
+        }
         if (app()->isProduction()) {
             $this->command?->error('DemoAccountsSeeder refuses to run in production.');
 
@@ -52,7 +57,7 @@ class DemoAccountsSeeder extends Seeder
             ['patient_code' => 'PAT-0000', 'consent' => true]
         );
 
-        User::firstOrCreate(
+        $user = User::firstOrCreate(
             ['email' => 'patient@example.test'],
             [
                 'person_id' => $person->id,
@@ -62,6 +67,10 @@ class DemoAccountsSeeder extends Seeder
                 'email_verified_at' => now(),
             ]
         );
+
+        if ($user->email_verified_at === null) {
+            $user->forceFill(['email_verified_at' => now()])->save();
+        }
     }
 
     private function demoStaff(string $password, string $email, string $lastName, string $title): void

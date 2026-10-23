@@ -12,14 +12,22 @@ final class Presence
 {
     public static function touch(User $user): void
     {
-        Cache::put(self::key($user), now()->getTimestamp(), max(30, (int) config('messaging.online_seconds', 90)));
+        try {
+            Cache::put(self::key($user), now()->getTimestamp(), max(30, (int) config('messaging.online_seconds', 90)));
+        } catch (\Throwable) {
+            // Presence is best-effort for email alert suppression and must never fail a messaging request.
+        }
     }
 
     public static function isOnline(User $user): bool
     {
-        $seen = Cache::get(self::key($user));
+        try {
+            $seen = Cache::get(self::key($user));
 
-        return is_int($seen) && $seen >= now()->getTimestamp() - max(30, (int) config('messaging.online_seconds', 90));
+            return is_int($seen) && $seen >= now()->getTimestamp() - max(30, (int) config('messaging.online_seconds', 90));
+        } catch (\Throwable) {
+            return false;
+        }
     }
 
     private static function key(User $user): string

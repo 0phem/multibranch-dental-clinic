@@ -47,23 +47,38 @@ class BranchClosureController extends Controller
 
     public function store(Request $request): JsonResponse
     {
-        $data = $request->validate(['branch_ref' => ['nullable', 'string', 'max:50'], 'date' => ['required', 'date_format:Y-m-d'], 'reason' => ['nullable', 'string', 'max:120'],
+        $data = $request->validate(['branch_ref' => ['nullable', 'string', 'max:50'], 'date' => ['required', 'date_format:Y-m-d'], 'end_date' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:date'], 'reason' => ['nullable', 'string', 'max:120'],
             'open_time' => ['nullable', 'date_format:H:i', 'required_with:close_time'], 'close_time' => ['nullable', 'date_format:H:i', 'required_with:open_time', 'after:open_time']]);
         if ($data['date'] < ClinicClock::today()) throw ValidationException::withMessages(['date' => ['Choose today or a later date.']]);
+        if (! empty($data['end_date']) && (strtotime($data['end_date']) - strtotime($data['date'])) / 86400 > 31) {
+            throw ValidationException::withMessages(['end_date' => ['Date range cannot exceed 31 days.']]);
+        }
         $branch = ! empty($data['branch_ref']) ? Branch::where('legacy_ref', $data['branch_ref'])->firstOrFail() : null;
-        try {
-            $closure = BranchClosure::create(['branch_id' => $branch?->id, 'closed_on' => $data['date'], 'reason' => $data['reason'] ?? null,
-                'open_time' => $data['open_time'] ?? null, 'close_time' => $data['close_time'] ?? null, 'status' => 'active', 'source' => 'owner',
-                'created_by_user_id' => $request->user()->id, 'updated_by_user_id' => $request->user()->id]);
-        } catch (QueryException $e) {
-            if ($e->getCode() === '23505') throw ValidationException::withMessages(['date' => ['This date is already closed (or suggested) for that branch.']]);
-
-            throw $e;
+        $endDate = $data['end_date'] ?? $data['date'];
+        $currentDate = $data['date'];
+        $lastClosure = null;
+        while ($currentDate <= $endDate) {
+            try {
+                $closure = BranchClosure::create(['branch_id' => $branch?->id, 'closed_on' => $currentDate, 'reason' => $data['reason'] ?? null,
+                    'open_time' => $data['open_time'] ?? null, 'close_time' => $data['close_time'] ?? null, 'status' => 'active', 'source' => 'owner',
+                    'created_by_user_id' => $request->user()->id, 'updated_by_user_id' => $request->user()->id]);
+                $lastClosure = $closure;
+            } catch (QueryException $e) {
+                if ($e->getCode() === '23505') {
+                    if ($data['date'] === $endDate) throw ValidationException::withMessages(['date' => ['This date is already closed (or suggested) for that branch.']]);
+                } else {
+                    throw $e;
+                }
+            }
+            $currentDate = date('Y-m-d', strtotime($currentDate . ' +1 day'));
+        }
+        if (! $lastClosure) {
+            throw ValidationException::withMessages(['date' => ['The selected dates are already closed for this branch.']]);
         }
         app(ClosureCalendar::class)->flush();
-        app(AuditService::class)->recordAdministrative('branch_closure.created', $request->user(), $branch, ['date' => $data['date'], 'reason' => $closure->reason, 'partial' => $closure->partialHours()]);
+        app(AuditService::class)->recordAdministrative('branch_closure.created', $request->user(), $branch, ['date' => $data['date'], 'end_date' => $data['end_date'] ?? null, 'reason' => $lastClosure->reason, 'partial' => $lastClosure->partialHours()]);
 
-        return response()->json(['data' => $this->view($closure->fresh('branch'), true)], 201);
+        return response()->json(['data' => $this->view($lastClosure->fresh('branch'), true)], 201);
     }
 
     /** Owner: remove a closure, or confirm / dismiss a holiday suggestion. */

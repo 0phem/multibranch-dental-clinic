@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react'
-import { Button, Card, Field, Icon, Modal, Notice, PageHeader, Progress, Status, Table } from '../components.jsx'
+import { Button, Card, Field, FilterBar, Icon, Modal, Notice, PageHeader, Progress, Status, Table } from '../components.jsx'
 import { branchCapacity, dentistName, displayTime, patientName, queueWaitEstimate } from '../logic.js'
 import { commandKey } from '../appointments-api.js'
 import { useVisibleRefresh } from '../use-visible-refresh.js'
@@ -19,12 +19,13 @@ import { encounterContext, inScope, isActiveQueue, isTodayQueue, sessionForRole 
 // appointment moves to Checked In) and — when the Visit has a responsible Dentist — queues it, all in one server
 // transaction (M9). Patients come from the server directory (or the minimal front-desk registration); nothing here
 // writes an arrival or queue record locally.
-export function CheckInPage({ store }) {
+export function CheckInPage({ store, context, setPage }) {
   const { state, toast }=store
   const session=store.session||sessionForRole('staff',state)
   const flow=store.appointmentFlow
-  const [mode,setMode]=useState('scheduled')
+  const [mode,setMode]=useState(context?.mode||'scheduled')
   const today=clinicDate()
+  useEffect(()=>{ flow?.searchPatients?.('') }, [])
   // Today's server appointments awaiting arrival (no Visit yet).
   const eligible=state.appointments.filter(a=>inScope(a,session,state)&&a.date===today&&['Confirmed','Pending'].includes(a.status)&&!(state.visits||[]).some(v=>v.appointmentId===a.id))
   // Today's server Visits that are checked in but not in a queue: only a Visit without a responsible Dentist (M9 Q4).
@@ -75,7 +76,7 @@ export function CheckInPage({ store }) {
 
   // Minimal front-desk registration of a new walk-in Patient (Person + Patient on the server, no login account).
   const emptyPatient={firstName:'',lastName:'',phone:'',email:'',dob:''}
-  const [registering,setRegistering]=useState(false)
+  const [registering,setRegistering]=useState(!!context?.register)
   const [newPatient,setNewPatient]=useState(emptyPatient)
   const registerKey=useRef(commandKey())
   const [registerError,setRegisterError]=useState('')
@@ -86,6 +87,7 @@ export function CheckInPage({ store }) {
     if(!phone.ok)return setRegisterError(phone.reason)
     const result=await flow.registerPatient({...newPatient,firstName:newPatient.firstName.trim(),lastName:newPatient.lastName.trim(),phone:phone.e164,email:newPatient.email.trim()},registerKey.current)
     if(!result.ok)return setRegisterError(result.message)
+    flow?.searchPatients?.('')
     updateWalkin('patientPublicId',result.patient.id)
     setNewPatient(emptyPatient);setRegistering(false);registerKey.current=commandKey()
     toast(`Patient ${result.patient.name} registered (${result.patient.patientCode}).`,'success')
@@ -93,7 +95,11 @@ export function CheckInPage({ store }) {
   const selectedPatient=(store.directoryPatients||[]).find(p=>p.id===walkIn.patientPublicId)
 
   return <>
-    <PageHeader kicker="Front desk" title="Patient check-in" text="Confirm arrival and move the patient into the live queue. Arrivals are recorded by the clinic server; no repeated registration is needed for an existing patient."/>
+    <PageHeader kicker="Front desk" title="Patient check-in" text="Confirm arrival and move the patient into the live queue. Arrivals are recorded by the clinic server; no repeated registration is needed for an existing patient."
+      aside={<div className="row-actions">
+        <Button size="sm" variant={mode==='walkin'&&registering?'primary':'soft'} onClick={()=>{setMode('walkin');setRegistering(true)}}>Register new patient</Button>
+        <Button size="sm" variant="ghost" onClick={()=>flow?.refresh()}>Refresh</Button>
+      </div>}/>
     <PossibleNoShows toast={toast} onChanged={()=>flow?.refresh()}/>
     <div className="fd-grid"><CounterCode toast={toast}/><SelfRegistered toast={toast} store={store} onChanged={()=>flow?.refresh()}/></div>
     <FrontDeskToday toast={toast} onChanged={()=>flow?.refresh()}/>
@@ -122,6 +128,14 @@ export function CheckInPage({ store }) {
         <Field label="Branch"><select value={walkIn.branchId} onChange={e=>updateWalkin('branchId',e.target.value)}>{branches.map(b=><option key={b.id} value={b.id}>{b.name}</option>)}</select></Field>
         <Field label="Requested service" required><select value={walkIn.serviceId} onChange={e=>updateWalkin('serviceId',e.target.value)}><option value="">Select service</option>{walkServices.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></Field>
         <Field label="Dentist" required hint="The live queue is organized by Dentist, so choose one now."><select value={walkIn.dentistId} onChange={e=>updateWalkin('dentistId',e.target.value)}><option value="">Select dentist</option>{walkDentists.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}</select></Field>
+        {walkIn.dentistId&&(()=>{
+          const dentistQueue=state.queue.filter(q=>q.dentistId===walkIn.dentistId&&isActiveQueue(q)&&isTodayQueue(q))
+          const upcomingAppt=state.appointments.find(a=>a.dentistId===walkIn.dentistId&&a.date===today&&['Confirmed','Pending'].includes(a.status))
+          return <div className="span-2"><Notice tone={upcomingAppt?'warning':'info'}>
+            <b>Dr. {walkDentists.find(d=>d.id===walkIn.dentistId)?.name||'Dentist'} queue load:</b> {dentistQueue.length} patient{dentistQueue.length===1?'':'s'} currently waiting/in chair.
+            {upcomingAppt?` Upcoming scheduled appointment: ${displayTime(upcomingAppt.start)} (${upcomingAppt.service}). Walk-ins are queued behind scheduled arrivals and must not displace confirmed appointments.`:' No conflicting scheduled appointments today.'}
+          </Notice></div>
+        })()}
         <div className="span-2 walkin-action"><Notice tone="info">The clinic server checks branch hours, the service and the Dentist’s shift. A walk-in does not reserve Dentist appointment time.</Notice><Button disabled={!canWalkIn} onClick={checkWalkin} icon="checkin">{walking?'Admitting…':'Admit walk-in to queue'}</Button></div>
       </div></Card>}
     </div>
@@ -164,13 +178,9 @@ export function QueuePage({ role, activeBranch, store, setPage }) {
   const priority = entry => {
     setPriorityModalEntry(entry)
   }
-  const submitPriority = (entry, priorityLevel, reason) => {
+  const submitPriority = (entry, priorityLevel, reason, meta = {}) => {
     setPriorityModalEntry(null)
-    if (priorityLevel === 'Urgent') {
-      run(entry,'Queue priority updated.',key=>flow.queuePriority(entry,'Urgent',reason.trim(),key))
-    } else {
-      run(entry,'Queue priority updated.',key=>flow.queuePriority(entry,priorityLevel,reason.trim(),key))
-    }
+    run(entry,'Queue priority updated.',key=>flow.queuePriority(entry,priorityLevel||'Urgent',reason.trim(),key,meta))
   }
   const restore = entry => {
     setRestoreModalEntry(entry)
@@ -186,7 +196,11 @@ export function QueuePage({ role, activeBranch, store, setPage }) {
   if (role==='patient') return <PatientQueuePage store={store} setPage={setPage}/>
   return <>
     <PageHeader title={role==='dentist'?'My Patient Queue':'Patient Queue'} text="The clinic server keeps the queue: numbers, order and positions update for everyone. Priority, then on-time before late arrivals, then arrival order decide positions inside each Dentist’s queue." aside={<Button variant="ghost" onClick={()=>flow?.refresh()}>Refresh</Button>}/>
-    <Card title={role==='dentist'?'My queue filters':'Queue filters'} className="filter-card"><div className="filter-row"><label>Branch <select value={activeBranch} disabled><option>{activeBranch}</option></select></label>{role!=='dentist'&&<label>Dentist <select value={dentistFilter} onChange={e=>setDentistFilter(e.target.value)}><option>All Dentists</option>{state.dentists.filter(d=>role==='owner'||d.branchIds.includes(session.branchId)).map(d=><option key={d.id} value={d.id}>{d.name}</option>)}</select></label>}<label>Status <select value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}><option>Active</option><option>All</option><option>Waiting</option><option>Called</option><option>Treatment Ready</option><option>Temporarily Away</option><option value="Served">Served (treatment started)</option></select></label></div></Card>
+    <FilterBar ariaLabel={role==='dentist'?'My queue filters':'Queue filters'} onClear={(dentistFilter!=='All Dentists'||statusFilter!=='Active')?()=>{setDentistFilter('All Dentists');setStatusFilter('Active')}:null}>
+      <label>Branch <select value={activeBranch} disabled><option>{activeBranch}</option></select></label>
+      {role!=='dentist'&&<label>Dentist <select value={dentistFilter} onChange={e=>setDentistFilter(e.target.value)}><option>All Dentists</option>{state.dentists.filter(d=>role==='owner'||d.branchIds.includes(session.branchId)).map(d=><option key={d.id} value={d.id}>{d.name}</option>)}</select></label>}
+      <label>Status <select value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}><option>Active</option><option>All</option><option>Waiting</option><option>Called</option><option>Treatment Ready</option><option>Temporarily Away</option><option value="Served">Served (treatment started)</option></select></label>
+    </FilterBar>
     <AppointmentsLoadNotice store={store}/>
     {!demo&&<QueueStatusCounts store={store} activeBranch={role==='owner'?activeBranch:'All Branches'} vis={vis}/>}
     {operational&&!demo&&<SelfRegistered toast={toast} store={store} compact/>}
@@ -215,7 +229,7 @@ export function QueuePage({ role, activeBranch, store, setPage }) {
             {q.status==='Called'&&<Button size="sm" variant="soft" disabled={!!busy} onClick={()=>update(q,'ready','Marked ready for treatment.')}>Ready for treatment</Button>}
             {['Waiting','Called','Treatment Ready'].includes(q.status)&&<Button size="sm" variant="ghost" disabled={!!busy} onClick={()=>update(q,'away','Marked temporarily away.')}>Temporarily Away</Button>}
             {q.status==='Temporarily Away'&&<Button size="sm" variant="soft" disabled={!!busy} onClick={()=>update(q,'return','Returned to the queue.')}>Return to Queue</Button>}
-            {active(q)&&q.priority!=='Urgent'&&<Button size="sm" variant="ghost" disabled={!!busy} onClick={()=>priority(q)}>Urgent queue priority</Button>}
+            {['Waiting','Temporarily Away'].includes(q.status)&&q.priority!=='Urgent'&&<Button size="sm" variant="ghost" disabled={!!busy} onClick={()=>priority(q)}>Urgent queue priority</Button>}
             {active(q)&&q.lateArrival&&<Button size="sm" variant="ghost" disabled={!!busy} onClick={()=>restore(q)}>Restore normal place</Button>}
           </>}
         </div>}
@@ -229,6 +243,7 @@ export function QueuePage({ role, activeBranch, store, setPage }) {
 
 export function PriorityModal({ entry, onClose, onConfirm }) {
   const [category, setCategory] = useState('Senior Citizen')
+  const [verified, setVerified] = useState(true)
   const [reason, setReason] = useState('Senior citizen priority')
   if (!entry) return null
   const isUrgent = category === 'Urgent'
@@ -237,14 +252,19 @@ export function PriorityModal({ entry, onClose, onConfirm }) {
   const handleSubmit = e => {
     e.preventDefault()
     if (!reason.trim()) return
-    onConfirm(entry, priorityLevel, reason.trim())
+    const verificationStatus = verified ? 'verified' : 'pending'
+    const verificationTag = verified ? 'ID/eligibility verified' : 'Pending verification'
+    const fullReason = reason.trim().includes(verificationTag)
+      ? reason.trim()
+      : `${reason.trim()} [${category} · ${verificationTag}]`
+    onConfirm(entry, priorityLevel, fullReason, { category, verificationStatus })
   }
 
   return (
-    <Modal open title="Assign Queue Priority" subtitle="Prioritize queue position for special needs or medical urgency" onClose={onClose}>
+    <Modal open title="Assign Queue Priority" subtitle="Prioritize waiting queue position for eligible patients or urgent accommodation" onClose={onClose}>
       <form onSubmit={handleSubmit}>
         <Notice tone="info">
-          Operational priority reorders the queue for seniors, PWD, or urgent medical needs. This is an operational accommodation, not a clinical assessment.
+          Operational priority reorders waiting entries (Urgent → Senior/PWD Priority → Normal, then arrival time). Patients already Called or Treatment Ready are never displaced. Do not record ID numbers or sensitive medical details here.
         </Notice>
         <div style={{ marginTop: '14px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
           <Field label="Priority Category" required>
@@ -260,11 +280,15 @@ export function PriorityModal({ entry, onClose, onConfirm }) {
               <option value="Urgent">Urgent / Medical Priority (Urgent)</option>
             </select>
           </Field>
+          <label className="au-check">
+            <input type="checkbox" checked={verified} onChange={e => setVerified(e.target.checked)} />
+            <span>Eligibility / valid ID verified in person (stores category and verification status only; never ID numbers)</span>
+          </label>
           <Field label="Operational Reason" required hint="Required for operational and audit records.">
             <input
               type="text"
               required
-              placeholder="e.g. Elderly patient, wheelchair assistance, acute pain"
+              placeholder="e.g. Senior citizen accommodation, PWD mobility assistance, acute pain"
               value={reason}
               onChange={e => setReason(e.target.value)}
               autoFocus

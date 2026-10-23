@@ -160,7 +160,7 @@ test('the Patient view shows only their own server queue state, with no wait est
 test('queue screens use server commands, the non-diagnostic priority label, and a visible-only 30-second refresh', () => {
   const page = read('src/pages/PatientFlow.jsx')
   assert.match(page, /flow\.queueCommand\(entry,name,key\)/)
-  assert.match(page, /flow\.queuePriority\(entry,'Urgent',reason\.trim\(\),key\)/)
+  assert.match(page, /flow\.queuePriority\(entry,(?:priorityLevel\|\|)?'Urgent',reason\.trim\(\),key(?:,meta)?\)/)
   assert.match(page, /Urgent queue priority/)
   assert.doesNotMatch(page, /Emergency priority|actions\.updateQueue|Add to queue|retryAdmit/)
   assert.match(page, /useVisibleRefresh\(flow\?\.refresh,\{active:role!=='patient'\}\)/)
@@ -170,4 +170,12 @@ test('queue screens use server commands, the non-diagnostic priority label, and 
   assert.match(hook, /document\.visibilityState !== 'hidden'/)
   assert.match(hook, /clearInterval\(timer\)/)
   assert.doesNotMatch(hook, /WebSocket|EventSource/)
+})
+
+test('PriorityModal exposes canonical categories only (Senior Citizen, PWD, Urgent) and never offers Other', () => {
+  const page = read('src/pages/PatientFlow.jsx')
+  assert.match(page, /<option value="Senior Citizen">Senior Citizen/)
+  assert.match(page, /<option value="PWD">Person with Disability - PWD/)
+  assert.match(page, /<option value="Urgent">Urgent \/ Medical Priority/)
+  assert.doesNotMatch(page, /<option value="Other">/)
 })

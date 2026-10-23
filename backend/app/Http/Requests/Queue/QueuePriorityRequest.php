@@ -25,6 +25,8 @@ class QueuePriorityRequest extends FormRequest
             'expected_revision' => ['required', 'integer', 'min:1'],
             'priority' => ['required', Rule::in(QueueEntry::PRIORITIES)],
             'reason' => ['required', 'string', 'min:1', 'max:500'],
+            'category' => ['nullable', 'string', Rule::in(['Senior Citizen', 'PWD', 'Urgent'])],
+            'verification_status' => ['nullable', 'required_with:category', 'string', Rule::in(['verified', 'pending'])],
             'status' => ['prohibited'],
             'position' => ['prohibited'],
         ];

@@ -123,3 +123,52 @@ test('patient portal sidebar segregation: navigation is grouped with section hea
   assert.match(css, /\.pp-nav-groups/)
   assert.match(css, /\.pp-nav-group-title/)
 })
+
+test('Section 2.4: BillingPage resend receipt button calls resendBillingReceipt and handles transport_accepted, logged_only, suppressed, and error outcomes without falsely claiming sent', () => {
+  const billing = read('src/patient/pages/Billing.jsx')
+  assert.match(billing, /resendBillingReceipt\(id\)/)
+  assert.match(billing, /Resend receipt/)
+  assert.match(billing, /status === 'transport_accepted'/)
+  assert.match(billing, /status === 'logged_only'\s*\?\s*'Receipt email was logged locally \(not sent to an external inbox in this environment\)\.'/)
+  assert.match(billing, /status === 'suppressed'\s*\?\s*'Receipt email was suppressed because this account uses a test email address\.'/)
+  assert.match(billing, /The receipt email could not be sent\./)
+})
+
+test('Section 2.4: BillingPage displays Receipt number, Payment reference, Payment status, and booking deposit adjustments', () => {
+  const billing = read('src/patient/pages/Billing.jsx')
+  assert.match(billing, /\['Receipt number', inv\.receipt\.number\]/)
+  assert.match(billing, /\['Payment reference', inv\.receipt\.reference\]/)
+  assert.match(billing, /\['Payment status'/)
+  assert.match(billing, /Less: booking deposit applied/)
+})
+
+test('Section 2.1: PrescriptionsPage and TeethPage use shared PageHead and ErrorState retry button', () => {
+  const prescriptions = read('src/patient/pages/Prescriptions.jsx')
+  assert.match(prescriptions, /<PageHead/)
+  assert.match(prescriptions, /<ErrorState text=\{error\} onRetry=\{\(\) => setAttempt\(a => a \+ 1\)\}\/>/)
+  const teeth = read('src/patient/pages/Teeth.jsx')
+  assert.match(teeth, /<PageHead/)
+  assert.match(teeth, /<ErrorState text=\{error\} onRetry=\{\(\) => setAttempt\(a => a \+ 1\)\}\/>/)
+})
+
+test('Section 2.1: ProfilePage Open Family link navigates to FamilyPage where dependents are managed via myDependents/addDependent/inviteToClaim', () => {
+  const account = read('src/patient/pages/Account.jsx')
+  assert.match(account, /onNavigate\('family'\)/)
+  assert.match(account, /Open Family/)
+  const portal = read('src/patient/Portal.jsx')
+  assert.match(portal, /case 'family': content = <FamilyPage\/>; break/)
+  assert.equal(ui.portalPageFromHash('#p/family'), 'family')
+  const family = read('src/patient/pages/Family.jsx')
+  assert.match(family, /myDependents\(\)/)
+  assert.match(family, /addDependent\(form\)/)
+  assert.match(family, /inviteToClaim\(d\.id, inviteEmail\)/)
+})
+
+test('Section 2.1: no internal module codes (M1-M26) or internal storage/enum tokens appear in patient-visible portal source', () => {
+  const checkFiles = [...portalFiles, 'src/pages/PatientMe.jsx', 'src/pages/ServerMessages.jsx']
+  for (const file of checkFiles) {
+    const noComments = read(file).replace(/\/\*[\s\S]*?\*\/|\/\/.*/g, '')
+    assert.doesNotMatch(noComments, /\bM(?:[1-9]|1\d|2[0-6])\b/, `${file} must not expose M1-M26 module codes`)
+    assert.doesNotMatch(noComments, /\b(?:legacy_ref|no_text_layer|unavailable_ocr_not_configured|not_performed)\b/, `${file} must not expose raw internal tokens`)
+  }
+})

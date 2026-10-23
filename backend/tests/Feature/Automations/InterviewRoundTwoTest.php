@@ -365,7 +365,7 @@ class InterviewRoundTwoTest extends TestCase
         $this->actingAsUser('patientA');
         $this->book(['service_ref' => 'svc3'])->assertStatus(422)->assertJsonPath('code', 'service_not_bookable_online');
         $this->actingAsUser('staffB1');
-        $this->staffBook(['service_ref' => 'svc3'])->assertCreated(); // the front desk still books it
+        $this->staffBook(['service_ref' => 'svc3', 'consultation_acknowledged' => true])->assertCreated(); // the front desk still books it (staff-direct path; acknowledgement required since Batch 4B)
 
         $this->actingAsUser('owner');
         $this->patchJson('/api/services/svc3/online-booking', ['online_booking' => 'hidden'])->assertOk();

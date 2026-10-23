@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { ROLE_INFO } from '../data.js'
-import { Button, Card, Field, Modal, Notice, PageHeader, Status, Table, Tabs } from '../components.jsx'
+import { Button, Card, ConfirmDialog, Field, Modal, Notice, PageHeader, Status, Table, Tabs } from '../components.jsx'
 import { dateLabel, dentistName, displayTime, patientName } from '../logic.js'
 import { AppointmentForm } from './Scheduling.jsx'
 import { IdCheck } from './CounterIntake.jsx'
@@ -259,6 +259,7 @@ function PatientDocumentsTab({ patient, role, store }) {
   const [retractTarget, setRetractTarget] = useState(null)
   const [retractReason, setRetractReason] = useState('')
   const [consentOpen, setConsentOpen] = useState(false)
+  const [withdrawTarget, setWithdrawTarget] = useState(null)
   const [consentForm, setConsentForm] = useState({ consent_type: 'general_treatment', version: '1.0', notes: '' })
   const [fileToUpload, setFileToUpload] = useState(null)
   const [uploadCategory, setUploadCategory] = useState('clinical_attachment')
@@ -415,7 +416,7 @@ function PatientDocumentsTab({ patient, role, store }) {
                 { key: 'signedAt', label: 'Signed Date', render: c => dateLabel(c.signedAt) },
                 { key: 'actions', label: 'Actions', render: c => (
                   c.status === 'Granted' && isStaff ? (
-                    <Button size="sm" variant="ghost" onClick={() => handleWithdrawConsent(c.id)}>Withdraw</Button>
+                    <Button size="sm" variant="ghost" onClick={() => setWithdrawTarget(c)}>Withdraw</Button>
                   ) : null
                 )},
               ]}
@@ -576,6 +577,20 @@ function PatientDocumentsTab({ patient, role, store }) {
         </div>
       </form>
     </Modal>
+    <ConfirmDialog
+      open={!!withdrawTarget}
+      title="Withdraw patient consent?"
+      confirmLabel="Withdraw Consent"
+      tone="danger"
+      onConfirm={async () => {
+        const id = withdrawTarget.id
+        setWithdrawTarget(null)
+        await handleWithdrawConsent(id)
+      }}
+      onCancel={() => setWithdrawTarget(null)}
+    >
+      <p>Are you sure you want to withdraw <b>{withdrawTarget?.consentType?.replace(/_/g, ' ')}</b> consent for this patient? This action will mark the consent record as Withdrawn.</p>
+    </ConfirmDialog>
   </>
 }
 
@@ -606,6 +621,7 @@ export function TreatmentPage({ store, context, setPage }) {
   const [base,setBase]=useState(treatment)
   const [form,setForm]=useState(()=>treatmentForm(treatment,dentist))
   const [saving,setSaving]=useState(false)
+  const [confirmCompleteOpen,setConfirmCompleteOpen]=useState(false)
   const dirty=formKey(form)!==formKey(treatmentForm(base,dentist))
   // Adopt the latest server record when nothing is unsaved; otherwise keep the Dentist's text and flag the newer version.
   React.useEffect(()=>{
@@ -665,11 +681,24 @@ export function TreatmentPage({ store, context, setPage }) {
         {!readOnly&&<div className="form-actions">
           {!treatment?<Button disabled={saving||!canStart} onClick={start}>Start Treatment</Button>:<>
             <Button variant="ghost" disabled={saving||!dirty} onClick={save}>Save Treatment Progress</Button>
-            <Button disabled={saving} onClick={complete}>Complete Treatment</Button></>}
+            <Button disabled={saving} onClick={()=>setConfirmCompleteOpen(true)}>Complete Treatment</Button></>}
         </div>}
         {!treatment&&queueEntry&&!canStart&&<Notice>Treatment can start once this patient is Called or Ready for treatment.</Notice>}
         {dirty&&!readOnly&&treatment&&<small className="block-muted">Unsaved changes — they are kept only on this screen until you save.</small>}
       </div></fieldset></Card>
     </div>}
+    <ConfirmDialog
+      open={confirmCompleteOpen}
+      title="Complete and finalize this treatment?"
+      confirmLabel="Complete Treatment"
+      tone="primary"
+      onConfirm={() => {
+        setConfirmCompleteOpen(false)
+        complete()
+      }}
+      onCancel={() => setConfirmCompleteOpen(false)}
+    >
+      <p>Are you sure you want to complete this treatment? Once completed, this clinical record is closed and read-only. Downstream billing and follow-up tasks will be prepared.</p>
+    </ConfirmDialog>
   </>
 }

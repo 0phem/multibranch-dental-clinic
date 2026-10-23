@@ -125,7 +125,7 @@ class DocumentManagementTest extends TestCase
     public function test_client_cannot_assign_server_controlled_fields_or_unknown_metadata(): void
     {
         $this->actingAsUser('staffB1');
-        foreach (['file_path', 'storage_key', 'checksum_sha256', 'mime_type', 'file_size_bytes', 'status', 'uploaded_by_user_id', 'created_by', 'verified_by', 'retracted_at', 'public_id', 'id', 'extraction', 'consent_status', 'created_at'] as $field) {
+        foreach (['file_path', 'storage_key', 'checksum_sha256', 'mime_type', 'file_size_bytes', 'status', 'uploaded_by_user_id', 'uploaded_by', 'created_by', 'verified_by', 'retracted_at', 'public_id', 'id', 'extraction', 'consent_status', 'created_at'] as $field) {
             $this->upload(['patient_id' => $this->p['A']->public_id, 'branch_id' => 'b1', $field => 'x'])->assertStatus(422)->assertJsonValidationErrors($field);
         }
         $this->upload(['patient_id' => $this->p['A']->public_id, 'branch_id' => 'b1', 'metadata' => ['storage_path' => '/etc/passwd']])->assertStatus(422);

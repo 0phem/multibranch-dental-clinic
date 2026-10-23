@@ -17,7 +17,7 @@ const ServerMessagesPage = lazy(() => import('../pages/ServerMessages.jsx').then
 const ArchivesPage = lazy(() => import('./pages/Archives.jsx').then(m => ({ default: m.ArchivesPage })))
 const PrescriptionsPage = lazy(() => import('./pages/Prescriptions.jsx').then(m => ({ default: m.PrescriptionsPage })))
 const TeethPage = lazy(() => import('./pages/Teeth.jsx').then(m => ({ default: m.TeethPage })))
-// Family replaced by Archives
+const FamilyPage = lazy(() => import('./pages/Family.jsx').then(m => ({ default: m.FamilyPage })))
 const PatientMePage = lazy(() => import('../pages/PatientMe.jsx').then(m => ({ default: m.PatientMePage })))
 
 // Only screens backed by real clinic-server data (decision 5): no HMO, prescriptions, loyalty or follow-up placeholders.
@@ -49,13 +49,12 @@ export const NAV_SECTIONS = [
   },
 ]
 const PHONE_NAV = [['home', 'home', 'Home'], ['book', 'plusCalendar', 'Book'], ['visits', 'calendar', 'Visits'], ['messages', 'message', 'Messages'], ['more', 'menu', 'More']]
-const TITLES = { home: 'Home', book: 'Book a visit', visits: 'My visits', messages: 'Messages', billing: 'Billing', prescriptions: 'Prescriptions', teeth: 'My teeth', archives: 'Archives', documents: 'Documents', profile: 'Profile', security: 'Account security' }
+const TITLES = { home: 'Home', book: 'Book a visit', visits: 'My visits', messages: 'Messages', billing: 'Billing', prescriptions: 'Prescriptions', teeth: 'My teeth', archives: 'Archives', documents: 'Documents', profile: 'Profile', family: 'Family', security: 'Account security' }
 export const PORTAL_PAGES = Object.keys(TITLES)
 
 /** The portal page named in the address (#p/visits), so a reload stays on the same page. */
 export function portalPageFromHash(hash = typeof window !== 'undefined' ? window.location.hash : '') {
   const m = /^#p\/([a-z]+)$/.exec(hash || '')
-  if (m && (m[1] === 'family' || m[1] === 'archives')) return 'archives'
   return m && PORTAL_PAGES.includes(m[1]) ? m[1] : null
 }
 
@@ -89,7 +88,7 @@ export function PatientPortal({ me, store, initialPage = 'home', initialContext 
     case 'archives': content = <ArchivesPage toast={toast}/>; break
     case 'documents': content = <div className="pp-page pp-legacy role-patient"><PatientMePage store={store} setPage={() => {}} documentsOnly/></div>; break
     case 'profile': content = <ProfilePage me={me} onNavigate={navigate}/>; break
-    case 'family': content = <ArchivesPage toast={toast}/>; break
+    case 'family': content = <FamilyPage/>; break
     case 'prescriptions': content = <PrescriptionsPage toast={toast}/>; break
     case 'teeth': content = <TeethPage/>; break
     case 'security': content = <SecurityPage me={me} onSignedOut={onSignedOut}/>; break

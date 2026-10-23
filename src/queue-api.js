@@ -82,7 +82,10 @@ export async function restoreQueueOrder(entry, reason, key) {
   return commandResult(await api.queueCommand(entry.id, 'late-order', { expected_revision: entry.revision, reason }, key))
 }
 
-/** Operational priority (Normal / Priority / Urgent) with a required reason — not clinical triage. */
-export async function setQueuePriority(entry, priority, reason, key) {
-  return commandResult(await api.queueCommand(entry.id, 'priority', { expected_revision: entry.revision, priority, reason }, key))
+/** Operational priority (Normal / Priority / Urgent) with a required reason and optional category/verification_status — not clinical triage. */
+export async function setQueuePriority(entry, priority, reason, key, meta = {}) {
+  const payload = { expected_revision: entry.revision, priority, reason }
+  if (meta.category) payload.category = meta.category
+  if (meta.verificationStatus) payload.verification_status = meta.verificationStatus
+  return commandResult(await api.queueCommand(entry.id, 'priority', payload, key))
 }

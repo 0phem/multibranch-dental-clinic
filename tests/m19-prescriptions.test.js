@@ -22,6 +22,14 @@ test('M19: dentist form shows the allergy check, has no drug database or interac
   assert.match(page, /voidPrescription\(id, reason\.trim\(\)\)/)
 })
 
+test('M19 (4.4): medicine name autocomplete and Other free-text option exist with no dev-written dosing defaults', () => {
+  const page = read('src/pages/ServerPrescriptions.jsx')
+  assert.match(page, /<datalist id="rx-common">/)
+  assert.match(page, /<option value="__other__">Other \(free-text entry\)<\/option>/)
+  assert.doesNotMatch(page, /COMMON_PRESETS/)
+  assert.doesNotMatch(page, /Every 8 hours|Every 4 to 6 hours|Every 12 hours|Maximum 4000mg/i)
+})
+
 test('M19: the patient sees issued prescriptions read-only with a PDF, and a void one is marked', () => {
   const page = read('src/patient/pages/Prescriptions.jsx')
   assert.match(page, /myPrescriptions\(\)/); assert.match(page, /downloadPrescriptionPdf\(p\.id, p\.number\)/)

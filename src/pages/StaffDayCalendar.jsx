@@ -341,7 +341,6 @@ export function StaffDayCalendar({ store }) {
                 </p>
               </div>
               <div className="row-actions">
-                {canManage && <Button size="sm" onClick={() => setNewOpen(true)} icon="plusCalendar">New appointment</Button>}
                 <Button size="sm" variant="ghost" onClick={() => setSelectedDate(null)}>Close</Button>
               </div>
             </div>
@@ -429,7 +428,7 @@ export function StaffDayCalendar({ store }) {
     </div>
 
     <Modal open={newOpen} title="Create appointment" subtitle="The clinic server validates the slot and assigns an eligible Dentist unless you choose one." wide onClose={() => setNewOpen(false)}>
-      <AppointmentForm role={role} store={store} prefill={selectedDate ? { date: selectedDate } : null} onSaved={() => { setNewOpen(false); handleRefresh() }}/>
+      <AppointmentForm role={role} store={store} prefill={selectedDate ? { date: selectedDate, ...(activeBranch && activeBranch !== 'all' ? { branchId: activeBranch } : {}) } : null} onSaved={() => { setNewOpen(false); handleRefresh() }}/>
     </Modal>
 
     <Modal open={!!reschedule} title="Reschedule appointment" subtitle="The new time must pass the same conflict-prevention rules as a new booking." wide onClose={() => setReschedule(null)}>
@@ -453,6 +452,7 @@ export function StaffDayCalendar({ store }) {
         <div><dt>Service</dt><dd>{selected.serviceName || '—'}</dd></div>
         <div><dt>Dentist</dt><dd>{selected.dentistId ? selected.dentistName || '—' : 'Unassigned'}</dd></div>
         <div><dt>Branch</dt><dd>{selected.branchName || '—'}</dd></div>
+        <div><dt>Booking payment</dt><dd>{selected.bookingPaymentStatus === 'paid' ? `Deposit paid${selected.bookingPaymentMethod ? ` (${selected.bookingPaymentMethod})` : ''}` : selected.bookingPaymentStatus === 'held' ? 'Pre-authorized (held)' : selected.bookingPaymentStatus === 'refunded' ? 'Refunded' : selected.bookingPaymentStatus === 'forfeited' ? 'Forfeited' : 'Unpaid'}</dd></div>
         <div><dt>Booked via</dt><dd>{sourceLabel(selected.source)}</dd></div>
       </dl>}
     </Modal>

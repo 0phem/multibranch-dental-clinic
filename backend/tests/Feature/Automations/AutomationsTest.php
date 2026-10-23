@@ -429,4 +429,14 @@ class AutomationsTest extends TestCase
         $this->expectException(\Illuminate\Database\QueryException::class);
         DB::table('automation_deliveries')->update(['reason' => 'x']);
     }
+
+    public function test_automation_test_endpoint_is_rate_limited(): void
+    {
+        $this->actingAsUser('owner');
+        // Route has throttle:12,1 (allows 12 requests per minute, 13th is 429)
+        for ($i = 0; $i < 12; $i++) {
+            $this->postJson('/api/automations/appointment_reminders/test')->assertOk();
+        }
+        $this->postJson('/api/automations/appointment_reminders/test')->assertStatus(429);
+    }
 }

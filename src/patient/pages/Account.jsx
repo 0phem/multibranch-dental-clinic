@@ -28,8 +28,8 @@ export function ProfilePage({ me, onNavigate }) {
       <p className="pp-hint">To update these details, message the front desk or tell them at your next visit.</p>
     </section>}
     <HmoDetails/>
-    <section className="pp-card pp-fade" aria-labelledby="pp-family-link"><p className="pp-eyebrow" id="pp-family-link">Family</p>
-      <p className="pp-hint">Children or others in your care now have their own page.</p>
+    <section className="pp-card pp-fade" aria-labelledby="pp-family-link"><p className="pp-eyebrow" id="pp-family-link">Family & dependents</p>
+      <p className="pp-hint">Manage children or dependents in your care for booking and reminders.</p>
       <button type="button" className="link-button" onClick={() => onNavigate('family')}>Open Family</button></section>
     <section className="pp-card pp-fade">
       <p className="pp-eyebrow">Sign-in email</p>

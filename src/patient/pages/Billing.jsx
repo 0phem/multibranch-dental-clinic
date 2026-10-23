@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { Button, Icon } from '../../components.jsx'
-import { downloadBillingPdf, getBillingInvoice, myBillingInvoices } from '../../api-client.js'
+import { downloadBillingPdf, getBillingInvoice, myBillingInvoices, resendBillingReceipt } from '../../api-client.js'
 import { paymentMethodLabel } from '../../payment-method.js'
 import { useVisibleRefresh } from '../../use-visible-refresh.js'
 import { ReviewAndPay } from '../../pages/ReviewAndPay.jsx'
@@ -9,9 +9,10 @@ import { EmptyState, ErrorState, PageHead, Pill, Skeleton } from '../ui.jsx'
 
 const view = i => ({ id: i.id, invoiceNo: i.invoice_number, date: i.issued_at || i.created_at, branch: i.branch?.name || '', status: i.status, total: i.gross_amount,
   discountType: i.discount_type, discountIdNumber: i.discount_id_number, discountAmount: i.discount_amount,
-  hmoCoverage: i.hmo_coverage_amount, patientResponsibility: i.patient_responsibility_amount, balance: i.balance,
+  hmoCoverage: i.hmo_coverage_amount, patientResponsibility: i.patient_responsibility_amount, paidAmount: i.paid_amount, balance: i.balance,
+  settlementType: i.settlement_type || null,
   items: (i.lines || []).map(l => ({ key: l.id, name: l.service?.name || 'Service', quantity: l.quantity, unit: l.unit_price, amount: l.line_total })),
-  receipt: i.receipt ? { number: i.receipt.number, amount: i.receipt.amount, method: paymentMethodLabel(i.receipt.method), paidAt: i.receipt.issued_at } : null })
+  receipt: i.receipt ? { number: i.receipt.number, amount: i.receipt.amount, method: paymentMethodLabel(i.receipt.method), reference: i.receipt.external_reference || i.payment?.external_reference || null, paidAt: i.receipt.issued_at } : null })
 const stamp = iso => iso ? `${dateLong(String(iso).slice(0, 10))}` : ''
 
 /**
@@ -20,12 +21,30 @@ const stamp = iso => iso ? `${dateLong(String(iso).slice(0, 10))}` : ''
  */
 export function BillingPage({ context, toast }) {
   const [rows, setRows] = useState(null), [error, setError] = useState(''), [cursor, setCursor] = useState(null), [more, setMore] = useState(false)
-  const [reviewId, setReviewId] = useState(null), [openId, setOpenId] = useState(null), [attempt, setAttempt] = useState(0), [downloading, setDownloading] = useState('')
+  const [reviewId, setReviewId] = useState(null), [openId, setOpenId] = useState(null), [attempt, setAttempt] = useState(0), [downloading, setDownloading] = useState(''), [resending, setResending] = useState('')
   const download = async (id, kind) => {
     setDownloading(`${id}:${kind}`)
     const r = await downloadBillingPdf(id, kind)
     setDownloading('')
     if (!r.ok) toast?.(r.message || 'The PDF could not be downloaded.', 'warning')
+  }
+  const resend = async id => {
+    setResending(id)
+    const r = await resendBillingReceipt(id)
+    setResending('')
+    if (!r.ok) {
+      toast?.(r.message || 'The receipt email could not be sent.', 'warning')
+      return
+    }
+    const status = r.data?.status
+    const msg = status === 'transport_accepted'
+      ? (r.data?.message || 'Receipt email accepted by mail server.')
+      : status === 'logged_only'
+        ? 'Receipt email was logged locally (not sent to an external inbox in this environment).'
+        : status === 'suppressed'
+          ? 'Receipt email was suppressed because this account uses a test email address.'
+          : (r.data?.message || 'Receipt dispatch recorded (not sent externally).')
+    toast?.(msg, status === 'transport_accepted' ? 'success' : 'info')
   }
   const linkId = typeof context?.invoiceId === 'string' ? context.invoiceId.toLowerCase() : null, linkPayment = context?.payment || null
   const [linkState, setLinkState] = useState(linkId && linkPayment ? 'checking' : null)
@@ -89,16 +108,29 @@ export function BillingPage({ context, toast }) {
         <ul className="pp-lines" aria-label="Charges">{inv.items.map(l => <li key={l.key}><span>{l.name}<small>{l.quantity} × {money(l.unit)}</small></span><span>{money(l.amount)}</span></li>)}</ul>
         {Number(inv.discountAmount) > 0 && <p className="pp-row"><span>Less: 20% {inv.discountType || 'Statutory'} discount{inv.discountIdNumber ? ` (${inv.discountIdNumber})` : ''}</span><span>−{money(inv.discountAmount)}</span></p>}
         {Number(inv.hmoCoverage) > 0 && <p className="pp-row"><span>Less: coverage</span><span>−{money(inv.hmoCoverage)}</span></p>}
+        {inv.status === 'Issued' && Number(inv.paidAmount) > 0 && <p className="pp-row"><span>Less: booking deposit applied</span><span>−{money(inv.paidAmount)}</span></p>}
         <p className="pp-row pp-total"><span>{inv.status === 'Paid' ? 'Paid' : 'To pay'}</span><b>{money(inv.status === 'Paid' ? inv.patientResponsibility ?? inv.total : inv.balance)}</b></p>
         <div className="pp-actions">
           {inv.status === 'Issued' && Number(inv.balance) > 0 && <Button onClick={() => setReviewId(inv.id)}>Review and pay</Button>}
           <Button size="sm" variant="ghost" icon="download" disabled={downloading === `${inv.id}:invoice`} onClick={() => download(inv.id, 'invoice')}>{downloading === `${inv.id}:invoice` ? 'Preparing…' : 'Invoice PDF'}</Button>
           {inv.receipt && <Button size="sm" variant="ghost" icon="download" disabled={downloading === `${inv.id}:receipt`} onClick={() => download(inv.id, 'receipt')}>{downloading === `${inv.id}:receipt` ? 'Preparing…' : 'Receipt PDF'}</Button>}
+          {inv.receipt && <Button size="sm" variant="ghost" icon="mail" disabled={resending === inv.id} onClick={() => resend(inv.id)}>{resending === inv.id ? 'Sending…' : 'Resend receipt'}</Button>}
           {inv.receipt && <Button size="sm" variant="soft" aria-expanded={openId === inv.id} aria-controls={`rct-${inv.id}`} onClick={() => setOpenId(openId === inv.id ? null : inv.id)}>{openId === inv.id ? 'Hide receipt' : 'View receipt'}</Button>}
         </div>
         {inv.receipt && openId === inv.id && <dl className="pp-summary pp-receipt" id={`rct-${inv.id}`}>
-          {[['Receipt', inv.receipt.number], ['Amount paid', money(inv.receipt.amount)], ['Method', inv.receipt.method], ['Paid on', stamp(inv.receipt.paidAt)], ...(Number(inv.discountAmount) > 0 ? [['Discount', `20% ${inv.discountType} (${inv.discountIdNumber})`]] : [])].map(([k, v]) => <div key={k}><dt>{k}</dt><dd>{v}</dd></div>)}
-          <p className="pp-hint">The receipt PDF was also sent to your email.</p>
+          {[
+            ['Receipt number', inv.receipt.number],
+            ...(inv.receipt.reference ? [['Payment reference', inv.receipt.reference]] : []),
+            ...(inv.branch ? [['Branch', inv.branch]] : []),
+            ['Payment status', inv.status === 'Paid' ? 'Paid in full' : inv.status],
+            ['Amount paid', money(inv.receipt.amount)],
+            ['Method', inv.receipt.method],
+            ['Paid on', stamp(inv.receipt.paidAt)],
+            ...(Number(inv.discountAmount) > 0 ? [['Discount', `20% ${inv.discountType || 'Statutory'}${inv.discountIdNumber ? ` (${inv.discountIdNumber})` : ''} (−${money(inv.discountAmount)})`]] : []),
+            ...(Number(inv.hmoCoverage) > 0 ? [['HMO coverage', `−${money(inv.hmoCoverage)}`]] : []),
+            ...(inv.settlementType === 'booking_deposit' || inv.settlementType === 'partial_booking_deposit' ? [['Adjustment', 'Booking deposit applied']] : []),
+          ].map(([k, v]) => <div key={k}><dt>{k}</dt><dd>{v}</dd></div>)}
+          <p className="pp-hint">The receipt PDF was also sent to your email. You can download it or request a resend above.</p>
         </dl>}
       </li>)}
     </ul>

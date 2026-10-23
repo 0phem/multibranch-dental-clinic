@@ -336,4 +336,54 @@ class AppointmentBookingTest extends TestCase
             ->assertJsonPath('data.recommendation.branch.id', 'b2');
         $this->assertNotNull($near);
     }
+
+    public function test_consultation_first_service_requires_staff_acknowledgement_or_returns_422(): void
+    {
+        $this->svc['svc2']->forceFill(['online_booking' => 'consultation_first', 'consultation_service_id' => $this->svc['svc1']->id])->save();
+        $this->actingAsUser('staffB1');
+
+        $this->staffBook(['service_ref' => 'svc2', 'dentist_ref' => 'd1', 'start_time' => '14:00'])
+            ->assertStatus(422)
+            ->assertJsonPath('code', 'consultation_acknowledgement_required');
+    }
+
+    public function test_consultation_first_service_with_staff_acknowledgement_succeeds_and_creates_audit_log(): void
+    {
+        $this->svc['svc2']->forceFill(['online_booking' => 'consultation_first', 'consultation_service_id' => $this->svc['svc1']->id])->save();
+        $this->actingAsUser('staffB1');
+
+        $res = $this->staffBook(['service_ref' => 'svc2', 'dentist_ref' => 'd1', 'start_time' => '14:00', 'consultation_acknowledged' => true])
+            ->assertCreated();
+
+        $appointmentId = $res->json('data.id');
+        $this->assertDatabaseHas('audit_logs', [
+            'action' => 'appointment.consultation_authorized',
+            'actor_user_id' => $this->u['staffB1']->id,
+            'auditable_public_id' => $appointmentId,
+        ]);
+    }
+
+    public function test_patient_cannot_bypass_consultation_first_service_with_acknowledgement_flag(): void
+    {
+        $this->svc['svc2']->forceFill(['online_booking' => 'consultation_first', 'consultation_service_id' => $this->svc['svc1']->id])->save();
+        $this->actingAsUser('patientA');
+
+        $this->book(['service_ref' => 'svc2', 'consultation_acknowledged' => true])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('consultation_acknowledged');
+    }
+
+    public function test_patient_online_flow_for_consultation_first_service_is_unchanged_and_the_consultation_itself_books(): void
+    {
+        $this->svc['svc2']->forceFill(['online_booking' => 'consultation_first', 'consultation_service_id' => $this->svc['svc1']->id])->save();
+        $this->actingAsUser('patientA');
+
+        // The restricted service is still refused online with the original code (not the staff acknowledgement code).
+        $this->book(['service_ref' => 'svc2'])
+            ->assertStatus(422)
+            ->assertJsonPath('code', 'service_not_bookable_online');
+
+        // The consultation service books normally, with no acknowledgement involved.
+        $this->book(['service_ref' => 'svc1'])->assertCreated();
+    }
 }

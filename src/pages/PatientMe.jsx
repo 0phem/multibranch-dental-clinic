@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { Button, Empty, Field, Modal, Notice, PageHeader, Status } from '../components.jsx'
+import { PageHead } from '../patient/ui.jsx'
 import { dateLabel } from '../logic.js'
 import { patientContext } from '../patient-view.js'
 import { DefinitionList, RecordCard } from '../patient-ui.jsx'
@@ -110,7 +111,7 @@ export function PatientMePage({ store, setPage, documentsOnly = false }) {
   }
 
   return <div className="pt-page">
-    {documentsOnly ? <PageHeader kicker="Your account" title="Documents" text="Your clinic consents, and documents you have shared with the clinic."/>
+    {documentsOnly ? <PageHead eyebrow="Records & Billing" title="Documents" text="Your clinic consents and documents on file with the clinic."/>
       : <PageHeader kicker="Your account" title="Me" text="Your profile information, documents, and clinic consents."/>}
 
     {!documentsOnly && <section className="pt-record" aria-labelledby="pt-me-profile-title">
@@ -155,7 +156,7 @@ export function PatientMePage({ store, setPage, documentsOnly = false }) {
 
     <section className="pt-record" aria-labelledby="pt-me-docs-title" style={{ marginTop: '20px' }}>
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-        <div><h2 id="pt-me-docs-title" className="pt-record-title">My Documents</h2><p className="pt-record-sub">{documentsOnly ? "IDs and records kept in your private clinic record." : "IDs, insurance cards, and medical records kept in your private clinic record."} Files are type-checked but not scanned for malware.</p></div>
+        <div><h2 id="pt-me-docs-title" className="pt-record-title">My Documents</h2><p className="pt-record-sub">{documentsOnly ? 'Clinic-shared records and documents you have uploaded (such as valid IDs, referrals, X-rays, or consent forms).' : 'IDs, insurance cards, and medical records kept in your private clinic record.'}</p></div>
         <Button size="sm" onClick={() => setUploadOpen(true)}>Upload Document</Button>
       </header>
 
@@ -166,9 +167,10 @@ export function PatientMePage({ store, setPage, documentsOnly = false }) {
       ) : (
         <div className="pt-list" style={{ marginTop: '12px' }}>
           {docs.map(doc => (
-            <RecordCard key={doc.id} title={doc.title} subtitle={`${doc.originalFilename} • ${doc.fileSizeFormatted} • Uploaded ${dateLabel(doc.createdAt)}`} status={doc.status}>
+            <RecordCard key={doc.id} title={doc.title} subtitle={`${doc.originalFilename} • ${doc.fileSizeFormatted} • Uploaded ${dateLabel(doc.createdAt)}${doc.branch?.name ? ` • ${doc.branch.name}` : ''}`} status={doc.status}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', marginTop: '6px' }}>
                 <span className="split-badge info"><b>Type</b><span>{doc.category ? doc.category.replace(/_/g, ' ') : 'document'}</span></span>
+                <span className="split-badge"><b>Source</b><span>{doc.uploadedByPatient ? 'Uploaded by you' : 'Shared by clinic'}</span></span>
               </div>
               <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
                 {doc.status === 'Active' && <Button size="sm" variant="soft" onClick={() => handleDownload(doc)}>Download</Button>}

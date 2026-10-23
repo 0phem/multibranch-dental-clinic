@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { Button, Card, Field, Notice, PageHeader } from '../components.jsx'
+import { Button, Card, ConfirmDialog, Field, FilterBar, Notice, PageHeader } from '../components.jsx'
 import {
   addScheduleException, cancelLeave, copyProfileHours, decideLeave, leaveCalendar, leaveConflicts, leaveRequests, myLeave, notifyLeaveAffected,
   notifyScheduleAffected, removeScheduleException, requestLeave, saveWeeklyHours, scheduleAffected, workSchedules,
@@ -61,10 +61,20 @@ export function WorkSchedulesPage({ store, role }) {
   const after = r => { if (r.data?.affected) setAffected(r.data.affected); load() }
   const editable = dentist?.branches.some(b => b.editable)
   const canEdit = role !== 'dentist' && editable
+  const ownStaffProfile = role === 'staff'
+    ? (store?.state?.staff || []).find(s => s.userId === store?.session?.userId || s.id === store?.session?.staffId)
+    : null
 
   return <div className="st-page">
     <PageHeader kicker={role === 'dentist' ? 'My hours' : role === 'owner' ? 'Administration' : 'Team'} title="Work schedules"
       text="Each dentist’s weekly hours per branch, and dated exceptions. Online booking, the front desk, walk-ins and the calendar use only these hours, inside the branch’s opening hours and minus approved leave. A change never cancels an appointment."/>
+    {role === 'staff' && (
+      <Notice tone="info" title="My assigned staff shift (read-only)">
+        {ownStaffProfile
+          ? `Your assigned shift at ${ownStaffProfile.branch || 'your branch'} is ${t12(ownStaffProfile.shiftStart)}–${t12(ownStaffProfile.shiftEnd)} (${ownStaffProfile.staffType || ownStaffProfile.title || 'Staff'}). Staff cannot edit their own assigned work schedule; only the Clinic Owner or an authorized administrator can update staff shifts.`
+          : 'Staff cannot edit their own assigned work schedule; only the Clinic Owner or an authorized administrator can update staff shifts. To request time off, submit a request under Leave.'}
+      </Notice>
+    )}
     {error && <Notice tone="warning" title="Unavailable">{error}</Notice>}
     {!data ? <p className="au-muted" role="status">Loading…</p> : !data.dentists.length ? <Notice>No dentists to show for your branches.</Notice> : <>
       <Card>
@@ -249,17 +259,17 @@ function Approvals({ toast, role, branches, onChanged }) {
   useEffect(() => { load() }, [filters.status, filters.branch_ref])
   if (denied) return role === 'staff' ? <Notice tone="info" title="Leave approvals">The Owner approves leave requests. The Owner can let the front desk approve them too (Automations → Work schedules, leave and handovers).</Notice> : null
   return <Card title="Leave requests to decide" subtitle={meta.approver === 'owner_or_front_desk' ? 'Decided by the Owner or the front desk of the requester’s branch.' : 'Decided by the Owner.'}>
-    <div className="st-filters">
+    <FilterBar className="st-filters" ariaLabel="Filter leave requests" onClear={(filters.status !== 'Pending' || filters.branch_ref) ? () => setFilters({ status: 'Pending', branch_ref: '' }) : null}>
       <Field label="Status"><select value={filters.status} onChange={e => setFilters(x => ({ ...x, status: e.target.value }))}><option value="">All</option>{['Pending', 'Approved', 'Declined', 'Cancelled'].map(s => <option key={s}>{s}</option>)}</select></Field>
       <Field label="Branch"><select value={filters.branch_ref} onChange={e => setFilters(x => ({ ...x, branch_ref: e.target.value }))}><option value="">All branches</option>{branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</select></Field>
-    </div>
+    </FilterBar>
     {!rows ? <p className="au-muted" role="status">Loading…</p> : !rows.length ? <p className="au-muted">No requests here.</p> : <ul className="fd-list">{rows.map(l => <LeaveRow key={l.id} l={l} open={open === l.id} onToggle={() => setOpen(open === l.id ? null : l.id)} toast={toast} wordingApproved={meta.wording_approved}
       onChanged={decided => { if (decided && filters.status && decided !== filters.status) { setOpen(l.id); setFilters(x => ({ ...x, status: '' })) } else load() }}/>)}</ul>}
   </Card>
 }
 
 function LeaveRow({ l, open, onToggle, toast, onChanged, wordingApproved }) {
-  const [conflicts, setConflicts] = useState(null), [busy, setBusy] = useState('')
+  const [conflicts, setConflicts] = useState(null), [busy, setBusy] = useState(''), [confirmDecision, setConfirmDecision] = useState(null)
   const loadConflicts = () => l.requester.role === 'Dentist' && leaveConflicts(l.id).then(r => { if (r.ok) setConflicts(r.data.appointments) })
   useEffect(() => { if (open) loadConflicts() }, [open])
   const decide = async decision => {
@@ -271,16 +281,45 @@ function LeaveRow({ l, open, onToggle, toast, onChanged, wordingApproved }) {
     if (decision === 'approve' && r.data.appointments?.length) setConflicts(r.data.appointments)
     onChanged(r.data.status) // keeps the row (and its affected visits) on screen after the decision
   }
+  const doCancel = async () => {
+    setBusy('cancel')
+    const r = await cancelLeave(l.id)
+    setBusy('')
+    if (!r.ok) return toast(firstError(r), 'warning')
+    toast('Leave cancelled. The time is bookable again.', 'success')
+    onChanged()
+  }
   return <li className="st-leave">
     <div><b>{l.requester.name} ({l.requester.role}) · {l.label}</b>
       <span>{l.type_label} · <span className={`fd-badge ${STATUS_TONE[l.status]}`}>{l.status}</span>{l.decided_by ? ` · by ${l.decided_by}` : ''}</span>
       {l.private_note && <span>Private note: {l.private_note}</span>}</div>
     <div className="ns-actions">
-      {l.can_decide && <><Button size="sm" disabled={!!busy} onClick={() => decide('approve')}>{busy === 'approve' ? 'Accepting…' : 'Accept leave request'}</Button>
-        <Button size="sm" variant="ghost" disabled={!!busy} onClick={() => decide('decline')}>{busy === 'decline' ? 'Declining…' : 'Decline leave'}</Button></>}
+      {l.can_decide && <><Button size="sm" disabled={!!busy} onClick={() => setConfirmDecision('approve')}>{busy === 'approve' ? 'Accepting…' : 'Accept leave request'}</Button>
+        <Button size="sm" variant="ghost" disabled={!!busy} onClick={() => setConfirmDecision('decline')}>{busy === 'decline' ? 'Declining…' : 'Decline leave'}</Button></>}
       {l.requester.role === 'Dentist' && l.status !== 'Declined' && l.status !== 'Cancelled' && <Button size="sm" variant="soft" onClick={onToggle} aria-expanded={open}>{open ? 'Hide bookings' : 'Booked appointments'}</Button>}
-      {l.can_cancel && l.status === 'Approved' && <Button size="sm" variant="ghost" disabled={!!busy} onClick={async () => { setBusy('cancel'); const r = await cancelLeave(l.id); setBusy(''); if (!r.ok) return toast(firstError(r), 'warning'); toast('Leave cancelled. The time is bookable again.', 'success'); onChanged() }}>Cancel leave</Button>}
+      {l.can_cancel && l.status === 'Approved' && <Button size="sm" variant="ghost" disabled={!!busy} onClick={() => setConfirmDecision('cancel')}>Cancel leave</Button>}
     </div>
+    {confirmDecision && <ConfirmDialog
+      open
+      title={confirmDecision === 'approve' ? 'Accept leave request?' : confirmDecision === 'decline' ? 'Decline leave request?' : 'Cancel approved leave?'}
+      tone={confirmDecision === 'approve' ? 'default' : 'danger'}
+      confirmLabel={confirmDecision === 'approve' ? 'Accept leave request' : confirmDecision === 'decline' ? 'Decline leave' : 'Cancel leave'}
+      onConfirm={() => {
+        const d = confirmDecision
+        setConfirmDecision(null)
+        if (d === 'cancel') doCancel()
+        else decide(d)
+      }}
+      onCancel={() => setConfirmDecision(null)}
+    >
+      <p>
+        {confirmDecision === 'approve'
+          ? `Accepting this leave request for ${l.requester.name} (${l.label}) blocks new bookings during their away window. Existing appointments remain on the affected list so they can be reassigned or rescheduled.`
+          : confirmDecision === 'decline'
+            ? `Declining marks this leave request for ${l.requester.name} (${l.label}) as Declined and keeps their schedule open for booking.`
+            : `Cancelling this approved leave for ${l.requester.name} (${l.label}) reopens their blocked schedule time for booking.`}
+      </p>
+    </ConfirmDialog>}
     {open && <div className="st-conflicts">
       {l.status === 'Pending' && conflicts?.length > 0 && <p className="au-muted">Approving keeps these appointments; resolve them before or after approving.</p>}
       <AffectedAppointments rows={conflicts} wordingApproved={wordingApproved} toast={toast} canAct={l.status === 'Approved' || l.status === 'Pending'} onChanged={loadConflicts}

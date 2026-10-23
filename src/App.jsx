@@ -327,7 +327,7 @@ function AppBody() {
     case 'appointments': content=<AppointmentsPage role={role} store={store} setPage={setPage} context={context}/>; break
     case 'schedule': content=<SchedulePage store={store}/>; break
     case 'calendar': content=<StaffDayCalendar store={store}/>; break
-    case 'checkin': content=<CheckInPage store={store}/>; break
+    case 'checkin': content=<CheckInPage {...props}/>; break
     case 'queue': content=<QueuePage {...props}/>; break
     case 'capacity': content=<CapacityPage {...props}/>; break
     case 'patients': content=<PatientsPage {...props}/>; break
@@ -351,7 +351,7 @@ function AppBody() {
     case 'handovers': content=<HandoversPage store={store} role={role}/>; break
     case 'hmos': content=<AcceptedHmosPage store={store}/>; break
     case 'wording': content=<WordingApprovalsPage store={store}/>; break
-    case 'archives': content=<ArchivesPage store={store} activeBranch={branch}/>; break
+    case 'archives': content=<ArchivesPage store={store} role={role} activeBranch={branch}/>; break
     case 'branding': content=<ClinicBrandingPage/>; break
     case 'assistant': content=<AssistantAnswersPage store={store}/>; break
     case 'audit': content=<AuditTrailPage store={store}/>; break

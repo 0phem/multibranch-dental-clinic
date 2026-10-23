@@ -31,6 +31,23 @@ class StaffProfileController extends Controller
 
         $staffProfile->update($attributes);
 
+        // Section 3.5: when an administrator changes a staff member's assigned branch on their StaffProfile,
+        // synchronize the linked Staff user account's server-side authorization branch scopes (user_branch_scopes).
+        if ($request->has('branch_ref') && $staffProfile->person_id) {
+            $linkedUser = \App\Models\User::where('person_id', $staffProfile->person_id)
+                ->where('role', \App\Enums\Role::Staff)
+                ->first();
+            if ($linkedUser) {
+                $branchIds = $attributes['branch_id']
+                    ? [$attributes['branch_id']]
+                    : Branch::where('status', 'Open')->pluck('id')->all();
+                \App\Models\UserBranchScope::where('user_id', $linkedUser->id)->whereNotIn('branch_id', $branchIds ?: [0])->delete();
+                foreach ($branchIds as $branchId) {
+                    \App\Models\UserBranchScope::firstOrCreate(['user_id' => $linkedUser->id, 'branch_id' => $branchId]);
+                }
+            }
+        }
+
         return response()->json(['data' => new StaffProfileResource($staffProfile->fresh(['person', 'branch']))]);
     }
 }

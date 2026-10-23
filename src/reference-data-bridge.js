@@ -31,6 +31,8 @@ export function mapService(row) {
     id: row.id, code: row.code, name: row.name, duration: row.duration_minutes,
     // M13: the server Service carries no fee. `reference_fee_php` is never read; prices come only from M13 versions.
     category: row.category, status: row.status,
+    ...(row.online_booking !== undefined ? { onlineBooking: row.online_booking } : {}),
+    ...(row.consultation_service_id !== undefined ? { consultationServiceId: row.consultation_service_id } : {}),
   }
 }
 

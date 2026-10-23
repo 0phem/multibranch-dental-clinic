@@ -108,4 +108,11 @@ test('PatientMePage includes patient documents and consents views', () => {
   assert.match(patientMe, /fetchMyConsents/)
   assert.match(patientMe, /downloadDocumentFile/)
   assert.match(patientMe, /retractDocument/)
+  assert.match(patientMe, /<PageHead/)
+})
+
+test('Section 2.5: PatientMePage renders Uploaded by you vs Shared by clinic source badge from server-derived uploadedByPatient', () => {
+  assert.match(patientMe, /doc\.uploadedByPatient \? 'Uploaded by you' : 'Shared by clinic'/)
+  assert.equal(mapDocument({ id: 'd1', original_filename: 'a.pdf', file_size_bytes: 1024, uploaded_by: { role: 'patient' } }).uploadedByPatient, true)
+  assert.equal(mapDocument({ id: 'd2', original_filename: 'b.pdf', file_size_bytes: 1024, uploaded_by: { role: 'staff' } }).uploadedByPatient, false)
 })

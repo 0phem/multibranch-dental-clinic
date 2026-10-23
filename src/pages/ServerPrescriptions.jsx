@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { Button, Card, Field, Modal, Notice, PageHeader } from '../components.jsx'
+import { Button, Card, ConfirmDialog, Field, FilterBar, Modal, Notice, PageHeader } from '../components.jsx'
 import { createPrescription, downloadPrescriptionPdf, issuePrescription, listPrescriptions, prescription, prescriptionVisits, savePrescriptionLicense, updatePrescription, voidPrescription } from '../api-client.js'
 
 const firstError = r => (r.kind === 'validation' ? Object.values(r.errors || {})[0]?.[0] || r.message : r.message) || 'That did not work.'
@@ -7,16 +7,17 @@ const day = d => d ? new Date(`${d}T00:00:00Z`).toLocaleDateString('en-PH', { mo
 const EMPTY_LINE = { medicine: '', dosage: '', frequency: '', duration: '', instructions: '' }
 const TONE = { Draft: 'is-late', Issued: 'is-ok', Void: 'is-bad' }
 
-const COMMON_PRESETS = [
-  { name: 'Amoxicillin 500mg', dosage: '1 capsule (500mg)', frequency: 'Every 8 hours (3x daily)', duration: '7 days', instructions: 'Take with or after meals. Complete the entire course.' },
-  { name: 'Mefenamic Acid 500mg', dosage: '1 capsule (500mg)', frequency: 'Every 8 hours as needed', duration: '3 to 5 days', instructions: 'Take with food for pain or swelling.' },
-  { name: 'Paracetamol 500mg', dosage: '1 tablet (500mg)', frequency: 'Every 4 to 6 hours as needed', duration: '3 days', instructions: 'For mild to moderate pain. Maximum 4000mg per day.' },
-  { name: 'Ibuprofen 400mg', dosage: '1 tablet (400mg)', frequency: 'Every 6 to 8 hours with meals', duration: '3 to 5 days', instructions: 'Take immediately after food or with milk.' },
-  { name: 'Co-amoxiclav 625mg', dosage: '1 tablet (625mg)', frequency: 'Every 12 hours (2x daily)', duration: '7 days', instructions: 'Take at the start of a meal. Complete the course.' },
-  { name: 'Clindamycin 300mg', dosage: '1 capsule (300mg)', frequency: 'Every 6 to 8 hours', duration: '7 days', instructions: 'Take with a full glass of water. Alternative for penicillin allergy.' },
-  { name: 'Tranexamic Acid 500mg', dosage: '1 capsule (500mg)', frequency: 'Every 8 hours', duration: '2 to 3 days', instructions: 'For post-extraction bleeding control.' },
-  { name: 'Celecoxib 200mg', dosage: '1 capsule (200mg)', frequency: 'Once or twice daily', duration: '3 to 5 days', instructions: 'Take with food for acute dental pain and inflammation.' },
-  { name: 'Chlorhexidine 0.12% Oral Rinse', dosage: '15 mL rinse', frequency: 'Twice daily after brushing', duration: '7 to 14 days', instructions: 'Swish for 30 seconds then expectorate. Do not swallow.' },
+// Medicine name autocomplete list only. Dosing, frequency, duration, and instructions are never pre-filled or presented as clinic-approved defaults.
+const COMMON_MEDICINE_NAMES = [
+  'Amoxicillin 500mg',
+  'Mefenamic Acid 500mg',
+  'Paracetamol 500mg',
+  'Ibuprofen 400mg',
+  'Co-amoxiclav 625mg',
+  'Clindamycin 300mg',
+  'Tranexamic Acid 500mg',
+  'Celecoxib 200mg',
+  'Chlorhexidine 0.12% Oral Rinse',
 ]
 
 /**
@@ -53,16 +54,14 @@ export function PrescriptionsServerPage({ store, role }) {
     {error && <Notice tone="warning" title="Unavailable">{error}</Notice>}
     <Card title={owner ? 'Issued prescriptions' : 'Prescriptions'}>
       {rows && rows.length > 0 && (
-        <div className="st-filters" style={{ marginBottom: '1rem', display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
-          <Field label="Search">
-            <input
-              type="search"
-              placeholder="Search by number, patient, dentist, or branch…"
-              value={query}
-              onChange={e => setQuery(e.target.value)}
-              style={{ minWidth: '240px' }}
-            />
-          </Field>
+        <FilterBar
+          className="st-filters"
+          ariaLabel="Filter prescriptions"
+          search={query}
+          onSearchChange={setQuery}
+          searchPlaceholder="Search by number, patient, dentist, or branch…"
+          onClear={(query || statusFilter !== 'all') ? () => { setQuery(''); setStatusFilter('all') } : null}
+        >
           <Field label="Status">
             <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
               <option value="all">All statuses</option>
@@ -71,12 +70,7 @@ export function PrescriptionsServerPage({ store, role }) {
               <option value="Void">Void</option>
             </select>
           </Field>
-          {(query || statusFilter !== 'all') && (
-            <div style={{ display: 'flex', alignItems: 'flex-end' }}>
-              <Button size="sm" variant="ghost" onClick={() => { setQuery(''); setStatusFilter('all') }}>Clear</Button>
-            </div>
-          )}
-        </div>
+        </FilterBar>
       )}
       {!rows ? <p className="au-muted" role="status">Loading…</p> : !filteredRows.length ? <p className="au-muted">No prescriptions found.</p>
         : <ul className="fd-list">{filteredRows.map(p => <li key={p.id}>
@@ -95,7 +89,7 @@ export function PrescriptionsServerPage({ store, role }) {
 function WriteCard({ toast, onDone, editing, onEdited }) {
   const [visits, setVisits] = useState(null), [meta, setMeta] = useState({}), [visitId, setVisitId] = useState('')
   const [lines, setLines] = useState([{ ...EMPTY_LINE }]), [note, setNote] = useState(''), [draft, setDraft] = useState(null)
-  const [err, setErr] = useState(''), [busy, setBusy] = useState('')
+  const [err, setErr] = useState(''), [busy, setBusy] = useState(''), [confirmIssue, setConfirmIssue] = useState(false)
   useEffect(() => { prescriptionVisits().then(r => { if (r.ok) { setVisits(r.data); setMeta(r.meta || {}) } }) }, [])
   useEffect(() => {
     if (!editing) return
@@ -119,45 +113,57 @@ function WriteCard({ toast, onDone, editing, onEdited }) {
       {!draft && <Field label="Visit" required hint="Visits at your branches in the last 30 days."><select value={visitId} onChange={e => setVisitId(e.target.value)} required>
         <option value="">Choose a visit…</option>{visits.map(v => <option key={v.id} value={v.id}>{day(v.date)} · {v.patient.name}{v.patient.age !== null ? ` (${v.patient.age})` : ''} · {v.branch}</option>)}</select></Field>}
       {(visit || draft) && <Notice tone="warning" title="Check allergies before prescribing">{meta.allergies?.length ? meta.allergies.join(', ') : meta.allergy_notice}</Notice>}
-      <datalist id="rx-common">{[...new Set([...(meta.common_medicines || []), ...COMMON_PRESETS.map(p => p.name)])].map(m => <option key={m} value={m}/>)}</datalist>
-      {lines.map((l, i) => <fieldset key={i} className="rx-line"><legend>Medicine {i + 1}</legend>
-        <Field label="Quick template (optional)" hint="Choose a dental preset to populate standard dosage & frequency, or enter custom details">
-          <select
-            value=""
-            onChange={e => {
-              const found = COMMON_PRESETS.find(p => p.name === e.target.value)
-              if (found) {
-                setLines(ls => ls.map((line, j) => j === i ? {
-                  ...line,
-                  medicine: found.name,
-                  dosage: found.dosage,
-                  frequency: found.frequency,
-                  duration: found.duration,
-                  instructions: found.instructions
-                } : line))
-              }
-            }}
-          >
-            <option value="">Choose a common template…</option>
-            {COMMON_PRESETS.map(p => <option key={p.name} value={p.name}>{p.name}</option>)}
-          </select>
-        </Field>
-        <Field label="Medicine" required><input list="rx-common" value={l.medicine} maxLength={200} onChange={e => set(i, 'medicine', e.target.value)} placeholder="e.g. Amoxicillin 500mg"/></Field>
-        <div className="st-pair"><Field label="Dosage"><input value={l.dosage} maxLength={120} onChange={e => set(i, 'dosage', e.target.value)} placeholder="e.g. 1 capsule (500mg)"/></Field>
-          <Field label="Frequency"><input value={l.frequency} maxLength={120} onChange={e => set(i, 'frequency', e.target.value)} placeholder="e.g. Every 8 hours"/></Field></div>
-        <Field label="Duration"><input value={l.duration} maxLength={120} onChange={e => set(i, 'duration', e.target.value)} placeholder="e.g. 7 days"/></Field>
-        <Field label="Instructions"><textarea value={l.instructions} maxLength={500} onChange={e => set(i, 'instructions', e.target.value)} placeholder="e.g. Take with food"/></Field>
-        {lines.length > 1 && <Button size="sm" variant="ghost" onClick={() => setLines(ls => ls.filter((_, j) => j !== i))}>Remove medicine {i + 1}</Button>}
-      </fieldset>)}
+      <datalist id="rx-common">{[...new Set([...(meta.common_medicines || []), ...COMMON_MEDICINE_NAMES])].map(m => <option key={m} value={m}/>)}</datalist>
+      {lines.map((l, i) => {
+        const medicineCatalog = [...new Set([...(meta.common_medicines || []), ...COMMON_MEDICINE_NAMES])]
+        const isCatalogMatch = medicineCatalog.includes(l.medicine)
+        const selectValue = isCatalogMatch ? l.medicine : (l.medicine ? '__other__' : '')
+        return <fieldset key={i} className="rx-line"><legend>Medicine {i + 1}</legend>
+          <Field label="Select medicine or choose Other" hint="Select a medicine name or choose Other for free-text entry. Dosage, frequency, and duration are entered by the prescribing dentist.">
+            <select
+              aria-label={`Select medicine ${i + 1}`}
+              value={selectValue}
+              onChange={e => {
+                const val = e.target.value
+                if (val === '__other__') {
+                  if (isCatalogMatch) set(i, 'medicine', '')
+                } else {
+                  set(i, 'medicine', val)
+                }
+              }}
+            >
+              <option value="">Choose a medicine name or Other…</option>
+              {medicineCatalog.map(name => <option key={name} value={name}>{name}</option>)}
+              <option value="__other__">Other (free-text entry)</option>
+            </select>
+          </Field>
+          <Field label="Medicine" required><input list="rx-common" value={l.medicine} maxLength={200} onChange={e => set(i, 'medicine', e.target.value)} placeholder="Select above or type medicine name"/></Field>
+          <div className="st-pair"><Field label="Dosage"><input value={l.dosage} maxLength={120} onChange={e => set(i, 'dosage', e.target.value)} placeholder="Entered by dentist"/></Field>
+            <Field label="Frequency"><input value={l.frequency} maxLength={120} onChange={e => set(i, 'frequency', e.target.value)} placeholder="Entered by dentist"/></Field></div>
+          <Field label="Duration"><input value={l.duration} maxLength={120} onChange={e => set(i, 'duration', e.target.value)} placeholder="Entered by dentist"/></Field>
+          <Field label="Instructions"><textarea value={l.instructions} maxLength={500} onChange={e => set(i, 'instructions', e.target.value)} placeholder="Entered by dentist"/></Field>
+          {lines.length > 1 && <Button size="sm" variant="ghost" onClick={() => setLines(ls => ls.filter((_, j) => j !== i))}>Remove medicine {i + 1}</Button>}
+        </fieldset>
+      })}
       <Button size="sm" variant="soft" onClick={() => setLines(ls => [...ls, { ...EMPTY_LINE }])}>Add another medicine</Button>
       <Field label="Note (optional)"><textarea value={note} maxLength={1000} onChange={e => setNote(e.target.value)}/></Field>
       {err && <p className="au-error" role="alert">{err}</p>}
       <div className="ns-actions">
         <Button type="submit" variant="soft" disabled={!!busy || (!draft && !visitId) || !lines.some(l => l.medicine.trim())}>{busy === 'save' ? 'Saving…' : 'Save draft'}</Button>
-        <Button disabled={!!busy || (!draft && !visitId) || !lines.some(l => l.medicine.trim())} onClick={() => save(true)}>{busy === 'issue' ? 'Issuing…' : 'Issue prescription'}</Button>
+        <Button disabled={!!busy || (!draft && !visitId) || !lines.some(l => l.medicine.trim())} onClick={() => setConfirmIssue(true)}>{busy === 'issue' ? 'Issuing…' : 'Issue prescription'}</Button>
         {draft && <Button variant="ghost" onClick={reset}>Cancel</Button>}
       </div>
       <p className="au-muted">Issuing locks the prescription and gives it a number. It cannot be edited afterwards, only voided.</p>
+      <ConfirmDialog
+        open={confirmIssue}
+        title="Issue and lock prescription?"
+        tone="default"
+        confirmLabel="Issue prescription"
+        onConfirm={() => { setConfirmIssue(false); save(true) }}
+        onCancel={() => setConfirmIssue(false)}
+      >
+        <p>Issuing assigns an official prescription number, locks the medication lines against further edits, and makes the prescription available to the branch front desk and the patient.</p>
+      </ConfirmDialog>
     </form>}
   </Card>
 }

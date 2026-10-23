@@ -132,3 +132,11 @@ test('in a clinic-server session the local conversation commands refuse; they re
     assert.match(result.message, /clinic server/)
   }
 })
+
+test('undecryptable message displays neutral fallback text without exposing internal error or key rotation details', () => {
+  const model = read('backend/app/Models/ConversationMessage.php')
+  assert.match(model, /This message can't be displayed/)
+  assert.doesNotMatch(model, /Message encrypted with a previous clinic key/)
+  const page = read('src/pages/ServerMessages.jsx')
+  assert.match(page, /<p>\{m\.body\}<\/p>/)
+})

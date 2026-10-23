@@ -93,9 +93,10 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureAccountAccess::cla
         Route::post('/{invoice}/payment', [BillingController::class, 'pay'])->middleware('role:staff');
         Route::post('/{invoice}/paymongo-checkout', [PayMongoController::class, 'checkout']);
         Route::get('/{invoice}/payment-options', [PayMongoController::class, 'options']);
-        // The emailed PDFs, for download (own invoices only for a Patient).
+        // The emailed PDFs, for download (own invoices only for a Patient), and rate-limited receipt email resend.
         Route::get('/{invoice}/pdf', [\App\Http\Controllers\BillingDocumentController::class, 'invoice'])->middleware(['role:patient,staff,owner', 'throttle:30,1']);
         Route::get('/{invoice}/receipt-pdf', [\App\Http\Controllers\BillingDocumentController::class, 'receipt'])->middleware(['role:patient,staff,owner', 'throttle:30,1']);
+        Route::post('/{invoice}/resend-receipt', [\App\Http\Controllers\BillingDocumentController::class, 'resendReceipt'])->middleware(['role:patient,staff,owner', 'throttle:10,1']);
     });
     Route::get('/receipts/mine', [BillingController::class, 'receiptsMine'])->middleware('role:patient');
     Route::get('/billing/treatments', [BillingController::class, 'treatments'])->middleware('role:staff,owner');

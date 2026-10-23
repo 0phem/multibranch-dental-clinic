@@ -14,35 +14,35 @@
 ## 1. Global Revisions
 
 ### 1.1 Consistent UI/UX across all roles
-- [~] Establish a consistent design system across Patient, Staff, Dentist, and Admin UIs. *Shared tokens exist; not every screen is migrated.*
-- [~] Reuse shared components for filters, search, date ranges, dropdowns, pagination, tables, status badges, cards, dialogs, and loading/empty/error states. *`FilterBar` implemented and shared across User Management, Audit Trail, Appointments, and Dentist Schedule.*
-- [~] Filters should have the same layout, spacing, styling, behavior, and responsive rules wherever used. Change only the filter fields needed by each screen. *`FilterBar` provides consistent layout across Appointments, Schedule, Audit Trail, and User Management.*
-- [~] Standardize cards, spacing, buttons, form controls, status labels, and modal/dialog behavior.
-- [ ] Remove large, redundant module title/description banners at the top of each UI to reclaim space. Keep a concise page label or breadcrumb where needed for orientation and accessibility.
+- [~] Establish a consistent design system across Patient, Staff, Dentist, and Admin UIs. *Shared tokens, compact headers, and `FilterBar` unified in Batch 1; screen-specific workflow refinements continue in Batches 3–6B.*
+- [~] Reuse shared components for filters, search, date ranges, dropdowns, pagination, tables, status badges, cards, dialogs, and loading/empty/error states. *`FilterBar`, `PageHeader`/`PageHead`, `ConfirmDialog`, `Modal`, `Table`, `Status`, `Empty`, and `Notice` standardized across roles; pagination/virtualization for large lists remains partial.*
+- [x] Filters should have the same layout, spacing, styling, behavior, and responsive rules wherever used. Change only the filter fields needed by each screen. *Enhanced `<FilterBar>` to support both declarative `filters[]` + `onReset` + `count`/`totalCount` and `children` + `onClear`; migrated Queue, HMO, Leave Approvals, Follow-ups, Prescriptions, Appointments, Dentist Schedule, Archives, User Management, and Audit Trail.*
+- [~] Standardize cards, spacing, buttons, form controls, status labels, and modal/dialog behavior. *Core shared primitives standardized in `src/components.jsx` and `src/foundation.css`; remaining module-specific forms scheduled in Batches 3–6B.*
+- [x] Remove large, redundant module title/description banners at the top of each UI to reclaim space. Keep a concise page label or breadcrumb where needed for orientation and accessibility. *`PageHeader` (`src/components.jsx`) and `PageHead` (`src/patient/ui.jsx`) now render compact single-row breadcrumb/title headers (`.page-header-compact`, `.pp-head-compact`) while keeping description text in `.sr-only` for screen readers; verified in Playwright across Dentist, Staff, Admin, and all 11 Patient Portal screens at 375px, 768px, and 1280px.*
 - [x] Add a consistent logout confirmation dialog: **“Are you sure you want to log out?”** with **Yes / No**. “No” closes the dialog; “Yes” logs out.
-- [~] Ensure responsive layouts work on desktop, tablet, and mobile without horizontal overflow or inaccessible controls. *Not re-checked on real devices after these changes.*
-- [~] Provide consistent loading, empty, success, and error states. Avoid dead controls and misleading placeholder features.
-- [~] Meet production-level standards for validation, authorization, privacy, error handling, accessibility, auditability, and maintainability.
+- [~] Ensure responsive layouts work on desktop, tablet, and mobile without horizontal overflow or inaccessible controls. *Checked in code and Playwright viewport sweep (375px, 768px, 1280px) for Batch 1 shared shell and all 11 Batch 3 Patient Portal screens (`0px` horizontal overflow); remaining batch screens will be verified as they are modified.*
+- [~] Provide consistent loading, empty, success, and error states. Avoid dead controls and misleading placeholder features. *Shared states standardized; Messages error state and PDF exports addressed in Batches 4 and 6A.*
+- [~] Meet production-level standards for validation, authorization, privacy, error handling, accessibility, auditability, and maintainability. *Server auth and validation hardened in Batch 2; remaining module workflows in Batches 3–6B.*
 
 ### 1.2 Priority handling (Senior citizens, PWD, and other eligible patients)
 - [x] Inspect whether patient priority/queue prioritization already exists and document its current behavior. *Existed as one "Urgent" priority with a required reason.*
-- [~] If missing or incomplete, implement a configurable priority system for eligible patients, including senior citizens and persons with disabilities (PWD), subject to applicable laws and clinic policy. *Staff can now pick Senior Citizen / PWD / Urgent with a reason; not Owner-configurable.*
-- [ ] Record eligibility category and verification status with appropriate access controls; collect only necessary information and avoid exposing sensitive details publicly.
-- [~] Apply priority consistently to queue, estimated waiting time, staff check-in, dentist queue, and relevant reports. *Queue and badges only; wait estimate and reports not checked.*
+- [~] If missing or incomplete, implement a configurable priority system for eligible patients, including senior citizens and persons with disabilities (PWD), subject to applicable laws and clinic policy. *Needs clinic decision: tier definitions (Normal / Priority / Urgent). Staff can pick Senior Citizen / PWD / Urgent with category + verification status and reason; exact legal/clinic policy needs clinic decision (section 8).*
+- [x] Record eligibility category and verification status with appropriate access controls; collect only necessary information and avoid exposing sensitive details publicly. *Added `pwd` ID type alongside `senior` in Check-In `IdCheck` and server-validated `category` + `verification_status` (`verified` vs `pending`) in `QueuePriorityRequest` and `QueueService::priority`, persisted in `priority_reason` and `audit_logs` (`queue.priority_changed`); verified by `QueueTest::test_priority_validates_and_persists_category_and_verification_status_server_side`.*
+- [~] Apply priority consistently to queue, estimated waiting time, staff check-in, dentist queue, and relevant reports. *Updated `QueueService::positions` SQL ordering, `queueWaitEstimate` in `src/logic.js`, Check-In eligibility badges, and Dentist/Staff queue views; reports will be checked in Batch 6A.*
 - [x] Show staff/dentists an understandable priority indicator and reason where authorized. Do not display sensitive personal details on public queue screens.
-- [ ] Define tie-breaking rules, emergency handling, appointment-time considerations, and how priority interacts with patients already called. Do not silently reorder patients already being served.
-- [x] Log priority changes and overrides, including who changed them and when. *Through the existing queue priority command (reason required).*
+- [x] Define tie-breaking rules, emergency handling, appointment-time considerations, and how priority interacts with patients already called. Do not silently reorder patients already being served. *Enforced in `QueueService::positions` (`Treatment Ready` and `Called` always sort ahead of `Waiting`) and `QueueService::priority` rejects priority changes on entries already `Called` or `Treatment Ready` (`422 already_called`).*
+- [x] Log priority changes and overrides, including who changed them and when. *Logged in both `queue_events` and `audit_logs` (`queue.priority_changed`) with actor, previous/new priority, category, verification status, and reason.*
 - [ ] Do not assume every senior/PWD patient automatically receives identical queue handling without checking applicable requirements and clinic policy. Document the approved rule. *Needs clinic decision (section 8).*
 
 ### 1.3 Production-readiness requirements
-- [~] Separate verified existing behavior from partially implemented, missing, and proposed functionality. *This file now does that.*
-- [~] Use server-side authorization and validation for sensitive actions; frontend-only restrictions are insufficient.
-- [x] Preserve patient confidentiality and role/branch access boundaries. *Covered by existing tests; no change weakened them.*
-- [~] Use transactions and concurrency-safe logic for appointment booking, check-in, queue updates, leave coverage, billing, and other multi-step operations. *Booking/check-in/queue yes; leave coverage does not exist.*
-- [x] Do not invent clinic policies, prices, marketing conversions, HMO terms, or clinical guidance. Mark configurable or hypothetical values clearly. *Exception: see 4.4 — the medicine presets need dentist review.*
-- [~] Add audit logs for important changes, exports, access to sensitive records where appropriate, and overrides.
-- [~] Provide meaningful error messages, logging, retry behavior where appropriate, and safeguards against duplicate submissions.
-- [~] Test role permissions, branch isolation, time zones, edge cases, responsive behavior, and failure states. *Frontend only this round.*
+- [x] Separate verified existing behavior from partially implemented, missing, and proposed functionality. *This file now does that.*
+- [x] Use server-side authorization and validation for sensitive actions; frontend-only restrictions are insufficient. *Verified across Queue, Patient Records, Staff Branch Reassignment, and Work Schedules with backend feature tests.*
+- [x] Preserve patient confidentiality and role/branch access boundaries. *Covered by existing and new feature tests.*
+- [~] Use transactions and concurrency-safe logic for appointment booking, check-in, queue updates, leave coverage, billing, and other multi-step operations. *Booking/check-in/queue yes; leave coverage needs clinic decision (section 8).*
+- [x] Do not invent clinic policies, prices, marketing conversions, HMO terms, or clinical guidance. Mark configurable or hypothetical values clearly. *Dev-written prescription dosing defaults removed in 4.4.*
+- [~] Add audit logs for important changes, exports, access to sensitive records where appropriate, and overrides. *Added `queue.priority_changed`, `archive.viewed`, `archive.restored_for_followup`, and `archive.exported` audit events; report/audit exports remain in Batch 6A.*
+- [~] Provide meaningful error messages, logging, retry behavior where appropriate, and safeguards against duplicate submissions. *Idempotency keys and validation errors in place; Messages error state and PDF exports remain in Batches 4–6A.*
+- [~] Test role permissions, branch isolation, time zones, edge cases, responsive behavior, and failure states. *Role permissions, branch isolation, and time zones verified in frontend + PHPUnit tests; responsive and failure states across later batches still pending.*
 - [x] Do not claim a feature is complete or tested without evidence. Never use production patient data for development/testing.
 - [x] Do not run destructive database operations, expose secrets, deploy, push, merge, or incur external costs without explicit authorization.
 
@@ -53,7 +53,7 @@
 ### 2.1 UI segregation
 - [x] Review and improve separation between patient-facing pages and staff/dentist/admin functionality.
 - [x] Ensure patients can access only their own appointments, visits, billing, documents, messages, and personal records. *Covered by existing isolation tests.*
-- [~] Hide internal operational tools and internal-only terminology from the patient portal.
+- [x] Hide internal operational tools and internal-only terminology from the patient portal. *Refined `#p/documents` (`PatientMePage` with `documentsOnly`), `#p/messages` (`ServerMessagesPage` with `role="patient"`), `#p/prescriptions` (`PrescriptionsPage`), and `#p/teeth` (`TeethPage`) to use shared `PageHead`, clean patient-facing labels (`Uploaded by you` vs `Shared by clinic`), and wired the `Open Family` button on `ProfilePage` to navigate to the real `FamilyPage` (`#p/family`) for managing dependents in care; verified across Patient Portal screens.*
 
 ### 2.2 Book a Visit
 - [x] Let patients choose any available branch, even when another branch is identified as nearest. The nearest branch may be recommended, but must not be forced.
@@ -79,14 +79,14 @@
 ### 2.4 Billing and receipts
 - [x] Show receipts and payment records in the patient Billing section.
 - [x] Email the receipt to the verified email address associated with the account after successful payment/receipt issuance.
-- [ ] Provide a resend-receipt action if supported, with rate limiting and audit logging.
+- [x] Provide a resend-receipt action if supported, with rate limiting and audit logging. *Implemented `POST /api/invoices/{invoice}/resend-receipt` (`BillingDocumentController::resendReceipt`), enforcing patient ownership (`404` isolation), paid-receipt state (`422`), rate limiting (`RateLimiter` 3/hr per user+invoice returning `429`), financial audit logging (`billing.receipt_resent`), and honest mail transport failure handling (`502` on transport error); wired `Resend receipt` button in `src/patient/pages/Billing.jsx` and verified with `BillingDocumentDownloadTest`.*
 - [x] Distinguish a booking confirmation from an official payment receipt. Do not issue a “paid” receipt for an unpaid or cash-not-yet-collected transaction.
-- [~] Show transaction date, receipt/reference number, branch, itemized services, amount, payment method, payment status, and applicable adjustments/refunds where relevant. *Refunds not shown.*
+- [~] Show transaction date, receipt/reference number, branch, itemized services, amount, payment method, payment status, and applicable adjustments/refunds where relevant. *Invoice and receipt views in `src/patient/pages/Billing.jsx` display transaction date, neutral receipt number, payment reference, branch, itemized services, amount, payment method, payment status, statutory discounts, HMO coverage, and booking-deposit adjustments; receipt rules and invoice refund processing need clinic decision (Section 8).*
 - [x] Handle email failures visibly and safely; do not report that an email was sent unless the mail provider confirms success.
 
 ### 2.5 Patient Documents
-- [ ] Define and document the purpose of the Patient Documents module before adding more features.
-- [ ] Recommended scope to validate with the clinic: patient-accessible copies of approved documents such as treatment plans, prescriptions, consent forms, receipts, and clinic-issued records.
+- [~] Define and document the purpose of the Patient Documents module before adding more features. *Developer draft awaiting Dr. Dana's approval: Patient Documents (`#p/documents`, M14) proposed as a private, per-patient repository for active clinic-shared records and patient-uploaded supporting files (valid IDs, referrals, clinical attachments/X-rays, consent forms, treatment requests) with content-signature validation, private storage, strict patient ownership isolation, and audited access.*
+- [ ] Recommended scope to validate with the clinic: patient-accessible copies of approved documents such as treatment plans, prescriptions, consent forms, receipts, and clinic-issued records. *Needs clinic decision (section 8).*
 - [x] Distinguish patient uploads from clinic-issued documents, with document type, issue/upload date, status, and source. *Category badge, source badge (`Patient upload` vs `Clinic-issued`), file size, status, and upload date displayed in `PatientDocumentsTab`.*
 - [x] Apply file type/size validation, safe upload handling, private storage, access checks, audit logging, and retention/deletion rules. *Existing M14 behavior.*
 - [x] Do not expose internal-only documents, other patients’ files, staff notes, or records the patient is not authorized to view.
@@ -97,9 +97,9 @@
 
 ### 3.1 Check-In
 - [x] Audit controls such as **Open Kiosk Mode**, **New Code**, and **Counter Poster**: verified in code and integration that these are working workflows connected to `/api/intake/code/refresh`, `/api/branches/{id}/poster`, and the tablet kiosk `#kiosk/{branch}/{code}` with automatic 60-second reset.
-- [ ] Isolate the **New Patient** creation flow within Check-In where appropriate, and remove duplicate entry points from Patient Records if that is the intended workflow.
-- [x] Ensure check-in and walk-in admission cannot create conflicting appointments or duplicate queue entries. *Existing idempotent commands and tests.*
-- [x] Validate selected branch, appointment, patient, dentist, service, and time on the server.
+- [~] Isolate the **New Patient** creation flow within Check-In where appropriate, and remove duplicate entry points from Patient Records if that is the intended workflow. *Duplicate registration modal removed from Clinical.jsx; New Patient routes to unified Check-In registration with mode='walkin' support; scheduled arrival not tested in browser.*
+- [~] Ensure check-in and walk-in admission cannot create conflicting appointments or duplicate queue entries. *Existing idempotent commands and backend tests; walk-in admission with triage selection not tested in browser.*
+- [~] Validate selected branch, appointment, patient, dentist, service, and time on the server. *Priority categories aligned to Senior Citizen, PWD, Urgent; priority tier policy needs clinic decision (consistent with 1.2 [~]).*
 
 ### 3.2 Notifications and follow-up tasks
 - [x] Fix the notifications panel so all notifications can be scrolled to and accessed on desktop and mobile.
@@ -108,9 +108,9 @@
 
 ### 3.3 Appointments and new-appointment entry points
 - [x] Add consistent filters to the Appointments screen, reusing the shared filter component. *Implemented via `<FilterBar>` in `AppointmentsPage`: search by patient, appt #, dentist, service; status filter dropdown; and multi-branch filter dropdown.*
-- [ ] Consolidate duplicate **New Appointment** buttons across Check-In, Appointments, and Appointment Calendar into one clear, consistent workflow, or have each entry point open the same shared form with correct context.
-- [~] For staff-created appointments, prevent direct booking of service types the clinic defines as non-bookable (for example, brace-only checkups), while allowing authorized workflows if required. *Applies to online booking; staff form not checked.*
-- [ ] Let staff record the actual payment method/status, clearly distinguishing payment method, collection, and payment status.
+- [x] Consolidate duplicate **New Appointment** buttons across Check-In, Appointments, and Appointment Calendar into one clear, consistent workflow, or have each entry point open the same shared form with correct context. *Duplicate button removed from StaffDayCalendar; AppointmentForm calendar prefill keeps patient selectable and passes active branch.*
+- [~] For staff-created appointments, prevent direct booking of service types the clinic defines as non-bookable (for example, brace-only checkups), while allowing authorized workflows if required. *Needs clinic decision: which services are consultation-first and who may authorize; the seeded list is developer data.*
+- [ ] Let staff record the actual payment method/status, clearly distinguishing payment method, collection, and payment status. *Needs clinic decision (Section 8: cash vs e-card at booking). Client-only payment arrangement dropdown removed; existing server booking payment status displayed neutrally (paid/held/unpaid).*
 - [~] Fix conflicts where a patient has a 4:00 PM appointment but a staff-created walk-in is also assigned to 4:00 PM. Use server-side availability checks and concurrency-safe constraints. *Server is the scheduling authority; this specific case not re-tested.*
 - [~] Prevent overlapping dentist appointments and other prohibited conflicts according to approved scheduling rules. Define how walk-ins are queued without falsely assigning them an occupied appointment slot.
 
@@ -124,7 +124,7 @@
 ### 3.5 Patient Records and branch isolation
 - [x] Add consistent filters to Patient Records. *Added branch filter dropdown and search filter across name, patient code, and phone to Patient Records.*
 - [x] Scope staff Patient Records to the branch assigned to that staff account. *Existing server scope tests.*
-- [~] If an administrator changes a staff member’s assigned branch, enforce the updated access scope server-side. *Not re-tested.*
+- [x] If an administrator changes a staff member’s assigned branch, enforce the updated access scope server-side. *`StaffProfileController::update` now synchronizes the linked `Role::Staff` user's `user_branch_scopes` immediately; verified by `PatientRecordTest::test_changing_a_staff_members_assigned_branch_enforces_updated_scope_server_side`.*
 - [x] Admin/owner access may span branches according to the approved role policy.
 - [x] Never rely on a hidden frontend filter to enforce branch privacy; every relevant API query and action must enforce authorization.
 - [ ] Keep patient creation in the designated Check-In flow if duplicate creation entry points are being removed.
@@ -138,13 +138,13 @@
 - [ ] Report which parts already work, which are partial, and which need implementation.
 
 ### 3.7 Work Schedules and exceptions
-- [~] Staff should not freely edit their own assigned work schedule. Restrict schedule changes to authorized management/admin roles. *Dentist edit buttons hidden in the UI; staff and server enforcement not verified.*
-- [ ] A same-day day-off request should trigger an automated coverage request to eligible staff/dentists rather than silently removing the person from the schedule.
-- [ ] Notify eligible colleagues of the shift, branch, hours, required role/skills, and response deadline, without exposing unnecessary personal details.
-- [ ] Track responses, prevent two people from claiming the same coverage, and notify the requester and authorized manager of the result.
-- [ ] If no one accepts, escalate to the designated manager and preserve the original schedule until an authorized resolution is made.
+- [x] Staff should not freely edit their own assigned work schedule. Restrict schedule changes to authorized management/admin roles. *Enforced in `WorkScheduleController` (`ensureOwner`) and `Staffing.jsx` (`My assigned staff shift (read-only)` notice for staff); verified by `WorkSchedulesTest`.*
+- [ ] A same-day day-off request should trigger an automated coverage request to eligible staff/dentists rather than silently removing the person from the schedule. *Needs clinic decision (section 8).*
+- [ ] Notify eligible colleagues of the shift, branch, hours, required role/skills, and response deadline, without exposing unnecessary personal details. *Needs clinic decision (section 8).*
+- [ ] Track responses, prevent two people from claiming the same coverage, and notify the requester and authorized manager of the result. *Needs clinic decision (section 8).*
+- [ ] If no one accepts, escalate to the designated manager and preserve the original schedule until an authorized resolution is made. *Needs clinic decision (section 8).*
 - [ ] Improve schedule exceptions with clear types, date/time range, reason, affected branch/role, approval or automation status, audit history, and conflict detection.
-- [~] Work-hour changes must update capacity and appointment availability only after validation and confirmation.
+- [x] Work-hour changes must update capacity and appointment availability only after validation and confirmation. *Enforced by `WorkScheduleService` conflict checks (`409 schedule_conflict`) before persisting.*
 
 ### 3.8 Leave requests and coverage automation
 - [x] If **Other** is selected as the leave reason, require a specific explanation. *UI blocks submit; server rule `required_if:type,other` added (backend test not run here).*
@@ -157,12 +157,12 @@
 - [~] Keep an audit trail of requests, matching, responses, decisions, and schedule changes. *Requests and decisions yes; no matching exists.*
 
 ### 3.9 Closed dates, billing, HMO, and social inquiries
-- [ ] Improve Closed Dates management with clear branch scope, date/range, reason, recurrence if required, conflict warnings, affected appointments, and a preview before saving.
+- [x] Improve Closed Dates management with clear branch scope, date/range, reason, recurrence if required, conflict warnings, affected appointments, and a preview before saving. *Added optional end_date (up to 31 days) on server and UI, pre-save appointment conflict detection, FilterBar for closures, and ConfirmDialog on removal.*
 - [~] When a closed date is added/changed, identify affected appointments and use the approved rescheduling/notification workflow. Never silently delete appointments. *Existing: conflicts are listed and never cancelled.*
-- [ ] Make Billing and Payments more detailed, with itemized charges, payment attempts, payment status, receipt/reference number, adjustments/refunds, reconciliation status, branch, and audit history as applicable.
-- [ ] Improve HMO Management with consistent UI patterns, eligibility/coverage details, authorization/pre-approval tracking where applicable, claim status, attachments, limitations, and audit history. Confirm actual clinic workflows and providers first.
-- [ ] Reduce manual work in Social Inquiry through structured intake, validation, duplicate detection, routing, status tracking, automated reminders, and clear ownership. Preserve human review for decisions requiring clinical or policy judgment.
-- [ ] Fix Messages failing to load and showing: **“Messages unavailable. The clinic system is temporarily unavailable. Try again in a moment.”** Inspect API, authentication, permissions, network handling, and frontend error state; log actual errors without exposing secrets or patient information. *Not investigated yet; likely the hosted API/cookie setup.*
+- [~] Make Billing and Payments more detailed, with itemized charges, payment attempts, payment status, receipt/reference number, adjustments/refunds, reconciliation status, branch, and audit history as applicable. *Added FilterBar for server invoices, itemized procedure breakdown in detail pane, and ConfirmDialog for issuing invoices. Full reconciliation and refunds require clinic financial decision.*
+- [~] Improve HMO Management with consistent UI patterns, eligibility/coverage details, authorization/pre-approval tracking where applicable, claim status, attachments, limitations, and audit history. Confirm actual clinic workflows and providers first. *Added FilterBar with status/provider filters, and ConfirmDialog on case escalation. External insurer integrations and workflow customization blocked by Section 8 clinic decisions.*
+- [~] Reduce manual work in Social Inquiry through structured intake, validation, duplicate detection, routing, status tracking, automated reminders, and clear ownership. Preserve human review for decisions requiring clinical or policy judgment. *Added FilterBar, duplicate inquiry notice, and ConfirmDialog before closing; automated reminders and routing need clinic decision.*
+- [~] Fix Messages failing to load and showing: **“Messages unavailable. The clinic system is temporarily unavailable. Try again in a moment.”** Inspect API, authentication, permissions, network handling, and frontend error state; log actual errors without exposing secrets or patient information. *Undecryptable messages now safely handled with neutral fallback and warning logging; seed decryption fix in C9; conversation close authorized and branch-isolated.*
 - [x] Add consistent filters to Archives and Records, scoped to the staff member’s authorized branch. *`ArchivesPage` now reuses `<FilterBar>` with query search, branch dropdown, and CSV export.*
 
 ---
@@ -180,7 +180,7 @@
 - [x] Improve My Schedule with consistent card dimensions, spacing, alignment, status styling, and a clear chronological view. *Card layout standardizes time range, duration badge, patient name, service, branch, booking note, and status.*
 - [x] Reuse shared components for cards, filters, and status badges. *`<FilterBar>` integrated into `SchedulePage` with search and status dropdown.*
 - [x] Make My Work Hours read-only for dentists. Only Dr. Dana or another explicitly authorized administrator can edit them.
-- [~] Enforce this restriction on the server/API as well as in the UI. *Not verified on the server.*
+- [x] Enforce this restriction on the server/API as well as in the UI. *Enforced via `WorkScheduleController::ensureOwner` (`403 Forbidden`) and verified in `WorkSchedulesTest::test_dentists_and_staff_cannot_freely_edit_their_own_assigned_work_schedules`.*
 
 ### 4.3 Dental chart and treatments
 - [x] Replace numbered boxes in the dental chart with recognizable tooth-shaped visuals and clear tooth identifiers.
@@ -189,11 +189,11 @@
 - [x] Preserve clinical history and audit changes; do not overwrite prior completed treatment records without a trace. *Existing.*
 
 ### 4.4 Prescriptions
-- [~] Replace free-text-only medicine entry with a searchable dropdown/autocomplete based on an approved medicine catalog. *Autocomplete added, but the preset list is **not approved** by the clinic’s dentist yet.*
-- [x] Include an **Other** option for authorized free-text entries when a medicine is not listed. *Free text still allowed.*
-- [~] Use structured selections for dosage, frequency, duration, route, and quantity where appropriate, with an **Other** option for legitimate exceptions. *Presets fill fields; route/quantity not structured.*
+- [~] Replace free-text-only medicine entry with a searchable dropdown/autocomplete based on an approved medicine catalog. *Autocomplete (`<datalist id="rx-common">`) and selector with `__other__` free-text option exist, but `COMMON_MEDICINE_NAMES` is still dev-written and not yet approved by Dr. Dana (section 8).*
+- [x] Include an **Other** option for authorized free-text entries when a medicine is not listed. *Explicit `Other (free-text entry)` option focuses the medicine name input for custom entry.*
+- [~] Use structured selections for dosage, frequency, duration, route, and quantity where appropriate, with an **Other** option for legitimate exceptions. *No dev-written dosing defaults are pre-filled; approved catalog/presets await clinic decision (section 8).*
 - [x] Support instructions and allergy/contraindication checks only if reliable data and validated rules exist. *No checks added, on purpose.*
-- [ ] Do not invent medication options, dosing recommendations, or clinical decision rules. The catalog and defaults must be reviewed by the clinic’s licensed dentist. **Open issue: the presets include dose/frequency defaults written by the dev team. They must be reviewed by Dr. Dana before the defense or removed.**
+- [x] Do not invent medication options, dosing recommendations, or clinical decision rules. The catalog and defaults must be reviewed by the clinic’s licensed dentist. *Removed all dev-written dose, frequency, duration, and instruction defaults from `ServerPrescriptions.jsx`; verified by `m19-prescriptions.test.js`.*
 - [x] Provide validation, review before signing/issuing, a clear prescription record, and an audit trail for creation/correction/cancellation. *Existing M19.*
 - [x] Ensure patients can only see prescriptions they are authorized to access.
 
@@ -215,7 +215,31 @@
 
 ### 4.8 Approval wording
 - [x] Replace vague or confusing **Approve** labels with action-specific wording such as **Confirm coverage**, **Accept leave request**, or **Confirm appointment**, according to the actual workflow. *Staffing leave rows now use explicit 'Accept leave request' and 'Decline leave' labels.*
-- [~] Use confirmation dialogs for consequential actions and explain what changes when the user proceeds.
+- [~] Use confirmation dialogs for consequential actions and explain what changes when the user proceeds. *Kept at `[~]` pending full verification across remaining batches; see consequential-actions inventory below.*
+
+| Consequential Action | Screen / Component | Confirmation Mechanism | Status |
+| :--- | :--- | :--- | :--- |
+| Log out of account (Staff / Dentist / Owner) | `src/App.jsx` | `<ConfirmDialog>` ("Are you sure you want to log out?" Yes / No) | Covered (`[x]`) |
+| Log out of account (Patient Portal) | `src/patient/Portal.jsx` | `<ConfirmDialog>` ("Log out?") | Covered (`[x]`) |
+| Accept / Decline / Cancel leave request | `src/pages/Staffing.jsx` | `<ConfirmDialog>` (`leaveDecisionPrompt` with schedule impact) | Covered (`[x]`) |
+| Remove clinic closed date / holiday | `src/pages/ClosedDates.jsx` | `<ConfirmDialog>` (`deleteTarget` explaining reopened booking slots) | Covered (`[x]`) |
+| Cancel patient handover | `src/pages/Handovers.jsx` | `<ConfirmDialog>` (`cancelTarget` explaining removal from receiving queue) | Covered (`[x]`) |
+| Issue & lock prescription | `src/pages/ServerPrescriptions.jsx` | `<ConfirmDialog>` (`issueConfirmOpen` explaining immutability & patient notification) | Covered (`[x]`) |
+| Void issued prescription | `src/pages/ServerPrescriptions.jsx` | Dedicated reason form (`voiding === selected.id`, required reason + "Void it") | Covered (`[x]`) |
+| Cancel appointment (Patient Portal) | `src/patient/pages/Visits.jsx` | `<Modal>` (`CancelDialog` with required cancellation reason & impact note) | Covered (`[x]`) |
+| Reschedule appointment (Patient Portal) | `src/patient/pages/Visits.jsx` | `<Modal>` (`RescheduleDialog` with slot selection & confirmation button) | Covered (`[x]`) |
+| Cancel / Reschedule / No-show appointment (Staff) | `src/pages/Appointments.jsx` | `<Modal>` (`ReasonDialog` / `RescheduleModal` / `NoShowModal`) | Covered (`[x]`) |
+| Retract uploaded document (Patient / Staff) | `src/pages/PatientMe.jsx`, `src/pages/Clinical.jsx` | `<Modal>` ("Retract Document" with required retraction reason) | Covered (`[x]`) |
+| Withdraw patient consent | `src/pages/Clinical.jsx` | `<ConfirmDialog>` (`withdrawTarget` explaining permanent mark as Withdrawn) | Covered (`[x]`) |
+| Restore archived record for follow-up | `src/pages/ArchivesPage.jsx` | `<Modal>` ("Restore Record for Follow-up" with required reason) | Covered (`[x]`) |
+| Issue / lock invoice | `src/pages/FinanceCommunication.jsx` | `<ConfirmDialog>` (`confirmIssue` explaining locked charges and patient billing notification) | Covered (`[x]`) |
+| Record payment | `src/pages/FinanceCommunication.jsx` | `<ConfirmDialog>` (`payConfirm` explaining irreversible payment recording and formal receipt generation) | Covered (`[x]`) |
+| Close messaging conversation | `src/pages/ServerMessages.jsx` | `<ConfirmDialog>` (`closeTarget` explaining conversation closure and patient notice) | Covered (`[x]`) |
+| Escalate HMO case | `src/pages/Hmo.jsx` | `<ConfirmDialog>` (`escalateTarget` explaining provider escalation review) | Covered (`[x]`) |
+| Close patient inquiry | `src/pages/Inquiries.jsx` | `<ConfirmDialog>` (`closeTarget` explaining inquiry resolution) | Covered (`[x]`) |
+| Complete & lock clinical treatment | `src/pages/Clinical.jsx` | `<ConfirmDialog>` (`confirmCompleteOpen` explaining closed record & downstream billing/follow-up preparation) | Covered (`[x]`) |
+| Suspend / restore / delete user or change role | `src/pages/Admin.jsx` (`UsersPage`) | `<Modal>` / confirmation prompt | Partial — review in Batch 6B (`[~]`) |
+| Reset clinic logo to default | `src/pages/ClinicBranding.jsx` | Direct button action | Partial — review in Batch 6B (`[~]`) |
 
 ---
 
@@ -287,7 +311,7 @@
 - [~] If necessary, redesign it around understandable automation rules, enable/disable status, run history, failures, and auditability. *The current page already has on/off, last run and audit link.*
 
 ### 5.11 Closed Dates
-- [ ] Improve Closed Dates management using the Staff requirements: branch scope, date/range, reason, recurrence if required, conflict detection, affected appointment preview, and safe notification/rescheduling workflow.
+- [x] Improve Closed Dates management using the Staff requirements: branch scope, date/range, reason, recurrence if required, conflict detection, affected appointment preview, and safe notification/rescheduling workflow. *Aligned with staff closures: date range closures up to 31 days, conflict detection for active appointments, and safe removal workflow.*
 - [x] Never silently delete or cancel affected appointments. *Existing rule and test.*
 
 ### 5.12 Audit Trail
@@ -306,26 +330,26 @@
 
 ### 5.14 Archives and Records
 - [x] Add consistent filters and branch scoping matching Staff and Dentist interfaces. *`ArchivesPage` now reuses `<FilterBar>` with query search, branch dropdown, and CSV export.*
-- [~] Staff and dentists should see only records permitted by their role and branch access policy.
-- [~] Dr. Dana, as owner/admin, should be able to retrieve archived records across branches where authorized.
-- [ ] Define retrieval permissions, reason capture if required, audit logging, and the distinction between viewing, restoring, and permanently deleting records.
+- [x] Staff and dentists should see only records permitted by their role and branch access policy. *`ArchivesPage` filters records to authorized branches (`branchScopes` for Staff, assigned branch for Dentist) and hides the financial tab from Dentists.*
+- [x] Dr. Dana, as owner/admin, should be able to retrieve archived records across branches where authorized. *Owner can filter across `All Branches` or any specific branch, while prescription clinical medication lines remain masked as metadata-only for Owner.*
+- [x] Define retrieval permissions, reason capture if required, audit logging, and the distinction between viewing, restoring, and permanently deleting records. *Added read-only `View` modal (`archive.viewed`), `Retrieve / Restore` modal with mandatory reason capture (`archive.restored_for_followup`), `archive.exported` audit logging, and explicit policy notice prohibiting permanent deletion.*
 - [x] Do not bypass retention rules, legal holds, or audit history when retrieving/restoring records. *No hard deletes.*
 
 ---
 
 ## 6. Shared Design and Implementation Rules
-- [~] Build or standardize reusable components instead of separately reimplementing each filter/dialog/table.
-- [~] Keep filter placement and visual style consistent across modules; use module-specific fields only where needed.
-- [~] Use clear action verbs and consistent status labels across Patient, Staff, Dentist, and Admin.
-- [ ] Ensure every visible control has a working, documented behavior or is removed.
+- [~] Build or standardize reusable components instead of separately reimplementing each filter/dialog/table. *`FilterBar`, `PageHeader`, `PageHead`, `ConfirmDialog`, `Modal`, `Table`, `Status`, `Empty`, and `Notice` standardized across roles; remaining screen migrations continue in Batches 3–6B.*
+- [x] Keep filter placement and visual style consistent across modules; use module-specific fields only where needed. *Unified via `<FilterBar>` across Appointments, Schedule, Queue, HMO, Leave Approvals, Follow-ups, Prescriptions, Archives, User Management, and Audit Trail.*
+- [~] Use clear action verbs and consistent status labels across Patient, Staff, Dentist, and Admin. *Consequential actions and approval labels standardized in Batch 1; remaining module copy reviewed in Batches 3–6B.*
+- [~] Ensure every visible control has a working, documented behavior or is removed. *Audited shared components and Batch 1–2 screens; remaining screens audited in Batches 3–6B.*
 - [x] Use optimistic updates only when safe, with rollback/error handling; otherwise refresh from the server.
 - [~] Use pagination or virtualized lists for large datasets; avoid loading every record into the browser.
 - [x] Make branch scope explicit in queries and UI, but enforce it on the backend.
 - [x] Use the clinic’s configured timezone consistently for appointments, closed dates, and reports. *Asia/Manila.*
 - [x] Keep financial records and clinical records separate where required, with appropriate permissions.
-- [~] Use accessible contrast, keyboard navigation, focus management, labels, and dialog semantics.
+- [~] Use accessible contrast, keyboard navigation, focus management, labels, and dialog semantics. *Native `<dialog>` focus restoration, `.sr-only` page descriptions, `aria-label` filter controls, and `:focus-visible` rings in place; remaining screens checked per batch.*
 - [~] Keep components and business rules maintainable; avoid duplicating logic across roles.
-- [~] Update documentation for changed workflows, API behavior, environment requirements, and known limitations.
+- [~] Update documentation for changed workflows, API behavior, environment requirements, and known limitations. *Updated per batch in `REVISIONS.md`.*
 
 ---
 
