@@ -206,8 +206,14 @@ export function StaffDayCalendar({ store }) {
     if (result.ok) handleRefresh()
   }
 
+  const [dayStatusFilter, setDayStatusFilter] = useState('All')
+  useEffect(() => { setDayStatusFilter('All') }, [selectedDate])
   const selectedRows = selectedDate ? rowsOn(selectedDate) : []
   const selectedLoad = selectedDate ? loadOf(selectedDate) : null
+  const visibleDayRows = selectedRows.filter(a => {
+    if (dayStatusFilter !== 'All' && a.status !== dayStatusFilter) return false
+    return true
+  })
 
   return <>
     <PageHeader
@@ -345,8 +351,30 @@ export function StaffDayCalendar({ store }) {
               {canManage && <Button size="sm" variant="soft" onClick={() => setNewOpen(true)} icon="plusCalendar">Book an appointment on {shortDay(selectedDate)}</Button>}
             </div>}
 
-            {selectedRows.length > 0 && <ul className="daycal-expanded-list">
-              {selectedRows.map(a => <li key={a.id} className="daycal-expanded-card">
+            {selectedRows.length > 0 && <div className="daycal-day-filter" style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '12px' }}>
+              <select
+                id="daycal-status-filter"
+                className="filter-select"
+                aria-label="Filter selected day appointments by status"
+                value={dayStatusFilter}
+                onChange={e => setDayStatusFilter(e.target.value)}
+                style={{ fontSize: '13px' }}
+              >
+                <option value="All">All statuses ({selectedRows.length})</option>
+                <option value="Confirmed">Confirmed</option>
+                <option value="Pending">Pending</option>
+                <option value="Completed">Completed</option>
+                <option value="Cancelled">Cancelled</option>
+                <option value="No-show">No-show</option>
+              </select>
+            </div>}
+
+            {selectedRows.length > 0 && visibleDayRows.length === 0 && <div className="daycal-expanded-empty">
+              <p className="muted-copy">No appointments with status &ldquo;{dayStatusFilter}&rdquo; on this date.</p>
+            </div>}
+
+            {visibleDayRows.length > 0 && <ul className="daycal-expanded-list">
+              {visibleDayRows.map(a => <li key={a.id} className="daycal-expanded-card">
                 <div className="daycal-expanded-main">
                   <span className="daycal-avatar" aria-hidden="true" style={{ background: avatarColour(a.patientId || a.patientCode) }}>{initials(a.patientName)}</span>
                   <div className="daycal-expanded-info">

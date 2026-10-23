@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { Button, Card, ConfirmDialog, Field, Modal, Notice, PageHeader, Status, Table } from '../components.jsx'
+import { Button, Card, ConfirmDialog, Field, FilterBar, Modal, Notice, PageHeader, Status, Table } from '../components.jsx'
 import { addMinutes, dateLabel, dentistName, displayTime, patientName } from '../logic.js'
 import { clinicDate } from '../clock.js'
 import { commandKey } from '../appointments-api.js'
@@ -142,8 +142,25 @@ export function AppointmentsPage({ role, store, setPage, context }) {
   const [cancelling,setCancelling]=useState(null)
   const [missed,setMissed]=useState(null)
   const [newOpen,setNewOpen]=useState(false)
+  const [search,setSearch]=useState('')
+  const [statusFilter,setStatusFilter]=useState('All')
+  const [branchFilter,setBranchFilter]=useState('All')
   if(role==='patient')return <PatientAppointmentsPage store={store} setPage={setPage} context={context}/>
-  const visible=state.appointments.filter(a=>inScope(a,session,state)).sort((a,b)=>`${a.date}${a.start}`.localeCompare(`${b.date}${b.start}`))
+  const branches=bookableBranches(state,session)
+  const visible=state.appointments.filter(a=>{
+    if(!inScope(a,session,state))return false
+    if(statusFilter!=='All'&&a.status!==statusFilter)return false
+    if(branchFilter!=='All'&&a.branchId!==branchFilter&&a.branch!==branchFilter)return false
+    if(search.trim()){
+      const q=search.trim().toLowerCase()
+      const pName=(a.patientName||patientName(a.patientId,state.patients)||'').toLowerCase()
+      const dName=(a.dentistName||dentistName(a.dentistId,state.dentists)||'').toLowerCase()
+      const apptNo=(a.appointmentNo||'').toLowerCase()
+      const service=(a.service||'').toLowerCase()
+      if(!pName.includes(q)&&!dName.includes(q)&&!apptNo.includes(q)&&!service.includes(q))return false
+    }
+    return true
+  }).sort((a,b)=>`${a.date}${a.start}`.localeCompare(`${b.date}${b.start}`))
   const cancel=async()=>{
     const a=cancelling;setCancelling(null)
     const result=await store.appointmentFlow.cancel(a,commandKey())
@@ -161,8 +178,27 @@ export function AppointmentsPage({ role, store, setPage, context }) {
   return <>
     <PageHeader kicker="Scheduling" title="Appointment management" text="Create, reschedule and cancel visits. Every change is validated and stored by the clinic server." aside={<div className="row-actions"><Button variant="ghost" onClick={()=>store.appointmentFlow.refresh()}>Refresh</Button><Button onClick={()=>setNewOpen(true)} icon="plusCalendar">New appointment</Button></div>}/>
     <AppointmentsStatusNotice store={store}/>
+    <FilterBar
+      search={search}
+      onSearchChange={setSearch}
+      searchPlaceholder="Search patient, appointment #, dentist, service…"
+      onClear={(search||statusFilter!=='All'||branchFilter!=='All')?()=>{setSearch('');setStatusFilter('All');setBranchFilter('All')}:null}
+    >
+      <select aria-label="Filter by appointment status" value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}>
+        <option value="All">All statuses</option>
+        <option value="Confirmed">Confirmed</option>
+        <option value="Pending">Pending</option>
+        <option value="Completed">Completed</option>
+        <option value="Cancelled">Cancelled</option>
+        <option value="No-show">No-show</option>
+      </select>
+      {branches.length>1&&<select aria-label="Filter by branch" value={branchFilter} onChange={e=>setBranchFilter(e.target.value)}>
+        <option value="All">All branches</option>
+        {branches.map(b=><option key={b.id} value={b.id}>{b.name}</option>)}
+      </select>}
+    </FilterBar>
     <Card title="Clinic appointments" subtitle="Appointments in your authorized branches, about three months back and ahead.">
-      <Table rows={visible} empty="No appointments in your authorized branches." columns={[
+      <Table rows={visible} empty="No appointments matching your filters in your authorized branches." columns={[
         {key:'appointmentNo',label:'Appointment',render:a=><div><b>{a.appointmentNo}</b><small className="block-muted">{a.source}</small></div>},
         {key:'date',label:'Date & time',render:a=><div><b>{dateLabel(a.date)}</b><small className="block-muted">{displayTime(a.start)}–{displayTime(addMinutes(a.start,a.duration))}</small></div>},
         {key:'patient',label:'Patient',render:a=>a.patientName||patientName(a.patientId,state.patients)},
@@ -186,12 +222,38 @@ export function SchedulePage({ store }) {
   const { state }=store
   const did=(store.session||sessionForRole('dentist',state)).dentistId
   const [date,setDate]=useState(clinicDate)
-  const rows=state.appointments.filter(a=>a.dentistId===did&&a.date===date&&a.status!=='Cancelled').sort((a,b)=>a.start.localeCompare(b.start))
+  const [search,setSearch]=useState('')
+  const [statusFilter,setStatusFilter]=useState('All')
+  const baseRows=state.appointments.filter(a=>a.dentistId===did&&a.date===date&&a.status!=='Cancelled').sort((a,b)=>a.start.localeCompare(b.start))
+  const rows=baseRows.filter(a=>{
+    if(statusFilter!=='All'&&a.status!==statusFilter)return false
+    if(search.trim()){
+      const q=search.trim().toLowerCase()
+      const pName=(a.patientName||patientName(a.patientId,state.patients)||'').toLowerCase()
+      const sName=(a.service||'').toLowerCase()
+      const bName=(a.branch||'').toLowerCase()
+      if(!pName.includes(q)&&!sName.includes(q)&&!bName.includes(q))return false
+    }
+    return true
+  })
   return <>
     <PageHeader title="My Clinical Schedule" text="Your appointments from the clinic server, with expected visit durations." aside={<div className="row-actions"><input className="compact-date" type="date" aria-label="Schedule date" value={date} onChange={e=>setDate(e.target.value)}/><Button variant="ghost" onClick={()=>store.appointmentFlow.refresh()}>Refresh</Button></div>}/>
     <AppointmentsStatusNotice store={store}/>
-    <Card title={`${dateLabel(date)} schedule`}>
-      <div className="day-schedule">{rows.length?rows.map(a=><div className="schedule-slot" key={a.id}><div className="schedule-time"><b>{displayTime(a.start)}</b><small>{a.duration} min</small></div><div className="schedule-line"/><div className="schedule-visit"><div><strong>{a.patientName||patientName(a.patientId,state.patients)}</strong><span>{a.service}</span><small>{a.branch} • {a.notes||'No booking note'}</small></div><Status>{a.status}</Status></div></div>):<Notice>No appointments are scheduled for this date.</Notice>}</div>
+    <FilterBar
+      search={search}
+      onSearchChange={setSearch}
+      searchPlaceholder="Filter schedule by patient or service…"
+      onClear={(search||statusFilter!=='All')?()=>{setSearch('');setStatusFilter('All')}:null}
+    >
+      <select aria-label="Filter schedule by status" value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}>
+        <option value="All">All statuses</option>
+        <option value="Confirmed">Confirmed</option>
+        <option value="Pending">Pending</option>
+        <option value="Completed">Completed</option>
+      </select>
+    </FilterBar>
+    <Card title={`${dateLabel(date)} schedule`} subtitle={`${rows.length} appointment${rows.length===1?'':'s'} for ${dateLabel(date)}`}>
+      <div className="day-schedule">{rows.length?rows.map(a=><div className="schedule-slot" key={a.id}><div className="schedule-time"><b>{displayTime(a.start)}–{displayTime(addMinutes(a.start,a.duration))}</b><small>{a.duration} min</small></div><div className="schedule-line"/><div className="schedule-visit"><div><strong>{a.patientName||patientName(a.patientId,state.patients)}</strong><span>{a.service}</span><small>{a.branch} • {a.notes||'No booking note'}</small></div><Status>{a.status}</Status></div></div>):<Notice>No appointments are scheduled for this date.</Notice>}</div>
     </Card>
   </>
 }

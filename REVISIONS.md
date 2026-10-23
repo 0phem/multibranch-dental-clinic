@@ -15,8 +15,8 @@
 
 ### 1.1 Consistent UI/UX across all roles
 - [~] Establish a consistent design system across Patient, Staff, Dentist, and Admin UIs. *Shared tokens exist; not every screen is migrated.*
-- [~] Reuse shared components for filters, search, date ranges, dropdowns, pagination, tables, status badges, cards, dialogs, and loading/empty/error states. *`FilterBar` exists; used only in User Management and Audit Trail so far.*
-- [~] Filters should have the same layout, spacing, styling, behavior, and responsive rules wherever used. Change only the filter fields needed by each screen. *Same as above.*
+- [~] Reuse shared components for filters, search, date ranges, dropdowns, pagination, tables, status badges, cards, dialogs, and loading/empty/error states. *`FilterBar` implemented and shared across User Management, Audit Trail, Appointments, and Dentist Schedule.*
+- [~] Filters should have the same layout, spacing, styling, behavior, and responsive rules wherever used. Change only the filter fields needed by each screen. *`FilterBar` provides consistent layout across Appointments, Schedule, Audit Trail, and User Management.*
 - [~] Standardize cards, spacing, buttons, form controls, status labels, and modal/dialog behavior.
 - [ ] Remove large, redundant module title/description banners at the top of each UI to reclaim space. Keep a concise page label or breadcrumb where needed for orientation and accessibility.
 - [x] Add a consistent logout confirmation dialog: **“Are you sure you want to log out?”** with **Yes / No**. “No” closes the dialog; “Yes” logs out.
@@ -65,7 +65,7 @@
 - [x] Provide clear confirmation after successful booking and prevent accidental duplicate submissions.
 
 ### 2.3 My Visits
-- [~] In rescheduling, keep unavailable times visible, disabled, and grayed out. *Not verified on the reschedule screen.*
+- [x] In rescheduling, keep unavailable times visible, disabled, and grayed out. *Verified in code: `RescheduleDialog` in `Visits.jsx` reuses `<TimeSlots>` from `BookingCalendar.jsx` which displays all standard slots with `.is-unavailable` and `disabled`.*
 - [x] Add a cancellation-reason selection with predefined options, for example:
   - No longer need the appointment
   - Schedule conflict
@@ -87,7 +87,7 @@
 ### 2.5 Patient Documents
 - [ ] Define and document the purpose of the Patient Documents module before adding more features.
 - [ ] Recommended scope to validate with the clinic: patient-accessible copies of approved documents such as treatment plans, prescriptions, consent forms, receipts, and clinic-issued records.
-- [~] Distinguish patient uploads from clinic-issued documents, with document type, issue/upload date, status, and source. *Category badge added; source (patient vs clinic) not shown.*
+- [x] Distinguish patient uploads from clinic-issued documents, with document type, issue/upload date, status, and source. *Category badge, source badge (`Patient upload` vs `Clinic-issued`), file size, status, and upload date displayed in `PatientDocumentsTab`.*
 - [x] Apply file type/size validation, safe upload handling, private storage, access checks, audit logging, and retention/deletion rules. *Existing M14 behavior.*
 - [x] Do not expose internal-only documents, other patients’ files, staff notes, or records the patient is not authorized to view.
 
@@ -107,7 +107,7 @@
 - [ ] Ensure buttons and controls perform their stated actions; remove misleading inactive controls.
 
 ### 3.3 Appointments and new-appointment entry points
-- [ ] Add consistent filters to the Appointments screen, reusing the shared filter component.
+- [x] Add consistent filters to the Appointments screen, reusing the shared filter component. *Implemented via `<FilterBar>` in `AppointmentsPage`: search by patient, appt #, dentist, service; status filter dropdown; and multi-branch filter dropdown.*
 - [ ] Consolidate duplicate **New Appointment** buttons across Check-In, Appointments, and Appointment Calendar into one clear, consistent workflow, or have each entry point open the same shared form with correct context.
 - [~] For staff-created appointments, prevent direct booking of service types the clinic defines as non-bookable (for example, brace-only checkups), while allowing authorized workflows if required. *Applies to online booking; staff form not checked.*
 - [ ] Let staff record the actual payment method/status, clearly distinguishing payment method, collection, and payment status.
@@ -118,11 +118,11 @@
 - [x] Make the calendar slightly more compact to preserve space for appointment details.
 - [x] When a date is selected, open its appointments in a panel on the right on desktop so users do not need to scroll down.
 - [x] On small screens, let the details panel stack or become a drawer. *Stacks below.*
-- [~] Reuse shared appointment filters, status badges, and action patterns from Appointments. *Badges yes; filters no.*
+- [x] Reuse shared appointment filters, status badges, and action patterns from Appointments. *Appointment Calendar includes status filter dropdown for the selected date's appointments, matching Appointments action patterns and status badges.*
 - [x] Preserve authorized appointment actions and ensure calendar counts/details reflect real server data.
 
 ### 3.5 Patient Records and branch isolation
-- [ ] Add consistent filters to Patient Records.
+- [x] Add consistent filters to Patient Records. *Added branch filter dropdown and search filter across name, patient code, and phone to Patient Records.*
 - [x] Scope staff Patient Records to the branch assigned to that staff account. *Existing server scope tests.*
 - [~] If an administrator changes a staff member’s assigned branch, enforce the updated access scope server-side. *Not re-tested.*
 - [x] Admin/owner access may span branches according to the approved role policy.
@@ -177,8 +177,8 @@
 - [~] Use reliable server data or real-time updates/polling with stale-data handling; do not display invented queue positions.
 
 ### 4.2 My Schedule and My Work Hours
-- [ ] Improve My Schedule with consistent card dimensions, spacing, alignment, status styling, and a clear chronological view.
-- [ ] Reuse shared components for cards, filters, and status badges.
+- [x] Improve My Schedule with consistent card dimensions, spacing, alignment, status styling, and a clear chronological view. *Card layout standardizes time range, duration badge, patient name, service, branch, booking note, and status.*
+- [x] Reuse shared components for cards, filters, and status badges. *`<FilterBar>` integrated into `SchedulePage` with search and status dropdown.*
 - [x] Make My Work Hours read-only for dentists. Only Dr. Dana or another explicitly authorized administrator can edit them.
 - [~] Enforce this restriction on the server/API as well as in the UI. *Not verified on the server.*
 

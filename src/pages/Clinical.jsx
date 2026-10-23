@@ -23,10 +23,18 @@ export function PatientsPage({ role, store, context, setPage }) {
   // collections (demo fixtures and local projections) stay in state for unfinished modules but are never shown here.
   const serverSession=!!session?.serverUserId
   const availablePatients=state.patients.filter(p=>(!serverSession||p.serverProjection)&&patientInScope(p,state,session))
+  const branches=state.branches.filter(b=>role==='owner'||(session.branchScopes?session.branchScopes.includes(b.id):b.id===session.branchId))
+  const [branchFilter,setBranchFilter]=useState('All')
   const [selected,setSelected]=useState(context?.patientId||availablePatients[0]?.id||'')
   React.useEffect(()=>{if(context?.patientId)setSelected(context.patientId)},[context?.patientId])
   const [tab,setTab]=useState('summary')
   const [search,setSearch]=useState('')
+  const filteredPatients=availablePatients.filter(p=>{
+    if(branchFilter!=='All'&&p.preferredBranch!==branchFilter)return false
+    const term=search.trim().toLowerCase()
+    if(!term)return true
+    return `${p.name} ${p.patientCode||''} ${p.phone||''}`.toLowerCase().includes(term)
+  })
   const [newOpen,setNewOpen]=useState(false)
   const [newPatient,setNewPatient]=useState({firstName:'',lastName:'',dob:'',sex:'Female',phone:'',email:'',address:'',preferredBranch:'Dr. Dana Roxas Dental Clinic',hmo:'None',hmoMember:'—',allergies:'None',medicalHistory:'',dentalHistory:'',emergencyContact:'',consent:false,createPortalAccount:false})
   const patient=availablePatients.find(p=>p.id===selected)
@@ -86,7 +94,16 @@ export function PatientsPage({ role, store, context, setPage }) {
   return <>
     <PageHeader title="Centralized Patient Records" text="Identity and contact details are shared across the patient record. Staff may maintain approved demographics; dentists see those fields read-only and edit only clinical information." aside={role==='dentist'&&encounter&&(['Called','Treatment Ready'].includes(encounter.status)||encounter.status==='Served'&&encounter.visitStatus==='In Treatment')?<Button onClick={()=>setPage('treatment',context)}>{encounter.treatmentId?'Continue Treatment':'Open Treatment'}</Button>:null}/>
     {!patient&&!serverSession?<Notice>The selected patient is unavailable in your current scope. {availablePatients.length>0&&<Button onClick={()=>setSelected(availablePatients[0].id)}>Open an available patient</Button>}{role==='staff'&&<Button onClick={()=>setNewOpen(true)}>New Patient</Button>}</Notice>:<div className="records-layout">
-      <Card className="patient-list" title="Patients" actions={role==='staff'?<Button size="sm" onClick={()=>setNewOpen(true)}>New Patient</Button>:null}><input className="search-input" aria-label="Search patients" placeholder={serverSession&&role!=='dentist'?'Search the clinic directory…':'Search patient...'} value={search} onChange={e=>setSearch(e.target.value)}/>{searchError&&<Notice tone="warning" title="Patient search unavailable">{searchError} <Button size="sm" variant="ghost" onClick={()=>setSearchAttempt(searchAttempt+1)}>Retry</Button></Notice>}{serverSession&&availablePatients.length===0&&!searchError&&<p className="muted">{role==='dentist'?'Patients appear here from your appointments and queue.':'Type at least 2 characters to search the clinic patient directory.'}</p>}<div className="patient-list-scroll">{availablePatients.filter(p=>`${p.name} ${p.patientCode||''} ${p.phone||''}`.toLowerCase().includes(search.trim().toLowerCase())).map(p=><button key={p.id} className={selected===p.id?'selected':''} onClick={()=>{setSelected(p.id);setTab('summary')}}><span className="avatar">{p.name.split(' ').map(x=>x[0]).slice(0,2).join('')}</span><div><b>{p.name}</b><small>{p.serverProjection?p.patientCode:`${p.patientCode||p.id} • ${p.preferredBranch} • ${p.hmo}`}</small></div></button>)}</div></Card>
+      <Card className="patient-list" title="Patients" subtitle={`${filteredPatients.length} on file`} actions={role==='staff'?<Button size="sm" onClick={()=>setNewOpen(true)}>New Patient</Button>:null}>
+        <input className="search-input" aria-label="Search patients" placeholder={serverSession&&role!=='dentist'?'Search the clinic directory…':'Search patient...'} value={search} onChange={e=>setSearch(e.target.value)}/>
+        {branches.length>1&&<select className="filter-select" style={{width:'100%',margin:'6px 0 2px'}} aria-label="Filter patients by branch" value={branchFilter} onChange={e=>setBranchFilter(e.target.value)}>
+          <option value="All">All branches</option>
+          {branches.map(b=><option key={b.id} value={b.name}>{b.name}</option>)}
+        </select>}
+        {searchError&&<Notice tone="warning" title="Patient search unavailable">{searchError} <Button size="sm" variant="ghost" onClick={()=>setSearchAttempt(searchAttempt+1)}>Retry</Button></Notice>}
+        {serverSession&&availablePatients.length===0&&!searchError&&<p className="muted">{role==='dentist'?'Patients appear here from your appointments and queue.':'Type at least 2 characters to search the clinic patient directory.'}</p>}
+        <div className="patient-list-scroll">{filteredPatients.length?filteredPatients.map(p=><button key={p.id} className={selected===p.id?'selected':''} onClick={()=>{setSelected(p.id);setTab('summary')}}><span className="avatar">{p.name.split(' ').map(x=>x[0]).slice(0,2).join('')}</span><div><b>{p.name}</b><small>{p.serverProjection?p.patientCode:`${p.patientCode||p.id} • ${p.preferredBranch} • ${p.hmo}`}</small></div></button>):<p className="muted" style={{padding:'12px 8px'}}>No matching patients found.</p>}</div>
+      </Card>
       {patient?      <div>
         <Card className="patient-header-card"><div className="patient-record-head"><div className="avatar xl">{patient.name.split(' ').map(x=>x[0]).slice(0,2).join('')}</div><div><h2>{patient.name}</h2><p>{patient.serverProjection?patient.patientCode:<>{patient.patientCode||patient.id} • {patient.dob||'DOB not set'} • {patient.sex||'—'} • {patient.preferredBranch}</>}</p><div className="chip-row">{!patient.serverProjection&&<span className="mini-chip">Allergies: {patient.allergies}</span>}{patient.consent&&<span className="mini-chip success">Consent on file</span>}</div></div></div></Card>
         <Tabs tabs={tabs} active={tab} onChange={setTab}/>
@@ -429,9 +446,14 @@ function PatientDocumentsTab({ patient, role, store }) {
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '8px' }}>
                     <div>
-                      <b style={{ fontSize: '12px', display: 'block' }}>{doc.title}</b>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px', flexWrap: 'wrap' }}>
+                        <b style={{ fontSize: '12px' }}>{doc.title}</b>
+                        <span className={`mini-chip ${doc.uploadedByPatient ? 'info' : 'brand'}`} style={{ fontSize: '9px', padding: '1px 6px' }}>
+                          {doc.uploadedByPatient ? 'Patient upload' : 'Clinic-issued'}
+                        </span>
+                      </div>
                       <small style={{ color: 'var(--muted)', fontSize: '10px' }}>
-                        {doc.originalFilename} • {doc.fileSizeFormatted} • {doc.category?.replace(/_/g, ' ')} • Uploaded {dateLabel(doc.createdAt)}
+                        {doc.originalFilename} • {doc.fileSizeFormatted} • {doc.category?.replace(/_/g, ' ')} • Source: {doc.uploadedByPatient ? 'Patient' : 'Clinic'} • Uploaded {dateLabel(doc.createdAt)}
                       </small>
                     </div>
                     <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
