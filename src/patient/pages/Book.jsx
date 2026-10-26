@@ -188,6 +188,7 @@ function DentistStep({ service, branch, value, onPick }) {
 
 function Review({ choice, forPerson, onEdit, onBooked }) {
   const [policy, setPolicy] = useState(null)
+  const [paymentMode, setPaymentMode] = useState('online') // 'online' | 'cash'
   useEffect(() => { publicFaq().then(r => { if (r.ok) setPolicy(r.meta?.cancellation_policy || null) }) }, [])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -195,20 +196,36 @@ function Review({ choice, forPerson, onEdit, onBooked }) {
   const confirm = async () => {
     if (busy) return
     setBusy(true); setError('')
-    const result = await createAppointment({ branchId: choice.branch.id, serviceId: choice.service.id, date: choice.date, start: choice.slot.start_time, dentistId: choice.dentist?.id || null, forPatientId: forPerson?.id || null }, key.current)
+    const result = await createAppointment({ branchId: choice.branch.id, serviceId: choice.service.id, date: choice.date, start: choice.slot.start_time, dentistId: choice.dentist?.id || null, forPatientId: forPerson?.id || null, payAtClinic: paymentMode === 'cash' }, key.current)
     setBusy(false)
     if (!result.ok) { setError(result.message || 'This time could not be booked. Please choose another.'); return }
     onBooked({ ...result.row, serviceName: choice.service.name, branchName: choice.branch.name, branchAddress: choice.branch.address })
   }
   const rows = [...(forPerson ? [['Patient', `${forPerson.name} (${forPerson.relationship.toLowerCase()})`, 0]] : []), ['Service', choice.service.name, 0], ['Branch', <>{choice.branch.name}<small>{choice.branch.address}</small></>, 1],
     ['Dentist', choice.slot?.dentist?.name || choice.dentist?.name || 'Assigned by the clinic', 2], ['Date', dateLong(choice.date), 3], ['Time', time12(choice.slot?.start_time), 4],
-    ['Payment', 'Online booking fee via PayMongo (GCash, Maya or card). Any remaining balance is paid at the clinic after the visit.', null]]
+    ['Payment method', paymentMode === 'online' ? 'Online payment via PayMongo (GCash, Maya, Cards)' : 'Cash settled at appointment on arrival', null]]
   return <>
     <dl className="pp-summary">{rows.map(([k, v, s]) => <div key={k}><dt>{k}</dt><dd>{v}</dd>{s !== null && <button type="button" className="link-button" onClick={() => onEdit(s)} aria-label={`Change ${k.toLowerCase()}`}>Change</button>}</div>)}</dl>
-    <p className="pp-note"><Icon name="wallet" size={18}/> Pay at booking via PayMongo (GCash, Maya, Cards). Your slot is held for 15 minutes. Cancellations at least 24 hours in advance are fully refunded.</p>
-    {policy && <p className="pp-note pp-policy"><Icon name="calendar" size={18}/> {policy}</p>}
+    <div className="pp-payment-options" style={{ marginTop: '14px', display: 'grid', gap: '8px' }}>
+      <label style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', padding: '12px', border: `1.5px solid ${paymentMode === 'online' ? 'var(--brand)' : 'var(--pp-edge)'}`, borderRadius: '12px', background: paymentMode === 'online' ? 'var(--brand-soft)' : '#fff', cursor: 'pointer' }}>
+        <input type="radio" name="paymentOption" value="online" checked={paymentMode === 'online'} onChange={() => setPaymentMode('online')} style={{ marginTop: '2px' }}/>
+        <div>
+          <b style={{ display: 'block', color: 'var(--ink)', fontSize: '0.9375rem' }}>Pay online now via PayMongo (Card, GCash, Maya)</b>
+          <small style={{ color: 'var(--text)', fontSize: '0.8125rem' }}>Secure checkout holds slot for 15 minutes. Deposit applies to visit bill.</small>
+        </div>
+      </label>
+      <label style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', padding: '12px', border: `1.5px solid ${paymentMode === 'cash' ? 'var(--brand)' : 'var(--pp-edge)'}`, borderRadius: '12px', background: paymentMode === 'cash' ? 'var(--brand-soft)' : '#fff', cursor: 'pointer' }}>
+        <input type="radio" name="paymentOption" value="cash" checked={paymentMode === 'cash'} onChange={() => setPaymentMode('cash')} style={{ marginTop: '2px' }}/>
+        <div>
+          <b style={{ display: 'block', color: 'var(--ink)', fontSize: '0.9375rem' }}>Pay Cash at Appointment</b>
+          <small style={{ color: 'var(--text)', fontSize: '0.8125rem' }}>No payment required now. Pay cash at the front desk when you arrive.</small>
+        </div>
+      </label>
+    </div>
+    {paymentMode === 'online' && <p className="pp-note" style={{ marginTop: '12px' }}><Icon name="wallet" size={18}/> Pay at booking via PayMongo (GCash, Maya, Cards). Slot held for 15 minutes. Cancellations at least 24h in advance are refunded.</p>}
+    {policy && <p className="pp-note pp-policy" style={{ marginTop: '8px' }}><Icon name="calendar" size={18}/> {policy}</p>}
     {error && <p className="pp-error-text" role="alert">{error}</p>}
-    <Button width="full" className="pp-primary" disabled={busy} onClick={confirm}>{busy ? 'Processing…' : 'Confirm & pay'}</Button>
+    <Button width="full" className="pp-primary" disabled={busy} onClick={confirm}>{busy ? 'Processing…' : paymentMode === 'online' ? 'Confirm & pay online' : 'Confirm appointment (Cash)'}</Button>
   </>
 }
 

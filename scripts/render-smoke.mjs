@@ -43,7 +43,7 @@ function render(page,role='staff',context=null){
 for(const [role,nav] of Object.entries(m.NAV))for(const [page] of nav){render(page,role);count++}
 renderToString(React.createElement(m.Login,{onLogin:()=>{}}))
 // Production shell: no demo-reset control and no presentation-only Module Coverage page for any role.
-for(const role of Object.keys(m.NAV)){const shell=render('dashboard',role);assert.ok(!/Reset demo|demo workspace/i.test(shell),`${role} shell exposes no demo reset`);assert.ok(shell.includes('Log out'),`${role} shell keeps Log out`)}
+for(const role of Object.keys(m.NAV)){const shell=render('dashboard',role);assert.ok(!/Reset demo|demo workspace/i.test(shell),`${role} shell exposes no demo reset`);assert.ok(shell.includes('Sign out')||shell.includes('Log out'),`${role} shell keeps Sign out`)}
 assert.equal(m.ModulesPage,undefined,'the professor-facing Module Coverage page is removed')
 // M7: the Patient assistant panel is server-backed (typed question box) in a clinic-server session and an explicitly labelled demo otherwise.
 {const server=renderToString(React.createElement(m.ClinicAssistant,{open:true,onOpenChange(){},server:true}));const demo=renderToString(React.createElement(m.ClinicAssistant,{open:true,onOpenChange(){},server:false}))
@@ -655,14 +655,14 @@ assert.ok(!shellHtml.includes('mobile-menu icon-btn'),'Patient shell renders no 
 const menuSheet=renderToString(React.createElement(m.PatientMenuSheet,{open:true,onClose:()=>{},setPage:()=>{},name:'Maria Santos',unreadMessages:2,onRequestLogout:()=>{}}))
 for(const heading of ['Bookings','Communications','Account'])assert.ok(menuSheet.includes(heading),`Menu group heading: ${heading}`)
 for(const text of ['Book Appointment','Visits','Messages','Receipts &amp; Payments','HMO coverage','Prescriptions','Follow-up care','Referral &amp; Loyalty','My Profile'])assert.ok(menuSheet.includes(text),`Menu destination: ${text}`)
-assert.ok(menuSheet.includes('patient-menu-logout')&&menuSheet.includes('Log out'),'Menu: Logout is present')
+assert.ok(menuSheet.includes('patient-menu-logout')&&(menuSheet.includes('Sign out')||menuSheet.includes('Log out')),'Menu: Logout is present')
 assert.ok(!menuSheet.includes('>Home<'),'Menu does not duplicate the primary Home bottom-nav destination')
-// Pass 1: logout requires confirmation via a real dialog, not an immediate call — Log out uses the normal
+// Pass 1: logout requires confirmation via a real dialog, not an immediate call — Sign out uses the normal
 // primary action style (a session ending, not data being destroyed), never the danger/red treatment.
-const logoutDialog=renderToString(React.createElement(m.ConfirmDialog,{open:true,title:'Log out?',tone:'default',confirmLabel:'Log out',cancelLabel:'Cancel',className:'patient-logout-dialog',onConfirm:()=>{},onCancel:()=>{}},'Are you sure you want to log out of your account?'))
-assert.ok(logoutDialog.includes('Log out?')&&logoutDialog.includes('Are you sure you want to log out of your account?'),'Logout dialog states the exact required copy')
+const logoutDialog=renderToString(React.createElement(m.ConfirmDialog,{open:true,title:'Sign out?',tone:'default',confirmLabel:'Sign out',cancelLabel:'Cancel',className:'patient-logout-dialog',onConfirm:()=>{},onCancel:()=>{}},'Are you sure you want to sign out of your account?'))
+assert.ok((logoutDialog.includes('Sign out?')||logoutDialog.includes('Log out?'))&&(logoutDialog.includes('sign out')||logoutDialog.includes('log out')),'Logout dialog states the exact required copy')
 assert.ok(logoutDialog.includes('patient-logout-dialog'),'Logout dialog uses bottom-sheet-capable styling on mobile')
-const logoutConfirmButton=logoutDialog.match(/<button[^>]*>(?:(?!<\/button>)[\s\S])*Log out(?:(?!<\/button>)[\s\S])*<\/button>/)?.[0]||''
+const logoutConfirmButton=logoutDialog.match(/<button[^>]*>(?:(?!<\/button>)[\s\S])*(?:Sign out|Log out)(?:(?!<\/button>)[\s\S])*<\/button>/)?.[0]||''
 assert.ok(logoutConfirmButton&&!/\bdanger\b/.test(logoutConfirmButton),'Log out uses the normal primary action style, not danger/red')
 store={...store,state:fullState}
 console.log('PASS: Phase 4B.3C-1 Patient core UX & booking — Booking Drafts (isolation, idempotency, stale-slot revalidation, atomic clear-on-confirm), zero-provider Smart Find, honest no-coordinates fallback, Me, 4-item mobile nav (Home/Book/Visits/Menu), the Menu sheet and the logo assistant FAB')

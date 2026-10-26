@@ -21,6 +21,7 @@ class Invoice extends Model {
     public function receipt(): HasOne { return $this->hasOne(Receipt::class); }
     public function histories(): HasMany { return $this->hasMany(InvoiceHistory::class)->orderBy('id'); }
     public function balance(): string { $toCents=function($v){$p=explode('.',(string)$v);return ((int)$p[0])*100+(int)str_pad($p[1]??'0',2,'0');}; $c=$toCents($this->patient_responsibility_amount)-$toCents($this->paid_amount); return number_format($c/100,2,'.',''); }
+    public function getBalanceAttribute(): string { return $this->balance(); }
     public function scopeVisibleTo(Builder $query, User $user): Builder {
         return match($user->role->value) {
             'owner' => $query,

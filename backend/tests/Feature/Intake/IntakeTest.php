@@ -395,6 +395,31 @@ class IntakeTest extends TestCase
         $before = Mail::sent(OneTimeCodeMail::class)->count();
         $this->withServerVariables(['REMOTE_ADDR' => '10.9.9.9'])->postJson('/api/account/claim', ['token' => $token])->assertCreated();
         $this->assertSame($before + 1, Mail::sent(OneTimeCodeMail::class)->count()); // the link still sends a code
+    }
 
+    public function test_kiosk_channel_is_rejected_and_only_phone_and_account_are_allowed(): void
+    {
+        // Public API validation rejects 'kiosk'
+        $this->submitForm($this->form([], ['channel' => 'kiosk']))
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('channel');
+
+        // Public API validation accepts 'phone'
+        $this->submitForm($this->form(['phone' => '0917 555 0777'], ['channel' => 'phone']))
+            ->assertCreated();
+
+        // Database CHECK constraint rejects 'kiosk'
+        $this->expectException(\Illuminate\Database\QueryException::class);
+        DB::table('intake_submissions')->insert([
+            'public_id' => 'intake_kiosk_test_public_id',
+            'reference' => 'TESTREF12345',
+            'branch_id' => $this->b['b1']->id,
+            'channel' => 'kiosk',
+            'status' => 'pending',
+            'consent_at' => now(),
+            'consent_version' => 'v1',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
     }
 }

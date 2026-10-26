@@ -517,7 +517,10 @@ final class AppointmentService
             AppointmentCommandKey::class, $actor, $key, $command, $payload,
             function () use ($work) {
                 [$appointment, $status] = $work();
-                $body = (new AppointmentResource($appointment->fresh(self::RELATIONS)))->response()->getData(true);
+                $fresh = $appointment->fresh(array_merge(self::RELATIONS, ['activeCheckoutSession']));
+                $fresh->checkout_url = $appointment->checkout_url ?? $fresh->activeCheckoutSession?->checkout_url;
+                $fresh->checkout_session_id = $appointment->checkout_session_id ?? $fresh->activeCheckoutSession?->provider_session_id;
+                $body = (new AppointmentResource($fresh))->response()->getData(true);
 
                 return [$body, $status, ['appointment_id' => $appointment->id]];
             },

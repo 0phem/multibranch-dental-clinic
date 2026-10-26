@@ -64,6 +64,14 @@ export function PatientPortal({ me, store, initialPage = 'home', initialContext 
   const [context, setContext] = useState(initialContext)
   const [visit, setVisit] = useState(0) // remounts a page when it is opened again with new context
   const [menu, setMenu] = useState(false), [more, setMore] = useState(false), [bell, setBell] = useState(false), [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false)
+  const [avatar, setAvatar] = useState(() => {
+    try { return localStorage.getItem(`patient_avatar_${me?.patient?.id || me?.id}`) || null } catch { return null }
+  })
+  useEffect(() => {
+    const handler = e => setAvatar(e.detail)
+    window.addEventListener('patient-avatar-updated', handler)
+    return () => window.removeEventListener('patient-avatar-updated', handler)
+  }, [me?.patient?.id, me?.id])
   const notes = useNotifications()
   const main = useRef(null)
   const toast = store.toast
@@ -116,7 +124,7 @@ export function PatientPortal({ me, store, initialPage = 'home', initialContext 
       </nav>
       <div className="pp-me">
         <button type="button" className="pp-me-btn" aria-haspopup="menu" aria-expanded={menu} onClick={() => setMenu(m => !m)}>
-          <span className="pp-avatar" aria-hidden="true">{initials(me.name)}</span><span className="pp-me-text"><b>{me.name}</b><small>{me.email}</small></span><Icon name="chevron" size={16}/>
+          <span className="pp-avatar" aria-hidden="true">{avatar ? <img src={avatar} alt="" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }}/> : initials(me.name)}</span><span className="pp-me-text"><b>{me.name}</b><small>{me.email}</small></span><Icon name="chevron" size={16}/>
         </button>
         {menu && <ProfileMenu onPick={navigate} onLogout={() => { setMenu(false); setLogoutConfirmOpen(true) }} onClose={() => setMenu(false)}/>}
       </div>
@@ -157,8 +165,8 @@ export function PatientPortal({ me, store, initialPage = 'home', initialContext 
       navigate(t.page, t.page === 'billing' ? { invoiceId: t.id } : t.page === 'messages' ? { conversationId: t.id } : { appointmentId: t.id })
     }}/>}
     <AssistantLauncher onNavigate={navigate}/>
-    <ConfirmDialog open={logoutConfirmOpen} title="Log out?" tone="default" confirmLabel="Log out" cancelLabel="Cancel" className="patient-logout-dialog" onConfirm={() => { setLogoutConfirmOpen(false); onLogout() }} onCancel={() => setLogoutConfirmOpen(false)}>
-      Are you sure you want to log out of your account?
+    <ConfirmDialog open={logoutConfirmOpen} title="Sign out?" tone="default" confirmLabel="Sign out" cancelLabel="Cancel" className="patient-logout-dialog" onConfirm={() => { setLogoutConfirmOpen(false); onLogout() }} onCancel={() => setLogoutConfirmOpen(false)}>
+      Are you sure you want to sign out of your account?
     </ConfirmDialog>
   </div>
 }

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { Brand } from '../Brand.jsx'
 import { Button, Card, Field, FilterBar, Modal, Notice, PageHeader, Status, Table } from '../components.jsx'
 import { dateLabel } from '../logic.js'
 import { fetchAuditLogs, downloadAuditLogsCsv } from '../audit-api.js'
@@ -102,32 +103,28 @@ export function AuditTrailPage({ store }) {
               {exporting ? 'Generating Export...' : 'Export Audit Trail (CSV)'}
             </Button>
             <Button size="sm" variant="ghost" onClick={() => window.print()} icon="file">
-              Print / PDF
+              Download / Print PDF
             </Button>
           </div>
         }
       />
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', marginBottom: '20px' }}>
-        <div style={{ padding: '14px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--surface)' }}>
-          <span style={{ fontSize: '11px', color: 'var(--muted)', textTransform: 'uppercase', fontWeight: '700' }}>Events loaded</span>
-          <b style={{ display: 'block', fontSize: '20px', marginTop: '4px' }}>{logs.length}</b>
-        </div>
-        <div style={{ padding: '14px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--surface)' }}>
-          <span style={{ fontSize: '11px', color: 'var(--muted)', textTransform: 'uppercase', fontWeight: '700' }}>Security & warnings (loaded)</span>
-          <b style={{ display: 'block', fontSize: '20px', marginTop: '4px', color: securityCount > 0 ? '#b91c1c' : 'inherit' }}>{securityCount}</b>
-        </div>
-        <div style={{ padding: '14px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--surface)' }}>
-          <span style={{ fontSize: '11px', color: 'var(--muted)', textTransform: 'uppercase', fontWeight: '700' }}>Financial (loaded)</span>
-          <b style={{ display: 'block', fontSize: '20px', marginTop: '4px' }}>{financialCount}</b>
-        </div>
-        <div style={{ padding: '14px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--surface)' }}>
-          <span style={{ fontSize: '11px', color: 'var(--muted)', textTransform: 'uppercase', fontWeight: '700' }}>Clinical (loaded)</span>
-          <b style={{ display: 'block', fontSize: '20px', marginTop: '4px' }}>{clinicalCount}</b>
+      <div className="audit-print-header" style={{ display: 'none', marginBottom: '20px', paddingBottom: '12px', borderBottom: '2px solid #0f172a' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Brand />
+          <div style={{ textAlign: 'right' }}>
+            <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '800' }}>Official Audit Trail & Compliance Log</h3>
+            <span style={{ fontSize: '11px', color: '#64748b' }}>Generated on {new Date().toLocaleDateString()}</span>
+          </div>
         </div>
       </div>
-
-      <Card title="Audit Event Filters">
+      <style>{`
+        @media print {
+          .audit-print-header { display: block !important; }
+          .card { border: none !important; box-shadow: none !important; }
+        }
+      `}</style>
+<Card title="Audit Event Filters">
         <FilterBar
           search={search}
           onSearchChange={setSearch}
@@ -193,6 +190,25 @@ export function AuditTrailPage({ store }) {
           {rangeInvalid && <span style={{ color: '#dc2626', fontSize: '12px', fontWeight: '600' }}>The end date is before the start date.</span>}
         </div>
       </Card>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', marginBottom: '20px' }}>
+        <div style={{ padding: '14px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--surface)' }}>
+          <span style={{ fontSize: '11px', color: 'var(--muted)', textTransform: 'uppercase', fontWeight: '700' }}>Events loaded</span>
+          <b style={{ display: 'block', fontSize: '20px', marginTop: '4px' }}>{logs.length}</b>
+        </div>
+        <div style={{ padding: '14px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--surface)' }}>
+          <span style={{ fontSize: '11px', color: 'var(--muted)', textTransform: 'uppercase', fontWeight: '700' }}>Security & warnings (loaded)</span>
+          <b style={{ display: 'block', fontSize: '20px', marginTop: '4px', color: securityCount > 0 ? '#b91c1c' : 'inherit' }}>{securityCount}</b>
+        </div>
+        <div style={{ padding: '14px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--surface)' }}>
+          <span style={{ fontSize: '11px', color: 'var(--muted)', textTransform: 'uppercase', fontWeight: '700' }}>Financial (loaded)</span>
+          <b style={{ display: 'block', fontSize: '20px', marginTop: '4px' }}>{financialCount}</b>
+        </div>
+        <div style={{ padding: '14px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--surface)' }}>
+          <span style={{ fontSize: '11px', color: 'var(--muted)', textTransform: 'uppercase', fontWeight: '700' }}>Clinical (loaded)</span>
+          <b style={{ display: 'block', fontSize: '20px', marginTop: '4px' }}>{clinicalCount}</b>
+        </div>
+      </div>
 
       <div style={{ marginTop: '20px' }}>
         <Card title="Activity Log" subtitle="Newest first, recorded by the clinic server. Entries cannot be edited or deleted from the application.">

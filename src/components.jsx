@@ -38,6 +38,7 @@ const ICON_PATHS={
   logout:<><path d="M10 17l5-5-5-5M15 12H3"/><path d="M14 3h5a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-5"/></>,
   menu:<><path d="M4 6h16M4 12h16M4 18h16"/></>,
   x:<><path d="M6 6l12 12M18 6 6 18"/></>,
+  refresh:<><path d="M21 12a9 9 0 1 1-2.64-6.36L21 8"/><path d="M21 3v5h-5"/></>,
   tooth:<><path d="M12 3c-2.2 0-3.7-1.2-5.5-.8C3.6 2.9 2.5 6 3.3 9.2c.8 3.2 1.9 4.1 2.3 7.7.3 2.5 1.1 4.1 2.3 4.1 1.6 0 1.8-4.9 4.1-4.9s2.5 4.9 4.1 4.9c1.2 0 2-1.6 2.3-4.1.4-3.6 1.5-4.5 2.3-7.7C21.5 6 20.4 2.9 17.5 2.2 15.7 1.8 14.2 3 12 3Z"/></>,
   robot:<><rect x="4" y="7" width="16" height="12" rx="3"/><path d="M9 11h.01M15 11h.01M8 15h8M12 3v4M9 3h6"/></>,
   file:<><path d="M6 2h8l4 4v16H6z"/><path d="M14 2v5h5M9 13h6M9 17h6"/></>,
@@ -180,9 +181,87 @@ export function SplitBadge({ left, right, tone='neutral' }) {
   return <span className={`split-badge ${tone}`}><b>{left}</b><span>{right}</span></span>
 }
 
+export function SearchInput({ value, onChange, placeholder = 'Search…', ariaLabel, className = '', onClear, ...props }) {
+  return <div className={`search-input-wrap ${className}`.trim()}>
+    <Icon name="search" size={16} className="search-input-icon"/>
+    <input
+      type="search"
+      className="search-input-field"
+      value={value || ''}
+      onChange={e => onChange?.(e.target.value)}
+      placeholder={placeholder}
+      aria-label={ariaLabel || placeholder}
+      {...props}
+    />
+    {value && onClear && <button type="button" className="search-input-clear" title="Clear search" aria-label="Clear search" onClick={onClear}>
+      <Icon name="x" size={14}/>
+    </button>}
+  </div>
+}
+
+export function RefreshButton({ onClick, loading = false, title = 'Refresh', ariaLabel = 'Refresh', size = 'md', className = '', ...props }) {
+  const [spinning, setSpinning] = React.useState(false)
+  const isRefreshing = loading || spinning
+
+  const handleClick = async (e) => {
+    if (isRefreshing) return
+    setSpinning(true)
+    try {
+      await onClick?.(e)
+    } finally {
+      setTimeout(() => setSpinning(false), 500)
+    }
+  }
+
+  return <button
+    type="button"
+    className={`icon-btn refresh-btn ${size === 'sm' ? 'refresh-btn-sm' : ''} ${isRefreshing ? 'is-spinning' : ''} ${className}`.trim()}
+    title={title}
+    aria-label={ariaLabel}
+    disabled={isRefreshing}
+    onClick={handleClick}
+    {...props}
+  >
+    <Icon name="refresh" size={size === 'sm' ? 16 : 18}/>
+  </button>
+}
+
+export function SelectWithOther({ label, value, onChange, options = [], otherValue, onOtherChange, placeholder = 'Please specify…', required = false, hint, error }) {
+  const isOther = value === 'Other' || value === 'other' || value === '__other__'
+  return <div className="select-with-other">
+    <Field label={label} required={required} hint={hint} error={!isOther ? error : undefined}>
+      <select value={value} onChange={e => {
+        onChange?.(e.target.value)
+        if (e.target.value !== 'Other' && e.target.value !== 'other' && e.target.value !== '__other__') {
+          onOtherChange?.('')
+        }
+      }}>
+        {options.map(opt => {
+          const val = typeof opt === 'object' ? opt.value : opt
+          const lbl = typeof opt === 'object' ? opt.label : opt
+          return <option key={val} value={val}>{lbl}</option>
+        })}
+      </select>
+    </Field>
+    {isOther && <Field label={`Specify ${label || ''}`.trim()} required error={error}>
+      <input
+        type="text"
+        value={otherValue || ''}
+        onChange={e => onOtherChange?.(e.target.value)}
+        placeholder={placeholder}
+        aria-required="true"
+      />
+    </Field>}
+  </div>
+}
+
 export function FilterBar({ search, onSearchChange, searchPlaceholder='Search…', filters=[], count, totalCount, onClear, onReset, children, className='', ariaLabel='Search and filters' }) {
   const clearHandler = onClear || onReset
   const hasFilters = Array.isArray(filters) && filters.length > 0
+  const hasActiveFilters = Boolean(
+    (search && String(search).trim() !== '') ||
+    (hasFilters && filters.some(f => f.value && f.value !== 'all' && f.value !== 'All' && f.value !== ''))
+  )
   return <div className={`filter-bar ${className}`.trim()} role="search" aria-label={ariaLabel}>
     {onSearchChange && <div className="filter-bar-search">
       <Icon name="search" size={16} className="filter-search-icon"/>
@@ -211,6 +290,16 @@ export function FilterBar({ search, onSearchChange, searchPlaceholder='Search…
       {children}
     </div>}
     {count != null && totalCount != null && <span className="filter-bar-count block-muted" aria-live="polite">{count} of {totalCount}</span>}
-    {clearHandler && <button type="button" className="btn ghost sm filter-bar-clear" onClick={clearHandler}>Clear filters</button>}
+    {clearHandler && (
+      <button
+        type="button"
+        className="icon-btn filter-bar-clear"
+        title="Clear filters"
+        aria-label="Clear filters"
+        onClick={clearHandler}
+      >
+        <Icon name="x" size={16}/>
+      </button>
+    )}
   </div>
 }

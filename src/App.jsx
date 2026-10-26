@@ -279,8 +279,8 @@ function AppBody() {
   if(publicView==='respond')return <RespondLink hash={typeof window==='undefined'?'':window.location.hash}/>
   if(authPhase==='checking')return <AuthChecking/>
   if(authPhase==='error'&&publicView!=='home')return <AuthUnavailable onRetry={checkSession}/>
-  // Counter registration (poster QR) and the front-desk kiosk: public, also for a signed-in patient (who joins with their account).
-  if(publicView==='join'||publicView==='kiosk')return <ChunkBoundary><Suspense fallback={<AuthShell><StartupLoading compact label="Opening registration…"/></AuthShell>}><JoinPage hash={window.location.hash} signedInPatient={role==='patient'&&publicView==='join'}/></Suspense></ChunkBoundary>
+  // Counter registration (poster QR): public, also for a signed-in patient (who joins with their account).
+  if(publicView==='join')return <ChunkBoundary><Suspense fallback={<AuthShell><StartupLoading compact label="Opening registration…"/></AuthShell>}><JoinPage hash={window.location.hash} signedInPatient={role==='patient'}/></Suspense></ChunkBoundary>
 
   const storageWarnings=Object.values(store.persistenceErrors||{})
   if(storageWarnings.some(message=>message.includes('could not be read')))return <Notice title="Saved workspace needs recovery">{storageWarnings.join(' ')}</Notice>

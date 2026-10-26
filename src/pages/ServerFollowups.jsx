@@ -72,17 +72,32 @@ function FollowupRow({ t, owner, role, store, toast, onChanged }) {
   </li>
 }
 
+const STANDARD_REASONS = [
+  'Post-Op Check',
+  'Suture Removal',
+  'Crown / Bridge Fitting',
+  'Restoration Polish',
+  'Ortho Adjustment',
+  'Routine Cleaning / Recall',
+  'Other'
+]
+
 /** The follow-up tasks on a patient record (front desk), with "Add a follow-up". */
 export function FollowupPanel({ patientId, branches = [], toast, store, role = 'staff' }) {
   const [rows, setRows] = useState(null), [adding, setAdding] = useState(false)
-  const [f, setF] = useState({ branch_ref: branches[0]?.id || '', reason: '', due_on: manilaToday() }), [err, setErr] = useState('')
+  const [reasonCategory, setReasonCategory] = useState(STANDARD_REASONS[0])
+  const [customReason, setCustomReason] = useState('')
+  const [f, setF] = useState({ branch_ref: branches[0]?.id || '', due_on: manilaToday() }), [err, setErr] = useState('')
   const load = () => patientFollowups(patientId).then(r => setRows(r.ok ? r.data : []))
   useEffect(() => { load() }, [patientId])
+  const effectiveReason = reasonCategory === 'Other' ? customReason.trim() : reasonCategory
+
   const add = async e => {
     e.preventDefault(); setErr('')
-    const r = await createFollowup({ patient_id: patientId, ...f, branch_ref: f.branch_ref || branches[0]?.id })
+    if (!effectiveReason) return setErr('Please select or enter a reason for follow-up.')
+    const r = await createFollowup({ patient_id: patientId, reason: effectiveReason, ...f, branch_ref: f.branch_ref || branches[0]?.id })
     if (!r.ok) return setErr(firstError(r))
-    toast('Follow-up added.', 'success'); setAdding(false); setF(x => ({ ...x, reason: '' })); load()
+    toast('Follow-up added.', 'success'); setAdding(false); setCustomReason(''); load()
   }
   return <section className="st-panel" aria-labelledby={`fu-${patientId}`}>
     <h3 id={`fu-${patientId}`} className="st-sub">Follow-ups</h3>
@@ -90,10 +105,15 @@ export function FollowupPanel({ patientId, branches = [], toast, store, role = '
       : <ul className="fd-list">{rows.map(t => <FollowupRow key={t.id} t={t} role={role} store={store} toast={toast} onChanged={load}/>)}</ul>}
     {adding ? <form className="au-form" onSubmit={add}>
       <Field label="Branch"><select value={f.branch_ref} onChange={e => setF(x => ({ ...x, branch_ref: e.target.value }))}>{branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</select></Field>
-      <Field label="Reason" required hint="Seen by the branch team only, never by the patient."><input value={f.reason} maxLength={500} onChange={e => setF(x => ({ ...x, reason: e.target.value }))} required/></Field>
+      <Field label="Follow-up reason" required hint="Seen by the branch team only, never by the patient.">
+        <select value={reasonCategory} onChange={e => setReasonCategory(e.target.value)}>
+          {STANDARD_REASONS.map(r => <option key={r} value={r}>{r}</option>)}
+        </select>
+      </Field>
+      {reasonCategory === 'Other' && <Field label="Specify reason" required><input value={customReason} maxLength={500} placeholder="Enter specific clinical reason…" onChange={e => setCustomReason(e.target.value)} required/></Field>}
       <Field label="Due" required><input type="date" value={f.due_on} onChange={e => setF(x => ({ ...x, due_on: e.target.value }))} required/></Field>
       {err && <p className="au-error" role="alert">{err}</p>}
-      <div className="ns-actions"><Button type="submit" size="sm" disabled={!f.reason.trim()}>Add follow-up</Button><Button size="sm" variant="ghost" onClick={() => setAdding(false)}>Cancel</Button></div>
+      <div className="ns-actions"><Button type="submit" size="sm" disabled={!effectiveReason}>Add follow-up</Button><Button size="sm" variant="ghost" onClick={() => setAdding(false)}>Cancel</Button></div>
     </form> : <Button size="sm" variant="soft" onClick={() => setAdding(true)}>Add a follow-up</Button>}
   </section>
 }

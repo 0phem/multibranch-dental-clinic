@@ -238,7 +238,7 @@
    "to_be": [
     {
      "lane": "Patient",
-     "text": "Scans the counter QR; fills the form on own phone (or kiosk)",
+     "text": "Scans the counter QR; fills the form on own phone",
      "kind": "manual"
     },
     {

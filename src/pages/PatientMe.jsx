@@ -67,6 +67,7 @@ export function PatientMePage({ store, setPage, documentsOnly = false }) {
   const handleUpload = async (e) => {
     e.preventDefault()
     if (!fileToUpload) return toast('Please select a file to upload.', 'warning')
+    if (uploadCategory === 'other' && !uploadTitle.trim()) return toast('Please specify a description for this document.', 'warning')
     const formData = new FormData()
     formData.append('file', fileToUpload)
     formData.append('category', uploadCategory)
@@ -201,8 +202,13 @@ export function PatientMePage({ store, setPage, documentsOnly = false }) {
             required
           />
         </Field>
-        <Field label="Title / Description">
-          <input value={uploadTitle} onChange={e => setUploadTitle(e.target.value)} placeholder="e.g. Driver's License or Maxicare Card" />
+        <Field label={uploadCategory === 'other' ? 'Specify Document Description' : 'Title / Description'} required={uploadCategory === 'other'}>
+          <input
+            value={uploadTitle}
+            onChange={e => setUploadTitle(e.target.value)}
+            placeholder={uploadCategory === 'other' ? 'e.g., Insurance certificate, Medical clearance, School referral' : "e.g. Driver's License or Maxicare Card"}
+            aria-required={uploadCategory === 'other' || undefined}
+          />
         </Field>
         <Field label="Category" required>
           <select value={uploadCategory} onChange={e => setUploadCategory(e.target.value)}>

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { Button, Card, ConfirmDialog, Modal, Notice, PageHeader, Status } from '../components.jsx'
+import { Button, Card, ConfirmDialog, Modal, Notice, PageHeader, RefreshButton, Status } from '../components.jsx'
 import { displayTime, patientName, dateLabel } from '../logic.js'
 import { clinicNow, clinicDate } from '../clock.js'
 import { useVisibleRefresh } from '../use-visible-refresh.js'
@@ -62,6 +62,23 @@ function AppointmentButton({ a, onSelect, showDentist = false }) {
     <span className="daycal-chip-name">{a.patientName || 'Patient'}{a.serviceName ? <small> · {a.serviceName}</small> : null}</span>
     <span className="daycal-chip-status">{a.status}{showDentist && a.dentistName ? ` · ${a.dentistName}` : ''}</span>
   </button>
+}
+
+function AppointmentAvatarButton({ a, onSelect }) {
+  const name = patientName(a.patientName)
+  const tooltip = `${name} · ${displayTime(a.start)} · ${a.serviceName || a.service || 'Appointment'}`
+  return (
+    <button
+      type="button"
+      className="daycal-avatar-badge"
+      style={{ background: avatarColour(a.patientId || a.patientCode) }}
+      title={tooltip}
+      aria-label={tooltip}
+      onClick={e => { e.stopPropagation(); onSelect(a.id) }}
+    >
+      {initials(a.patientName)}
+    </button>
+  )
 }
 
 export function StaffDayCalendar({ store }) {
@@ -221,8 +238,7 @@ export function StaffDayCalendar({ store }) {
       title="Appointment Calendar"
       text="An interactive monthly calendar of clinic appointments with daily busyness, patient details, and booking controls."
       aside={<div className="row-actions">
-        <Button variant="ghost" onClick={handleRefresh}>Refresh</Button>
-        <Button onClick={() => setNewOpen(true)} icon="plusCalendar">New appointment</Button>
+        <RefreshButton onClick={handleRefresh}/>
       </div>}
     />
 
@@ -282,10 +298,11 @@ export function StaffDayCalendar({ store }) {
             const shown = list.slice(0, 3)
             const band = loadBand(loadOf(c.date), load.crowded)
             const isSelected = selectedDate === c.date
+            const isPrior = c.date < today
 
             return <div
               key={c.date}
-              className={`daycal-cell${c.date === today ? ' is-today' : ''}${isSelected ? ' is-selected' : ''}${band ? ` load-${band.band}` : ''}`}
+              className={`daycal-cell${c.date === today ? ' is-today' : ''}${isPrior ? ' past-day' : ''}${isSelected ? ' is-selected' : ''}${band ? ` load-${band.band}` : ''}`}
               onClick={() => setSelectedDate(prev => prev === c.date ? null : c.date)}
               role="gridcell"
               aria-selected={isSelected}
@@ -315,9 +332,9 @@ export function StaffDayCalendar({ store }) {
                 <LoadBadge day={loadOf(c.date)} count={list.length} crowded={load.crowded}/>
               </div>
 
-              <div className="daycal-cell-chips">
-                {shown.map(a => <AppointmentButton key={a.id} a={a} onSelect={setSelectedId}/>)}
-                {totals && list.length > shown.length && <button type="button" className="daycal-more" onClick={e => { e.stopPropagation(); setSelectedDate(c.date) }}>+{list.length - shown.length} more</button>}
+              <div className="daycal-cell-chips daycal-avatars-row" aria-label={`${list.length} appointments`}>
+                {shown.map(a => <AppointmentAvatarButton key={a.id} a={a} onSelect={setSelectedId}/>)}
+                {totals && list.length > shown.length && <button type="button" className="daycal-avatar-badge daycal-more-avatar" title={`+${list.length - shown.length} more appointments`} aria-label={`+${list.length - shown.length} more appointments`} onClick={e => { e.stopPropagation(); setSelectedDate(c.date) }}>+{list.length - shown.length}</button>}
               </div>
             </div>
           })}

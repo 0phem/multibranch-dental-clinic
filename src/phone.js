@@ -12,7 +12,7 @@ export const DEFAULT_COUNTRY=COUNTRY_CODES.find(country=>country.code==='PH')
 
 // The Owner directory's existing Philippine contact control keeps its input behavior.
 export function sanitizePhoneInput(value) {
-  return String(value||'').replace(/\D/g,'').slice(0,10)
+  return String(value||'').replace(/\D/g,'').replace(/^0+/,'').slice(0,10)
 }
 
 export function normalizePhoneNumber(countrySelection,raw) {
