@@ -1,15 +1,77 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { Button, Field, Icon } from '../../components.jsx'
 import { PasswordField } from '../../pages/PasswordField.jsx'
 import { confirmEmailChange, getPatientRecord, myHmo, requestEmailChange, requestPasswordReset, resetPassword, saveMyHmo } from '../../api-client.js'
-import { dateLong } from '../format.js'
+import { dateLong, initials } from '../format.js'
 import { ErrorState, PageHead, Skeleton, useLoad } from '../ui.jsx'
+
+function AvatarUpload({ me, toast }) {
+  const [avatar, setAvatar] = useState(() => {
+    try {
+      return localStorage.getItem(`patient_avatar_${me?.patient?.id || me?.id}`) || null
+    } catch { return null }
+  })
+  const fileInputRef = useRef(null)
+
+  const onFileChange = e => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      toast?.('Please select an image file (JPG, PNG, or WebP).', 'warning')
+      return
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      toast?.('Image must be under 2MB.', 'warning')
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = () => {
+      const dataUri = reader.result
+      try {
+        localStorage.setItem(`patient_avatar_${me?.patient?.id || me?.id}`, dataUri)
+        setAvatar(dataUri)
+        window.dispatchEvent(new CustomEvent('patient-avatar-updated', { detail: dataUri }))
+        toast?.('Profile picture updated successfully.', 'success')
+      } catch {
+        toast?.('Could not save photo to browser storage.', 'warning')
+      }
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const removeAvatar = () => {
+    try {
+      localStorage.removeItem(`patient_avatar_${me?.patient?.id || me?.id}`)
+      setAvatar(null)
+      window.dispatchEvent(new CustomEvent('patient-avatar-updated', { detail: null }))
+      toast?.('Profile picture removed.', 'info')
+    } catch { /* noop */ }
+  }
+
+  return <section className="pp-card pp-fade" aria-labelledby="pp-photo-title">
+    <p className="pp-eyebrow" id="pp-photo-title">Profile picture</p>
+    <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginTop: '8px' }}>
+      <div style={{ width: '68px', height: '68px', borderRadius: '50%', overflow: 'hidden', background: 'var(--brand-soft)', display: 'grid', placeItems: 'center', flexShrink: 0, border: '2px solid var(--brand)' }}>
+        {avatar ? <img src={avatar} alt="Profile preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/> : <span style={{ fontSize: '1.25rem', fontWeight: 'bold', color: 'var(--brand-3)' }}>{initials(me?.name || 'Patient')}</span>}
+      </div>
+      <div>
+        <b style={{ display: 'block', fontSize: '0.9375rem', color: 'var(--ink)' }}>Upload your profile photo</b>
+        <p style={{ margin: '2px 0 8px', fontSize: '0.8125rem', color: 'var(--muted)' }}>Supports JPG, PNG, or WebP up to 2MB.</p>
+        <input type="file" ref={fileInputRef} accept="image/png, image/jpeg, image/webp" onChange={onFileChange} style={{ display: 'none' }}/>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <Button size="sm" variant="soft" icon="upload" onClick={() => fileInputRef.current?.click()}>{avatar ? 'Change photo' : 'Upload photo'}</Button>
+          {avatar && <Button size="sm" variant="ghost" className="pp-danger" onClick={removeAvatar}>Remove</Button>}
+        </div>
+      </div>
+    </div>
+  </section>
+}
 
 /**
  * Profile (decision 2): the legal name is read-only for Patients. Staff correct it (audited), and issued invoices and receipts keep
  * the name they were issued to. The other details are shown as recorded by the clinic.
  */
-export function ProfilePage({ me, onNavigate }) {
+export function ProfilePage({ me, onNavigate, toast }) {
   const record = useLoad(() => getPatientRecord(me.patient.id), [me.patient.id])
   const r = record.data
   const rows = r ? [['Patient number', r.code], ['Date of birth', r.date_of_birth ? dateLong(r.date_of_birth) : null], ['Mobile number', r.phone], ['Address', r.address],
@@ -17,6 +79,7 @@ export function ProfilePage({ me, onNavigate }) {
     ['Preferred branch', r.preferred_branch?.name]] : []
   return <div className="pp-page">
     <PageHead eyebrow="Your account" title="Profile"/>
+    <AvatarUpload me={me} toast={toast}/>
     {record.status === 'loading' && <Skeleton lines={5} label="Loading your profile"/>}
     {record.status === 'error' && <ErrorState text={record.error} onRetry={record.reload}/>}
     {r && <section className="pp-card pp-fade" aria-labelledby="pp-name">

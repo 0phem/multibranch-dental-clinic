@@ -7,7 +7,7 @@ const firstError = r => (r.kind === 'validation' ? Object.values(r.errors || {})
 const FIELDS = [['first_name', 'First name'], ['last_name', 'Last name'], ['date_of_birth', 'Date of birth', 'date'], ['sex', 'Sex'], ['phone', 'Mobile'], ['email', 'Email'], ['address', 'Address']]
 const age = dob => { if (!dob) return null; const b = new Date(`${dob}T00:00:00Z`), n = new Date(); let a = n.getUTCFullYear() - b.getUTCFullYear(); if (n.getUTCMonth() < b.getUTCMonth() || (n.getUTCMonth() === b.getUTCMonth() && n.getUTCDate() < b.getUTCDate())) a--; return a }
 
-/** Front desk: today's counter code (for the patients' phones and the kiosk), the poster, and the kiosk link. */
+/** Front desk: today's counter code (for the patients' phones) and the poster. */
 export function CounterCode({ toast = () => {} }) {
   const [data, setData] = useState(null), [busy, setBusy] = useState(false), [failed, setFailed] = useState(null), [attempt, setAttempt] = useState(0)
   useEffect(() => { setFailed(null); intakeCode().then(r => { if (r.ok) setData(r.data); else setFailed(r.kind) }) }, [attempt])
@@ -28,7 +28,7 @@ export function CounterCode({ toast = () => {} }) {
     <div className="au-actions">
       <Button size="sm" variant="soft" disabled={busy} onClick={refresh}>New code</Button>
       <a className="btn ghost sm" href={branchPosterUrl(data.branch.id)} target="_blank" rel="noreferrer"><span>Counter poster (PDF)</span></a>
-      <a className="btn ghost sm" href={`#kiosk/${data.branch.id}/${data.code}`} target="_blank" rel="noreferrer"><span>Open kiosk mode</span></a>
+
     </div>
   </Card>
 }
@@ -48,13 +48,13 @@ export function SelfRegistered({ toast = () => {}, compact = false, onChanged, s
   }, [])
   if (!rows.length) return null
   const name = s => (s.channel === 'account' ? s.account?.visit_for_name || s.account?.name : `${s.self?.first_name || ''} ${s.self?.last_name || ''}`.trim())
-  return <Card className="ci-self" title={`Self-registered: verify ID (${rows.length})`} subtitle="Filled in by the patient on their phone or the kiosk. Check the ID, then confirm.">
+  return <Card className="ci-self" title={`Self-registered: verify ID (${rows.length})`} subtitle="Filled in by the patient on their phone. Check the ID, then confirm.">
     <ul className="fd-list">{rows.map(s => {
       const minorDep = (s.dependents || []).find((d, i) => s.visit_for === `dependent:${i}`)
       return <li key={s.id}>
         <div><b>{name(s)}{s.join_queue && <span className="fd-badge is-info">Joining today’s queue</span>}{s.duplicates?.length > 0 && <span className="fd-badge is-late">Possible existing patient</span>}
           {(minorDep?.minor || s.account?.visit_for_minor) && <span className="fd-badge is-late">Minor: guardian {s.channel === 'account' ? s.account?.name : `${s.self?.first_name} ${s.self?.last_name}`}</span>}</b>
-          <span>{s.time} · {s.reference} · {s.channel === 'account' ? 'signed in with their account' : s.channel === 'kiosk' ? 'kiosk' : 'own phone'}{s.id_type ? ` · scanned ${idTypes[s.id_type] || s.id_type}` : ''}{minorDep ? ` · visit for ${minorDep.first_name}` : ''}</span></div>
+          <span>{s.time} · {s.reference} · {s.channel === 'account' ? 'signed in with their account' : 'own phone'}{s.id_type ? ` · scanned ${idTypes[s.id_type] || s.id_type}` : ''}{minorDep ? ` · visit for ${minorDep.first_name}` : ''}</span></div>
         {!compact && <Button size="sm" onClick={() => setOpen(s)}>Review and confirm</Button>}
       </li>
     })}</ul>
@@ -110,6 +110,17 @@ function ReviewDialog({ row, idTypes, toast, onClose, onDone, store }) {
     </div>}
     <div className="ci-id">
       <Field label="ID shown"><select value={idType} onChange={e => setIdType(e.target.value)}>{Object.entries(idTypes).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></Field>
+      {idType === 'other' && (
+        <Field label="Specify ID type" required>
+          <input
+            type="text"
+            placeholder="e.g., PhilHealth ID, School ID, Company ID"
+            value={corrections.id_other || ''}
+            onChange={e => setCorrections({ ...corrections, id_other: e.target.value })}
+            aria-required="true"
+          />
+        </Field>
+      )}
       <label className="au-check"><input type="checkbox" checked={idChecked} onChange={e => setIdChecked(e.target.checked)}/> I checked this ID in person (only the type, your name and the time are saved; never the number or a photo)</label>
     </div>
     {err && <p className="au-error" role="alert">{err}</p>}
@@ -145,7 +156,7 @@ function OfferAccount({ patientId, email: stored, toast }) {
 }
 
 export function IdCheck({ patientId, toast = () => {} }) {
-  const [record, setRecord] = useState(null), [type, setType] = useState('philid'), [busy, setBusy] = useState(false)
+  const [record, setRecord] = useState(null), [type, setType] = useState('philid'), [otherText, setOtherText] = useState(''), [busy, setBusy] = useState(false)
   useEffect(() => { setRecord(null); getPatientRecord(patientId).then(r => { if (r.ok) setRecord(r.data) }) }, [patientId])
   if (!record) return null
   const minor = record.minor ? <p className="fd-badge is-late">Minor{record.guardians?.length ? `: guardian ${record.guardians.map(g => g.name).join(', ')}` : ': no guardian linked yet'}</p> : null
@@ -155,7 +166,7 @@ export function IdCheck({ patientId, toast = () => {} }) {
       : <OfferAccount patientId={patientId} email={record.email} toast={toast}/>)}</div>
   const go = async () => {
     setBusy(true)
-    const r = await verifyPatientId(patientId, { id_type: type })
+    const r = await verifyPatientId(patientId, { id_type: type, ...(type === 'other' && otherText ? { other_details: otherText } : {}) })
     setBusy(false)
     if (!r.ok) return toast(firstError(r), 'warning')
     toast('ID check recorded (type only).', 'success')
@@ -164,6 +175,7 @@ export function IdCheck({ patientId, toast = () => {} }) {
   return <div className="ci-idcheck">{minor}
     <p><b>First visit: check the ID.</b> {record.minor ? 'For a minor, check the guardian’s ID.' : ''}</p>
     <div className="au-actions"><select aria-label="ID shown" value={type} onChange={e => setType(e.target.value)}>{Object.entries(ID_TYPES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
-      <Button size="sm" variant="soft" disabled={busy} onClick={go}>ID checked</Button></div>
+      {type === 'other' && <input type="text" placeholder="Specify ID (e.g. PhilHealth, Company ID)" value={otherText} onChange={e => setOtherText(e.target.value)} aria-label="Specify ID type" style={{ minWidth: '200px' }}/>}
+      <Button size="sm" variant="soft" disabled={busy || (type === 'other' && !otherText.trim())} onClick={go}>ID checked</Button></div>
   </div>
 }

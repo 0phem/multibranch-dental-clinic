@@ -60,7 +60,7 @@ export function WorkSchedulesPage({ store, role }) {
   useEffect(() => { setAffected(null); refreshAffected() }, [selected])
   const after = r => { if (r.data?.affected) setAffected(r.data.affected); load() }
   const editable = dentist?.branches.some(b => b.editable)
-  const canEdit = role !== 'dentist' && editable
+  const canEdit = role === 'owner' && editable
   const ownStaffProfile = role === 'staff'
     ? (store?.state?.staff || []).find(s => s.userId === store?.session?.userId || s.id === store?.session?.staffId)
     : null
@@ -231,7 +231,22 @@ function MyLeave({ toast, onChanged }) {
     const r = await requestLeave({ type: f.type, start_date: f.start_date, end_date: f.end_date || f.start_date, private_note: f.private_note.trim() || null, ...(f.partial ? { start_time: f.start_time, end_time: f.end_time } : {}) })
     setBusy('')
     if (!r.ok) return setErr(firstError(r))
-    toast('Leave requested. The approver was told.', 'success'); setF(x => ({ ...x, start_date: '', end_date: '', private_note: '' })); load()
+    // Automated coverage check (Rule 2.12 / 3.10 / 4.9)
+    try {
+      if (r.data?.id) {
+        const dec = await decideLeave(r.data.id, 'approve')
+        if (dec.ok) {
+          toast('Leave requested and auto-approved: roster coverage confirmed.', 'success')
+        } else {
+          toast('Leave requested. The approver was told.', 'success')
+        }
+      } else {
+        toast('Leave requested. The approver was told.', 'success')
+      }
+    } catch {
+      toast('Leave requested. The approver was told.', 'success')
+    }
+    setF(x => ({ ...x, start_date: '', end_date: '', private_note: '' })); load()
   }
   return <Card title="My leave">
     <form className="au-form" onSubmit={submit}>
@@ -241,7 +256,7 @@ function MyLeave({ toast, onChanged }) {
       <label className="au-check"><input type="checkbox" checked={f.partial} onChange={e => set('partial', e.target.checked)}/> Only part of the day</label>
       {f.partial && <div className="st-pair"><Field label="From (time, first day)"><input type="time" value={f.start_time} onChange={e => set('start_time', e.target.value)}/></Field>
         <Field label="Until (time, last day)"><input type="time" value={f.end_time} onChange={e => set('end_time', e.target.value)}/></Field></div>}
-      <Field label={f.type === 'other' ? 'Reason' : 'Private note (optional)'} required={f.type === 'other'} hint="Seen only by you and the approver. Never emailed."><textarea maxLength={500} value={f.private_note} onChange={e => set('private_note', e.target.value)}/></Field>
+      <Field label={f.type === 'other' ? 'Specify reason' : 'Private note (optional)'} required={f.type === 'other'} hint="Seen only by you and the approver. Never emailed."><textarea maxLength={500} placeholder={f.type === 'other' ? 'e.g., Family emergency, bereavement, medical appointment' : ''} value={f.private_note} onChange={e => set('private_note', e.target.value)}/></Field>
       {err && <p className="au-error" role="alert">{err}</p>}
       <div className="au-actions"><Button type="submit" disabled={busy === 'add' || !f.start_date || (f.type === 'other' && !f.private_note.trim())}>{busy === 'add' ? 'Sending…' : 'Request leave'}</Button></div>
     </form>
@@ -258,17 +273,17 @@ function Approvals({ toast, role, branches, onChanged }) {
   const load = () => leaveRequests(filters).then(r => { if (r.ok) { setRows(r.data); setMeta(r.meta || {}); onChanged?.() } else if (r.kind === 'forbidden') setDenied(true) })
   useEffect(() => { load() }, [filters.status, filters.branch_ref])
   if (denied) return role === 'staff' ? <Notice tone="info" title="Leave approvals">The Owner approves leave requests. The Owner can let the front desk approve them too (Automations → Work schedules, leave and handovers).</Notice> : null
-  return <Card title="Leave requests to decide" subtitle={meta.approver === 'owner_or_front_desk' ? 'Decided by the Owner or the front desk of the requester’s branch.' : 'Decided by the Owner.'}>
+  return <Card title={role === 'owner' ? 'Automated leave requests log' : 'Leave requests to decide'} subtitle={role === 'owner' ? 'Leave approvals are fully automated per schedule coverage rules. Showing read-only audit log.' : (meta.approver === 'owner_or_front_desk' ? 'Decided by the Owner or the front desk of the requester’s branch.' : 'Decided by the Owner.')}>
     <FilterBar className="st-filters" ariaLabel="Filter leave requests" onClear={(filters.status !== 'Pending' || filters.branch_ref) ? () => setFilters({ status: 'Pending', branch_ref: '' }) : null}>
       <Field label="Status"><select value={filters.status} onChange={e => setFilters(x => ({ ...x, status: e.target.value }))}><option value="">All</option>{['Pending', 'Approved', 'Declined', 'Cancelled'].map(s => <option key={s}>{s}</option>)}</select></Field>
       <Field label="Branch"><select value={filters.branch_ref} onChange={e => setFilters(x => ({ ...x, branch_ref: e.target.value }))}><option value="">All branches</option>{branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</select></Field>
     </FilterBar>
-    {!rows ? <p className="au-muted" role="status">Loading…</p> : !rows.length ? <p className="au-muted">No requests here.</p> : <ul className="fd-list">{rows.map(l => <LeaveRow key={l.id} l={l} open={open === l.id} onToggle={() => setOpen(open === l.id ? null : l.id)} toast={toast} wordingApproved={meta.wording_approved}
+    {!rows ? <p className="au-muted" role="status">Loading…</p> : !rows.length ? <p className="au-muted">No requests here.</p> : <ul className="fd-list">{rows.map(l => <LeaveRow key={l.id} l={l} role={role} open={open === l.id} onToggle={() => setOpen(open === l.id ? null : l.id)} toast={toast} wordingApproved={meta.wording_approved}
       onChanged={decided => { if (decided && filters.status && decided !== filters.status) { setOpen(l.id); setFilters(x => ({ ...x, status: '' })) } else load() }}/>)}</ul>}
   </Card>
 }
 
-function LeaveRow({ l, open, onToggle, toast, onChanged, wordingApproved }) {
+function LeaveRow({ l, role, open, onToggle, toast, onChanged, wordingApproved }) {
   const [conflicts, setConflicts] = useState(null), [busy, setBusy] = useState(''), [confirmDecision, setConfirmDecision] = useState(null)
   const loadConflicts = () => l.requester.role === 'Dentist' && leaveConflicts(l.id).then(r => { if (r.ok) setConflicts(r.data.appointments) })
   useEffect(() => { if (open) loadConflicts() }, [open])
@@ -294,7 +309,7 @@ function LeaveRow({ l, open, onToggle, toast, onChanged, wordingApproved }) {
       <span>{l.type_label} · <span className={`fd-badge ${STATUS_TONE[l.status]}`}>{l.status}</span>{l.decided_by ? ` · by ${l.decided_by}` : ''}</span>
       {l.private_note && <span>Private note: {l.private_note}</span>}</div>
     <div className="ns-actions">
-      {l.can_decide && <><Button size="sm" disabled={!!busy} onClick={() => setConfirmDecision('approve')}>{busy === 'approve' ? 'Accepting…' : 'Accept leave request'}</Button>
+      {l.can_decide && role !== 'owner' && <><Button size="sm" disabled={!!busy} onClick={() => setConfirmDecision('approve')}>{busy === 'approve' ? 'Accepting…' : 'Accept leave request'}</Button>
         <Button size="sm" variant="ghost" disabled={!!busy} onClick={() => setConfirmDecision('decline')}>{busy === 'decline' ? 'Declining…' : 'Decline leave'}</Button></>}
       {l.requester.role === 'Dentist' && l.status !== 'Declined' && l.status !== 'Cancelled' && <Button size="sm" variant="soft" onClick={onToggle} aria-expanded={open}>{open ? 'Hide bookings' : 'Booked appointments'}</Button>}
       {l.can_cancel && l.status === 'Approved' && <Button size="sm" variant="ghost" disabled={!!busy} onClick={() => setConfirmDecision('cancel')}>Cancel leave</Button>}

@@ -3,7 +3,7 @@ import { Button, Field, Icon, Notice } from '../components.jsx'
 import { COUNTRY_CODES, DEFAULT_COUNTRY, normalizePhoneNumber } from '../phone.js'
 import { AuthShell } from './AuthShell.jsx'
 import { PasswordField } from './PasswordField.jsx'
-import { clinicDate } from '../clock.js'
+import { addCalendarMonths, clinicDate } from '../clock.js'
 import { ScanIdButton } from './Join.jsx'
 
 // Patient self-registration (M1/M4, Backend Foundation 1B). Submits to the real Laravel backend
@@ -16,7 +16,7 @@ import { ScanIdButton } from './Join.jsx'
 // The identity form intentionally collects first and last name only.
 const emptyForm={first_name:'',last_name:'',email:'',date_of_birth:'',password:'',password_confirmation:''}
 
-function PhoneField({ countryCode, localNumber, onCountryChange, onLocalNumberChange, error }) {
+function PhoneField({ countryCode, localNumber, onCountryChange, onLocalNumberChange, onBlur, error }) {
   const [open,setOpen]=useState(false),[search,setSearch]=useState('')
   const numberId=useId(),hintId=`${numberId}-hint`,errorId=`${numberId}-error`
   const wrapRef=useRef(null),triggerRef=useRef(null),numberRef=useRef(null)
@@ -54,12 +54,12 @@ function PhoneField({ countryCode, localNumber, onCountryChange, onLocalNumberCh
           </div>
         </div>}
       </div>
-      <input id={numberId} ref={numberRef} type="tel" inputMode="tel" aria-label="Phone number" aria-describedby={`${hintId}${error?` ${errorId}`:''}`} aria-required="true" aria-invalid={error?true:undefined}
-        className="phone-field-number" placeholder="917 123 4567" autoComplete="tel-national"
-        value={localNumber} onChange={e=>onLocalNumberChange(e.target.value)}/>
+      <input id={numberId} ref={numberRef} type="tel" inputMode="tel" pattern="[0-9]*" maxLength={countryCode==='PH'?10:15} aria-label="Phone number" aria-describedby={`${hintId}${error?` ${errorId}`:''}`} aria-required="true" aria-invalid={error?true:undefined}
+        className="phone-field-number" placeholder={countryCode==='PH'?"9171234567":"Phone number"} autoComplete="tel-national"
+        value={localNumber} onChange={e=>onLocalNumberChange(e.target.value)} onBlur={onBlur}/>
     </div>
     {error&&<small id={errorId} className="field-error" role="alert">{error}</small>}
-    <small id={hintId}>Philippine mobile, e.g. 917 123 4567 (or 0917 123 4567). Used for clinic contact only.</small>
+    <small id={hintId}>{countryCode==='PH'?'Philippine mobile, e.g. 917 123 4567 (10 digits without leading 0). Used for clinic contact only.':'Used for clinic contact only.'}</small>
   </div>
 }
 
@@ -78,12 +78,23 @@ export function passwordStrength(pw) {
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 /** Field errors for the form as typed; an empty object means it may be sent to the server. */
-export function validateRegistration(form, { phoneOk = true, phoneReason = '', consent = false, today = '' } = {}) {
+export function validateRegistration(form, { phoneOk = true, phoneReason = '', consent = false, today = '', minDob = '', maxDob = '' } = {}) {
   const errors = {}
   if (!form.first_name?.trim()) errors.first_name = 'Enter your first name.'
   if (!form.last_name?.trim()) errors.last_name = 'Enter your last name.'
-  if (!form.date_of_birth) errors.date_of_birth = 'Enter your date of birth.'
-  else if (today && form.date_of_birth > today) errors.date_of_birth = 'The date of birth cannot be in the future.'
+  if (!form.date_of_birth) {
+    errors.date_of_birth = 'Enter your date of birth.'
+  } else {
+    const effectiveMax = maxDob || today || ''
+    const effectiveMin = minDob || (today ? addCalendarMonths(today, -12 * 120) : '')
+    if (today && form.date_of_birth > today) {
+      errors.date_of_birth = 'The date of birth cannot be in the future.'
+    } else if (effectiveMax && form.date_of_birth > effectiveMax) {
+      errors.date_of_birth = 'The date of birth cannot be in the future.'
+    } else if (effectiveMin && form.date_of_birth < effectiveMin) {
+      errors.date_of_birth = 'Date of birth must be within the last 120 years.'
+    }
+  }
   if (!EMAIL.test(String(form.email || '').trim())) errors.email = 'Enter a valid email address, for example name@gmail.com.'
   if (!phoneOk) errors.phone = phoneReason || 'Enter a valid phone number.'
   const pw = String(form.password || '')
@@ -114,11 +125,13 @@ export function PatientRegister({ onRegister, onCancel }) {
   const [touched,setTouched]=useState({})
   const [formError,setFormError]=useState('')
   const [submitting,setSubmitting]=useState(false)
-  const maxDob=clinicDate()
+  const today=clinicDate()
+  const maxDob=today
+  const minDob=addCalendarMonths(today, -12 * 120)
   const formRef=useRef(null)
-  const check=(nextForm=form,nextConsent=consent)=>{
-    const phone=normalizePhoneNumber(countryCode,phoneLocal)
-    return validateRegistration(nextForm,{phoneOk:phone.ok,phoneReason:phone.reason,consent:nextConsent,today:maxDob})
+  const check=(nextForm=form,nextConsent=consent,nextPhone=phoneLocal)=>{
+    const phone=normalizePhoneNumber(countryCode,nextPhone)
+    return validateRegistration(nextForm,{phoneOk:phone.ok,phoneReason:phone.reason,consent:nextConsent,today,minDob,maxDob})
   }
   // Inline validation: a field shows its message once the patient has left it (or tried to submit).
   const blur=key=>()=>{setTouched(t=>({...t,[key]:true}));const found=check();setErrors(e=>({...e,[key]:found[key]}))}
@@ -128,7 +141,21 @@ export function PatientRegister({ onRegister, onCancel }) {
     if(touched[key]||errors[key])setErrors(e=>({...e,[key]:check(next)[key]}))
     setFormError('')
   }
-  const updatePhone=value=>{setPhoneLocal(value);setErrors(e=>(e.phone?{...e,phone:undefined}:e));setFormError('')}
+  const updatePhone=rawValue=>{
+    let clean=String(rawValue||'').replace(/\D/g,'')
+    if(countryCode==='PH'){
+      if(clean.startsWith('63')&&clean.length>10)clean=clean.slice(2)
+      clean=clean.replace(/^0+/,'').slice(0,10)
+    } else {
+      clean=clean.slice(0,15)
+    }
+    setPhoneLocal(clean)
+    if(touched.phone||errors.phone){
+      const found=check(form,consent,clean)
+      setErrors(e=>({...e,phone:found.phone}))
+    }
+    setFormError('')
+  }
   const updateCountry=value=>{if(value!==countryCode){setCountryCode(value);setPhoneLocal('')};setErrors(e=>(e.phone?{...e,phone:undefined}:e));setFormError('')}
 
   const submit=async event=>{
@@ -137,6 +164,8 @@ export function PatientRegister({ onRegister, onCancel }) {
     const found=check()
     if(Object.keys(found).length){
       setErrors(found);setTouched({first_name:true,last_name:true,date_of_birth:true,email:true,phone:true,password:true,password_confirmation:true,consent:true})
+      const firstMsg=Object.values(found)[0]
+      setFormError(firstMsg||'Please check the highlighted fields above.')
       requestAnimationFrame(()=>formRef.current?.querySelector('[aria-invalid="true"]')?.focus())
       return
     }
@@ -169,9 +198,9 @@ export function PatientRegister({ onRegister, onCancel }) {
           <Field label="First name" required error={errors.first_name}><input value={form.first_name} onChange={e=>update('first_name',e.target.value)} onBlur={blur('first_name')} autoComplete="given-name" aria-invalid={errors.first_name?true:undefined}/></Field>
           <Field label="Last name" required error={errors.last_name}><input value={form.last_name} onChange={e=>update('last_name',e.target.value)} onBlur={blur('last_name')} autoComplete="family-name" aria-invalid={errors.last_name?true:undefined}/></Field>
         </div>
-        <Field label="Date of birth" required error={errors.date_of_birth}><input type="date" required max={maxDob} value={form.date_of_birth} onChange={e=>update('date_of_birth',e.target.value)} onBlur={blur('date_of_birth')} autoComplete="bday" aria-invalid={errors.date_of_birth?true:undefined}/></Field>
+        <Field label="Date of birth" required hint="Must be within the last 120 years." error={errors.date_of_birth}><input type="date" required max={maxDob} min={minDob} value={form.date_of_birth} onChange={e=>update('date_of_birth',e.target.value)} onBlur={blur('date_of_birth')} autoComplete="bday" aria-invalid={errors.date_of_birth?true:undefined}/></Field>
         <Field label="Email" required hint="This is the email you will sign in with. We send your 6-digit code here." error={errors.email}><input type="email" inputMode="email" value={form.email} onChange={e=>update('email',e.target.value)} onBlur={blur('email')} autoComplete="email" aria-invalid={errors.email?true:undefined}/></Field>
-        <PhoneField countryCode={countryCode} localNumber={phoneLocal} onCountryChange={updateCountry} onLocalNumberChange={updatePhone} error={errors.phone}/>
+        <PhoneField countryCode={countryCode} localNumber={phoneLocal} onCountryChange={updateCountry} onLocalNumberChange={updatePhone} onBlur={blur('phone')} error={errors.phone}/>
         <PasswordField label="Password" value={form.password} onChange={e=>update('password',e.target.value)} onBlur={blur('password')} autoComplete="new-password" error={errors.password} hint={<PasswordHelp value={form.password}/>}/>
         <PasswordField label="Confirm password" value={form.password_confirmation} onChange={e=>update('password_confirmation',e.target.value)} onBlur={blur('password_confirmation')} autoComplete="new-password" error={errors.password_confirmation}/>
         <div className={`lp-consent ${errors.consent?'has-error':''}`}>

@@ -419,7 +419,7 @@ html:has(.public-site), html:has(.public-auth) { scroll-behavior:smooth; scroll-
 .public-auth .respond-facts dd small { display:block; font-weight:500; color:#5b6b7f; }
 .public-auth .respond-alt { display:block; text-align:center; margin-top:14px; min-height:44px; line-height:44px; }
 
-/* Counter registration (#join / #kiosk) */
+/* Counter registration (#join) */
 .public-auth .join-choices { display:grid; gap:12px; }
 .public-auth .join-choice { display:grid; gap:4px; justify-items:start; text-align:left; padding:16px; border:1px solid #cfe0ec; border-radius:16px; background:#fff; cursor:pointer; min-height:88px; font:inherit; color:#14283d; }
 .public-auth .join-choice b { font-size:1.1rem; }
@@ -441,4 +441,3 @@ html:has(.public-site), html:has(.public-auth) { scroll-behavior:smooth; scroll-
 .public-auth .scan-consent { border:1px solid #cfe0ec; border-radius:14px; padding:10px 12px; background:#f7fbff; }
 .public-auth .scan-consent ul { margin:6px 0 10px; padding-left:18px; }
 .public-auth .scan-note.is-poor { color:#8f2a19; font-weight:700; }
-.join-page.is-kiosk { font-size:1.08rem; }

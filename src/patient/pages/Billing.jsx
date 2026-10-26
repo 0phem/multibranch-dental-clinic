@@ -112,10 +112,11 @@ export function BillingPage({ context, toast }) {
         <p className="pp-row pp-total"><span>{inv.status === 'Paid' ? 'Paid' : 'To pay'}</span><b>{money(inv.status === 'Paid' ? inv.patientResponsibility ?? inv.total : inv.balance)}</b></p>
         <div className="pp-actions">
           {inv.status === 'Issued' && Number(inv.balance) > 0 && <Button onClick={() => setReviewId(inv.id)}>Review and pay</Button>}
-          <Button size="sm" variant="ghost" icon="download" disabled={downloading === `${inv.id}:invoice`} onClick={() => download(inv.id, 'invoice')}>{downloading === `${inv.id}:invoice` ? 'Preparing…' : 'Invoice PDF'}</Button>
-          {inv.receipt && <Button size="sm" variant="ghost" icon="download" disabled={downloading === `${inv.id}:receipt`} onClick={() => download(inv.id, 'receipt')}>{downloading === `${inv.id}:receipt` ? 'Preparing…' : 'Receipt PDF'}</Button>}
+          <Button size="sm" variant="soft" icon="download" disabled={downloading === `${inv.id}:receipt` || downloading === `${inv.id}:invoice`} onClick={() => download(inv.id, inv.receipt ? 'receipt' : 'invoice')}>
+            {downloading === `${inv.id}:receipt` || downloading === `${inv.id}:invoice` ? 'Preparing…' : 'Download Receipt'}
+          </Button>
           {inv.receipt && <Button size="sm" variant="ghost" icon="mail" disabled={resending === inv.id} onClick={() => resend(inv.id)}>{resending === inv.id ? 'Sending…' : 'Resend receipt'}</Button>}
-          {inv.receipt && <Button size="sm" variant="soft" aria-expanded={openId === inv.id} aria-controls={`rct-${inv.id}`} onClick={() => setOpenId(openId === inv.id ? null : inv.id)}>{openId === inv.id ? 'Hide receipt' : 'View receipt'}</Button>}
+          {inv.receipt && <Button size="sm" variant="ghost" aria-expanded={openId === inv.id} aria-controls={`rct-${inv.id}`} onClick={() => setOpenId(openId === inv.id ? null : inv.id)}>{openId === inv.id ? 'Hide details' : 'View details'}</Button>}
         </div>
         {inv.receipt && openId === inv.id && <dl className="pp-summary pp-receipt" id={`rct-${inv.id}`}>
           {[

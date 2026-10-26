@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { Button, Card, ConfirmDialog, Field, FilterBar, Modal, Notice, PageHeader, Status, Table } from '../components.jsx'
+import { Button, Card, ConfirmDialog, Field, FilterBar, Modal, Notice, PageHeader, RefreshButton, Status, Table } from '../components.jsx'
 import { addMinutes, dateLabel, dentistName, displayTime, patientName } from '../logic.js'
 import { clinicDate } from '../clock.js'
 import { commandKey } from '../appointments-api.js'
@@ -196,7 +196,7 @@ export function AppointmentsPage({ role, store, setPage, context }) {
     toast(result.ok?'Marked as No-show.':result.message,result.ok?'success':'warning')
   }
   return <>
-    <PageHeader kicker="Scheduling" title="Appointment management" text="Create, reschedule and cancel visits. Every change is validated and stored by the clinic server." aside={<div className="row-actions"><Button variant="ghost" onClick={()=>store.appointmentFlow.refresh()}>Refresh</Button><Button onClick={()=>setNewOpen(true)} icon="plusCalendar">New appointment</Button></div>}/>
+    <PageHeader kicker="Scheduling" title="Appointment management" text="Create, reschedule and cancel visits. Every change is validated and stored by the clinic server." aside={<div className="row-actions"><RefreshButton onClick={()=>store.appointmentFlow.refresh()}/><Button onClick={()=>setNewOpen(true)} icon="plusCalendar">New appointment</Button></div>}/>
     <AppointmentsStatusNotice store={store}/>
     <FilterBar
       search={search}
@@ -262,7 +262,7 @@ export function SchedulePage({ store }) {
     return true
   })
   return <>
-    <PageHeader title="My Clinical Schedule" text="Your appointments from the clinic server, with expected visit durations." aside={<div className="row-actions"><input className="compact-date" type="date" aria-label="Schedule date" value={date} onChange={e=>setDate(e.target.value)}/><Button variant="ghost" onClick={()=>store.appointmentFlow.refresh()}>Refresh</Button></div>}/>
+    <PageHeader title="My Clinical Schedule" text="Your appointments from the clinic server, with expected visit durations." aside={<div className="row-actions"><input className="compact-date" type="date" aria-label="Schedule date" value={date} onChange={e=>setDate(e.target.value)}/><RefreshButton onClick={()=>store.appointmentFlow.refresh()}/></div>}/>
     <AppointmentsStatusNotice store={store}/>
     <FilterBar
       search={search}

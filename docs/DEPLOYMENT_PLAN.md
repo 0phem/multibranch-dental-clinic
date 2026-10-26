@@ -254,7 +254,7 @@ All checks must pass on the hosted URL:
 - [ ] 4. **Real-time Messaging**: Patient ↔ Front Desk message delivered live via Reverb WebSockets; fallback polling works if WSS is disconnected.
 - [ ] 5. **Automations & Reminders**: Trigger reminder via demo clock on demo database; queue worker processes email outbox.
 - [ ] 6. **Payments**: Generate invoice → PayMongo test checkout (GCash/Test Card) → webhook verifies payment → receipt email and PDF download generate properly.
-- [ ] 7. **Staff / Dentist / Owner Portals**: All 4 roles sign in; schedules, leave requests, handovers, counter QR, and kiosk open without errors.
+- [ ] 7. **Staff / Dentist / Owner Portals**: All 4 roles sign in; schedules, leave requests, handovers, and counter QR open without errors.
 - [ ] 8. **Security & Privacy**: No secrets in frontend bundle; HTTPS enforced; error stack traces hidden from end users.
 - [ ] 9. **Performance**: Page loads snappy on 4G mobile and desktop.
 - [ ] 10. **Demo Reset**: Single-command/button reset working to refresh demo data before Saturday defense.

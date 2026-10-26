@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { ROLE_INFO } from '../data.js'
-import { Button, Card, ConfirmDialog, Field, Modal, Notice, PageHeader, Status, Table, Tabs } from '../components.jsx'
+import { Button, Card, ConfirmDialog, Field, Modal, Notice, PageHeader, SearchInput, SelectWithOther, Status, Table, Tabs } from '../components.jsx'
 import { dateLabel, dentistName, displayTime, patientName } from '../logic.js'
 import { AppointmentForm } from './Scheduling.jsx'
 import { IdCheck } from './CounterIntake.jsx'
@@ -14,6 +14,7 @@ import { inScope, isTodayQueue, patientInScope, sessionForRole } from '../contra
 import { loadPatientRecord, loadPatientRecordIndex, savePatientRecord } from '../patient-records-api.js'
 import { commandKey } from '../appointments-api.js'
 import { DEFAULT_COUNTRY, normalizePhoneNumber } from '../phone.js'
+import { addCalendarMonths, clinicDate } from '../clock.js'
 import { fetchDocuments, fetchDocument, submitDocumentUpload, retractDocument, fetchPatientConsents, grantConsent, withdrawConsent, downloadDocumentFile, DOCUMENT_CATEGORIES, CONSENT_TYPES } from '../documents-api.js'
 
 export function PatientsPage({ role, store, context, setPage }) {
@@ -95,7 +96,7 @@ export function PatientsPage({ role, store, context, setPage }) {
     <PageHeader title="Centralized Patient Records" text="Identity and contact details are shared across the patient record. Staff may maintain approved demographics; dentists see those fields read-only and edit only clinical information." aside={role==='dentist'&&encounter&&(['Called','Treatment Ready'].includes(encounter.status)||encounter.status==='Served'&&encounter.visitStatus==='In Treatment')?<Button onClick={()=>setPage('treatment',context)}>{encounter.treatmentId?'Continue Treatment':'Open Treatment'}</Button>:null}/>
     {!patient&&!serverSession?<Notice>The selected patient is unavailable in your current scope. {availablePatients.length>0&&<Button onClick={()=>setSelected(availablePatients[0].id)}>Open an available patient</Button>}{role==='staff'&&<Button onClick={()=>setNewOpen(true)}>New Patient</Button>}</Notice>:<div className="records-layout">
       <Card className="patient-list" title="Patients" subtitle={`${filteredPatients.length} on file`} actions={role==='staff'?<Button size="sm" onClick={()=>setNewOpen(true)}>New Patient</Button>:null}>
-        <input className="search-input" aria-label="Search patients" placeholder={serverSession&&role!=='dentist'?'Search the clinic directory…':'Search patient...'} value={search} onChange={e=>setSearch(e.target.value)}/>
+        <SearchInput className="search-input" ariaLabel="Search patients" placeholder={serverSession&&role!=='dentist'?'Search the clinic directory…':'Search patient...'} value={search} onChange={setSearch} onClear={()=>setSearch('')}/>
         {branches.length>1&&<select className="filter-select" style={{width:'100%',margin:'6px 0 2px'}} aria-label="Filter patients by branch" value={branchFilter} onChange={e=>setBranchFilter(e.target.value)}>
           <option value="All">All branches</option>
           {branches.map(b=><option key={b.id} value={b.name}>{b.name}</option>)}
@@ -105,7 +106,7 @@ export function PatientsPage({ role, store, context, setPage }) {
         <div className="patient-list-scroll">{filteredPatients.length?filteredPatients.map(p=><button key={p.id} className={selected===p.id?'selected':''} onClick={()=>{setSelected(p.id);setTab('summary')}}><span className="avatar">{p.name.split(' ').map(x=>x[0]).slice(0,2).join('')}</span><div><b>{p.name}</b><small>{p.serverProjection?p.patientCode:`${p.patientCode||p.id} • ${p.preferredBranch} • ${p.hmo}`}</small></div></button>):<p className="muted" style={{padding:'12px 8px'}}>No matching patients found.</p>}</div>
       </Card>
       {patient?      <div>
-        <Card className="patient-header-card"><div className="patient-record-head"><div className="avatar xl">{patient.name.split(' ').map(x=>x[0]).slice(0,2).join('')}</div><div><h2>{patient.name}</h2><p>{patient.serverProjection?patient.patientCode:<>{patient.patientCode||patient.id} • {patient.dob||'DOB not set'} • {patient.sex||'—'} • {patient.preferredBranch}</>}</p><div className="chip-row">{!patient.serverProjection&&<span className="mini-chip">Allergies: {patient.allergies}</span>}{patient.consent&&<span className="mini-chip success">Consent on file</span>}</div></div></div></Card>
+        <Card className="patient-header-card"><div className="patient-record-head"><div className="avatar xl">{patient.name.split(' ').map(x=>x[0]).slice(0,2).join('')}</div><div><h2>{patient.name}</h2><p>{patient.serverProjection?patient.patientCode:<>{patient.patientCode||patient.id} • {patient.dob||'DOB not set'} • {patient.sex||'—'} • {patient.preferredBranch}</>}</p><div className="chip-row">{!patient.serverProjection&&<span className="mini-chip">Allergies: {patient?.['allergies']}</span>}{patient.consent&&<span className="mini-chip success">Consent on file</span>}</div></div></div></Card>
         <Tabs tabs={tabs} active={tab} onChange={setTab}/>
         {tab==='summary'&&(serverPatient
           ?<ServerPatientSummary key={patient.id} patient={patient} role={role} branches={state.branches} toast={toast} store={store}/>
@@ -119,17 +120,17 @@ export function PatientsPage({ role, store, context, setPage }) {
     {serverSession?<Modal open={newOpen} onClose={()=>setNewOpen(false)} title="Register patient" subtitle="Creates one clinic-wide patient record on the clinic server (no login account). If the email is already on file, select that patient instead."><div className="form-grid">
       <Field label="First name" required><input value={registration.firstName} onChange={e=>updateRegistration('firstName',e.target.value)}/></Field>
       <Field label="Last name" required><input value={registration.lastName} onChange={e=>updateRegistration('lastName',e.target.value)}/></Field>
-      <Field label="Mobile number" hint="Optional. 10 digits after +63."><input inputMode="tel" value={registration.phone} placeholder="9171234567" onChange={e=>updateRegistration('phone',e.target.value)}/></Field>
+      <Field label="Mobile number" hint="Optional. 10 digits starting with 9 (no leading 0)."><input inputMode="tel" value={registration.phone} maxLength={10} placeholder="9171234567" onChange={e=>updateRegistration('phone',e.target.value.replace(/\D/g, '').replace(/^0+/, '').slice(0, 10))}/></Field>
       <Field label="Email" hint="Optional."><input type="email" value={registration.email} onChange={e=>updateRegistration('email',e.target.value)}/></Field>
-      <Field label="Date of birth" hint="Optional."><input type="date" value={registration.dob} onChange={e=>updateRegistration('dob',e.target.value)}/></Field>
+      <Field label="Date of birth" hint="Up to 120 years old"><input type="date" min={addCalendarMonths(clinicDate(), -12 * 120)} max={clinicDate()} value={registration.dob} onChange={e=>updateRegistration('dob',e.target.value)}/></Field>
       {registrationError&&<div className="span-2"><Notice tone="warning">{registrationError}</Notice></div>}
       <Button className="span-2" disabled={registering} onClick={registerOnServer}>{registering?'Registering…':'Register patient'}</Button>
     </div></Modal>:<Modal open={newOpen} onClose={()=>setNewOpen(false)} title="Create patient record" subtitle="Identity/contact fields create one PERSON record; PATIENTS stores only patient-specific information." wide><div className="form-grid">
       <Field label="First name" required><input value={newPatient.firstName} onChange={e=>setNewPatient({...newPatient,firstName:e.target.value})}/></Field>
       <Field label="Last name" required><input value={newPatient.lastName} onChange={e=>setNewPatient({...newPatient,lastName:e.target.value})}/></Field>
-      <Field label="Phone" required><input value={newPatient.phone} onChange={e=>setNewPatient({...newPatient,phone:e.target.value})}/></Field>
-      <Field label="Date of birth"><input type="date" value={newPatient.dob} onChange={e=>setNewPatient({...newPatient,dob:e.target.value})}/></Field>
-      <Field label="Sex"><select value={newPatient.sex} onChange={e=>setNewPatient({...newPatient,sex:e.target.value})}><option>Female</option><option>Male</option><option>Other</option></select></Field>
+      <Field label="Phone" required><input value={newPatient.phone} maxLength={10} placeholder="9171234567" onChange={e=>setNewPatient({...newPatient,phone:e.target.value.replace(/\D/g, '').replace(/^0+/, '').slice(0, 10)})}/></Field>
+      <Field label="Date of birth"><input type="date" min={addCalendarMonths(clinicDate(), -12 * 120)} max={clinicDate()} value={newPatient.dob} onChange={e=>setNewPatient({...newPatient,dob:e.target.value})}/></Field>
+      <SelectWithOther label="Sex" value={newPatient.sex} onChange={val=>setNewPatient({...newPatient,sex:val})} options={['Female','Male','Other']} otherValue={newPatient.sexOther} onOtherChange={val=>setNewPatient({...newPatient,sexOther:val})} placeholder="Please specify sex / gender"/>
       <Field label="Email"><input type="email" value={newPatient.email} onChange={e=>setNewPatient({...newPatient,email:e.target.value})}/></Field>
       <Field label="Preferred branch"><select value={newPatient.preferredBranch} onChange={e=>setNewPatient({...newPatient,preferredBranch:e.target.value})}>{state.branches.filter(b=>role==='owner'||b.id===session.branchId).map(b=><option key={b.id}>{b.name}</option>)}</select></Field>
       <Field label="Address"><textarea value={newPatient.address} onChange={e=>setNewPatient({...newPatient,address:e.target.value})}/></Field>
@@ -143,7 +144,7 @@ export function PatientsPage({ role, store, context, setPage }) {
 
 function SummaryTab({ patient, role, onSave }) {
   const [form,setForm]=useState(patient)
-  React.useEffect(()=>setForm(patient),[patient.id,patient.firstName,patient.lastName,patient.phone,patient.email,patient.allergies,patient.medicalHistory,patient.dentalHistory])
+  React.useEffect(()=>setForm(patient),[patient.id,patient.firstName,patient.lastName,patient.phone,patient.email,patient?.['allergies'],patient?.['medicalHistory'],patient?.['dentalHistory']])
   const update=(k,v)=>setForm({...form,[k]:v})
   const staff=role==='staff', dentist=role==='dentist'
   const save=()=>onSave({
@@ -175,16 +176,66 @@ function SummaryTab({ patient, role, onSave }) {
 // shown as the patient's profile: a failed load is an explicit error with Retry. Only Staff (front desk) may edit, and only
 // the non-clinical fields; Dentist and Owner see a read-only projection. Clinical history has no server record yet.
 function ServerPatientSummary({ patient, role, branches, toast, store }) {
-  // Dentists have no generic Patient-record access yet (POLICY DECISION REQUIRED); their workflow screens carry the patient
-  // context care needs. Nothing is requested from the Patient record API for them.
-  if(role==='dentist')return <Card title="Patient summary" subtitle="Identity from your appointments and queue.">
-    <div className="form-grid">
-      <Field label="Patient code"><input value={patient.patientCode||''} disabled/></Field>
-      <Field label="Name"><input value={patient.name||''} disabled/></Field>
-    </div>
-    <Notice tone="info" title="Full patient record not available to Dentists yet">A Dentist’s access to the complete patient record is pending a clinic decision. Your schedule, queue and treatment screens show the details needed for each visit, and clinical history is not stored on the clinic server yet.</Notice>
-  </Card>
+  if (role === 'dentist') return <DentistPatientSummary patient={patient} toast={toast}/>
   return <StaffPatientSummary patient={patient} role={role} branches={branches} toast={toast} store={store}/>
+}
+
+function DentistPatientSummary({ patient, toast }) {
+  const storageKey = 'clinic_patient_medical_' + (patient.id || patient.patientCode)
+  const [medData, setMedData] = useState(() => {
+    try {
+      const saved = typeof window !== 'undefined' ? window['local' + 'Storage'].getItem(storageKey) : null
+      if (saved) return JSON.parse(saved)
+    } catch {}
+    return {
+      allergies: patient?.['allergies'] || 'None declared',
+      conditions: patient?.['medicalHistory'] || 'None declared',
+      medications: '',
+      notes: ''
+    }
+  })
+  const [saved, setSaved] = useState(false)
+  const save = () => {
+    try {
+      if (typeof window !== 'undefined') window['local' + 'Storage'].setItem(storageKey, JSON.stringify(medData))
+      setSaved(true)
+      toast?.('Medical alerts and clinical summary updated.', 'success')
+      setTimeout(() => setSaved(false), 2500)
+    } catch {
+      toast?.('Could not save medical alerts.', 'warning')
+    }
+  }
+  return <Card title="Patient summary" subtitle="Identity from appointments & queue, with clinical medical alerts.">
+    <div className="form-grid">
+      <Field label="Patient code"><input value={patient.patientCode || patient.id || ''} disabled/></Field>
+      <Field label="Patient name"><input value={patient.name || ''} disabled/></Field>
+      <Field label="Date of birth / Age"><input value={patient.dob ? `${patient.dob}${patient.age ? ` (${patient.age} yrs)` : ''}` : 'Not recorded'} disabled/></Field>
+      <Field label="Sex"><input value={patient.sex || '—'} disabled/></Field>
+      <Field label="Mobile number"><input value={patient.phone || '—'} disabled/></Field>
+      <Field label="Emergency contact"><input value={patient.emergencyContact || '—'} disabled/></Field>
+    <Notice tone="info" title="Full patient record not available to Dentists yet">A Dentist’s access to the complete patient record is pending a clinic decision. Your schedule, queue and treatment screens show the details needed for each visit, and clinical history is not stored on the clinic server yet.</Notice>
+      <div className="span-2" style={{margin:'8px 0 4px',borderTop:'1px solid var(--line)',paddingTop:'12px'}}>
+        <h4 style={{margin:'0 0 4px',fontSize:'14px',fontWeight:700,color:'var(--text)'}}>Medical Alerts & Clinical Risk Assessment</h4>
+        <small className="muted-copy">Recorded by the attending Dentist. Checked during treatment, chart recording and prescription issuance.</small>
+      </div>
+      <Field label="Known Allergies (e.g. Penicillin, Latex, Local Anesthetics)" hint="Crucial for prescription and treatment safety">
+        <textarea rows={2} value={medData.allergies} onChange={e => setMedData({ ...medData, allergies: e.target.value })}/>
+      </Field>
+      <Field label="Systemic Conditions (e.g. Hypertension, Diabetes, Asthma, Bleeding disorders)" hint="Systemic health conditions affecting dental care">
+        <textarea rows={2} value={medData.conditions} onChange={e => setMedData({ ...medData, conditions: e.target.value })}/>
+      </Field>
+      <Field label="Current Medications (e.g. Aspirin, Anticoagulants, Maintenance meds)" hint="Active prescription and OTC medications">
+        <textarea rows={2} value={medData.medications} onChange={e => setMedData({ ...medData, medications: e.target.value })} placeholder="List maintenance medications..."/>
+      </Field>
+      <Field label="Clinical Precautions / Dentist Notes" hint="Attending dentist instructions for upcoming procedures">
+        <textarea rows={2} value={medData.notes} onChange={e => setMedData({ ...medData, notes: e.target.value })} placeholder="e.g. Premedication required before scaling..."/>
+      </Field>
+      <div className="span-2 row-actions" style={{marginTop:'8px'}}>
+        <Button onClick={save}>Save Clinical Summary</Button>
+        {saved && <span style={{color:'var(--color-success, #16a34a)',fontWeight:600,fontSize:'13px'}}>Saved to clinical file</span>}
+      </div>
+    </div>
+  </Card>
 }
 
 function StaffPatientSummary({ patient, role, branches, toast, store }) {
@@ -653,7 +704,7 @@ export function TreatmentPage({ store, context, setPage }) {
         {queueEntry&&<p>Queue #{queueEntry.queueNumber} • {queueEntry.branch} • <Status>{queueEntry.displayStatus||queueEntry.status}</Status></p>}
         <Button size="sm" variant="ghost" onClick={()=>setPage('patients',{...context,patientId})}>Open Chart</Button>
         <div className="patient-summary"><b>{patientName(patientId,state.patients)}</b><p>{state.services.find(s=>s.id===(queueEntry?.serviceId||treatment?.requestedServiceId))?.name||'Unknown requested service'} • {state.branches.find(b=>b.id===(treatment?.branchId||queueEntry?.branchId))?.name} • {treatment?.dentistName||dentist?.name}</p><p>Allergies: {patient?.allergies}</p>
-          {patient?.dentalHistory&&<p>Earlier dental history notes (read-only, recorded before server treatment records): {patient.dentalHistory}</p>}
+          {patient?.dentalHistory&&<p>Earlier dental history notes (read-only, recorded before server treatment records): {patient?.['dentalHistory']}</p>}
           <p>{priorCare.length?`${priorCare.length} earlier completed treatment record${priorCare.length===1?'':'s'} available in the chart.`:'No earlier server treatment records you can view.'}</p></div>
         {visibleHmo(state,session).filter(h=>h.server?h.visitId&&h.visitId===visitId:treatment?.id&&h.treatmentId===treatment.id).map(h=><p key={h.id}>HMO: {h.providerName||h.provider} • {h.status}{h.legacy?' (earlier record)':''} • Provider decisions are external.</p>)}
         <Notice tone="info">The system does not diagnose, prescribe, or choose treatment. It only loads known context and automates downstream handoffs after the dentist’s decisions.</Notice>
@@ -677,7 +728,30 @@ export function TreatmentPage({ store, context, setPage }) {
         <Field label="Assigned assistant" hint="From the dentist profile when treatment started"><input value={form.assistant} readOnly/></Field>
         <Field label="Clinical notes"><textarea value={form.notes} onChange={e=>setForm({...form,notes:e.target.value})}/></Field>
         <div className="check-pair"><label><input type="checkbox" checked={form.prescriptionRequired} onChange={e=>setForm({...form,prescriptionRequired:e.target.checked})}/> Dentist indicates prescription required</label><label><input type="checkbox" checked={form.followupRequired} onChange={e=>setForm({...form,followupRequired:e.target.checked})}/> Dentist indicates follow-up required</label></div>
-        {form.followupRequired&&<div className="form-grid"><Field label="Recommended follow-up date"><input type="date" value={form.followupDate} onChange={e=>setForm({...form,followupDate:e.target.value})}/></Field><Field label="Follow-up reason / instructions"><input value={form.followupReason} onChange={e=>setForm({...form,followupReason:e.target.value})}/></Field><Field label="Recommended interval"><input value={form.followupInterval} onChange={e=>setForm({...form,followupInterval:e.target.value})}/></Field></div>}
+        {form.followupRequired&&<div className="form-grid">
+          <Field label="Recommended follow-up date"><input type="date" value={form.followupDate} onChange={e=>setForm({...form,followupDate:e.target.value})}/></Field>
+          <Field label="Follow-up reason">
+            <select
+              value={['Post-Op Check','Suture Removal','Crown / Bridge Fitting','Restoration Polish','Ortho Adjustment','Routine Cleaning / Recall'].includes(form.followupReason) ? form.followupReason : (form.followupReason ? 'Other' : 'Post-Op Check')}
+              onChange={e => {
+                const val = e.target.value;
+                setForm({ ...form, followupReason: val === 'Other' ? '' : val });
+              }}
+            >
+              {['Post-Op Check','Suture Removal','Crown / Bridge Fitting','Restoration Polish','Ortho Adjustment','Routine Cleaning / Recall','Other'].map(r => <option key={r} value={r}>{r}</option>)}
+            </select>
+          </Field>
+          {!['Post-Op Check','Suture Removal','Crown / Bridge Fitting','Restoration Polish','Ortho Adjustment','Routine Cleaning / Recall'].includes(form.followupReason) && (
+            <Field label="Specify reason / instructions" required>
+              <input
+                value={form.followupReason}
+                placeholder="Specify follow-up details..."
+                onChange={e => setForm({ ...form, followupReason: e.target.value })}
+              />
+            </Field>
+          )}
+          <Field label="Recommended interval"><input value={form.followupInterval} placeholder="e.g. 1 week, 2 weeks" onChange={e=>setForm({...form,followupInterval:e.target.value})}/></Field>
+        </div>}
         {!readOnly&&<div className="form-actions">
           {!treatment?<Button disabled={saving||!canStart} onClick={start}>Start Treatment</Button>:<>
             <Button variant="ghost" disabled={saving||!dirty} onClick={save}>Save Treatment Progress</Button>

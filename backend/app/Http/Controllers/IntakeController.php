@@ -20,7 +20,7 @@ use libphonenumber\PhoneNumberFormat;
 use libphonenumber\PhoneNumberUtil;
 
 /**
- * Registration intake. Public (the counter QR or the kiosk, no sign-in): the branch page and the registration form, which
+ * Registration intake. Public (the counter QR, no sign-in): the branch page and the registration form, which
  * needs today's code from the front-desk screen and is rate-limited per IP and device. Signed-in patients join today's queue
  * with the same code. Staff: today's code (refresh), pending registrations with possible existing records, confirm or
  * cancel, and the one-click in-person ID check.
@@ -179,7 +179,7 @@ class IntakeController extends Controller
     private function validateForm(Request $request): array
     {
         $data = $request->validate([
-            'branch_ref' => ['required', 'string', 'max:50'], 'code' => ['nullable', 'string', 'max:12'], 'channel' => ['nullable', 'in:phone,kiosk'],
+            'branch_ref' => ['required', 'string', 'max:50'], 'code' => ['nullable', 'string', 'max:12'], 'channel' => ['nullable', 'in:phone,account'],
             'consent' => ['accepted'],
             'self.first_name' => ['required', 'string', 'max:100'], 'self.last_name' => ['required', 'string', 'max:100'],
             'self.date_of_birth' => ['required', 'date_format:Y-m-d', 'before_or_equal:'.ClinicClock::today(), 'after:1900-01-01'],

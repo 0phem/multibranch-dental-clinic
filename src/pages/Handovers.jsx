@@ -32,7 +32,7 @@ export function HandoversPage({ store, role }) {
         : <ul className="fd-list">{shown.map(h => <li key={h.id}>
           <div><b>{h.patient.name} · {h.patient.code}</b><span>{route(h)}</span>
             <span>{h.status}{h.acknowledged ? ` by ${h.acknowledged.by}, ${when(h.acknowledged.at)}` : ''} · sent {when(h.created_at)}{h.from.by ? ` by ${h.from.by}` : ''}</span></div>
-          {!owner && <Button size="sm" variant={h.can_acknowledge ? 'primary' : 'soft'} onClick={() => setOpenId(h.id)}>{h.can_acknowledge ? 'Read and acknowledge' : 'Open'}</Button>}
+          {!owner && <Button size="sm" variant={h.can_acknowledge ? 'primary' : 'soft'} onClick={() => setOpenId(h.id)}>{h.can_acknowledge ? 'Open (Auto-accept)' : 'Open'}</Button>}
         </li>)}</ul>}
     </Card>
     {openId && <HandoverDialog id={openId} toast={toast} onClose={() => setOpenId(null)} onChanged={load}/>}
@@ -41,7 +41,25 @@ export function HandoversPage({ store, role }) {
 
 export function HandoverDialog({ id, toast, onClose, onChanged }) {
   const [h, setH] = useState(null), [error, setError] = useState(''), [busy, setBusy] = useState(''), [confirmCancel, setConfirmCancel] = useState(false)
-  useEffect(() => { handover(id).then(r => (r.ok ? setH(r.data) : setError(r.message || 'This handover could not be opened.'))) }, [id])
+  useEffect(() => {
+    handover(id).then(r => {
+      if (r.ok) {
+        setH(r.data)
+        // Auto-accepted handover (Rule 2.10 & 3.8)
+        if (r.data.can_acknowledge) {
+          acknowledgeHandover(id).then(ackRes => {
+            if (ackRes.ok) {
+              setH(ackRes.data)
+              toast?.('Handover transferred and auto-accepted.', 'success')
+              onChanged?.()
+            }
+          })
+        }
+      } else {
+        setError(r.message || 'This handover could not be opened.')
+      }
+    })
+  }, [id])
   const act = async (fn, done) => {
     setBusy(done)
     const r = await fn(id)
@@ -86,7 +104,7 @@ export function HandoverPanel({ patientId, toast }) {
     <h3 id={`ho-${patientId}`} className="st-sub">Handovers</h3>
     {!rows ? <p className="au-muted" role="status">Loading…</p> : !rows.length ? <p className="au-muted">No handovers for this patient.</p>
       : <ul className="fd-list">{rows.map(h => <li key={h.id}><div><b>{route(h)}</b><span>{h.status} · {when(h.created_at)}</span></div>
-        <Button size="sm" variant={h.can_acknowledge ? 'primary' : 'soft'} onClick={() => setOpenId(h.id)}>{h.can_acknowledge ? 'Read and acknowledge' : 'Open'}</Button></li>)}</ul>}
+        <Button size="sm" variant={h.can_acknowledge ? 'primary' : 'soft'} onClick={() => setOpenId(h.id)}>{h.can_acknowledge ? 'Open (Auto-accept)' : 'Open'}</Button></li>)}</ul>}
     {creating ? <HandoverForm patientId={patientId} toast={toast} onCancel={() => setCreating(false)} onDone={() => { setCreating(false); load() }}/>
       : <Button size="sm" variant="soft" onClick={() => setCreating(true)}>Hand over care</Button>}
     {openId && <HandoverDialog id={openId} toast={toast} onClose={() => setOpenId(null)} onChanged={load}/>}

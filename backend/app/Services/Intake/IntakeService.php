@@ -22,7 +22,7 @@ use Illuminate\Validation\ValidationException;
 
 /**
  * Counter registration (R2-03: "new patients fill in their information on paper, then staff type it into the system"; about
- * 15 minutes, R2-05). The patient fills the form on their own phone (or the kiosk); it waits, encrypted, as a submission. Staff
+ * 15 minutes, R2-05). The patient fills the form on their own phone; it waits, encrypted, as a submission. Staff
  * see it on the Check-In page and in the queue as "Self-registered: verify ID", with every field filled. They check the
  * physical ID, correct anything (audited, field names only) and confirm: the submission becomes a patient record — or, when the
  * shared record already has this person from any branch (R2-08), staff choose "Use this record" (never merged automatically).

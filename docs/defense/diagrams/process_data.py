@@ -71,7 +71,7 @@ MODULES = [
                S('Front desk', 'Returning patient looked up in the branch archive', 'R2-06'),
                S('Front desk', 'Another branch: register again or retype (separate databases)', 'R2-08'),
                C('Front desk', 'A wrong name is corrected', 'How is a wrong patient name corrected today, and who may do it?')],
-     'to_be': [T('Patient', 'Scans the counter QR; fills the form on own phone (or kiosk)'),
+     'to_be': [T('Patient', 'Scans the counter QR; fills the form on own phone'),
                T('System', 'Finds a possible existing record from any branch', 'auto'),
                T('Front desk', 'Checks the ID; confirms or corrects (audited) instead of typing'),
                T('Patient', 'Guardian adds a child or dependent (consent per person)'),

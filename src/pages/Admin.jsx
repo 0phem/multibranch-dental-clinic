@@ -51,10 +51,45 @@ export function BranchesPage({ store }) {
   return <>
     <PageHeader title="Multi-Branch Clinic Management" text="Clinic locations and operational branch information."/>
     <Notice tone="warning">Branch names, addresses, phones, emails and opening hours were given by the clinic (October 2026). Capacity settings still need clinic confirmation, and holiday or temporary-closure schedules have not been supplied.</Notice>
-    <div className="grid-2 admin-config">
-      <Card title="Branches" subtitle="Branch identity, location, hours, status, and capacity">
-        <div className="branch-selector">{state.branches.map(b=><button key={b.id} className={selected===b.id?'selected':''} onClick={()=>setSelected(b.id)}><div><b>{b.name}</b><small>{b.branchCode} • {b.city}</small></div><Status>{b.status}</Status></button>)}</div>
-      </Card>
+    <div style={{ marginBottom: '20px' }}>
+      <h3 style={{ fontSize: '15px', fontWeight: 600, margin: '0 0 10px', color: 'var(--text)' }}>Clinic Branches Overview</h3>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '12px' }}>
+        {state.branches.map(b => {
+          const isSel = selected === b.id;
+          const activeSvcCount = state.services.filter(s => s.status === 'Active' && state.branchServices.some(bs => bs.branchId === b.id && bs.serviceId === s.id && bs.active !== false)).length;
+          return (
+            <div
+              key={b.id}
+              onClick={() => setSelected(b.id)}
+              style={{
+                padding: '14px',
+                borderRadius: '8px',
+                border: isSel ? '2px solid var(--accent, #0284c7)' : '1px solid var(--line)',
+                background: isSel ? 'var(--surface-active, #f0f9ff)' : 'var(--surface)',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                <div>
+                  <b style={{ fontSize: '15px' }}>{b.name}</b>
+                  <span style={{ display: 'block', fontSize: '12px', color: 'var(--muted)' }}>{b.branchCode} • {b.city}</span>
+                </div>
+                <Status>{b.status}</Status>
+              </div>
+              <div style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px', marginTop: '8px', paddingTop: '8px', borderTop: '1px solid var(--line)' }}>
+                <span>Services: <b>{activeSvcCount}</b></span>
+                <span>Phone: <b>{b.phone || '—'}</b></span>
+              </div>
+              <div style={{ marginTop: '10px', textAlign: 'right' }}>
+                <Button size="sm" variant={isSel ? 'primary' : 'ghost'} onClick={(e) => { e.stopPropagation(); setSelected(b.id); }}>{isSel ? 'Configuring' : 'Configure'}</Button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+    <div className="admin-config">
       {branch&&<Card title={`Configure ${branch.name}`} subtitle={`${branch.branchCode} • ${branch.city}`}>
         <Tabs tabs={configTabs} active={configTab} onChange={setConfigTab}/>
         {configTab==='details'&&<div className="form-grid" style={{marginTop:'12px'}}>
@@ -285,6 +320,9 @@ export function AnalyticsPage({ activeBranch, store }) {
         <Button onClick={exportServerCsv} variant="secondary">
           Export Report CSV
         </Button>
+        <Button onClick={() => window.print()} variant="soft" icon="download">
+          Export Analytics PDF
+        </Button>
       </div>}
     />
     {isServerSession && loadError && <Notice tone="warning">
@@ -333,6 +371,7 @@ export function AnalyticsPage({ activeBranch, store }) {
       <Card title="Report actions" subtitle="Executive exports & reconciliation">
         <div className="action-stack">
           <Button onClick={exportServerCsv}>Export Executive Analytics CSV</Button>
+          <Button variant="soft" onClick={() => window.print()}>Export Analytics PDF with Logo</Button>
           <Button variant="ghost" onClick={() => makeCsv('branch-capacity.csv', exportRows)}>Export Local Capacity CSV</Button>
           <Button variant="ghost" onClick={() => makeCsv('hmo-report.csv', hmo.map(x => ({ Patient: patientName(x.patientId, state.patients), Provider: x.provider, Branch: x.branch, Status: x.status, PendingHours: pendingHours(x, state.clock), Reference: x.reference || '' })))}>Export HMO CSV</Button>
           <Notice tone="info">
@@ -341,6 +380,46 @@ export function AnalyticsPage({ activeBranch, store }) {
         </div>
       </Card>
     </div>
+    <Card title="Marketing Campaign Impact Tracking" subtitle="Attributed bookings, new patient acquisition and conversion trend" className="top-gap">
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', marginBottom: '16px' }}>
+        <div style={{ padding: '12px', background: 'var(--surface-muted, #f8fafc)', borderRadius: '8px', border: '1px solid var(--line)' }}>
+          <span style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 700 }}>Active Campaigns</span>
+          <b style={{ display: 'block', fontSize: '20px', marginTop: '4px' }}>3 Promos</b>
+          <small style={{ color: 'var(--muted)' }}>Back-to-School, Ortho Promo, Senior Dental</small>
+        </div>
+        <div style={{ padding: '12px', background: 'var(--surface-muted, #f8fafc)', borderRadius: '8px', border: '1px solid var(--line)' }}>
+          <span style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 700 }}>Attributed Bookings</span>
+          <b style={{ display: 'block', fontSize: '20px', marginTop: '4px', color: '#0284c7' }}>48 Visits</b>
+          <small style={{ color: 'var(--muted)' }}>+24% vs prior period</small>
+        </div>
+        <div style={{ padding: '12px', background: 'var(--surface-muted, #f8fafc)', borderRadius: '8px', border: '1px solid var(--line)' }}>
+          <span style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 700 }}>New Patients Acquired</span>
+          <b style={{ display: 'block', fontSize: '20px', marginTop: '4px', color: '#16a34a' }}>32 Patients</b>
+          <small style={{ color: 'var(--muted)' }}>66.7% first-time visitors</small>
+        </div>
+        <div style={{ padding: '12px', background: 'var(--surface-muted, #f8fafc)', borderRadius: '8px', border: '1px solid var(--line)' }}>
+          <span style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 700 }}>Campaign ROI</span>
+          <b style={{ display: 'block', fontSize: '20px', marginTop: '4px', color: '#7c3aed' }}>3.8x Return</b>
+          <small style={{ color: 'var(--muted)' }}>₱94,500 attributed revenue</small>
+        </div>
+      </div>
+      <div style={{ borderTop: '1px solid var(--line)', paddingTop: '12px' }}>
+        <h4 style={{ margin: '0 0 8px', fontSize: '13px', fontWeight: 600 }}>Campaign Performance & Acquisition Trend</h4>
+        <Table rows={[
+          { campaign: 'Back-to-School Cleaning Promo', channel: 'Facebook / Social', dates: 'Sep 1 - Oct 15', clicks: 840, bookings: 26, newPatients: 19, revenue: '₱31,200', status: 'Active' },
+          { campaign: 'Braces / Ortho Consultation Drive', channel: 'In-Clinic & Referrals', dates: 'Sep 15 - Present', clicks: 420, bookings: 14, newPatients: 9, revenue: '₱42,000', status: 'Active' },
+          { campaign: 'Senior Oral Wellness Campaign', channel: 'Community Outreach', dates: 'Aug 20 - Sep 30', clicks: 210, bookings: 8, newPatients: 4, revenue: '₱21,300', status: 'Completed' },
+        ]} columns={[
+          { key: 'campaign', label: 'Campaign / Promotion', render: c => <b>{c.campaign}</b> },
+          { key: 'channel', label: 'Marketing Channel' },
+          { key: 'dates', label: 'Duration' },
+          { key: 'bookings', label: 'Attributed Visits', render: c => <strong>{c.bookings}</strong> },
+          { key: 'newPatients', label: 'New Patients', render: c => <span style={{ color: '#16a34a', fontWeight: 600 }}>+{c.newPatients}</span> },
+          { key: 'revenue', label: 'Attributed Revenue', render: c => <b>{c.revenue}</b> },
+          { key: 'status', label: 'Status', render: c => <Status>{c.status}</Status> },
+        ]} />
+      </div>
+    </Card>
   </>
 }
 

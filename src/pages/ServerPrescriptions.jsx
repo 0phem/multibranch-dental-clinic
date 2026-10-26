@@ -19,6 +19,9 @@ const COMMON_MEDICINE_NAMES = [
   'Celecoxib 200mg',
   'Chlorhexidine 0.12% Oral Rinse',
 ]
+const COMMON_DOSAGES = ['250mg', '500mg', '625mg', '1000mg (1g)', '15ml', '1 tablet', '1 capsule', '2 tablets']
+const COMMON_FREQUENCIES = ['Once daily', 'Twice daily', 'Three times daily', 'Four times daily', 'Before meals', 'After meals', 'As needed for pain']
+const COMMON_DURATIONS = ['3 days', '5 days', '7 days', '10 days', '14 days', 'As needed for 5 days']
 
 /**
  * M19 Prescriptions (clinic server). Dentists at the branch write a prescription for a recent visit: free-text lines, no drug list
@@ -116,32 +119,101 @@ function WriteCard({ toast, onDone, editing, onEdited }) {
       <datalist id="rx-common">{[...new Set([...(meta.common_medicines || []), ...COMMON_MEDICINE_NAMES])].map(m => <option key={m} value={m}/>)}</datalist>
       {lines.map((l, i) => {
         const medicineCatalog = [...new Set([...(meta.common_medicines || []), ...COMMON_MEDICINE_NAMES])]
-        const isCatalogMatch = medicineCatalog.includes(l.medicine)
-        const selectValue = isCatalogMatch ? l.medicine : (l.medicine ? '__other__' : '')
+        const isMedMatch = medicineCatalog.includes(l.medicine)
+        const medSelect = isMedMatch ? l.medicine : (l.medicine ? '__other__' : '')
+        const isDosageMatch = COMMON_DOSAGES.includes(l.dosage)
+        const dosageSelect = isDosageMatch ? l.dosage : (l.dosage ? '__other__' : '')
+        const isFreqMatch = COMMON_FREQUENCIES.includes(l.frequency)
+        const freqSelect = isFreqMatch ? l.frequency : (l.frequency ? '__other__' : '')
+        const isDurationMatch = COMMON_DURATIONS.includes(l.duration)
+        const durationSelect = isDurationMatch ? l.duration : (l.duration ? '__other__' : '')
+
         return <fieldset key={i} className="rx-line"><legend>Medicine {i + 1}</legend>
-          <Field label="Select medicine or choose Other" hint="Select a medicine name or choose Other for free-text entry. Dosage, frequency, and duration are entered by the prescribing dentist.">
+          <Field label="Medicine" required hint="Choose standard medicine or Other to specify">
             <select
               aria-label={`Select medicine ${i + 1}`}
-              value={selectValue}
+              value={medSelect}
               onChange={e => {
                 const val = e.target.value
-                if (val === '__other__') {
-                  if (isCatalogMatch) set(i, 'medicine', '')
-                } else {
-                  set(i, 'medicine', val)
-                }
+                set(i, 'medicine', val === '__other__' ? '' : val)
               }}
             >
-              <option value="">Choose a medicine name or Other…</option>
+              <option value="">Choose medicine…</option>
               {medicineCatalog.map(name => <option key={name} value={name}>{name}</option>)}
               <option value="__other__">Other (free-text entry)</option>
             </select>
           </Field>
-          <Field label="Medicine" required><input list="rx-common" value={l.medicine} maxLength={200} onChange={e => set(i, 'medicine', e.target.value)} placeholder="Select above or type medicine name"/></Field>
-          <div className="st-pair"><Field label="Dosage"><input value={l.dosage} maxLength={120} onChange={e => set(i, 'dosage', e.target.value)} placeholder="Entered by dentist"/></Field>
-            <Field label="Frequency"><input value={l.frequency} maxLength={120} onChange={e => set(i, 'frequency', e.target.value)} placeholder="Entered by dentist"/></Field></div>
-          <Field label="Duration"><input value={l.duration} maxLength={120} onChange={e => set(i, 'duration', e.target.value)} placeholder="Entered by dentist"/></Field>
-          <Field label="Instructions"><textarea value={l.instructions} maxLength={500} onChange={e => set(i, 'instructions', e.target.value)} placeholder="Entered by dentist"/></Field>
+          {medSelect === '__other__' && (
+            <Field label="Specify medicine name" required>
+              <input value={l.medicine} maxLength={200} onChange={e => set(i, 'medicine', e.target.value)} placeholder="Type medicine name (e.g. Ciprofloxacin 500mg)"/>
+            </Field>
+          )}
+
+          <div className="st-pair">
+            <Field label="Dosage" hint="Choose standard dosage or Other">
+              <select
+                aria-label={`Select dosage ${i + 1}`}
+                value={dosageSelect}
+                onChange={e => {
+                  const val = e.target.value
+                  set(i, 'dosage', val === '__other__' ? '' : val)
+                }}
+              >
+                <option value="">Choose dosage…</option>
+                {COMMON_DOSAGES.map(d => <option key={d} value={d}>{d}</option>)}
+                <option value="__other__">Other (specify)</option>
+              </select>
+            </Field>
+            <Field label="Frequency" hint="Choose standard frequency or Other">
+              <select
+                aria-label={`Select frequency ${i + 1}`}
+                value={freqSelect}
+                onChange={e => {
+                  const val = e.target.value
+                  set(i, 'frequency', val === '__other__' ? '' : val)
+                }}
+              >
+                <option value="">Choose frequency…</option>
+                {COMMON_FREQUENCIES.map(f => <option key={f} value={f}>{f}</option>)}
+                <option value="__other__">Other (specify)</option>
+              </select>
+            </Field>
+          </div>
+
+          <div className="st-pair">
+            {dosageSelect === '__other__' && (
+              <Field label="Specify custom dosage" required>
+                <input value={l.dosage} maxLength={120} onChange={e => set(i, 'dosage', e.target.value)} placeholder="e.g. 750mg twice daily"/>
+              </Field>
+            )}
+            {freqSelect === '__other__' && (
+              <Field label="Specify custom frequency" required>
+                <input value={l.frequency} maxLength={120} onChange={e => set(i, 'frequency', e.target.value)} placeholder="e.g. Every 4 hours"/>
+              </Field>
+            )}
+          </div>
+
+          <Field label="Duration" hint="Choose standard treatment duration or Other">
+            <select
+              aria-label={`Select duration ${i + 1}`}
+              value={durationSelect}
+              onChange={e => {
+                const val = e.target.value
+                set(i, 'duration', val === '__other__' ? '' : val)
+              }}
+            >
+              <option value="">Choose duration…</option>
+              {COMMON_DURATIONS.map(d => <option key={d} value={d}>{d}</option>)}
+              <option value="__other__">Other (specify)</option>
+            </select>
+          </Field>
+          {durationSelect === '__other__' && (
+            <Field label="Specify custom duration" required>
+              <input value={l.duration} maxLength={120} onChange={e => set(i, 'duration', e.target.value)} placeholder="e.g. 10 days or until finished"/>
+            </Field>
+          )}
+
+          <Field label="Instructions (optional)"><textarea value={l.instructions} maxLength={500} onChange={e => set(i, 'instructions', e.target.value)} placeholder="e.g. Take with full glass of water after meals"/></Field>
           {lines.length > 1 && <Button size="sm" variant="ghost" onClick={() => setLines(ls => ls.filter((_, j) => j !== i))}>Remove medicine {i + 1}</Button>}
         </fieldset>
       })}

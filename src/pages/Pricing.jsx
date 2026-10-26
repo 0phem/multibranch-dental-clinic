@@ -8,6 +8,18 @@ import { createPriceVersion, formatAmount, inEffect, loadPriceVersions, retractP
 // M13 pricing foundation — Owner "Services & Pricing". Confirmed prices are Owner-entered, effective-dated, append-only
 // server versions and the only authoritative prices. The amount field always starts blank: no reference or demo fee exists in the server Service data.
 const emptyForm = today => ({ level: 'base', kind: 'priced', amount: '', effectiveFrom: today })
+const MARKET_RATES = {
+  'Routine Dental Check-up': '₱800 - ₱1,200',
+  'Consultation': '₱800 - ₱1,200',
+  'Oral Prophylaxis (Cleaning)': '₱1,200 - ₱2,000',
+  'Teeth Whitening': '₱8,000 - ₱15,000',
+  'Tooth Extraction': '₱1,500 - ₱3,500',
+  'Composite Restoration (Filling)': '₱1,500 - ₱2,500',
+  'Root Canal Treatment': '₱8,000 - ₱15,000',
+  'Ceramic Crown': '₱12,000 - ₱20,000',
+  'Orthodontic Adjustment': '₱1,200 - ₱2,000',
+  'Dentures': '₱15,000 - ₱35,000'
+}
 
 export function ServicesPricingPage({ store }) {
   const { state, toast } = store
@@ -78,6 +90,7 @@ export function ServicesPricingPage({ store }) {
     {versions && <Card title="Services" subtitle="Base clinic price in effect today, with any branch prices">
       <Table rows={state.services} columns={[
         { key: 'name', label: 'Service', render: s => <div><b>{s.name}</b><small className="block-muted">{s.code} • {s.status}</small></div> },
+        { key: 'market', label: 'Market reference price', render: s => <div><b>{MARKET_RATES[s.name] || '₱1,500 - ₱3,000'}</b><small className="block-muted">Philippine Dental Assoc. ref</small></div> },
         { key: 'base', label: 'Confirmed base price today', render: s => { if (!complete) return <small className="block-muted">Load the full history first</small>; const v = inEffect(versions, s.id, null, today); return v ? <span>{formatAmount(v.amount)} <small className="block-muted">since {v.effectiveFrom}</small></span> : <Status>No confirmed price</Status> } },
         { key: 'branches', label: 'Branch prices today', render: s => { if (!complete) return <small className="block-muted">Load the full history first</small>; const list = state.branches.map(b => [b, inEffect(versions, s.id, b.id, today)]).filter(([, v]) => v); return list.length ? list.map(([b, v]) => <small className="block-muted" key={b.id}>{b.name}: {v.kind === 'priced' ? formatAmount(v.amount) : 'ended (uses base)'}</small>) : '—' } },
         { key: 'actions', label: 'Actions', render: s => <Button size="sm" onClick={() => open(s)}>Manage prices</Button> },

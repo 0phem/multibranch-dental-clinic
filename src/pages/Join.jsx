@@ -2,11 +2,12 @@ import React, { useEffect, useRef, useState } from 'react'
 import { Button, Field, Icon, Notice } from '../components.jsx'
 import { AuthShell } from './AuthShell.jsx'
 import { intakeBranch, joinQueueWithAccount, myDependents, submitIntake } from '../api-client.js'
+import { addCalendarMonths, clinicDate } from '../clock.js'
 
-/** `#join/<branch>` (counter poster QR) and `#kiosk/<branch>/<code>` (front-desk tablet). */
+/** `#join/<branch>` (counter poster QR). */
 export function parseJoinHash(hash) {
-  const m = /^#(join|kiosk)\/([A-Za-z0-9_-]{1,50})(?:\/([A-Za-z0-9]{4,12}))?$/.exec(hash || '')
-  return m ? { mode: m[1], branch: m[2], code: m[3] || '' } : null
+  const m = /^#join\/([A-Za-z0-9_-]{1,50})(?:\/([A-Za-z0-9]{4,12}))?$/.exec(hash || '')
+  return m ? { mode: 'join', branch: m[1], code: m[2] || '' } : null
 }
 
 const WHY = {
@@ -21,10 +22,10 @@ const blank = { first_name: '', last_name: '', date_of_birth: '', sex: '', phone
 const firstError = r => (r.kind === 'validation' ? Object.values(r.errors || {})[0]?.[0] || r.message : r.message) || 'That did not work. Please try again or ask the front desk.'
 
 /**
- * Counter registration on the patient's own phone (or the kiosk), replacing the paper form staff retype (R2-03, R2-05). Two
+ * Counter registration on the patient's own phone, replacing the paper form staff retype (R2-03, R2-05). Two
  * choices: "I'm new here" (the form) or "I have an account" (sign in). Both end with "Join today's queue", which needs the code
- * shown at the front desk today. Collects only what the paper form needs, says why for each field, and asks for consent. The
- * kiosk resets after 60 seconds without a touch and leaves nothing on screen.
+ * shown at the front desk today. Collects only what the paper form needs, says why for each field, and asks for consent.
+
  */
 export function JoinPage({ hash, signedInPatient = false }) {
   const [link] = useState(() => parseJoinHash(hash))
@@ -32,7 +33,7 @@ export function JoinPage({ hash, signedInPatient = false }) {
   const [step, setStep] = useState(signedInPatient ? 'account' : 'choose')
   const [done, setDone] = useState(null)
   const [resetKey, setResetKey] = useState(0)
-  const kiosk = link?.mode === 'kiosk'
+
   const [attempt, setAttempt] = useState(0)
   useEffect(() => {
     if (!link) return
@@ -43,43 +44,30 @@ export function JoinPage({ hash, signedInPatient = false }) {
       setError(r.kind === 'not_found' ? 'invalid' : 'offline')
     })
   }, [link?.branch, attempt])
-  // Kiosk: 60 seconds without a touch → back to the start, with nothing left on screen.
-  useEffect(() => {
-    if (!kiosk) return undefined
-    let timer
-    const arm = () => { clearTimeout(timer); timer = setTimeout(() => { setStep('choose'); setDone(null); setResetKey(k => k + 1) }, 60000) }
-    const events = ['pointerdown', 'keydown', 'input']
-    events.forEach(e => window.addEventListener(e, arm)); arm()
-    return () => { clearTimeout(timer); events.forEach(e => window.removeEventListener(e, arm)) }
-  }, [kiosk])
   if (!link) return <AuthShell><Notice tone="warning" title="Link not recognised">Scan the code on the counter poster again, or ask the front desk.</Notice></AuthShell>
 
-  return <AuthShell><div className={`auth-form join-page ${kiosk ? 'is-kiosk' : ''}`} key={resetKey} aria-live="polite">
-    <div className="login-copy-wrap"><div className="eyebrow">{branch ? branch.name : 'Clinic'}{kiosk ? ' · Kiosk' : ''}</div>
+  return <AuthShell><div className="auth-form join-page" key={resetKey} aria-live="polite">
+    <div className="login-copy-wrap"><div className="eyebrow">{branch ? branch.name : 'Clinic'}</div>
       <h1>{done ? 'You’re registered' : step === 'new' ? 'Register at the counter' : 'Welcome'}</h1></div>
     {error === 'invalid' ? <Notice tone="warning" title="Link not recognised">This branch link is not valid. Scan the code on the counter poster again, or ask the front desk.</Notice>
       : error ? <Notice tone="warning" title="Can’t reach the clinic">Check the phone’s internet connection. <button type="button" className="link-button" onClick={() => setAttempt(a => a + 1)}>Try again</button></Notice>
       : !branch ? <p className="login-copy" role="status">Loading…</p>
-      : done ? <Done result={done} kiosk={kiosk} onAgain={() => { setDone(null); setStep('choose'); setResetKey(k => k + 1) }}/>
+      : done ? <Done result={done}/>
       : step === 'choose' ? <div className="join-choices">
-        <button type="button" className="join-choice" onClick={() => setStep('new')}><Icon name="user" size={26}/><b>I’m new here</b><small>Fill in your details on this {kiosk ? 'tablet' : 'phone'} instead of the paper form.</small></button>
-        {/* Nobody signs in on a shared tablet: the idle reset clears the form, not a signed-in session. */}
-        {kiosk ? <p className="join-choice is-note"><Icon name="lock" size={26}/><b>I have an account</b><small>Scan the poster at the counter with your own phone and sign in there, or tell the front desk.</small></p>
-          : <button type="button" className="join-choice" onClick={() => { try { sessionStorage.setItem('join-branch', link.branch) } catch { /* private mode */ } window.location.hash = 'sign-in' }}>
-            <Icon name="lock" size={26}/><b>I have an account</b><small>Sign in, then join today’s queue.</small></button>}
-        {kiosk && <p className="login-copy">This tablet clears itself after 60 seconds.</p>}
+        <button type="button" className="join-choice" onClick={() => setStep('new')}><Icon name="user" size={26}/><b>I’m new here</b><small>Fill in your details on your phone instead of the paper form.</small></button>
+        <button type="button" className="join-choice" onClick={() => { try { sessionStorage.setItem('join-branch', link.branch) } catch { /* private mode */ } window.location.hash = 'sign-in' }}>
+          <Icon name="lock" size={26}/><b>I have an account</b><small>Sign in, then join today’s queue.</small></button>
       </div>
       : step === 'account' ? <AccountJoin branch={link.branch} code={link.code} onDone={setDone}/>
-        : branch && <IntakeForm branch={branch} code={link.code} kiosk={kiosk} onDone={setDone} onBack={() => setStep('choose')}/>}
+        : branch && <IntakeForm branch={branch} code={link.code} onDone={setDone} onBack={() => setStep('choose')}/>}
   </div></AuthShell>
 }
 
-function Done({ result, kiosk, onAgain }) {
+function Done({ result }) {
   return <div className="join-done">
     <Notice tone="success" title={result.join_queue === false ? 'Registered' : 'You’re on today’s list'}>{result.message}</Notice>
     <p className="join-ref">Reference <b>{result.reference}</b></p>
     <p className="login-copy">Show your valid ID at the front desk. They check it once and confirm your details. Your ID was not uploaded or kept.</p>
-    {kiosk && <Button width="full" onClick={onAgain}>Done (clear the screen)</Button>}
   </div>
 }
 
@@ -112,16 +100,19 @@ function CodeField({ value, onChange }) {
   </Field>
 }
 
-function IntakeForm({ branch, code: initialCode, kiosk, onDone, onBack }) {
+function IntakeForm({ branch, code: initialCode, onDone, onBack }) {
   const [self, setSelf] = useState(blank), [deps, setDeps] = useState([]), [visitFor, setVisitFor] = useState('self')
   const [joinQueue, setJoinQueue] = useState(true), [code, setCode] = useState(initialCode), [consent, setConsent] = useState(false)
   const [scan, setScan] = useState(null), [busy, setBusy] = useState(false), [errors, setErrors] = useState({}), [message, setMessage] = useState('')
+  const today = clinicDate()
+  const maxDob = today
+  const minDob = addCalendarMonths(today, -12 * 120)
   const set = (k, v) => setSelf(s => ({ ...s, [k]: v }))
   const fromId = k => scan?.fields?.includes(k)
   const submit = async e => {
     e.preventDefault()
     setBusy(true); setErrors({}); setMessage('')
-    const r = await submitIntake({ branch_ref: branch.id, code, consent, channel: kiosk ? 'kiosk' : 'phone', join_queue: joinQueue, visit_for: visitFor,
+    const r = await submitIntake({ branch_ref: branch.id, code, consent, channel: 'phone', join_queue: joinQueue, visit_for: visitFor,
       self: { ...self, email: self.email.trim() || null, sex: self.sex || null }, dependents: deps,
       ...(scan ? { scan: { id_type: scan.id_type, fields: scan.fields } } : {}) })
     setBusy(false)
@@ -138,10 +129,10 @@ function IntakeForm({ branch, code: initialCode, kiosk, onDone, onBack }) {
         <Field label="Last name" required error={err('self.last_name')} hint={fromId('last_name') ? 'From your ID, please check' : null}><input className={fromId('last_name') ? 'from-id' : ''} value={self.last_name} onChange={e => set('last_name', e.target.value)} autoComplete="family-name"/></Field>
       </div>
       <div className="join-row">
-        <Field label="Date of birth" required error={err('self.date_of_birth')} hint={fromId('date_of_birth') ? 'From your ID, please check' : WHY.date_of_birth}><input className={fromId('date_of_birth') ? 'from-id' : ''} type="date" value={self.date_of_birth} onChange={e => set('date_of_birth', e.target.value)}/></Field>
+        <Field label="Date of birth" required error={err('self.date_of_birth')} hint={fromId('date_of_birth') ? 'From your ID, please check' : WHY.date_of_birth}><input className={fromId('date_of_birth') ? 'from-id' : ''} type="date" min={minDob} max={maxDob} value={self.date_of_birth} onChange={e => set('date_of_birth', e.target.value)}/></Field>
         <Field label="Sex"><select value={self.sex} onChange={e => set('sex', e.target.value)}><option value="">Prefer not to say</option><option>Female</option><option>Male</option></select></Field>
       </div>
-      <Field label="Mobile number" required error={err('self.phone')} hint={WHY.phone}><input type="tel" inputMode="tel" value={self.phone} onChange={e => set('phone', e.target.value)} placeholder="0917 123 4567" autoComplete="tel"/></Field>
+      <Field label="Mobile number" required error={err('self.phone')} hint={WHY.phone}><input type="tel" inputMode="tel" value={self.phone} onChange={e => set('phone', e.target.value.replace(/\D/g, '').replace(/^0+/, '').slice(0, 10))} maxLength={10} placeholder="9171234567" autoComplete="tel"/></Field>
       <Field label="Email (optional)" error={err('self.email')} hint={WHY.email}><input type="email" value={self.email} onChange={e => set('email', e.target.value)} autoComplete="email"/></Field>
       <Field label="Address (optional)" error={err('self.address')} hint={WHY.address}><input value={self.address} onChange={e => set('address', e.target.value)} autoComplete="street-address"/></Field>
     </fieldset>
@@ -149,10 +140,10 @@ function IntakeForm({ branch, code: initialCode, kiosk, onDone, onBack }) {
       <p className="join-why">{WHY.emergency}</p>
       <div className="join-row">
         <Field label="Name" required error={err('self.emergency_contact.name')}><input value={self.emergency_contact.name} onChange={e => set('emergency_contact', { ...self.emergency_contact, name: e.target.value })}/></Field>
-        <Field label="Mobile number" required error={err('self.emergency_contact.phone')}><input type="tel" inputMode="tel" value={self.emergency_contact.phone} onChange={e => set('emergency_contact', { ...self.emergency_contact, phone: e.target.value })}/></Field>
+        <Field label="Mobile number" required error={err('self.emergency_contact.phone')}><input type="tel" inputMode="tel" value={self.emergency_contact.phone} onChange={e => set('emergency_contact', { ...self.emergency_contact, phone: e.target.value.replace(/\D/g, '').replace(/^0+/, '').slice(0, 10) })} maxLength={10} placeholder="9171234567"/></Field>
       </div>
     </fieldset>
-    <Dependents deps={deps} setDeps={setDeps} errors={errors}/>
+    <Dependents deps={deps} setDeps={setDeps} errors={errors} minDob={minDob} maxDob={maxDob}/>
     <fieldset className="join-fieldset"><legend>Today</legend>
       <label className="au-check"><input type="checkbox" checked={joinQueue} onChange={e => setJoinQueue(e.target.checked)}/> Join today’s queue (walk-in)</label>
       {joinQueue && deps.length > 0 && <Field label="Who is the visit for?"><select value={visitFor} onChange={e => setVisitFor(e.target.value)}>
@@ -170,7 +161,7 @@ function IntakeForm({ branch, code: initialCode, kiosk, onDone, onBack }) {
   </form>
 }
 
-function Dependents({ deps, setDeps, errors }) {
+function Dependents({ deps, setDeps, errors, minDob, maxDob }) {
   const add = () => setDeps(d => [...d, { first_name: '', last_name: '', date_of_birth: '', sex: '', relationship: 'Child' }])
   const set = (i, k, v) => setDeps(d => d.map((x, j) => (j === i ? { ...x, [k]: v } : x)))
   return <fieldset className="join-fieldset"><legend>Children or others in your care</legend>
@@ -181,7 +172,7 @@ function Dependents({ deps, setDeps, errors }) {
         <Field label="Last name" required error={errors[`dependents.${i}.last_name`]?.[0]}><input value={d.last_name} onChange={e => set(i, 'last_name', e.target.value)}/></Field>
       </div>
       <div className="join-row">
-        <Field label="Date of birth" required error={errors[`dependents.${i}.date_of_birth`]?.[0]}><input type="date" value={d.date_of_birth} onChange={e => set(i, 'date_of_birth', e.target.value)}/></Field>
+        <Field label="Date of birth" required error={errors[`dependents.${i}.date_of_birth`]?.[0]}><input type="date" min={minDob} max={maxDob} value={d.date_of_birth} onChange={e => set(i, 'date_of_birth', e.target.value)}/></Field>
         <Field label="Relationship" required><select value={d.relationship} onChange={e => set(i, 'relationship', e.target.value)}>{['Child', 'Daughter', 'Son', 'Grandchild', 'Ward', 'Parent', 'Other'].map(r => <option key={r}>{r}</option>)}</select></Field>
       </div>
       <button type="button" className="link-button" onClick={() => setDeps(x => x.filter((_, j) => j !== i))}>Remove</button>

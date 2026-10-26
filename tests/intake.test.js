@@ -52,14 +52,14 @@ test('the scan runs on the device: lazy-loaded, self-hosted OCR, no upload, cons
   assert.match(read('.gitignore'), /^public\/ocr\/$/m)
 })
 
-test('counter registration: routes, today’s code, consent, why each field, minors through a guardian, kiosk reset', () => {
-  assert.equal(publicViewFromHash('#join/b1'), 'join'); assert.equal(publicViewFromHash('#kiosk/b1/ABC123'), 'kiosk'); assert.equal(publicViewFromHash('#claim-account'), 'claim')
+test('counter registration: routes, today’s code, consent, why each field, minors through a guardian', () => {
+  assert.equal(publicViewFromHash('#join/b1'), 'join'); assert.equal(publicViewFromHash('#claim-account'), 'claim')
   const join = read('src/pages/Join.jsx')
   assert.match(join, /Today’s code at the front desk/); assert.match(join, /disabled=\{busy \|\| !consent\}/)
   for (const why of ['name:', 'date_of_birth:', 'phone:', 'email:', 'emergency:']) assert.ok(join.includes(why), why)
   assert.match(join, /Under 18\? A parent or guardian registers them here/)
-  assert.match(join, /setTimeout\(\(\) => \{ setStep\('choose'\); setDone\(null\); setResetKey/) // 60 s idle reset
-  assert.match(join, /60000/)
+  assert.doesNotMatch(join, /kiosk/i)
+  assert.doesNotMatch(join, /60000/)
   const staff = read('src/pages/CounterIntake.jsx')
   assert.match(staff, /Self-registered: verify ID/); assert.match(staff, /Record found from \{d\.found_from/); assert.match(staff, /Nothing is merged automatically/)
   assert.match(staff, /Minor: guardian/)
@@ -83,9 +83,9 @@ test('account claim: a one-time link route, the code goes to the stored email, t
   assert.match(staff, /Offer online account/); assert.match(staff, /Confirm the patient’s email with them/)
 })
 
-test('walkthrough fixes: no sign-in on a shared kiosk, honest invite outcome, a dependent named on success', () => {
-  const join = read('src/pages/Join.jsx'), family = read('src/patient/pages/Family.jsx'), book = read('src/patient/pages/Book.jsx')
-  assert.match(join, /kiosk \? <p className="join-choice is-note">/) // the kiosk offers no sign-in
+test('walkthrough fixes: phone-only intake, honest invite outcome, a dependent named on success', () => {
+  const join = read('src/pages/Join.jsx'), family = read('src/patient/pages/Family.jsx'), book = read('src/patient/pages/Book.jsx'), staff = read('src/pages/CounterIntake.jsx')
+  assert.doesNotMatch(staff, /#kiosk\//)
   assert.match(join, /r\.kind === 'not_found' \? 'invalid' : 'offline'/)
   assert.doesNotMatch(family, /window\.prompt/)
   assert.match(family, /r\.data\?\.status === 'transport_accepted'/)

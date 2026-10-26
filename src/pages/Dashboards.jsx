@@ -49,7 +49,7 @@ function StaffDashboard({ activeBranch, setPage, state, session, store }) {
   const overdueHmo=liveRecords(state.hmo).filter(h=>['Pending','Escalated'].includes(h.status)&&pendingHours(h,state.clock)>=12&&branchFilter(h))
   const branch=state.branches.find(b=>b.name===activeBranch)
   return <>
-    <PageHeader kicker="Front desk workspace" title="Today’s clinic operations" text={`Keep arrivals, queues, appointments and patient requests moving smoothly${branch?` at ${branch.name}`:''}.`} aside={<Button onClick={()=>setPage('checkin')} icon="checkin">Check in patient</Button>}/>
+    <PageHeader kicker="Front desk workspace" title="Today’s clinic operations" text={`Keep arrivals, queues, appointments and patient requests moving smoothly${branch?` at ${branch.name}`:''}.`}/>
     <div className="stats-grid">
       <StatCard label="Appointments today" value={todays.length} hint="Confirmed and pending" icon={<Icon name="calendar" size={18}/>}/>
       <StatCard label={serverQueue?'Awaiting treatment':'Waiting now'} value={serverQueue?(qCounts?qCounts.awaiting:qvis.mode==='loading'?'…':'Unavailable'):waiting.length} hint={serverQueue?(qCounts?'Waiting + Called + Treatment Ready':qvis.message):'Across active dentist queues'} tone="blue" icon={<Icon name="queue" size={18}/>}/>
