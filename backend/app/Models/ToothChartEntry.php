@@ -28,5 +28,7 @@ class ToothChartEntry extends Model
 
     public function dentist(): BelongsTo { return $this->belongsTo(DentistProfile::class, 'dentist_profile_id'); }
 
+    public function branch(): BelongsTo { return $this->belongsTo(Branch::class); }
+
     public function treatment(): BelongsTo { return $this->belongsTo(Treatment::class); }
 }

@@ -1,0 +1,449 @@
+/* Odontogram Styles */
+
+.od-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+}
+
+.od-top-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line, #e2e8f0);
+}
+
+.od-segmented {
+  display: inline-flex;
+  background: var(--surface-muted, #f1f5f9);
+  padding: 3px;
+  border-radius: 8px;
+  gap: 2px;
+}
+
+.od-segmented-btn {
+  padding: 6px 14px;
+  border: none;
+  background: transparent;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted, #64748b);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.od-segmented-btn.is-active {
+  background: #ffffff;
+  color: #0f172a;
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.od-main-layout {
+  display: grid;
+  grid-template-columns: 1fr 380px;
+  gap: 24px;
+  align-items: start;
+}
+
+/* SVG Chart Canvas */
+.od-canvas-container {
+  background: #ffffff;
+  border: 1px solid var(--line, #e2e8f0);
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+}
+
+.od-arch-svg {
+  width: 100%;
+  max-width: 540px;
+  height: auto;
+  display: block;
+}
+
+/* Center Crosshair */
+.od-crosshair {
+  stroke: #e2e8f0;
+  stroke-width: 1;
+  stroke-dasharray: 4 4;
+}
+
+.od-crosshair-label {
+  fill: #94a3b8;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Teeth on Canvas: strictly NO CSS transform on hover to prevent jumping bug (STF-03 / DEN-04) */
+.od-tooth {
+  cursor: pointer;
+  outline: none;
+}
+
+.od-tooth-shape {
+  fill: #ffffff;
+  stroke: #cbd5e1;
+  stroke-width: 1.2;
+  transition: fill 0.15s ease, stroke 0.15s ease, stroke-width 0.15s ease;
+}
+
+.od-tooth:hover .od-tooth-shape {
+  stroke: #6366f1;
+  stroke-width: 1.8;
+  fill: #f8fafc;
+}
+
+/* Teeth with findings */
+.od-tooth.has-finding .od-tooth-shape {
+  fill: #e0e7ff;
+  stroke: #6366f1;
+  stroke-width: 1.6;
+}
+
+.od-tooth.has-finding:hover .od-tooth-shape {
+  fill: #c7d2fe;
+  stroke: #4f46e5;
+}
+
+/* Selected tooth */
+.od-tooth.is-selected .od-tooth-shape {
+  fill: #ede9fe;
+  stroke: #4338ca;
+  stroke-width: 2.4;
+}
+
+/* Fissure lines */
+.od-fissure {
+  stroke: #94a3b8;
+  stroke-width: 0.8;
+  fill: none;
+  pointer-events: none;
+}
+
+.od-tooth.is-selected .od-fissure,
+.od-tooth.has-finding .od-fissure {
+  stroke: #4f46e5;
+}
+
+/* Tooth numbers outside arch */
+.od-tooth-num {
+  font-size: 11px;
+  font-weight: 500;
+  fill: #64748b;
+  user-select: none;
+  pointer-events: none;
+  transition: fill 0.15s ease, font-weight 0.15s ease;
+}
+
+.od-tooth:hover .od-tooth-num {
+  fill: #4338ca;
+  font-weight: 700;
+}
+
+.od-tooth.is-selected .od-tooth-num {
+  font-weight: 800;
+  fill: #312e81;
+  font-size: 12px;
+}
+
+/* Front view quadrants */
+.od-front-quadrants {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  width: 100%;
+}
+
+.od-front-quadrant {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.od-front-quadrant figcaption {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted, #64748b);
+}
+
+.od-front-quadrant svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+/* Right Panel (Timeline & Summary) */
+.od-side-panel {
+  background: var(--surface, #ffffff);
+  border: 1px solid var(--line, #e2e8f0);
+  border-radius: 12px;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-height: 640px;
+  overflow-y: auto;
+}
+
+/* Back button */
+.od-panel-nav {
+  display: flex;
+  align-items: center;
+}
+
+.od-back-btn {
+  background: none;
+  border: none;
+  color: #4f46e5;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.od-back-btn:hover {
+  background: #f1f5f9;
+}
+
+/* Tooth Hero in panel */
+.od-tooth-hero {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.od-tooth-chip-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.od-tooth-chip {
+  display: inline-block;
+  padding: 3px 10px;
+  background: #e0e7ff;
+  color: #3730a3;
+  font-size: 12px;
+  font-weight: 700;
+  border-radius: 9999px;
+}
+
+.od-sub-chip {
+  font-size: 12px;
+  color: var(--muted, #64748b);
+}
+
+.od-tooth-name {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.od-surface-section {
+  display: flex;
+  justify-content: center;
+  padding: 12px 0;
+  border-top: 1px solid #f1f5f9;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+/* Section titles */
+.od-section-title {
+  margin: 0 0 8px 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: #334155;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.od-record-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  background: #f8fafc;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+}
+
+/* Timeline Cards */
+.od-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.od-timeline-card {
+  padding: 10px 12px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-left: 3px solid #6366f1;
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.od-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.od-card-date {
+  font-size: 12px;
+  color: var(--muted, #64748b);
+  font-weight: 500;
+}
+
+.od-card-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  background: #e0e7ff;
+  color: #3730a3;
+}
+
+.od-card-surfaces {
+  font-size: 12px;
+  color: #1e293b;
+}
+
+.od-card-dentist {
+  font-size: 12px;
+  color: var(--muted, #64748b);
+}
+
+.od-card-note {
+  font-size: 12px;
+  padding: 6px 8px;
+  background: #f8fafc;
+  border-radius: 4px;
+  color: #334155;
+  margin-top: 4px;
+}
+
+/* Summary Panel Styles */
+.od-summary-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.od-summary-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.od-summary-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.od-summary-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.od-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.od-group-count {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 9999px;
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.od-group-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.od-chip-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #1e293b;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.od-chip-btn:hover {
+  background: #e0e7ff;
+  border-color: #6366f1;
+  color: #3730a3;
+}
+
+.od-chip-surf {
+  font-weight: 400;
+  color: var(--muted, #64748b);
+}
+
+.od-muted {
+  color: var(--muted, #64748b);
+  font-size: 13px;
+}
+
+/* Responsive behavior */
+@media (max-width: 1023px) {
+  .od-main-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .od-side-panel {
+    max-height: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .od-top-bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .od-segmented {
+    width: 100%;
+    display: flex;
+  }
+
+  .od-segmented-btn {
+    flex: 1;
+    text-align: center;
+  }
+}

@@ -244,7 +244,7 @@ function StaffPatientSummary({ patient, role, branches, toast, store }) {
       {editable&&<Button className="span-2" disabled={saving} onClick={save}>{saving?'Saving…':'Save changes'}</Button>}
       {editable&&<div className="span-2"><IdCheck patientId={patient.id} toast={toast}/></div>}
       {role==='staff'&&<div className="span-2"><HandoverPanel patientId={patient.id} toast={toast}/></div>}
-      {role==='staff'&&full&&<div className="span-2"><section className="st-panel" aria-label="Dental chart"><h3 className="st-sub">Dental chart (read-only)</h3><ChartView patientId={patient.id} canRecord={false} toast={toast}/></section></div>}
+      {role==='staff'&&full&&<div className="span-2"><section className="st-panel" aria-label="Dental chart"><h3 className="st-sub">Dental chart (read-only)</h3><ChartView patientId={patient.id} canRecord={false} toast={toast} store={store}/></section></div>}
       {role==='staff'&&full&&<div className="span-2"><FollowupPanel patientId={patient.id} toast={toast} store={store} branches={(branches||[]).filter(b=>b.status!=='Closed')}/></div>}
     </div>
   </Card>
