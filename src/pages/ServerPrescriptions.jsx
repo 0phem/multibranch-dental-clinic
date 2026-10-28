@@ -9,15 +9,15 @@ const TONE = { Draft: 'is-late', Issued: 'is-ok', Void: 'is-bad' }
 
 // Medicine name autocomplete list only. Dosing, frequency, duration, and instructions are never pre-filled or presented as clinic-approved defaults.
 const COMMON_MEDICINE_NAMES = [
-  'Amoxicillin 500mg',
-  'Mefenamic Acid 500mg',
-  'Paracetamol 500mg',
-  'Ibuprofen 400mg',
-  'Co-amoxiclav 625mg',
-  'Clindamycin 300mg',
-  'Tranexamic Acid 500mg',
-  'Celecoxib 200mg',
-  'Chlorhexidine 0.12% Oral Rinse',
+  'Amoxicillin',
+  'Mefenamic Acid',
+  'Paracetamol',
+  'Ibuprofen',
+  'Co-amoxiclav',
+  'Clindamycin',
+  'Tranexamic Acid',
+  'Celecoxib',
+  'Chlorhexidine Oral Rinse',
 ]
 const COMMON_DOSAGES = ['250mg', '500mg', '625mg', '1000mg (1g)', '15ml', '1 tablet', '1 capsule', '2 tablets']
 const COMMON_FREQUENCIES = ['Once daily', 'Twice daily', 'Three times daily', 'Four times daily', 'Before meals', 'After meals', 'As needed for pain']
@@ -145,7 +145,7 @@ function WriteCard({ toast, onDone, editing, onEdited }) {
           </Field>
           {medSelect === '__other__' && (
             <Field label="Specify medicine name" required>
-              <input value={l.medicine} maxLength={200} onChange={e => set(i, 'medicine', e.target.value)} placeholder="Type medicine name (e.g. Ciprofloxacin 500mg)"/>
+              <input value={l.medicine} maxLength={200} onChange={e => set(i, 'medicine', e.target.value)} placeholder="Type medicine name (e.g. Ciprofloxacin)"/>
             </Field>
           )}
 
@@ -214,7 +214,7 @@ function WriteCard({ toast, onDone, editing, onEdited }) {
           )}
 
           <Field label="Instructions (optional)"><textarea value={l.instructions} maxLength={500} onChange={e => set(i, 'instructions', e.target.value)} placeholder="e.g. Take with full glass of water after meals"/></Field>
-          {lines.length > 1 && <Button size="sm" variant="ghost" onClick={() => setLines(ls => ls.filter((_, j) => j !== i))}>Remove medicine {i + 1}</Button>}
+          {lines.length > 1 && <Button size="sm" variant="danger" onClick={() => setLines(ls => ls.filter((_, j) => j !== i))}>Remove medicine {i + 1}</Button>}
         </fieldset>
       })}
       <Button size="sm" variant="soft" onClick={() => setLines(ls => [...ls, { ...EMPTY_LINE }])}>Add another medicine</Button>
@@ -245,9 +245,9 @@ function LicenseCard({ toast }) {
   useEffect(() => { prescriptionVisits().then(r => r.ok && setValue(r.meta?.license_no || '')) }, [])
   if (value === null) return null
   return <Card title="License number on my prescriptions" subtitle="Optional. Shown under your name on prescriptions you issue from now on. Never filled in for you.">
-    <form className="au-form st-pair" onSubmit={async e => { e.preventDefault(); setBusy(true); const r = await savePrescriptionLicense(value.trim() || null); setBusy(false); toast(r.ok ? 'Saved.' : firstError(r), r.ok ? 'success' : 'warning') }}>
+    <form className="au-form rx-license-row" onSubmit={async e => { e.preventDefault(); setBusy(true); const r = await savePrescriptionLicense(value.trim() || null); setBusy(false); toast(r.ok ? 'Saved.' : firstError(r), r.ok ? 'success' : 'warning') }}>
       <Field label="License number"><input value={value} maxLength={40} onChange={e => setValue(e.target.value)}/></Field>
-      <div className="au-actions"><Button type="submit" size="sm" disabled={busy}>{busy ? 'Saving…' : 'Save'}</Button></div>
+      <div className="au-actions"><Button type="submit" disabled={busy}>{busy ? 'Saving…' : 'Save'}</Button></div>
     </form>
   </Card>
 }

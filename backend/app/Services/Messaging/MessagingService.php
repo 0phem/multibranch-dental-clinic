@@ -80,6 +80,16 @@ final class MessagingService
                 if ($current->status !== 'Open') {
                     throw VisitCommandException::rule('conversation_closed', 'This conversation is closed and cannot receive new messages.', 'conversation');
                 }
+                if ($actor->role === Role::Dentist) {
+                    $activeDentistId = ConversationParticipant::where('conversation_id', $current->id)
+                        ->whereIn('user_id', User::where('role', Role::Dentist->value)->select('id'))
+                        ->orderByDesc('created_at')
+                        ->orderByDesc('id')
+                        ->value('user_id');
+                    if ($activeDentistId && $activeDentistId !== $actor->id) {
+                        throw new VisitCommandException(403, 'forbidden', 'Only the currently assigned Dentist can post messages to this conversation.');
+                    }
+                }
                 $message = $this->post($current, $actor, $body);
 
                 // resolve(), not response(): additional() values would otherwise be merged into the JSON (an internal user id).
@@ -154,7 +164,27 @@ final class MessagingService
             $assigned = $dentist && DentistProfile::where('person_id', $dentist->person_id)
                 ->whereHas('branches', fn ($q) => $q->where('branches.id', $current->branch_id))->exists();
             if (! $assigned) throw VisitCommandException::rule('dentist_not_available', 'Choose a Dentist who works at this branch.', 'dentist');
-            $added = $this->join($current, $dentist);
+            $activeDentistId = ConversationParticipant::where('conversation_id', $current->id)
+                ->whereIn('user_id', User::where('role', Role::Dentist->value)->select('id'))
+                ->orderByDesc('created_at')
+                ->orderByDesc('id')
+                ->value('user_id');
+            $alreadyActive = $activeDentistId === $dentist->id;
+
+            ConversationParticipant::where('conversation_id', $current->id)
+                ->whereIn('user_id', User::where('role', Role::Dentist->value)->where('id', '<>', $dentist->id)->select('id'))
+                ->whereNotIn('user_id', ConversationMessage::where('conversation_id', $current->id)->select('sender_user_id'))
+                ->delete();
+
+            $exists = ConversationParticipant::where('conversation_id', $current->id)->where('user_id', $dentist->id)->exists();
+            if ($exists) {
+                if (! $alreadyActive) {
+                    ConversationParticipant::where('conversation_id', $current->id)->where('user_id', $dentist->id)->update(['created_at' => ClinicClock::now()]);
+                    $added = true;
+                }
+            } else {
+                $added = $this->join($current, $dentist);
+            }
             if ($added) {
                 $this->audit->recordAdministrative('conversation.participant_added', $actor, $current, ['role' => 'dentist']);
                 $this->changed($current, 'participant_added');
@@ -167,10 +197,16 @@ final class MessagingService
     /** Dentists who may be added: Active accounts assigned to the conversation's branch. */
     public function dentistOptions(Conversation $conversation): array
     {
+        $activeDentistId = ConversationParticipant::where('conversation_id', $conversation->id)
+            ->whereIn('user_id', User::where('role', Role::Dentist->value)->select('id'))
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
+            ->value('user_id');
+
         return User::where('role', Role::Dentist->value)->where('account_status', 'Active')
             ->whereIn('person_id', DentistProfile::whereHas('branches', fn ($q) => $q->where('branches.id', $conversation->branch_id))->select('person_id'))
             ->with('person')->get()
-            ->map(fn (User $u) => ['id' => $u->public_id, 'name' => $u->person?->fullName(), 'participant' => $conversation->participants()->where('user_id', $u->id)->exists()])
+            ->map(fn (User $u) => ['id' => $u->public_id, 'name' => $u->person?->fullName(), 'participant' => $u->id === $activeDentistId])
             ->sortBy('name')->values()->all();
     }
 

@@ -535,6 +535,8 @@ export function dispatchAutomationRule(ruleCode, payload) {
 // M21 Operational Analytics & Executive Intelligence (Owner only)
 export function getExecutiveSummary(params) { return request(`/api/analytics/executive-summary${query(params)}`) }
 export function getBranchPerformance(params) { return request(`/api/analytics/branch-performance${query(params)}`) }
+export function getDailyRevenue(params) { return request(`/api/analytics/daily-revenue${query(params)}`) }
+export function getWeeklyRevenueHistogram(params) { return request(`/api/analytics/weekly-histogram${query(params)}`) }
 
 // Scheduled automations (Administration → Automations, Owner). Settings changes carry the revision they were based on.
 export function listAutomations() { return request('/api/automations') }

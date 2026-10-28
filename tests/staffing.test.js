@@ -67,3 +67,31 @@ test('Batch 2 priority verification status is sent to server in queue-api.js', (
   assert.match(queueApi, /payload\.verification_status = meta\.verificationStatus/)
   assert.match(queueApi, /payload\.category = meta\.category/)
 })
+
+test('STF-08 / DEN-13 / OWN-12: partial-day leave syncs end_date to start_date and validates date/time bounds', () => {
+  const staffing = read('src/pages/Staffing.jsx')
+  assert.match(staffing, /const endDate = f\.partial \? f\.start_date : \(f\.end_date \|\| f\.start_date\)/)
+  assert.match(staffing, /if \(endDate < f\.start_date\) return setErr\('The until date cannot be before the from date\.'\)/)
+  assert.match(staffing, /if \(f\.partial && f\.end_time <= f\.start_time\) return setErr\('The end time must be after the start time\.'\)/)
+  assert.match(staffing, /value=\{f\.partial \? f\.start_date : f\.end_date\} disabled=\{f\.partial\}/)
+})
+
+test('OWN-11: work schedule supports both Dentist and Staff schedules with shift management and duty status', () => {
+  const staffing = read('src/pages/Staffing.jsx')
+  assert.match(staffing, /Dentist schedules/)
+  assert.match(staffing, /Staff schedules/)
+  assert.match(staffing, /Staff work schedules/)
+  assert.ok(staffing.includes('updateStaffProfile(currentStaff.id'))
+  assert.match(staffing, /Available \/ On-Duty/)
+  assert.match(staffing, /Weekly roster coverage/)
+})
+
+test('STF-07: Doctor is on duty today status badge on dentist profiles, dashboard, and schedules', () => {
+  const dashboards = read('src/pages/Dashboards.jsx')
+  const staffing = read('src/pages/Staffing.jsx')
+  const admin = read('src/pages/Admin.jsx')
+  assert.match(dashboards, /Doctor is on duty today/)
+  assert.match(dashboards, /isDoctorOnDuty/)
+  assert.match(staffing, /Doctor is on duty today/)
+  assert.match(admin, /Doctor is on duty today/)
+})

@@ -44,13 +44,49 @@ class WorkScheduleController extends Controller
             ->with(['branch', 'dentist.person'])->orderBy('on_date')->get();
         $editable = $this->editableBranchIds($user);
         $branches = Branch::where('status', 'Open')->orderBy('id')->get();
+        $staffProfiles = \App\Models\StaffProfile::with(['person', 'branch'])->orderBy('id')->get();
+
+        $todayDate = ClinicClock::today();
+        $todayWeekday = (int) (new \DateTime($todayDate))->format('N');
 
         return response()->json(['data' => [
-            'dentists' => $dentists->map(fn (DentistProfile $d) => ['id' => $d->legacy_ref, 'name' => $this->name($d), 'available' => (bool) $d->available,
-                'profile_hours' => $work->usesProfileHours($d) ? ['start' => substr((string) $d->shift_start, 0, 5), 'end' => substr((string) $d->shift_end, 0, 5)] : null,
-                'branches' => $d->branches->map(fn (Branch $b) => ['id' => $b->legacy_ref, 'name' => $b->name, 'editable' => in_array($b->id, $editable, true)])->values(),
-                'weekly' => ($weekly[$d->id] ?? collect())->map(fn (DentistSchedule $s) => $this->rowView($s))->values(),
-                'demo' => ($weekly[$d->id] ?? collect())->contains('demo', true)])->values(),
+            'dentists' => $dentists->map(function (DentistProfile $d) use ($todayDate, $todayWeekday, $exceptions, $weekly, $work, $editable) {
+                $todayEx = $exceptions->first(fn ($e) => $e->dentist_profile_id === $d->id && (string) $e->on_date === $todayDate);
+                $onDuty = false;
+                if ($todayEx) {
+                    $onDuty = $todayEx->kind === 'custom_hours';
+                } else {
+                    $hasWeekly = ($weekly[$d->id] ?? collect())->contains('weekday', $todayWeekday);
+                    if ($hasWeekly) {
+                        $onDuty = true;
+                    } elseif ($work->usesProfileHours($d)) {
+                        $onDuty = $d->branches->contains(fn ($b) => $b->hoursOnDay($todayWeekday) !== null);
+                    }
+                }
+                if (! $d->available) {
+                    $onDuty = false;
+                }
+
+                return [
+                    'id' => $d->legacy_ref,
+                    'name' => $this->name($d),
+                    'available' => (bool) $d->available,
+                    'on_duty_today' => (bool) $onDuty,
+                    'profile_hours' => $work->usesProfileHours($d) ? ['start' => substr((string) $d->shift_start, 0, 5), 'end' => substr((string) $d->shift_end, 0, 5)] : null,
+                    'branches' => $d->branches->map(fn (Branch $b) => ['id' => $b->legacy_ref, 'name' => $b->name, 'editable' => in_array($b->id, $editable, true)])->values(),
+                    'weekly' => ($weekly[$d->id] ?? collect())->map(fn (DentistSchedule $s) => $this->rowView($s))->values(),
+                    'demo' => ($weekly[$d->id] ?? collect())->contains('demo', true),
+                ];
+            })->values(),
+            'staff' => $staffProfiles->map(fn (\App\Models\StaffProfile $s) => [
+                'id' => $s->legacy_ref,
+                'name' => $s->person ? $s->person->fullName() : $s->legacy_ref,
+                'title' => $s->title,
+                'branch' => $s->branch ? ['id' => $s->branch->legacy_ref, 'name' => $s->branch->name] : null,
+                'shift_start' => $s->shift_start ? substr((string) $s->shift_start, 0, 5) : '09:00',
+                'shift_end' => $s->shift_end ? substr((string) $s->shift_end, 0, 5) : '18:00',
+                'available' => (bool) $s->available,
+            ])->values(),
             'exceptions' => $exceptions->map(fn (DentistScheduleException $e) => $this->exceptionView($e, $editable))->values(),
             'branches' => $branches->map(fn (Branch $b) => ['id' => $b->legacy_ref, 'name' => $b->name, 'hours' => collect(self::WEEKDAYS)->mapWithKeys(fn ($n, $i) => [$i => $b->hoursOnDay($i)])])->values(),
             'weekdays' => self::WEEKDAYS,

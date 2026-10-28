@@ -70,16 +70,10 @@ export function statusTone(value='') {
 
 export function queueWaitEstimate(entry, queue, appointments, treatments, dentists) {
   if (!isWaitingQueue(entry) || !isTodayQueue(entry) || entry.status==='In Treatment') return 0
-  const priorityRank = p => p === 'Urgent' ? 0 : p === 'Priority' ? 1 : 2
-  const statusRank = s => s === 'Treatment Ready' ? 0 : s === 'Called' ? 1 : 2
   const same=queue.filter(q=>q.branchId===entry.branchId && q.clinicDate===entry.clinicDate && q.dentistId===entry.dentistId && isWaitingQueue(q))
   const ahead=same.filter(q=>{
     if (q.id === entry.id) return false
     if (q.position != null && entry.position != null) return q.position < entry.position
-    const sDiff = statusRank(q.status) - statusRank(entry.status)
-    if (sDiff !== 0) return sDiff < 0
-    const pDiff = priorityRank(q.priority) - priorityRank(entry.priority)
-    if (pDiff !== 0) return pDiff < 0
     return (q.queueNumber || 99) < (entry.queueNumber || 99)
   }).length
   const avgDuration=appointments.filter(a=>a.dentistId===entry.dentistId && a.date===clinicDate() && a.status!=='Cancelled').map(a=>a.duration||30)

@@ -86,7 +86,7 @@ final class QueueService
         if (! $entry) {
             throw VisitCommandException::rule('not_in_queue', 'This visit is not in a queue, so treatment cannot start from it.', 'queue');
         }
-        if (! in_array($entry->status, ['Called', 'Treatment Ready'], true)) {
+        if (! in_array($entry->status, ['In Queue', 'Waiting', 'Called', 'Treatment Ready'], true)) {
             throw VisitCommandException::rule('queue_not_ready', 'Call this patient before starting treatment.', 'queue');
         }
         $from = $entry->status;
@@ -212,12 +212,10 @@ final class QueueService
         $rows = DB::select(
             "SELECT q.id, ROW_NUMBER() OVER (
                  PARTITION BY q.dentist_queue_id
-                 ORDER BY CASE WHEN q.status = 'Treatment Ready' THEN 0 WHEN q.status = 'Called' THEN 1 ELSE 2 END,
-                          CASE q.priority WHEN 'Urgent' THEN 0 WHEN 'Priority' THEN 1 ELSE 2 END,
-                          q.late_arrival, v.arrived_at, q.queue_number
+                 ORDER BY v.arrived_at ASC, q.queue_number ASC
              ) AS position
              FROM queue_entries q JOIN visits v ON v.id = q.visit_id
-             WHERE q.dentist_queue_id IN ({$placeholders}) AND q.status IN ('Waiting','Called','Treatment Ready')",
+             WHERE q.dentist_queue_id IN ({$placeholders}) AND q.status IN ('In Queue','Waiting','Called','Treatment Ready')",
             array_values($dentistQueueIds)
         );
 
@@ -252,7 +250,7 @@ final class QueueService
         $phase = match (true) {
             $visit->status === 'In Treatment' => 'in-treatment',
             $entry === null => 'checked-in',
-            default => ['Waiting' => 'waiting', 'Called' => 'called', 'Treatment Ready' => 'ready', 'Temporarily Away' => 'away'][$entry->status] ?? 'checked-in',
+            default => ['In Queue' => 'waiting', 'Waiting' => 'waiting', 'Called' => 'called', 'Treatment Ready' => 'ready', 'Temporarily Away' => 'away'][$entry->status] ?? 'checked-in',
         };
         $position = $entry && in_array($entry->status, QueueEntry::POSITIONAL, true) ? ($this->positions([$entry->dentist_queue_id])[$entry->id] ?? null) : null;
         $service = $visit->appointment?->service ?? $visit->requestedService;

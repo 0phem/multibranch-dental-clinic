@@ -25,12 +25,11 @@ use Illuminate\Database\Seeder;
 class InterviewRoundTwoDemoSeeder extends Seeder
 {
     private const HMOS = [
+        ['Intellicare', null],
         ['Avega', null],
         ['InLife iCare', null],
-        ['Intellicare', null],
         ['eTiQa', null],
-        ['Dental Network partnerships', null],
-        ['AXA Health Plans', 'Qualifying premium dental packages'],
+        ['Dental Network', null],
     ];
 
     private const NAMES = [

@@ -24,7 +24,7 @@ class CreateInquiryRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'branch_ref' => ['required', 'string', 'max:64', 'exists:branches,legacy_ref'],
+            'branch_ref' => ['nullable', 'string', 'max:64', 'exists:branches,legacy_ref'],
             'source' => ['required', 'string', 'in:Facebook,Instagram,Website'],
             'name' => ['required', 'string', 'min:2', 'max:120', 'not_regex:'.self::CONTROL, 'not_regex:/\n/'],
             'contact' => ['nullable', 'string', 'max:200', 'not_regex:'.self::CONTROL, 'not_regex:/\n/'],

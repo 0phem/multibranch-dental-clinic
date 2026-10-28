@@ -1,7 +1,17 @@
 import { validSession, strictTimestamp, permitted, completedEncounter, paymentConsistent } from './safeguards.js'
 import { clinicNow } from './clock.js'
 
-export const HMO_PROVIDERS=[{id:'hmo-medicare',name:'MediCare Plus'},{id:'hmo-healthfirst',name:'HealthFirst'}]
+export const HMO_PROVIDERS = [
+  { id: 'hmo-intellicare', name: 'Intellicare' },
+  { id: 'hmo-avega', name: 'Avega' },
+  { id: 'hmo-inlife-icare', name: 'InLife iCare' },
+  { id: 'hmo-etiqa', name: 'eTiQa' },
+  { id: 'hmo-dental-network', name: 'Dental Network' },
+  // Historical / legacy compatibility for earlier tests and browser fixtures
+  { id: 'hmo-medicare', name: 'MediCare Plus', legacy: true },
+  { id: 'hmo-healthfirst', name: 'HealthFirst', legacy: true },
+]
+export const ACTIVE_HMO_PROVIDERS = HMO_PROVIDERS.filter(p => !p.legacy)
 // providedBy says who normally supplies the document: the Patient, or the clinic (from the Dentist's visit).
 export const HMO_REQUIREMENT_RULES=[
   {id:'hmo-card',label:'HMO Card',providedBy:'patient'},

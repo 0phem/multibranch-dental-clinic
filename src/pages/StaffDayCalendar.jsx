@@ -302,7 +302,7 @@ export function StaffDayCalendar({ store }) {
 
             return <div
               key={c.date}
-              className={`daycal-cell${c.date === today ? ' is-today' : ''}${isPrior ? ' past-day' : ''}${isSelected ? ' is-selected' : ''}${band ? ` load-${band.band}` : ''}`}
+              className={`daycal-cell${c.date === today ? ' is-today' : ''}${isPrior ? ' past-day is-past' : ''}${isSelected ? ' is-selected' : ''}${band ? ` load-${band.band}` : ''}`}
               onClick={() => setSelectedDate(prev => prev === c.date ? null : c.date)}
               role="gridcell"
               aria-selected={isSelected}
@@ -460,18 +460,93 @@ export function StaffDayCalendar({ store }) {
       {missed && <p>{missed.code || missed.appointmentNo} • today at {displayTime(missed.start)} • {missed.patientName}. Use this only when the patient did not arrive; no visit is created. A patient who has already checked in can’t be marked No-show.</p>}
     </ConfirmDialog>
 
-    <Modal open={!!selected} title="Appointment details" subtitle="Clinic appointment record from the clinic server." onClose={() => setSelectedId(null)}>
-      {selected && <dl className="daycal-detail">
-        <div><dt>Appointment</dt><dd>{selected.code || '—'}</dd></div>
-        <div><dt>Status</dt><dd><Status>{selected.status}</Status><small className="block-muted">{statusMeaning(selected.status)}</small></dd></div>
-        <div><dt>Date and time</dt><dd>{longDate(selected.date)}, {displayTime(selected.start)} to {displayTime(selected.end)}{selected.duration ? ` (${selected.duration} min)` : ''}</dd></div>
-        <div><dt>Patient</dt><dd>{selected.patientName || '—'}{selected.patientCode ? <small className="block-muted">{selected.patientCode}</small> : null}</dd></div>
-        <div><dt>Service</dt><dd>{selected.serviceName || '—'}</dd></div>
-        <div><dt>Dentist</dt><dd>{selected.dentistId ? selected.dentistName || '—' : 'Unassigned'}</dd></div>
-        <div><dt>Branch</dt><dd>{selected.branchName || '—'}</dd></div>
-        <div><dt>Booking payment</dt><dd>{selected.bookingPaymentStatus === 'paid' ? `Deposit paid${selected.bookingPaymentMethod ? ` (${selected.bookingPaymentMethod})` : ''}` : selected.bookingPaymentStatus === 'held' ? 'Pre-authorized (held)' : selected.bookingPaymentStatus === 'refunded' ? 'Refunded' : selected.bookingPaymentStatus === 'forfeited' ? 'Forfeited' : 'Unpaid'}</dd></div>
-        <div><dt>Booked via</dt><dd>{sourceLabel(selected.source)}</dd></div>
-      </dl>}
+    <Modal open={!!selected} title="Appointment details" subtitle="Clinic appointment record from the clinic server." wide onClose={() => setSelectedId(null)}>
+      {selected && (
+        <div className="appt-detail-container">
+          <div className="appt-detail-header-card">
+            <div className="appt-detail-header-left" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <span className="daycal-avatar appt-detail-avatar" aria-hidden="true" style={{ background: avatarColour(selected.patientId || selected.patientCode), width: '40px', height: '40px', fontSize: '15px' }}>
+                {initials(selected.patientName)}
+              </span>
+              <div>
+                <h3 className="appt-detail-patient-name" style={{ margin: '0 0 2px', fontSize: '17px', fontWeight: 700 }}>{selected.patientName || 'Patient'}</h3>
+                <div className="appt-detail-meta-row" style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: 'var(--muted)' }}>
+                  {selected.patientCode && <span className="appt-detail-code">{selected.patientCode}</span>}
+                  <span className="appt-detail-code-badge" style={{ padding: '1px 6px', background: 'var(--surface-2, #e2e8f0)', borderRadius: '4px', fontWeight: 600 }}>{selected.code || selected.appointmentNo || '—'}</span>
+                </div>
+              </div>
+            </div>
+            <div className="appt-detail-header-right" style={{ textAlign: 'right' }}>
+              <Status>{selected.status}</Status>
+              <small className="block-muted" style={{ display: 'block', marginTop: '4px', fontSize: '11px' }}>{statusMeaning(selected.status)}</small>
+            </div>
+          </div>
+
+          <div className="appt-detail-grid">
+            <div className="appt-detail-section">
+              <h4 className="appt-detail-section-title">Schedule & Location</h4>
+              <div className="appt-detail-row">
+                <span className="appt-detail-label">Date</span>
+                <span className="appt-detail-value font-semibold">{longDate(selected.date)}</span>
+              </div>
+              <div className="appt-detail-row">
+                <span className="appt-detail-label">Time slot</span>
+                <span className="appt-detail-value">{displayTime(selected.start)} – {displayTime(selected.end)} {selected.duration ? `(${selected.duration} min)` : ''}</span>
+              </div>
+              <div className="appt-detail-row">
+                <span className="appt-detail-label">Branch</span>
+                <span className="appt-detail-value">{selected.branchName || '—'}</span>
+              </div>
+            </div>
+
+            <div className="appt-detail-section">
+              <h4 className="appt-detail-section-title">Clinical & Care</h4>
+              <div className="appt-detail-row">
+                <span className="appt-detail-label">Service</span>
+                <span className="appt-detail-value font-semibold">{selected.serviceName || '—'}</span>
+              </div>
+              <div className="appt-detail-row">
+                <span className="appt-detail-label">Attending Dentist</span>
+                <span className="appt-detail-value">{selected.dentistId ? selected.dentistName || '—' : 'Unassigned'}</span>
+              </div>
+              <div className="appt-detail-row">
+                <span className="appt-detail-label">Booking channel</span>
+                <span className="appt-detail-value">{sourceLabel(selected.source)}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="appt-detail-footer-bar">
+            <div className="appt-detail-payment-status">
+              <span className="appt-detail-label" style={{ marginRight: '6px' }}>Booking payment:</span>
+              <span className="appt-detail-value font-semibold">
+                {selected.bookingPaymentStatus === 'paid'
+                  ? `Deposit paid${selected.bookingPaymentMethod ? ` (${selected.bookingPaymentMethod})` : ''}`
+                  : selected.bookingPaymentStatus === 'held'
+                  ? 'Pre-authorized (held)'
+                  : selected.bookingPaymentStatus === 'refunded'
+                  ? 'Refunded'
+                  : selected.bookingPaymentStatus === 'forfeited'
+                  ? 'Forfeited'
+                  : 'Unpaid'}
+              </span>
+            </div>
+            <div className="appt-detail-actions" style={{ display: 'flex', gap: '8px' }}>
+              {canManage && ['Confirmed', 'Pending'].includes(selected.status) && (
+                <>
+                  <Button size="sm" variant="soft" onClick={() => { const s = selected; setSelectedId(null); onStartReschedule(s) }}>
+                    Reschedule
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => { const s = selected; setSelectedId(null); onStartCancel(s) }}>
+                    Cancel
+                  </Button>
+                </>
+              )}
+              <Button size="sm" variant="ghost" onClick={() => setSelectedId(null)}>Close</Button>
+            </div>
+          </div>
+        </div>
+      )}
     </Modal>
   </>
 }

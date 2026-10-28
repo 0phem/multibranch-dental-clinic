@@ -187,15 +187,15 @@ For bug fixes, self-check before PR, and end-of-day status, use templates B, C, 
 - [x] GEN-05 !!! Remove everything about kiosk
 
 **Batch JOE-2: Live queue and branch scoping**
-- [ ] STF-14 Live queue: remove (waiting, called, treatment ready, temporarily away)
-- [ ] STF-15 Live queue: remove the urgent queue priority
-- [ ] STF-20 Social Inquiries: Record and Inquiry: remove the dropdown for choosing branch
-- [ ] OWN-13 Live queue by branch: same
+- [x] STF-14 Live queue: remove (waiting, called, treatment ready, temporarily away)
+- [x] STF-15 Live queue: remove the urgent queue priority
+- [x] STF-20 Social Inquiries: Record and Inquiry: remove the dropdown for choosing branch
+- [x] OWN-13 Live queue by branch: same
 
 **Batch JOE-3: Billing, HMO, and schedules**
-- [ ] STF-18 Billing and payment: remove the invoice and replace the text with payment method
-- [ ] STF-19 HMO providers (Intellicare, Avega, InLife iCare, eTiQa, and Dental Network)
-- [ ] OWN-11 Work schedule: add staff as option so it's dentist and staff
+- [x] STF-18 Billing and payment: remove the invoice and replace the text with payment method
+- [x] STF-19 HMO providers (Intellicare, Avega, InLife iCare, eTiQa, and Dental Network)
+- [x] OWN-11 Work schedule: add staff as option so it's dentist and staff
 
 **Support tasks**
 - [ ] GEN-10 (support Celin): notifications grouped-by-date and soft-delete endpoints
@@ -230,41 +230,41 @@ For bug fixes, self-check before PR, and end-of-day status, use templates B, C, 
   <goal>Simplified live queue model and automatic branch scoping.</goal>
   <depends_on>JOE-1</depends_on>
 
-  <revision id="STF-14" status="todo" severity="medium" owner="Joevan" support="Celin">
+  <revision id="STF-14" status="done" severity="medium" owner="Joevan" support="Celin">
     <tasks>
-      - [ ] Remove the statuses: Waiting, Called, Treatment ready, Temporarily away
-      - [ ] Migrate existing queue entries to the remaining statuses; update status enums/validation
-      - [ ] Confirm with the team what the remaining queue statuses are before migration
+      - [x] Remove the statuses: Waiting, Called, Treatment ready, Temporarily away
+      - [x] Migrate existing queue entries to the remaining statuses; update status enums/validation
+      - [x] Confirm with the team what the remaining queue statuses are before migration
     </tasks>
     <acceptance>Removed statuses no longer exist in data or UI; existing entries are migrated cleanly.</acceptance>
   </revision>
 
-  <revision id="STF-15" status="todo" severity="medium" owner="Joevan" support="Celin">
+  <revision id="STF-15" status="done" severity="medium" owner="Joevan" support="Celin">
     <tasks>
-      - [ ] Remove the urgent queue priority from data, logic, sorting, and UI
-      - [ ] Queue order becomes first-come-first-served
+      - [x] Remove the urgent queue priority from data, logic, sorting, and UI
+      - [x] Queue order becomes first-come-first-served
     </tasks>
     <acceptance>No urgent priority anywhere; queue order is by arrival.</acceptance>
   </revision>
 
-  <revision id="STF-20" status="todo" severity="medium" owner="Joevan" support="Celin">
+  <revision id="STF-20" status="done" severity="medium" owner="Joevan" support="Celin">
     <tasks>
-      - [ ] Social Inquiries (Record and Inquiry): remove the branch selection dropdown
-      - [ ] Auto-scope to the user's branch from the session
+      - [x] Social Inquiries (Record and Inquiry): remove the branch selection dropdown
+      - [x] Auto-scope to the user's branch from the session
     </tasks>
     <acceptance>No branch dropdown; records are saved under the user's branch.</acceptance>
   </revision>
 
-  <revision id="OWN-13" status="todo" severity="medium" owner="Joevan" support="Celin">
+  <revision id="OWN-13" status="done" severity="medium" owner="Joevan" support="Celin">
     <tasks>
-      - [ ] Apply STF-14, STF-15, STF-16, STF-17 to Live queue by branch (owner view keeps the branch filter)
+      - [x] Apply STF-14, STF-15, STF-16, STF-17 to Live queue by branch (owner view keeps the branch filter)
     </tasks>
     <acceptance>Owner live queue by branch matches staff queue behavior.</acceptance>
   </revision>
 
   <batch_verification>
-    - [ ] Queue tested across branches
-    - [ ] No leftover removed statuses or priority
+    - [x] Queue tested across branches
+    - [x] No leftover removed statuses or priority
   </batch_verification>
 </batch>
 
@@ -272,35 +272,35 @@ For bug fixes, self-check before PR, and end-of-day status, use templates B, C, 
   <goal>Billing and HMO data are correct; work schedules support dentists and staff.</goal>
   <depends_on>none</depends_on>
 
-  <revision id="STF-18" status="todo" severity="medium" owner="Joevan" support="Celin">
+  <revision id="STF-18" status="done" severity="medium" owner="Joevan" support="Celin">
     <tasks>
-      - [ ] Billing and payment: remove the "Invoice" text/option
-      - [ ] Replace it with "Payment method" (field and label)
-      - [ ] Confirm payment method options with the team (e.g. cash, card, HMO)
+      - [x] Billing and payment: remove the "Invoice" text/option
+      - [x] Replace it with "Payment method" (field and label)
+      - [x] Confirm payment method options with the team (e.g. cash, card, HMO)
     </tasks>
     <acceptance>No "Invoice" wording; Payment method is shown and saved.</acceptance>
   </revision>
 
-  <revision id="STF-19" status="todo" severity="medium" owner="Joevan" support="Celin">
+  <revision id="STF-19" status="done" severity="medium" owner="Joevan" support="Celin">
     <tasks>
-      - [ ] Add HMO providers: Intellicare, Avega, InLife iCare, eTiQa, Dental Network (see Q3)
-      - [ ] Store as a managed list (not hard-coded) and use in billing and patient records
+      - [x] Add HMO providers: Intellicare, Avega, InLife iCare, eTiQa, Dental Network (see Q3)
+      - [x] Store as a managed list (not hard-coded) and use in billing and patient records
     </tasks>
     <acceptance>All five HMO providers are selectable in billing and patient records.</acceptance>
   </revision>
 
-  <revision id="OWN-11" status="todo" severity="medium" owner="Joevan" support="Richmon">
+  <revision id="OWN-11" status="done" severity="medium" owner="Joevan" support="Richmon">
     <tasks>
-      - [ ] Add "Staff" as a selectable option in Work schedule alongside Dentist
-      - [ ] Support schedules for both roles; feed STF-07 duty status
+      - [x] Add "Staff" as a selectable option in Work schedule alongside Dentist
+      - [x] Support schedules for both roles; feed STF-07 duty status
     </tasks>
     <hardening>Role-based permissions, overlapping schedules.</hardening>
     <acceptance>Work schedule can be set for dentists and staff.</acceptance>
   </revision>
 
   <batch_verification>
-    - [ ] Billing flow tested with each HMO and payment method
-    - [ ] Staff and dentist schedules save correctly
+    - [x] Billing flow tested with each HMO and payment method
+    - [x] Staff and dentist schedules save correctly
   </batch_verification>
 </batch>
 

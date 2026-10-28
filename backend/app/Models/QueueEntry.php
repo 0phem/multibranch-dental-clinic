@@ -14,12 +14,12 @@ class QueueEntry extends Model
 {
     use HasUlids;
 
-    public const STATUSES = ['Waiting', 'Called', 'Treatment Ready', 'Temporarily Away', 'Served'];
+    public const STATUSES = ['In Queue', 'In Treatment', 'Done', 'Cancelled', 'No-show', 'Waiting', 'Called', 'Treatment Ready', 'Temporarily Away', 'Served'];
 
-    /** States that hold a place in the queue order (Temporarily Away and Served do not). */
-    public const POSITIONAL = ['Waiting', 'Called', 'Treatment Ready'];
+    /** States that hold a place in the queue order (In Treatment, Done, Temporarily Away and Served do not). */
+    public const POSITIONAL = ['In Queue', 'Waiting', 'Called', 'Treatment Ready'];
 
-    public const PRIORITIES = ['Urgent', 'Priority', 'Normal'];
+    public const PRIORITIES = ['Normal', 'Priority'];
 
     protected $dateFormat = 'Y-m-d H:i:sP';
 

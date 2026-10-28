@@ -150,7 +150,7 @@ class AppointmentController extends Controller
     {
         Gate::authorize('cancel', $appointment);
 
-        return $this->appointments->cancel($request->user(), $appointment, $request->safe()->only(['expected_revision']), $this->idempotencyKey($request));
+        return $this->appointments->cancel($request->user(), $appointment, $request->safe()->only(['expected_revision', 'reason', 'note']), $this->idempotencyKey($request));
     }
 
     /** Appointment-only lifecycle command: the pre-arrival No-show (see AppointmentService::TRANSITIONS). */

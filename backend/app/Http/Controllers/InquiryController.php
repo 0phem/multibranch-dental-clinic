@@ -46,6 +46,8 @@ class InquiryController extends Controller
         if (! empty($v['branch_ref'])) {
             // A branch the account cannot see simply matches nothing: the filter never reveals whether it exists.
             $query->where('branch_id', Branch::where('legacy_ref', $v['branch_ref'])->value('id') ?? 0);
+        } elseif ($request->user()->staffProfile?->branch_id !== null) {
+            $query->where('branch_id', $request->user()->staffProfile->branch_id);
         }
         if (! empty($v['cursor'])) {
             $query->where('id', '<', $visible()->select('id')->where('public_id', strtolower($v['cursor']))->limit(1));
@@ -79,7 +81,22 @@ class InquiryController extends Controller
     {
         $v = $request->validated();
 
-        return $this->inquiries->create($request->user(), Branch::where('legacy_ref', $v['branch_ref'])->firstOrFail(), $v['source'], $v['name'], $v['contact'] ?? null, $v['topic'], $this->idempotencyKey($request, true));
+        $user = $request->user();
+        $profileBranchId = $user->staffProfile?->branch_id;
+        $scopeBranchIds = \App\Models\UserBranchScope::where('user_id', $user->id)->pluck('branch_id')->all();
+        if (! empty($v['branch_ref'])) {
+            $branch = Branch::where('legacy_ref', $v['branch_ref'])->firstOrFail();
+            abort_unless($profileBranchId === null || (int) $branch->id === (int) $profileBranchId, 403, 'This branch is outside your active branch assignment.');
+        } elseif ($profileBranchId !== null) {
+            $branch = Branch::find($profileBranchId);
+        } elseif (count($scopeBranchIds) === 1) {
+            $branch = Branch::find($scopeBranchIds[0]);
+        } else {
+            $branch = null;
+        }
+        abort_unless($branch !== null, 403, 'This branch is outside your access.');
+
+        return $this->inquiries->create($user, $branch, $v['source'], $v['name'], $v['contact'] ?? null, $v['topic'], $this->idempotencyKey($request, true));
     }
 
     public function respond(InquiryCommandRequest $request, Inquiry $inquiry): JsonResponse

@@ -55,7 +55,7 @@ export async function loadInquirySummary() {
 const one = result => (result.ok ? { ok: true, row: mapInquiry(result.data) } : normalizeFailure(result))
 
 export async function captureInquiry(form, key) {
-  const payload = { branch_ref: form.branchId, source: form.source, name: String(form.name ?? '').trim(), topic: String(form.topic ?? '').trim() }
+  const payload = { ...(form.branchId ? { branch_ref: form.branchId } : {}), source: form.source, name: String(form.name ?? '').trim(), topic: String(form.topic ?? '').trim() }
   const contact = String(form.contact ?? '').trim()
   if (contact) payload.contact = contact
   return one(await api.createInquiry(payload, key))

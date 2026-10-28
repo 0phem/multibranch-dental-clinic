@@ -68,21 +68,26 @@ final class Guardianship
             'sex' => $data['sex'] ?? null, 'phone' => $guardian->person?->phone]);
         $patient = Patient::create(['person_id' => $person->id, 'patient_code' => Patient::nextCode(), 'consent' => true]);
         $patient->forceFill(['registration_source' => $source, 'preferred_branch_id' => $guardian->preferred_branch_id])->save();
-        self::link($patient, $guardian, $data['relationship'], $actor, $actor);
+        self::link($patient, $guardian, $data['relationship'], $actor, $actor, $data['relationship_other'] ?? null);
 
         return $patient;
     }
 
     /** Staff (or the guardian's own consent) link a dependent to a guardian. Audited. */
-    public static function link(Patient $dependent, Patient $guardian, string $relationship, ?User $actor, ?User $consentBy): PatientGuardian
+    public static function link(Patient $dependent, Patient $guardian, string $relationship, ?User $actor, ?User $consentBy, ?string $relationshipOther = null): PatientGuardian
     {
         if ($dependent->id === $guardian->id) throw ValidationException::withMessages(['guardian' => ['A patient cannot be their own guardian.']]);
         if ($dependent->user) throw ValidationException::withMessages(['guardian' => ['This patient has their own account; a guardian cannot be linked.']]);
         if (self::isMinor($guardian->person?->date_of_birth?->toDateString())) throw ValidationException::withMessages(['guardian' => ['A guardian must be 18 or older.']]);
+        $isOther = strcasecmp(trim($relationship), 'Other') === 0;
+        $cleanOther = $isOther && $relationshipOther !== null ? mb_substr(trim($relationshipOther), 0, 100) : null;
+        if ($isOther && ($cleanOther === null || $cleanOther === '')) {
+            throw ValidationException::withMessages(['relationship_other' => ['Please specify the relationship.']]);
+        }
         $link = PatientGuardian::firstOrCreate(['dependent_patient_id' => $dependent->id, 'guardian_patient_id' => $guardian->id, 'status' => 'active'],
-            ['relationship' => mb_substr($relationship, 0, 40), 'consent_at' => now(), 'consent_by_user_id' => $consentBy?->id, 'created_by_user_id' => $actor?->id]);
+            ['relationship' => mb_substr($relationship, 0, 40), 'relationship_other' => $cleanOther, 'consent_at' => now(), 'consent_by_user_id' => $consentBy?->id, 'created_by_user_id' => $actor?->id]);
         if ($link->wasRecentlyCreated && $actor) {
-            app(AuditService::class)->recordAdministrative('patient.guardian_linked', $actor, $dependent, ['guardian' => $guardian->public_id, 'relationship' => $link->relationship]);
+            app(AuditService::class)->recordAdministrative('patient.guardian_linked', $actor, $dependent, ['guardian' => $guardian->public_id, 'relationship' => $link->relationship, 'relationship_other' => $link->relationship_other]);
         }
 
         return $link;

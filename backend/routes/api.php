@@ -263,6 +263,8 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureAccountAccess::cla
     Route::prefix('analytics')->middleware('role:owner')->group(function () {
         Route::get('/executive-summary', [AnalyticsController::class, 'executiveSummary']);
         Route::get('/branch-performance', [AnalyticsController::class, 'branchPerformance']);
+        Route::get('/daily-revenue', [AnalyticsController::class, 'dailyRevenue']);
+        Route::get('/weekly-histogram', [AnalyticsController::class, 'weeklyRevenueHistogram']);
         Route::get('/export', [AnalyticsController::class, 'export']);
     });
 

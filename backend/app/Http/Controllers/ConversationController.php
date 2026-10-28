@@ -93,12 +93,22 @@ class ConversationController extends Controller
     public function index(Request $request): JsonResponse
     {
         Presence::touch($request->user());
-        $v = $request->validate(['per_page' => ['nullable', 'integer', 'min:1', 'max:'.self::MAX_PER_PAGE], 'cursor' => ['nullable', 'string', 'size:26'], 'status' => ['nullable', 'string', 'in:Open,Closed']]);
+        $v = $request->validate(['per_page' => ['nullable', 'integer', 'min:1', 'max:'.self::MAX_PER_PAGE], 'cursor' => ['nullable', 'string', 'size:26'], 'status' => ['nullable', 'string', 'in:Open,Closed'], 'q' => ['nullable', 'string', 'max:120']]);
         $per = (int) ($v['per_page'] ?? 50);
         $user = $request->user();
         $query = $this->summaries($user)->visibleTo($user);
         if (! empty($v['status'])) {
             $query->where('status', $v['status']);
+        }
+        $term = trim((string) ($v['q'] ?? ''));
+        if ($term !== '') {
+            $like = '%'.str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], strtolower($term)).'%';
+            $query->where(function ($sub) use ($like) {
+                $sub->whereRaw('LOWER(conversations.context) LIKE ?', [$like])
+                    ->orWhereHas('patient', fn ($pq) => $pq->whereRaw('LOWER(patient_code) LIKE ?', [$like])
+                        ->orWhereHas('person', fn ($perQ) => $perQ->whereRaw("LOWER( COALESCE(first_name, '') || ' ' || COALESCE(last_name, '') ) LIKE ?", [$like])))
+                    ->orWhereHas('branch', fn ($bq) => $bq->whereRaw('LOWER(name) LIKE ?', [$like]));
+            });
         }
         if (! empty($v['cursor'])) {
             $query->where('id', '<', Conversation::visibleTo($user)->select('id')->where('public_id', strtolower($v['cursor']))->limit(1));

@@ -119,6 +119,15 @@ class InquiryTest extends TestCase
         $this->capture(['name' => 'José Núñez 李小龍', 'contact' => '+63 917 123 4567'])->assertCreated();
         $this->capture(['name' => str_repeat('n', 120), 'contact' => str_repeat('c', 200), 'topic' => str_repeat('t', 500)])->assertCreated();
         $this->capture(['contact' => null])->assertCreated()->assertJsonPath('data.contact.detail', null);
+        // STF-20: omitting branch_ref auto-scopes to the authenticated Staff user's branch from the session.
+        $this->actingAsUser('staffB1');
+        $this->postJson('/api/inquiries', ['source' => 'Facebook', 'name' => 'Auto Scoped', 'topic' => 'Checkup'], ['Idempotency-Key' => $this->key()])
+            ->assertCreated()
+            ->assertJsonPath('data.branch.id', 'b1');
+        // Ambiguous multi-branch scope without a staffProfile fails safely rather than arbitrarily picking the first branch.
+        $this->actingAsUser('staffBoth');
+        $this->postJson('/api/inquiries', ['source' => 'Facebook', 'name' => 'Ambiguous Branch', 'topic' => 'Checkup'], ['Idempotency-Key' => $this->key()])
+            ->assertForbidden();
     }
 
     public function test_untrusted_content_is_stored_and_returned_as_inert_data_and_links_are_never_fetched(): void

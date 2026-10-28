@@ -203,7 +203,7 @@ export function ClinicProvider({ children, initialReferenceData, initialServerAp
     return {
       ...entity,
       firstName:person?.firstName||'', lastName:person?.lastName||'',
-      email:person?.email||'', phone:person?.phone||'', dob:person?.dob||'', sex:person?.sex||'', address:person?.address||'',
+      email:person?.email||'', phone:person?.phone||'', dob:person?.dob||'', sex:person?.sexOther||person?.sex||'', sexOther:person?.sexOther||'', address:person?.address||'',
       name:doctor && base ? `Dr. ${base}` : base || entity.id,
     }
   }

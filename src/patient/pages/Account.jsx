@@ -118,7 +118,7 @@ function HmoDetails() {
     <p className="pp-eyebrow" id="pp-hmo">HMO (optional)</p>
     <p className="pp-hint">If you have an HMO card, add it here. Coverage is checked at the clinic; nothing is claimed online.{accepted.length ? ` HMOs the clinic has confirmed: ${accepted.map(h => h.name + (h.branch ? ` (${h.branch})` : '')).join(', ')}.` : ''}</p>
     <form onSubmit={save} className="pp-form">
-      <Field label="HMO provider"><input value={form.hmo_provider_name} maxLength={120} onChange={e => setForm(f => ({ ...f, hmo_provider_name: e.target.value }))}/></Field>
+      <Field label="HMO provider"><select value={form.hmo_provider_name} onChange={e => setForm(f => ({ ...f, hmo_provider_name: e.target.value }))}><option value="">Select HMO provider (optional)</option>{['Intellicare', 'Avega', 'InLife iCare', 'eTiQa', 'Dental Network'].map(name => <option key={name} value={name}>{name}</option>)}{form.hmo_provider_name && !['Intellicare', 'Avega', 'InLife iCare', 'eTiQa', 'Dental Network'].includes(form.hmo_provider_name) && <option value={form.hmo_provider_name}>{form.hmo_provider_name}</option>}</select></Field>
       <Field label="Member number"><input value={form.hmo_member_number} maxLength={60} autoComplete="off" onChange={e => setForm(f => ({ ...f, hmo_member_number: e.target.value }))}/></Field>
       <Button type="submit" size="sm" disabled={busy}>{busy ? 'Saving…' : 'Save HMO details'}</Button>
       {note && <p className="pp-hint" role="status">{note}</p>}

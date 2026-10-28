@@ -292,22 +292,60 @@ export function TemplateEditor({ template, toast, onChanged, approveAction = app
   const approvedByMe = canEdit ? !!template.owner_approval : !!template.dentist_approval
   return <div className="au-tpl-edit">
     <div className="au-form">
-      <Field label="Subject"><input value={draft.subject} maxLength={140} readOnly={!canEdit} onChange={e => setDraft(d => ({ ...d, subject: e.target.value }))}/></Field>
-      <Field label="Message" hint={canEdit ? `Plain text. A blank line starts a new paragraph. You can use: ${template.placeholders.map(p => `{${p}}`).join(' ')}` : 'Only the Owner can change the wording.'}>
-        <textarea rows={6} value={draft.body} maxLength={1200} readOnly={!canEdit} onChange={e => setDraft(d => ({ ...d, body: e.target.value }))}/>
-      </Field>
+      {canEdit ? (
+        <>
+          <Field label="Subject"><input value={draft.subject} maxLength={140} onChange={e => setDraft(d => ({ ...d, subject: e.target.value }))}/></Field>
+          <Field label="Message" hint={`Plain text. A blank line starts a new paragraph. You can use: ${template.placeholders.map(p => `{${p}}`).join(' ')}`}>
+            <textarea rows={6} value={draft.body} maxLength={1200} onChange={e => setDraft(d => ({ ...d, body: e.target.value }))}/>
+          </Field>
+        </>
+      ) : (
+        <div className="au-readonly-wording">
+          <div className="au-readonly-field">
+            <span className="au-readonly-label">Subject</span>
+            <div className="au-readonly-value font-semibold">{draft.subject}</div>
+          </div>
+          <div className="au-readonly-field">
+            <span className="au-readonly-label">Message wording</span>
+            <div className="au-readonly-body">{draft.body}</div>
+          </div>
+          <div className="au-approval-status-bar">
+            {template.owner_approval ? (
+              <span className="au-tag is-ok">✓ Owner approved: {template.owner_approval.by}</span>
+            ) : (
+              <span className="au-tag is-wait">⏳ Waiting for Owner approval</span>
+            )}
+            {template.dentist_approval ? (
+              <span className="au-tag is-ok">✓ Dentist approved: {template.dentist_approval.by}</span>
+            ) : (
+              <span className="au-tag is-wait">⏳ Waiting for Dentist approval</span>
+            )}
+          </div>
+        </div>
+      )}
       {err && <p className="au-error" role="alert">{err}</p>}
       <div className="au-actions">
-        <Button size="sm" variant="soft" disabled={!!busy} onClick={show}>{busy === 'preview' ? 'Loading…' : dirty ? 'Preview my changes' : 'Refresh preview'}</Button>
+        <Button size="sm" variant="soft" disabled={!!busy} onClick={show}>{busy === 'preview' ? 'Loading…' : canEdit ? (dirty ? 'Preview my changes' : 'Refresh preview') : 'Preview formatted email'}</Button>
         {canEdit && <Button size="sm" disabled={!dirty || !!busy} onClick={save}>{busy === 'save' ? 'Saving…' : 'Save wording'}</Button>}
-        {!dirty && !approvedByMe && <Button size="sm" icon="check" disabled={!!busy} onClick={approve}>{busy === 'approve' ? 'Approving…' : 'Approve this wording'}</Button>}
+        {!dirty && !approvedByMe && <Button size="sm" variant="primary" icon="check" disabled={!!busy} onClick={approve}>{busy === 'approve' ? 'Approving…' : 'Approve this wording'}</Button>}
+        {!canEdit && approvedByMe && <span className="au-tag is-ok au-approved-badge">✓ You approved this wording</span>}
         {canEdit && showTest && <Button size="sm" variant="ghost" icon="mail" disabled={!!busy} onClick={test}>Send a test to myself</Button>}
       </div>
       {canEdit && dirty && template.approved && <p className="au-muted">Saving changes clears the approval and switches off the automations that use this email until you approve again.</p>}
     </div>
     <div className="au-preview">
-      <p className="au-muted">Preview with example details{preview ? `: “${preview.subject}”` : ''}</p>
-      {preview && <iframe title={`Preview: ${template.name}`} sandbox="allow-same-origin" srcDoc={preview.html}/>}
+      <div className="au-preview-header">
+        <span className="au-preview-title">Patient Email Preview</span>
+        <small className="au-muted">{preview ? `Subject: “${preview.subject}”` : 'Preview with example details'}</small>
+      </div>
+      {preview ? (
+        <iframe title={`Preview: ${template.name}`} sandbox="allow-same-origin" srcDoc={preview.html}/>
+      ) : (
+        <div className="au-preview-empty">
+          <p className="au-muted">Click "Preview formatted email" to view the rendered template as seen by patients.</p>
+          <Button size="sm" variant="soft" disabled={busy === 'preview'} onClick={show}>{busy === 'preview' ? 'Loading…' : 'Generate preview'}</Button>
+        </div>
+      )}
     </div>
   </div>
 }

@@ -47,6 +47,8 @@ class UpdatePatientRecordRequest extends FormRequest
             'sex' => ['sometimes', 'nullable', 'string', 'max:30'],
             'address' => ['sometimes', 'nullable', 'string', 'max:255'],
             'emergency_contact' => ['sometimes', 'nullable', 'string', 'max:500'],
+            'hmo_provider_name' => ['sometimes', 'nullable', 'string', 'max:120'],
+            'hmo_member_number' => ['sometimes', 'nullable', 'string', 'max:60', 'regex:/^[A-Za-z0-9 \-\/]*$/'],
             // The branch's legacy_ref or ULID public_id; null clears the preference.
             'preferred_branch_id' => ['sometimes', 'nullable', 'string', 'max:64'],
 

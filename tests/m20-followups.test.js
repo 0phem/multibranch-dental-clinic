@@ -24,3 +24,10 @@ test('M20: book from the task with the normal booking form, close needs a note, 
 test('M20: the optional reminder sits under Reports on the Automations page', () => {
   assert.match(read('src/pages/Automations.jsx'), /\['Reports', \['owner_summary', 'recall', 'followup_reminders'\]\]/)
 })
+
+test('DEN-09: follow-up care assigns distinct badge color classes for each status and overdue', () => {
+  const page = read('src/pages/ServerFollowups.jsx'), autoCss = read('src/automations.css')
+  assert.match(page, /const TONE = \{ Open: 'is-pending', Contacted: 'is-info', Booked: 'is-ok', Closed: 'is-done' \}/)
+  assert.match(autoCss, /\.fd-badge\.is-pending/)
+  assert.match(autoCss, /\.fd-badge\.is-done/)
+})

@@ -18,6 +18,53 @@ import { sendTestEmail } from '../api-client.js'
 import { EmployeeInvitations } from './EmployeeInvitations.jsx'
 import { BranchAccessDialog } from './BranchAccessDialog.jsx'
 
+export const ALLOWED_BRANCH_CODES = ['BRC-A', 'BRC-B', 'BRC-C', 'BRC-D', 'BRC-E', 'BRC-F', 'MNL', 'QC', 'MKTI', 'BGC', 'ORT', 'ALB', 'CEB', 'DVO', 'PAS']
+
+export function BranchMapPicker({ latitude, longitude, onChange }) {
+  const mapRef = useRef(null)
+  const [mapLoaded, setMapLoaded] = useState(false)
+
+  React.useEffect(() => {
+    let cleanup = null
+    let active = true
+
+    if (typeof window !== 'undefined' && mapRef.current) {
+      import('../branch-map.js').then(({ mountBranchPinMap }) => {
+        if (!active) return
+        cleanup = mountBranchPinMap(mapRef.current, {
+          latitude,
+          longitude,
+          onChange
+        })
+        setMapLoaded(true)
+      }).catch(err => {
+        console.warn('Branch map could not load:', err)
+      })
+    }
+
+    return () => {
+      active = false
+      if (cleanup) cleanup()
+    }
+  }, [latitude, longitude])
+
+  return (
+    <div className="branch-map-picker-container">
+      <div
+        ref={mapRef}
+        className="branch-map-canvas"
+        style={{ width: '100%', height: '240px', borderRadius: '8px', border: '1px solid var(--line, #e2e8f0)', background: '#f8fafc', position: 'relative' }}
+      >
+        {!mapLoaded && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--muted, #64748b)', fontSize: '13px' }}>
+            <span>Loading interactive branch map…</span>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export function BranchesPage({ store }) {
   const { state, actions, toast }=store
   const [selected,setSelected]=useState(state.branches[0]?.id||'')
@@ -25,11 +72,22 @@ export function BranchesPage({ store }) {
   const [form,setForm]=useState(branch||{})
   const [configTab,setConfigTab]=useState('details')
   React.useEffect(()=>setForm(branch||{}),[branch])
+
+  const codesInUse = useMemo(() => new Set(state.branches.filter(b => b.id !== selected).map(b => b.branchCode)), [state.branches, selected])
+  const branchCodeOptions = useMemo(() => {
+    const list = [...ALLOWED_BRANCH_CODES]
+    if (form.branchCode && !list.includes(form.branchCode)) list.unshift(form.branchCode)
+    return list
+  }, [form.branchCode])
+
   // Phase 2A: branches/branchServices are backend-authoritative — the API call happens first, and only its
   // confirmed response is adopted into local state (never an optimistic local success ahead of the
   // server). See adoptBranchFromServer/adoptBranchServiceFromServer (administration.js) and the Phase 2A
   // plan, section J/point 8.
   const save=async()=>{
+    if (codesInUse.has(form.branchCode)) {
+      return toast(`Branch code ${form.branchCode} is already assigned to another branch.`, 'warning')
+    }
     const result=await syncBranchUpdate(selected,form)
     if(!result.ok)return toast(result.message||'Could not save branch changes.','warning')
     const adopted=actions.adoptBranchFromServer(selected,result.record)
@@ -61,28 +119,24 @@ export function BranchesPage({ store }) {
             <div
               key={b.id}
               onClick={() => setSelected(b.id)}
-              style={{
-                padding: '14px',
-                borderRadius: '8px',
-                border: isSel ? '2px solid var(--accent, #0284c7)' : '1px solid var(--line)',
-                background: isSel ? 'var(--surface-active, #f0f9ff)' : 'var(--surface)',
-                cursor: 'pointer',
-                transition: 'all 0.15s ease'
-              }}
+              className={`branch-overview-card ${isSel ? 'branch-card-selected' : ''}`}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
                 <div>
-                  <b style={{ fontSize: '15px' }}>{b.name}</b>
-                  <span style={{ display: 'block', fontSize: '12px', color: 'var(--muted)' }}>{b.branchCode} • {b.city}</span>
+                  <b style={{ fontSize: '15px', color: 'var(--text)' }}>{b.name}</b>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '3px' }}>
+                    <span className="branch-code-badge">{b.branchCode}</span>
+                    <span style={{ fontSize: '12px', color: 'var(--muted)' }}>• {b.city}</span>
+                  </div>
                 </div>
-                <Status>{b.status}</Status>
+                <Status tone={b.status === 'Open' ? 'success' : b.status === 'Temporarily Closed' ? 'warning' : 'neutral'}>{b.status}</Status>
               </div>
               <div style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px', marginTop: '8px', paddingTop: '8px', borderTop: '1px solid var(--line)' }}>
                 <span>Services: <b>{activeSvcCount}</b></span>
                 <span>Phone: <b>{b.phone || '—'}</b></span>
               </div>
               <div style={{ marginTop: '10px', textAlign: 'right' }}>
-                <Button size="sm" variant={isSel ? 'primary' : 'ghost'} onClick={(e) => { e.stopPropagation(); setSelected(b.id); }}>{isSel ? 'Configuring' : 'Configure'}</Button>
+                <Button size="sm" variant={isSel ? 'primary' : 'soft'} onClick={(e) => { e.stopPropagation(); setSelected(b.id); }}>{isSel ? 'Configuring' : 'Configure'}</Button>
               </div>
             </div>
           );
@@ -94,27 +148,73 @@ export function BranchesPage({ store }) {
         <Tabs tabs={configTabs} active={configTab} onChange={setConfigTab}/>
         {configTab==='details'&&<div className="form-grid" style={{marginTop:'12px'}}>
           <Field label="Branch name"><input value={form.name||''} onChange={e=>setForm({...form,name:e.target.value})}/></Field>
-          <Field label="Branch code"><input value={form.branchCode||''} onChange={e=>setForm({...form,branchCode:e.target.value})}/></Field>
+          <Field label="Branch code" hint="Select an allowed clinic branch code. Codes assigned to other branches are blocked.">
+            <select
+              value={form.branchCode || ''}
+              onChange={e => {
+                const code = e.target.value
+                if (codesInUse.has(code)) {
+                  toast(`Branch code ${code} is already assigned to another branch.`, 'warning')
+                  return
+                }
+                setForm({ ...form, branchCode: code })
+              }}
+            >
+              <option value="" disabled>Select branch code…</option>
+              {branchCodeOptions.map(code => {
+                const inUse = codesInUse.has(code)
+                return (
+                  <option key={code} value={code} disabled={inUse}>
+                    {code}{inUse ? ' (In use)' : ''}
+                  </option>
+                )
+              })}
+            </select>
+          </Field>
           <Field label="City"><input value={form.city||''} onChange={e=>setForm({...form,city:e.target.value})}/></Field>
           <Field label="Branch status"><select value={form.status||'Open'} onChange={e=>setForm({...form,status:e.target.value})}><option>Open</option><option>Temporarily Closed</option><option>Inactive</option></select></Field>
           <Field label="Capacity threshold (unconfirmed)"><input type="number" min="1" max="100" value={form.threshold??''} onChange={e=>setForm({...form,threshold:Number(e.target.value)})}/></Field>
           <Field label="Phone"><input value={form.phone||''} onChange={e=>setForm({...form,phone:e.target.value})}/></Field>
           <Field label="Email (optional)"><input type="email" value={form.email||''} onChange={e=>setForm({...form,email:e.target.value})}/></Field>
           <Field label="Address"><textarea value={form.address||''} onChange={e=>setForm({...form,address:e.target.value})}/></Field>
-          <Field label="Map latitude (optional)" hint="For the nearest-branch suggestion. Copy it from the branch's map pin."><input inputMode="decimal" value={form.latitude??''} onChange={e=>setForm({...form,latitude:e.target.value})}/></Field>
-          <Field label="Map longitude (optional)"><input inputMode="decimal" value={form.longitude??''} onChange={e=>setForm({...form,longitude:e.target.value})}/></Field>
+          <div className="branch-map-field" style={{ gridColumn: '1 / -1', marginTop: '6px' }}>
+            <label className="field-label">Branch location map <small>Click the map or drag the pin to set the exact branch coordinates</small></label>
+            <BranchMapPicker
+              latitude={form.latitude}
+              longitude={form.longitude}
+              onChange={({ latitude, longitude }) => setForm(f => ({ ...f, latitude, longitude }))}
+            />
+            <div className="branch-coords-readout">
+              <span>Latitude: <b className="coord-value">{form.latitude != null && form.latitude !== '' ? Number(form.latitude).toFixed(6) : 'Not pinned'}</b></span>
+              <span>Longitude: <b className="coord-value">{form.longitude != null && form.longitude !== '' ? Number(form.longitude).toFixed(6) : 'Not pinned'}</b></span>
+              <small style={{ color: 'var(--muted)' }}>(Coordinates are saved automatically from the map pin)</small>
+            </div>
+          </div>
         </div>}
         {configTab==='hours'&&<div style={{marginTop:'12px'}}>
           <label className="field-label">Opening hours <small>Per day; a closed day cannot be booked and is greyed out in the booking calendar</small></label>
           <div className="hours-editor">{[[1,'Monday'],[2,'Tuesday'],[3,'Wednesday'],[4,'Thursday'],[5,'Friday'],[6,'Saturday'],[7,'Sunday']].map(([day,label])=>{const week=form.weeklyHours||{};const h=week[day]||week[String(day)]||null;const setDay=value=>setForm({...form,weeklyHours:{...week,[day]:value}});const openDays=Object.values(week).filter(Boolean).length;return <div key={day} className="hours-row">
             <span className="hours-day">{label}</span>
-            <label className="hours-closed"><input type="checkbox" checked={!h} disabled={h&&openDays===1} onChange={e=>setDay(e.target.checked?null:{open:form.open||'08:00',close:form.close||'17:00'})}/> Closed</label>
+            <div className="hours-closed-action">
+              <Button
+                type="button"
+                size="xs"
+                variant={!h ? 'danger' : 'soft'}
+                className={`btn-toggle-closed ${!h ? 'is-closed' : 'is-open'}`}
+                disabled={h && openDays === 1}
+                aria-pressed={!h}
+                onClick={() => setDay(h ? null : { open: form.open || '08:00', close: form.close || '17:00' })}
+                title={h && openDays === 1 ? 'At least one operating day must remain open' : !h ? 'Day is closed. Click to mark open.' : 'Day is open. Click to mark closed.'}
+              >
+                {!h ? 'Closed' : 'Open'}
+              </Button>
+            </div>
             {h&&<><label><span className="sr-only">{label} opens</span><input type="time" value={h.open} onChange={e=>setDay({...h,open:e.target.value})}/></label><span aria-hidden="true">to</span><label><span className="sr-only">{label} closes</span><input type="time" value={h.close} onChange={e=>setDay({...h,close:e.target.value})}/></label></>}
           </div>})}</div>
         </div>}
         {configTab==='services'&&<div style={{marginTop:'12px'}}>
           <label className="field-label">Available services <small>Branch services • scheduling reads this catalog directly</small></label>
-          <div className="permission-list">{state.services.filter(s=>s.status==='Active').map(service=><label className="check-control" key={service.id}><input type="checkbox" checked={serviceActive(service.id)} onChange={()=>toggleService(service.id)}/><span><b>{service.name}</b><small>{service.category} • {service.duration} min</small></span></label>)}</div>
+          <div className="branch-services-grid">{state.services.filter(s=>s.status==='Active').map(service=>{const active=serviceActive(service.id);return <label className={`branch-service-item ${active?'is-active':''}`} key={service.id}><input type="checkbox" checked={active} onChange={()=>toggleService(service.id)}/><div><b>{service.name}</b><small style={{display:'block',color:'var(--muted)'}}>{service.category} • {service.duration} min</small></div></label>})}</div>
         </div>}
         <div style={{marginTop:'16px',display:'flex',justifyContent:'flex-end'}}>
           <Button onClick={save}>Publish Branch Changes</Button>
@@ -178,6 +278,7 @@ export function TeamPage({ store }) {
         {key:'shift',label:'Shift',render:d=>`${d.shiftStart}–${d.shiftEnd}`},
         {key:'active',label:'Active',render:d=><Status>{accountStatus(d)}</Status>},
         {key:'availability',label:'Available',render:d=><Status>{availableStatus(d)}</Status>},
+        {key:'dutyStatus',label:'Duty status',render:d=><span className={`fd-badge ${availableStatus(d)==='Available'?'is-ok':'is-muted'}`}>{availableStatus(d)==='Available'?'Doctor is on duty today':'Off duty'}</span>},
         {key:'action',label:'Action',render:d=><Button size="sm" variant="ghost" onClick={()=>setEditDentist({...d})}>Edit Profile</Button>}
       ]}/>
     </Card>:<Card title="Clinic Staff profiles" subtitle="Every row is linked to its account when account access exists">

@@ -56,6 +56,16 @@
 .au-tpl-head small { overflow-wrap: anywhere; }
 .au-tpl-edit { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; margin-top: 12px; }
 .au-tpl-edit textarea { width: 100%; min-height: 140px; font: inherit; line-height: 1.45; }
+.au-readonly-wording { display: grid; gap: 12px; padding: 14px; background: var(--surface, #f8fafc); border: 1px solid var(--line, #e2e8f0); border-radius: 8px; }
+.au-readonly-field { display: grid; gap: 4px; }
+.au-readonly-label { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted, #64748b); }
+.au-readonly-value { font-size: 0.95rem; font-weight: 600; color: var(--text, #0f172a); }
+.au-readonly-body { font-size: 0.9rem; line-height: 1.5; color: var(--text, #1e293b); white-space: pre-wrap; padding: 10px; background: #fff; border: 1px solid var(--line, #e2e8f0); border-radius: 6px; }
+.au-approval-status-bar { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.au-preview-header { display: flex; flex-direction: column; gap: 2px; margin-bottom: 8px; }
+.au-preview-title { font-size: 0.85rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted, #64748b); }
+.au-preview-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 48px 20px; border: 1px dashed var(--line, #cbd5e1); border-radius: 12px; background: var(--surface, #f8fafc); text-align: center; }
+.au-approved-badge { padding: 4px 12px; font-size: 0.82rem; }
 .au-preview iframe { width: 100%; height: 520px; border: 1px solid var(--line, #e1eaf1); border-radius: 12px; background: #fff; }
 @media (max-width: 900px) { .au-tpl-edit { grid-template-columns: 1fr; } .au-preview iframe { height: 440px; } }
 
@@ -159,12 +169,12 @@
 .rx-line legend { font-weight: 800; padding: 0 4px; }
 .rx-view { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
 .rx-view li { display: grid; gap: 2px; overflow-wrap: anywhere; }
-.rx-view span { color: var(--muted, #5b6b7f); }
+.rx-view span { color: var(--muted, #5b6b7f); } .rx-license-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; } .rx-license-row > .field { flex: 1 1 240px; } .rx-license-row > .au-actions { margin-top: 0; align-items: center; }
 /* M20 follow-ups */
 .fu-counts { margin: 0; color: var(--muted, #5b6b7f); }
 .fu-counts .is-bad { color: #8f2a19; }
 .fd-list li.fu-overdue { border-left: 4px solid #c0392b; padding-left: 10px; }
-.fd-badge.is-bad { background: #fde8e4; color: #8f2a19; }
+.fd-badge.is-bad { background: #fde8e4; color: #8f2a19; } .fd-badge.is-pending { background: #fff4e0; color: #7a4700; } .fd-badge.is-done { background: #eef2f6; color: #33475b; }
 /* M10 dental chart */
 .tc-layout { display: grid; gap: 12px; }
 @media (min-width: 1024px) { .tc-layout.has-panel { grid-template-columns: minmax(0, 1fr) 340px; align-items: start; } }

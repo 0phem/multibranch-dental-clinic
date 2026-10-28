@@ -131,7 +131,7 @@ final class IntakeService
                 }
                 $patient = str_starts_with($current->visit_for, 'dependent:') ? ($dependents[(int) substr($current->visit_for, 10)] ?? $holder) : $holder;
             }
-            if (! empty($input['id_verified'])) $this->recordIdCheck($holder, $staff, (string) ($input['id_type'] ?? $current->id_type ?? 'other'), $input['id_last4'] ?? null);
+            if (! empty($input['id_verified'])) $this->recordIdCheck($holder, $staff, (string) ($input['id_type'] ?? $current->id_type ?? 'other'), $input['id_last4'] ?? null, $input['other_details'] ?? null);
             $current->update(['status' => 'confirmed', 'patient_id' => $holder->id, 'confirmed_by_user_id' => $staff->id, 'confirmed_at' => now(),
                 // The form is no longer needed once it is the patient record: keep only what is required to show the history.
                 'data' => $current->channel === 'account' ? null : ['confirmed' => true]]);
@@ -172,7 +172,7 @@ final class IntakeService
         $eligible = $scheduling->eligibleDentists($branch, $service)->filter(fn (DentistProfile $d) => $scheduling->work()->workingNow($d, $branch));
         if ($eligible->isEmpty()) return null;
         $waiting = DB::table('queue_entries as q')->join('dentist_queues as dq', 'dq.id', '=', 'q.dentist_queue_id')
-            ->where('dq.branch_id', $branch->id)->where('dq.clinic_date', ClinicClock::today())->whereIn('q.status', ['Waiting', 'Called', 'Treatment Ready'])
+            ->where('dq.branch_id', $branch->id)->where('dq.clinic_date', ClinicClock::today())->whereIn('q.status', ['In Queue', 'Waiting', 'Called', 'Treatment Ready'])
             ->groupBy('dq.dentist_profile_id')->selectRaw('dq.dentist_profile_id, count(*) as n')->pluck('n', 'dentist_profile_id');
 
         return $eligible->sortBy(fn (DentistProfile $d) => [(int) ($waiting[$d->id] ?? 0), $d->id])->first();
@@ -188,13 +188,28 @@ final class IntakeService
     }
 
     /** One click at Check-In: the physical ID was checked. Only the type, who and when (and the last 4 if the Owner allows). */
-    public function recordIdCheck(Patient $patient, User $staff, string $idType, ?string $last4 = null): Patient
+    public function recordIdCheck(Patient $patient, User $staff, string $idType, ?string $last4 = null, ?string $otherDetails = null): Patient
     {
         if (! array_key_exists($idType, self::ID_TYPES)) throw ValidationException::withMessages(['id_type' => ['Choose the type of ID.']]);
+        $otherDetails = $idType === 'other' ? trim((string) $otherDetails) : null;
+        if ($idType === 'other' && ($otherDetails === null || $otherDetails === '')) {
+            throw ValidationException::withMessages(['other_details' => ['Specify the ID type.']]);
+        }
         $keepLast4 = (bool) (AutomationCatalog::setting('intake')?->settings['store_id_last4'] ?? false);
         $last4 = $keepLast4 && $last4 !== null ? strtoupper(substr(preg_replace('/[^A-Za-z0-9]/', '', $last4), -4)) : null;
-        $patient->forceFill(['id_type' => $idType, 'id_last4' => $last4 ?: null, 'id_verified_by_user_id' => $staff->id, 'id_verified_at' => now()])->save();
-        app(AuditService::class)->recordAdministrative('patient.id_verified_in_person', $staff, $patient, ['id_type' => $idType, 'last4_kept' => $last4 !== null]);
+        $patient->forceFill([
+            'id_type' => $idType,
+            'other_details' => $otherDetails ?: null,
+            'id_last4' => $last4 ?: null,
+            'id_verified_by_user_id' => $staff->id,
+            'id_verified_at' => now(),
+        ])->save();
+
+        $auditPayload = ['id_type' => $idType, 'last4_kept' => $last4 !== null];
+        if ($otherDetails !== null && $otherDetails !== '') {
+            $auditPayload['other_details'] = $otherDetails;
+        }
+        app(AuditService::class)->recordAdministrative('patient.id_verified_in_person', $staff, $patient, $auditPayload);
 
         return $patient;
     }

@@ -7,12 +7,14 @@ use App\Models\AutomatedAction;
 use App\Models\Branch;
 use App\Models\HmoCase;
 use App\Models\Invoice;
+use App\Models\Payment;
 use App\Models\QueueEntry;
 use App\Models\Visit;
 use App\Support\ClinicClock;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 
 // M21 read layer. Corrections in this pass (docs/M21_ANALYTICS_TECHNICAL_CORRECTIONS.md): the branch is a resolved Branch
 // model (never a request integer); period windows are half-open [from, until) instants in Asia/Manila and are bound as
@@ -54,7 +56,12 @@ class AnalyticsService
         return ['from' => $firstDay, 'until' => $lastDay->addDay()->startOfDay(), 'to' => $lastDay, 'label' => $label, 'period' => $period];
     }
 
-    /** Apply the half-open window with offset-bearing ISO strings (independent of the DB session time zone). */
+    /**
+     * Apply the half-open window with offset-bearing ISO strings (independent of the DB session time zone).
+     *
+     * @param  \Illuminate\Database\Eloquent\Builder|\Illuminate\Database\Query\Builder  $query
+     * @return \Illuminate\Database\Eloquent\Builder|\Illuminate\Database\Query\Builder
+     */
     private function within($query, string $column, array $bounds)
     {
         if ($bounds['from'] && $bounds['until']) {
@@ -253,5 +260,260 @@ class AnalyticsService
                 'is_open' => $b->status === 'Open',
             ];
         });
+    }
+
+    /**
+     * OWN-01 daily collection & refund time-series in Asia/Manila.
+     * Aggregates payments by payments.recorded_at and refunds by invoice_refunds.refunded_at independently
+     * so multiple partial refunds on one payment can never duplicate payment amounts.
+     */
+    public function getDailyRevenueTrend(
+        ?string $period = 'today',
+        ?Branch $branch = null,
+        ?string $dateFrom = null,
+        ?string $dateTo = null
+    ): array {
+        $bounds = $this->parsePeriod($period, $dateFrom, $dateTo);
+        $aggregated = $this->aggregateCollectionsAndRefundsByDate($bounds, $branch?->id);
+        $paymentsByDate = $aggregated['payments'];
+        $refundsByDate = $aggregated['refunds'];
+
+        $today = CarbonImmutable::createFromFormat('!Y-m-d', ClinicClock::today(), ClinicClock::TIMEZONE);
+        $firstDay = $bounds['from']?->startOfDay();
+        $lastDay = $bounds['to']?->startOfDay();
+
+        if (! $firstDay || ! $lastDay) {
+            $activityDates = array_unique(array_merge(array_keys($paymentsByDate), array_keys($refundsByDate)));
+            sort($activityDates);
+            if ($activityDates !== []) {
+                $earliest = CarbonImmutable::createFromFormat('!Y-m-d', $activityDates[0], ClinicClock::TIMEZONE);
+                $latest = CarbonImmutable::createFromFormat('!Y-m-d', $activityDates[count($activityDates) - 1], ClinicClock::TIMEZONE);
+                $firstDay = $earliest->lessThan($today) ? $earliest : $today;
+                $lastDay = $latest->greaterThan($today) ? $latest : $today;
+            } else {
+                $firstDay = $today;
+                $lastDay = $today;
+            }
+        }
+
+        $days = [];
+        $totalGrossCentavos = 0;
+        $totalRefundedCentavos = 0;
+        $totalPaymentsCount = 0;
+        $totalRefundsCount = 0;
+
+        $cursor = $firstDay;
+        while ($cursor->lessThanOrEqualTo($lastDay)) {
+            $dateStr = $cursor->toDateString();
+            $grossCentavos = $paymentsByDate[$dateStr]['gross_centavos'] ?? 0;
+            $paymentsCount = $paymentsByDate[$dateStr]['payments_count'] ?? 0;
+            $refundedCentavos = $refundsByDate[$dateStr]['refunded_centavos'] ?? 0;
+            $refundsCount = $refundsByDate[$dateStr]['refunds_count'] ?? 0;
+
+            $totalGrossCentavos += $grossCentavos;
+            $totalRefundedCentavos += $refundedCentavos;
+            $totalPaymentsCount += $paymentsCount;
+            $totalRefundsCount += $refundsCount;
+
+            $days[] = [
+                'date' => $dateStr,
+                'label' => $cursor->format('M d'),
+                'day_of_week' => $cursor->dayOfWeekIso,
+                'day_name' => $cursor->format('D'),
+                'gross_collected_php' => $this->formatCentavos($grossCentavos),
+                'refunded_php' => $this->formatCentavos($refundedCentavos),
+                'net_cash_flow_php' => $this->formatCentavos($grossCentavos - $refundedCentavos),
+                'payments_count' => $paymentsCount,
+                'refunds_count' => $refundsCount,
+            ];
+
+            $cursor = $cursor->addDay();
+        }
+
+        return [
+            'period' => $bounds['period'],
+            'period_label' => $bounds['label'],
+            'timezone' => ClinicClock::TIMEZONE,
+            'date_basis' => [
+                'collections' => 'payments.recorded_at',
+                'refunds' => 'invoice_refunds.refunded_at',
+            ],
+            'date_from' => $firstDay->toDateString(),
+            'date_to' => $lastDay->toDateString(),
+            'branch' => $branch ? ['public_id' => $branch->public_id, 'name' => $branch->name] : null,
+            'totals' => [
+                'gross_collected_php' => $this->formatCentavos($totalGrossCentavos),
+                'refunded_php' => $this->formatCentavos($totalRefundedCentavos),
+                'net_cash_flow_php' => $this->formatCentavos($totalGrossCentavos - $totalRefundedCentavos),
+                'payments_count' => $totalPaymentsCount,
+                'refunds_count' => $totalRefundsCount,
+            ],
+            'days' => $days,
+        ];
+    }
+
+    /**
+     * OWN-01 Monday–Saturday (6-bucket) weekly collection & refund histogram in Asia/Manila.
+     * Excludes Sunday. `is_finalized` is true only after the target week's Saturday has passed in Asia/Manila.
+     */
+    public function getWeeklyRevenueHistogram(
+        ?Branch $branch = null,
+        ?string $targetDate = null
+    ): array {
+        $referenceDateStr = ($targetDate !== null && $targetDate !== '') ? $targetDate : ClinicClock::today();
+        if (! ClinicClock::validDate($referenceDateStr)) {
+            throw new \InvalidArgumentException('Use a real calendar date in YYYY-MM-DD format.');
+        }
+
+        $referenceDate = CarbonImmutable::createFromFormat('!Y-m-d', $referenceDateStr, ClinicClock::TIMEZONE);
+        $monday = $referenceDate->startOfWeek(CarbonImmutable::MONDAY)->startOfDay();
+        $saturday = $monday->addDays(5)->startOfDay();
+
+        $bounds = $this->bounds($monday, $saturday, "{$monday->format('M d')} – {$saturday->format('M d, Y')}", 'week');
+        $aggregated = $this->aggregateCollectionsAndRefundsByDate($bounds, $branch?->id);
+        $paymentsByDate = $aggregated['payments'];
+        $refundsByDate = $aggregated['refunds'];
+
+        $buckets = [];
+        $totalGrossCentavos = 0;
+        $totalRefundedCentavos = 0;
+        $totalPaymentsCount = 0;
+        $totalRefundsCount = 0;
+
+        for ($offset = 0; $offset < 6; $offset++) {
+            $cursor = $monday->addDays($offset);
+            $dateStr = $cursor->toDateString();
+            $grossCentavos = $paymentsByDate[$dateStr]['gross_centavos'] ?? 0;
+            $paymentsCount = $paymentsByDate[$dateStr]['payments_count'] ?? 0;
+            $refundedCentavos = $refundsByDate[$dateStr]['refunded_centavos'] ?? 0;
+            $refundsCount = $refundsByDate[$dateStr]['refunds_count'] ?? 0;
+
+            $totalGrossCentavos += $grossCentavos;
+            $totalRefundedCentavos += $refundedCentavos;
+            $totalPaymentsCount += $paymentsCount;
+            $totalRefundsCount += $refundsCount;
+
+            $buckets[] = [
+                'date' => $dateStr,
+                'label' => $cursor->format('D, M d'),
+                'day_of_week' => $cursor->dayOfWeekIso,
+                'day_name' => $cursor->format('l'),
+                'short_day' => $cursor->format('D'),
+                'gross_collected_php' => $this->formatCentavos($grossCentavos),
+                'refunded_php' => $this->formatCentavos($refundedCentavos),
+                'net_cash_flow_php' => $this->formatCentavos($grossCentavos - $refundedCentavos),
+                'payments_count' => $paymentsCount,
+                'refunds_count' => $refundsCount,
+            ];
+        }
+
+        return [
+            'reference_date' => $referenceDate->toDateString(),
+            'week_start_date' => $monday->toDateString(),
+            'week_end_date' => $saturday->toDateString(),
+            'week_label' => $bounds['label'],
+            'timezone' => ClinicClock::TIMEZONE,
+            'date_basis' => [
+                'collections' => 'payments.recorded_at',
+                'refunds' => 'invoice_refunds.refunded_at',
+            ],
+            'is_finalized' => ClinicClock::today() > $saturday->toDateString(),
+            'branch' => $branch ? ['public_id' => $branch->public_id, 'name' => $branch->name] : null,
+            'totals' => [
+                'gross_collected_php' => $this->formatCentavos($totalGrossCentavos),
+                'refunded_php' => $this->formatCentavos($totalRefundedCentavos),
+                'net_cash_flow_php' => $this->formatCentavos($totalGrossCentavos - $totalRefundedCentavos),
+                'payments_count' => $totalPaymentsCount,
+                'refunds_count' => $totalRefundsCount,
+            ],
+            'buckets' => $buckets,
+        ];
+    }
+
+    /**
+     * Query payments and invoice_refunds independently by their respective Manila calendar dates.
+     *
+     * @return array{
+     *   payments: array<string, array{gross_centavos: int, payments_count: int}>,
+     *   refunds: array<string, array{refunded_centavos: int, refunds_count: int}>
+     * }
+     */
+    private function aggregateCollectionsAndRefundsByDate(array $bounds, ?int $branchId): array
+    {
+        $tz = ClinicClock::TIMEZONE;
+
+        $paymentQuery = Payment::query()
+            ->join('invoices', 'invoices.id', '=', 'payments.invoice_id');
+        if ($branchId !== null) {
+            $paymentQuery->where('invoices.branch_id', $branchId);
+        }
+        $this->within($paymentQuery, 'payments.recorded_at', $bounds);
+
+        $paymentRows = $paymentQuery->toBase()
+            ->selectRaw(
+                "to_char(payments.recorded_at AT TIME ZONE '{$tz}', 'YYYY-MM-DD') AS bucket_date,
+                 COUNT(*) AS payments_count,
+                 COALESCE(SUM(payments.amount), 0)::numeric(16,2)::text AS gross_collected_php"
+            )
+            ->groupByRaw("to_char(payments.recorded_at AT TIME ZONE '{$tz}', 'YYYY-MM-DD')")
+            ->orderBy('bucket_date')
+            ->get();
+
+        $paymentsByDate = [];
+        foreach ($paymentRows as $row) {
+            $paymentsByDate[(string) $row->bucket_date] = [
+                'gross_centavos' => $this->toCentavos((string) $row->gross_collected_php),
+                'payments_count' => (int) $row->payments_count,
+            ];
+        }
+
+        $refundQuery = DB::table('invoice_refunds')
+            ->join('invoices', 'invoices.id', '=', 'invoice_refunds.invoice_id');
+        if ($branchId !== null) {
+            $refundQuery->where('invoices.branch_id', $branchId);
+        }
+        $this->within($refundQuery, 'invoice_refunds.refunded_at', $bounds);
+
+        $refundRows = $refundQuery
+            ->selectRaw(
+                "to_char(invoice_refunds.refunded_at AT TIME ZONE '{$tz}', 'YYYY-MM-DD') AS bucket_date,
+                 COUNT(*) AS refunds_count,
+                 COALESCE(SUM(invoice_refunds.amount), 0)::numeric(16,2)::text AS refunded_php"
+            )
+            ->groupByRaw("to_char(invoice_refunds.refunded_at AT TIME ZONE '{$tz}', 'YYYY-MM-DD')")
+            ->orderBy('bucket_date')
+            ->get();
+
+        $refundsByDate = [];
+        foreach ($refundRows as $row) {
+            $refundsByDate[(string) $row->bucket_date] = [
+                'refunded_centavos' => $this->toCentavos((string) $row->refunded_php),
+                'refunds_count' => (int) $row->refunds_count,
+            ];
+        }
+
+        return [
+            'payments' => $paymentsByDate,
+            'refunds' => $refundsByDate,
+        ];
+    }
+
+    private function toCentavos(string $amount): int
+    {
+        $negative = str_starts_with($amount, '-');
+        $clean = ltrim($amount, '+-');
+        [$whole, $frac] = array_pad(explode('.', $clean, 2), 2, '0');
+
+        $cents = ((int) $whole * 100) + (int) substr(str_pad($frac, 2, '0'), 0, 2);
+
+        return $negative ? -$cents : $cents;
+    }
+
+    private function formatCentavos(int $centavos): string
+    {
+        $sign = $centavos < 0 ? '-' : '';
+        $abs = abs($centavos);
+
+        return sprintf('%s%d.%02d', $sign, intdiv($abs, 100), $abs % 100);
     }
 }

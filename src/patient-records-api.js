@@ -10,6 +10,7 @@ import { normalizeFailure } from './appointments-api.js'
 export const EDITABLE_FIELDS = {
   firstName: 'first_name', lastName: 'last_name', phone: 'phone', dob: 'date_of_birth', sex: 'sex',
   address: 'address', emergencyContact: 'emergency_contact', email: 'email', preferredBranchId: 'preferred_branch_id',
+  hmoProviderName: 'hmo_provider_name', hmoMemberNumber: 'hmo_member_number',
 }
 
 /** Server record -> UI read model. Fields outside the viewer's tier stay undefined (not ''), so a restricted record is never shown as blank data. */
@@ -24,6 +25,8 @@ export function mapPatientRecord(row) {
     preferredBranchId: 'preferred_branch' in row ? row.preferred_branch?.id ?? null : undefined,
     preferredBranch: 'preferred_branch' in row ? row.preferred_branch?.name ?? '' : undefined,
     hasPortalAccount: row.has_portal_account === true, revision: row.revision,
+    hmoProviderName: 'hmo_provider_name' in row ? row.hmo_provider_name || '' : undefined,
+    hmoMemberNumber: 'hmo_member_number' in row ? row.hmo_member_number || '' : undefined,
   }
 }
 

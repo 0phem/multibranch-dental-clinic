@@ -204,6 +204,12 @@ final class AppointmentService
                 'updated_by_user_id' => $actor->id,
             ]);
             $this->record($current, $actor, 'appointment.cancelled', $from);
+            if (! empty($input['reason'])) {
+                app(\App\Services\Audit\AuditService::class)->recordAdministrative('appointment.cancelled', $actor, $current, [
+                    'reason' => $input['reason'],
+                    'note' => $input['note'] ?? null,
+                ]);
+            }
             if ($late) \App\Services\Automations\AttendancePolicy::recordStrike($current->patient);
 
             // Section 22.3: Booking payment refund handling (>=24h automatic refund via PayMongo; <24h withheld for front-desk decision)

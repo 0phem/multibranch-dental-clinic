@@ -25,7 +25,7 @@ class GuardianController extends Controller
         $me = $request->user()->patient;
         abort_unless($me, 403);
 
-        return response()->json(['data' => Guardianship::dependentsOf($me)->map(fn ($l) => $this->view($l->dependent, $l->relationship))->values(),
+        return response()->json(['data' => Guardianship::dependentsOf($me)->map(fn ($l) => $this->view($l->dependent, $l->relationship, $l->relationship_other))->values(),
             'meta' => ['me' => ['id' => $me->public_id, 'name' => $me->person?->fullName(), 'first_name' => $me->person?->first_name]]]);
     }
 
@@ -35,7 +35,10 @@ class GuardianController extends Controller
         abort_unless($me, 403);
         $data = $request->validate(['first_name' => ['required', 'string', 'max:100'], 'last_name' => ['required', 'string', 'max:100'],
             'date_of_birth' => ['required', 'date_format:Y-m-d', 'before_or_equal:today'], 'sex' => ['nullable', 'in:Female,Male,Prefer not to say'],
-            'relationship' => ['required', 'string', 'max:40'], 'consent' => ['accepted']]);
+            'relationship' => ['required', 'string', 'max:40'], 'relationship_other' => ['nullable', 'string', 'max:100'], 'consent' => ['accepted']]);
+        if (strcasecmp(trim($data['relationship']), 'Other') === 0 && trim((string) ($data['relationship_other'] ?? '')) === '') {
+            throw ValidationException::withMessages(['relationship_other' => ['Please specify the relationship.']]);
+        }
         if (Guardianship::isMinor($me->person?->date_of_birth?->toDateString())) throw ValidationException::withMessages(['guardian' => ['Only an adult (18 or older) can add dependents.']]);
         if (Guardianship::dependentsOf($me)->count() >= 10) throw ValidationException::withMessages(['first_name' => ['Ask the front desk to add more dependents.']]);
         $patient = DB::transaction(function () use ($me, $data, $request) {
@@ -44,7 +47,7 @@ class GuardianController extends Controller
             return Guardianship::addDependent($me, $data, $request->user());
         });
 
-        return response()->json(['data' => $this->view($patient->load('person'), $data['relationship'])], 201);
+        return response()->json(['data' => $this->view($patient->load('person'), $data['relationship'], strcasecmp(trim($data['relationship']), 'Other') === 0 ? trim((string) ($data['relationship_other'] ?? '')) : null)], 201);
     }
 
     /** Guardian (or Staff): a dependent of 18 or more gets an email to claim their own account. */
@@ -67,18 +70,21 @@ class GuardianController extends Controller
     public function link(Request $request, Patient $patient): JsonResponse
     {
         Gate::authorize('update', $patient);
-        $data = $request->validate(['guardian_patient_id' => ['required', 'string', 'max:40'], 'relationship' => ['required', 'string', 'max:40']]);
+        $data = $request->validate(['guardian_patient_id' => ['required', 'string', 'max:40'], 'relationship' => ['required', 'string', 'max:40'], 'relationship_other' => ['nullable', 'string', 'max:100']]);
+        if (strcasecmp(trim($data['relationship']), 'Other') === 0 && trim((string) ($data['relationship_other'] ?? '')) === '') {
+            throw ValidationException::withMessages(['relationship_other' => ['Please specify the relationship.']]);
+        }
         $guardian = Patient::where('public_id', $data['guardian_patient_id'])->firstOrFail();
-        $link = Guardianship::link($patient, $guardian, $data['relationship'], $request->user(), null);
+        $link = Guardianship::link($patient, $guardian, $data['relationship'], $request->user(), null, $data['relationship_other'] ?? null);
 
-        return response()->json(['data' => ['id' => $link->public_id, 'guardian' => $guardian->person?->fullName(), 'relationship' => $link->relationship]], 201);
+        return response()->json(['data' => ['id' => $link->public_id, 'guardian' => $guardian->person?->fullName(), 'relationship' => $link->relationship, 'relationship_other' => $link->relationship_other]], 201);
     }
 
-    private function view(Patient $p, string $relationship): array
+    private function view(Patient $p, string $relationship, ?string $relationshipOther = null): array
     {
         $dob = $p->person?->date_of_birth?->toDateString();
 
         return ['id' => $p->public_id, 'code' => $p->patient_code, 'name' => $p->person?->fullName(), 'first_name' => $p->person?->first_name,
-            'date_of_birth' => $dob, 'relationship' => $relationship, 'minor' => Guardianship::isMinor($dob), 'age' => Guardianship::age($dob), 'has_account' => $p->user !== null];
+            'date_of_birth' => $dob, 'relationship' => $relationship, 'relationship_other' => $relationshipOther, 'minor' => Guardianship::isMinor($dob), 'age' => Guardianship::age($dob), 'has_account' => $p->user !== null];
     }
 }

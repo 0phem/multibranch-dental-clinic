@@ -37,3 +37,14 @@ test('M19: the patient sees issued prescriptions read-only with a PDF, and a voi
   assert.doesNotMatch(page, /updatePrescription|issuePrescription|voidPrescription/)
   assert.match(read('src/patient/Portal.jsx'), /\['prescriptions', 'file', 'Prescriptions'\]/)
 })
+
+test('DEN-06 / DEN-07 / DEN-08: medicine dropdown omits dosage, remove medicine is danger-styled, and license Save button uses standard size', () => {
+  const page = read('src/pages/ServerPrescriptions.jsx'), foundation = read('src/foundation.css'), autoCss = read('src/automations.css')
+  assert.doesNotMatch(page, /'Amoxicillin 500mg'|'Mefenamic Acid 500mg'|'Paracetamol 500mg'|'Ibuprofen 400mg'|'Co-amoxiclav 625mg'|'Clindamycin 300mg'|'Tranexamic Acid 500mg'|'Celecoxib 200mg'|'Chlorhexidine 0\.12% Oral Rinse'/)
+  assert.match(page, /'Amoxicillin'/)
+  assert.match(page, /<Button size="sm" variant="danger" onClick=\{\(\) => setLines\(ls => ls\.filter/)
+  assert.match(foundation, /\.btn\.danger:hover:not\(:disabled\)/)
+  assert.match(page, /<form className="au-form rx-license-row"/)
+  assert.match(page, /<div className="au-actions"><Button type="submit" disabled=\{busy\}>\{busy \? 'Saving…' : 'Save'\}<\/Button><\/div>/)
+  assert.match(autoCss, /\.rx-license-row \{ display: flex; flex-wrap: wrap; align-items: flex-end;/)
+})

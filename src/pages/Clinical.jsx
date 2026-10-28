@@ -8,7 +8,7 @@ import { HandoverPanel } from './Handovers.jsx'
 import { FollowupPanel } from './ServerFollowups.jsx'
 import { ChartView } from './DentalChart.jsx'
 
-import { visibleHmo } from '../phase3-contracts.js'
+import { visibleHmo, HMO_PROVIDERS } from '../phase3-contracts.js'
 import { visiblePrescriptions, prescriptionTasks, linkedTreatment, followupDisplayState } from '../phase2.js'
 import { inScope, isTodayQueue, patientInScope, sessionForRole } from '../contracts.js'
 import { loadPatientRecord, loadPatientRecordIndex, savePatientRecord } from '../patient-records-api.js'
@@ -37,7 +37,7 @@ export function PatientsPage({ role, store, context, setPage }) {
     return `${p.name} ${p.patientCode||''} ${p.phone||''}`.toLowerCase().includes(term)
   })
   const [newOpen,setNewOpen]=useState(false)
-  const [newPatient,setNewPatient]=useState({firstName:'',lastName:'',dob:'',sex:'Female',phone:'',email:'',address:'',preferredBranch:'Dr. Dana Roxas Dental Clinic',hmo:'None',hmoMember:'—',allergies:'None',medicalHistory:'',dentalHistory:'',emergencyContact:'',consent:false,createPortalAccount:false})
+  const [newPatient,setNewPatient]=useState({firstName:'',lastName:'',dob:'',sex:'Female',sexOther:'',phone:'',email:'',address:'',preferredBranch:'Dr. Dana Roxas Dental Clinic',hmo:'None',hmoMember:'—',allergies:'None',medicalHistory:'',dentalHistory:'',emergencyContact:'',consent:false,createPortalAccount:false})
   const patient=availablePatients.find(p=>p.id===selected)
   const serverPatient=serverSession&&!!patient?.serverProjection
   const [searchError,setSearchError]=useState('')
@@ -82,14 +82,14 @@ export function PatientsPage({ role, store, context, setPage }) {
     if(role!=='staff')return
     if(serverSession)return
     const result=actions.createPatientRecord({
-      person:{firstName:newPatient.firstName,lastName:newPatient.lastName,dob:newPatient.dob,sex:newPatient.sex,phone:newPatient.phone,email:newPatient.email,address:newPatient.address},
+      person:{firstName:newPatient.firstName,lastName:newPatient.lastName,dob:newPatient.dob,sex:newPatient.sex,sexOther:newPatient.sexOther,phone:newPatient.phone,email:newPatient.email,address:newPatient.address},
       patient:{preferredBranch:newPatient.preferredBranch,allergies:newPatient.allergies,medicalHistory:newPatient.medicalHistory,dentalHistory:newPatient.dentalHistory,emergencyContact:newPatient.emergencyContact,consent:newPatient.consent},
       createPortalAccount:newPatient.createPortalAccount
     })
     if(!result.ok)return toast(result.message,'warning')
     toast(result.record.userId?'Patient record and portal account created.':'Centralized patient record created.','success')
     setSelected(result.record.id);setNewOpen(false)
-    setNewPatient({firstName:'',lastName:'',dob:'',sex:'Female',phone:'',email:'',address:'',preferredBranch:'Dr. Dana Roxas Dental Clinic',hmo:'None',hmoMember:'—',allergies:'None',medicalHistory:'',dentalHistory:'',emergencyContact:'',consent:false,createPortalAccount:false})
+    setNewPatient({firstName:'',lastName:'',dob:'',sex:'Female',sexOther:'',phone:'',email:'',address:'',preferredBranch:'Dr. Dana Roxas Dental Clinic',hmo:'None',hmoMember:'—',allergies:'None',medicalHistory:'',dentalHistory:'',emergencyContact:'',consent:false,createPortalAccount:false})
   }
   const tabs=[{key:'summary',label:'Summary'},{key:'visits',label:'Visit history',count:visits.length},{key:'clinical',label:'Clinical',count:treatments.length},{key:'hmo',label:'HMO',count:hmo.length},{key:'documents',label:'Documents'}]
   return <>
@@ -135,9 +135,10 @@ export function PatientsPage({ role, store, context, setPage }) {
       <Field label="Preferred branch"><select value={newPatient.preferredBranch} onChange={e=>setNewPatient({...newPatient,preferredBranch:e.target.value})}>{state.branches.filter(b=>role==='owner'||b.id===session.branchId).map(b=><option key={b.id}>{b.name}</option>)}</select></Field>
       <Field label="Address"><textarea value={newPatient.address} onChange={e=>setNewPatient({...newPatient,address:e.target.value})}/></Field>
       <Field label="Emergency contact"><textarea value={newPatient.emergencyContact} onChange={e=>setNewPatient({...newPatient,emergencyContact:e.target.value})}/></Field>
+      <Field label="HMO provider"><select value={newPatient.hmo||'None'} onChange={e=>setNewPatient({...newPatient,hmo:e.target.value})}><option value="None">None</option>{HMO_PROVIDERS.filter(p=>!p.legacy).map(p=><option key={p.id} value={p.name}>{p.name}</option>)}</select></Field>
       <label className="check-control"><input type="checkbox" checked={newPatient.consent} onChange={e=>setNewPatient({...newPatient,consent:e.target.checked})}/><span><b>Consent recorded</b><small>Frontend marker only; real consent evidence is stored separately.</small></span></label>
       <label className="check-control"><input type="checkbox" checked={newPatient.createPortalAccount} onChange={e=>setNewPatient({...newPatient,createPortalAccount:e.target.checked})}/><span><b>Create patient portal account</b><small>Optional. A patient record may exist without a login.</small></span></label>
-      <Button className="span-2" onClick={createPatient}>Create Central Patient Record</Button>
+      <Button className="span-2" disabled={newPatient.sex==='Other'&&!(newPatient.sexOther||'').trim()} onClick={createPatient}>Create Central Patient Record</Button>
     </div></Modal>}
   </>
 }
@@ -289,6 +290,8 @@ function StaffPatientSummary({ patient, role, branches, toast, store }) {
       {record.sex!==undefined&&<Field label="Sex"><input value={form.sex} disabled={!editable} onChange={e=>update('sex',e.target.value)}/></Field>}
       {record.address!==undefined&&<Field label="Address"><textarea value={form.address} disabled={!editable} onChange={e=>update('address',e.target.value)}/></Field>}
       {record.emergencyContact!==undefined&&<Field label="Emergency contact"><textarea value={form.emergencyContact} disabled={!editable} onChange={e=>update('emergencyContact',e.target.value)}/></Field>}
+      {record.hmoProviderName!==undefined&&<Field label="HMO provider"><select value={form.hmoProviderName||''} disabled={!editable} onChange={e=>update('hmoProviderName',e.target.value||null)}><option value="">None / Not recorded</option>{HMO_PROVIDERS.filter(p=>!p.legacy).map(p=><option key={p.id} value={p.name}>{p.name}</option>)}</select></Field>}
+      {record.hmoMemberNumber!==undefined&&<Field label="HMO member number"><input value={form.hmoMemberNumber||''} disabled={!editable} onChange={e=>update('hmoMemberNumber',e.target.value||null)} placeholder="e.g. 123456789"/></Field>}
       <div className="span-2"><Notice tone="info" title="Clinical history">Allergies, medical history and dental history are not stored on the clinic server yet, so they are not shown or editable here. They change only through an authorized Dentist workflow.</Notice></div>
       {counts&&<div className="span-2"><Notice tone="info" title="Linked records">{[['appointments','appointments'],['visits','visits'],['treatments','treatments'],['invoices','invoices'],['hmo_cases','HMO cases']].map(([key,label])=>`${counts[key]} ${label}`).join(' • ')}{index.limit&&Object.values(counts).some(n=>n>=index.limit)?` (showing up to ${index.limit} per list)`:''}. These records are kept in their own modules and open from the tabs above.</Notice></div>}
       {problem&&<div className="span-2"><Notice tone={problem.tone} title={problem.conflict?'Record changed':undefined}>{problem.message}{problem.conflict&&<> <Button size="sm" variant="ghost" onClick={()=>setAttempt(attempt+1)}>Reload record</Button></>}</Notice></div>}

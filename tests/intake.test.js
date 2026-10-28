@@ -55,7 +55,7 @@ test('the scan runs on the device: lazy-loaded, self-hosted OCR, no upload, cons
 test('counter registration: routes, today’s code, consent, why each field, minors through a guardian', () => {
   assert.equal(publicViewFromHash('#join/b1'), 'join'); assert.equal(publicViewFromHash('#claim-account'), 'claim')
   const join = read('src/pages/Join.jsx')
-  assert.match(join, /Today’s code at the front desk/); assert.match(join, /disabled=\{busy \|\| !consent\}/)
+  assert.match(join, /Today’s code at the front desk/); assert.match(join, /disabled=\{busy \|\| !consent/)
   for (const why of ['name:', 'date_of_birth:', 'phone:', 'email:', 'emergency:']) assert.ok(join.includes(why), why)
   assert.match(join, /Under 18\? A parent or guardian registers them here/)
   assert.doesNotMatch(join, /kiosk/i)
@@ -92,4 +92,29 @@ test('walkthrough fixes: phone-only intake, honest invite outcome, a dependent n
   assert.match(book, /\$\{forName\} is booked!/)
   assert.match(read('src/pages/Clinical.jsx'), /<IdCheck patientId=\{patient\.id\}/) // offer an account from the patient record
   assert.match(read('src/pages/CounterIntake.jsx'), /Under 18: no online account of their own/)
+})
+
+test('STF-04 counter intake ID check: "other" ID requires specify text and passes other_details', () => {
+  const staff = read('src/pages/CounterIntake.jsx')
+  assert.match(staff, /type === 'other' && <input type="text" placeholder="Specify ID \(e\.g\. PhilHealth, Company ID\)"/)
+  assert.match(staff, /disabled=\{busy \|\| \(type === 'other' && !otherText\.trim\(\)\)\}/)
+  assert.match(staff, /other_details: type === 'other' \? \(r\.data\?\.other_details \|\| otherText\.trim\(\)\) : null/)
+  assert.match(staff, /record\.id_check\.other_details \? ` \(\$\{record\.id_check\.other_details\}\)` : ''/)
+  assert.doesNotMatch(staff, /setCorrections/)
+  assert.match(staff, /\.\.\.\(idType === 'other' \? \{ other_details: idOther\.trim\(\) \} : \{\}\)/)
+  assert.match(staff, /disabled=\{!!busy \|\| \(idChecked && idType === 'other' && !idOther\.trim\(\)\)\}/)
+})
+
+test('GEN-07 "other" choices require specify field and block saving without it in Join, Family, and Clinical', () => {
+  const join = read('src/pages/Join.jsx'), family = read('src/patient/pages/Family.jsx'), clinical = read('src/pages/Clinical.jsx'), workflow = read('src/workflow.js')
+  assert.match(join, /<SelectWithOther label="Relationship" required value=\{d\.relationship\}/)
+  assert.match(join, /placeholder="e\.g\., Niece, Nephew, Cousin"/)
+  assert.match(join, /deps\.some\(d => d\.relationship === 'Other' && !\(d\.relationship_other \|\| ''\)\.trim\(\)\)/)
+  assert.match(family, /<SelectWithOther label="Relationship" required value=\{form\.relationship\}/)
+  assert.match(family, /placeholder="e\.g\., Niece, Nephew, Cousin"/)
+  assert.match(family, /\(form\.relationship === 'Other' && !\(form\.relationship_other \|\| ''\)\.trim\(\)\)/)
+  assert.match(clinical, /disabled=\{newPatient\.sex==='Other'&&!\(newPatient\.sexOther\|\|''\)\.trim\(\)\} onClick=\{createPatient\}/)
+  assert.match(workflow, /if\(person\.sex==='Other'&&!clean\(person\.sexOther\)\)return fail\('Please specify sex \/ gender when Other is selected\.'\)/)
+  assert.match(workflow, /sex:person\.sex==='Other'\?clean\(person\.sexOther\):clean\(person\.sex\)/)
+  assert.match(read('src/administration.js'), /if\('sex' in personPatch\)personPatch\.sexOther=\['Female','Male',''\]\.includes\(personPatch\.sex\)\?'':personPatch\.sex/)
 })

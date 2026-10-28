@@ -14,7 +14,7 @@ const when = iso => (iso ? `${dateLabel(iso.slice(0, 10))} ${displayTime(iso.sli
 export function ServerInquiriesPage({ store }) {
   const { state, toast } = store
   const session = store.session
-  const branches = (session?.branchScopes || []).map(id => ({ id, name: state.branches.find(b => b.id === id)?.name || id }))
+  const branches = (session?.branchScopes || []).map(id => ({ id, name: state.branches.find(b => b.id === id)?.name || id })); const sessionBranchId = session?.branchId && (!branches.length || branches.some(b => b.id === session.branchId)) ? session.branchId : ''
   const [rows, setRows] = useState(null)
   const [nextCursor, setNextCursor] = useState(null)
   const [error, setError] = useState('')
@@ -23,9 +23,9 @@ export function ServerInquiriesPage({ store }) {
   const [filterSearch, setFilterSearch] = useState('')
   const [filterStatus, setFilterStatus] = useState('All')
   const [filterSource, setFilterSource] = useState('All')
-  const [filterBranch, setFilterBranch] = useState('All')
+
   const [closingInquiry, setClosingInquiry] = useState(null)
-  const [form, setForm] = useState(() => emptyForm(branches.length === 1 ? branches[0].id : ''))
+  const [form, setForm] = useState(() => emptyForm(sessionBranchId))
   const [busy, setBusy] = useState(false)
   const [linking, setLinking] = useState(null)
   const [appointmentId, setAppointmentId] = useState('')
@@ -56,13 +56,14 @@ export function ServerInquiriesPage({ store }) {
     replace(result.row); toast(message, 'success'); return true
   }
   const add = async () => {
-    if (!form.branchId) return toast('Choose the branch this inquiry belongs to.', 'warning')
+    if (!sessionBranchId) return toast('Your active branch could not be determined for this session.', 'warning')
+    const scopedForm = { ...form, branchId: sessionBranchId }
     setBusy(true)
-    const result = await captureInquiry(form, key.current)
+    const result = await captureInquiry(scopedForm, key.current)
     setBusy(false)
     if (!result.ok) return toast(result.message, 'warning')
     setRows(previous => [result.row, ...(previous || []).filter(r => r.id !== result.row.id)])
-    setForm(emptyForm(form.branchId)); key.current = commandKey(); toast('Inquiry recorded and assigned to you.', 'success')
+    setForm(emptyForm(sessionBranchId)); key.current = commandKey(); toast('Inquiry recorded and assigned to you.', 'success')
   }
   const link = async () => {
     if (!appointmentId) return toast('Choose the appointment that resulted from this inquiry.', 'warning')
@@ -74,14 +75,14 @@ export function ServerInquiriesPage({ store }) {
     <PageHeader title="Social Media & External Inquiry Management" text="Record inquiries your team receives from social media or the website, track who answered them, and link an inquiry to the appointment that followed."/>
     <Notice tone="info" title="Recorded manually">Staff type each inquiry in. The source is only where Staff say it came from: it does not mean the clinic has an official account there, and this system is not connected to Facebook, Instagram, the website or any other platform, fetches nothing from them and sends no messages. “Responded” only records that you replied outside this system. You see the inquiries assigned to you in your branches.</Notice>
     <Card title="Record an inquiry"><div className="form-grid">
-      <Field label="Branch" required><select value={form.branchId} onChange={e => edit({ branchId: e.target.value })}><option value="">Select branch</option>{branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</select></Field>
+
       <Field label="Source reported by Staff" required><select value={form.source} onChange={e => edit({ source: e.target.value })}>{SOURCES.map(s => <option key={s}>{s}</option>)}</select></Field>
       <Field label="Contact name" required><input value={form.name} maxLength={LIMITS.name} onChange={e => edit({ name: e.target.value })}/></Field>
       <Field label="Contact handle or number"><input value={form.contact} maxLength={LIMITS.contact} autoComplete="off" onChange={e => edit({ contact: e.target.value })}/></Field>
       <Field label="What they asked" required><textarea value={form.topic} maxLength={LIMITS.topic} onChange={e => edit({ topic: e.target.value })}/></Field>
       {(()=>{
         const pot = (form.name.trim() || form.contact.trim()) ? (rows || []).find(r => {
-          if (form.branchId && r.branchId && r.branchId !== form.branchId) return false
+          if (!sessionBranchId || r.branchId !== sessionBranchId) return false
           const n = form.name.trim().toLowerCase()
           const c = form.contact.trim().toLowerCase()
           if (n && r.name?.toLowerCase() === n) return true
@@ -98,7 +99,7 @@ export function ServerInquiriesPage({ store }) {
       const visibleRows = (rows || []).filter(i => {
         if (filterStatus !== 'All' && i.status !== filterStatus) return false
         if (filterSource !== 'All' && i.source !== filterSource) return false
-        if (filterBranch !== 'All' && i.branchName !== filterBranch && i.branchId !== filterBranch) return false
+        if (!sessionBranchId || i.branchId !== sessionBranchId) return false
         if (filterSearch.trim()) {
           const q = filterSearch.trim().toLowerCase()
           const n = (i.name || '').toLowerCase()
@@ -113,7 +114,7 @@ export function ServerInquiriesPage({ store }) {
           search={filterSearch}
           onSearchChange={setFilterSearch}
           searchPlaceholder="Filter inquiries by contact or topic…"
-          onClear={(filterSearch || filterStatus !== 'All' || filterSource !== 'All' || filterBranch !== 'All') ? () => { setFilterSearch(''); setFilterStatus('All'); setFilterSource('All'); setFilterBranch('All') } : null}
+          onClear={(filterSearch || filterStatus !== 'All' || filterSource !== 'All') ? () => { setFilterSearch(''); setFilterStatus('All'); setFilterSource('All') } : null}
         >
           <select aria-label="Filter inquiries by status" value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
             <option value="All">All statuses</option>
@@ -126,10 +127,10 @@ export function ServerInquiriesPage({ store }) {
             <option value="All">All sources</option>
             {SOURCES.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
-          {branches.length > 1 && <select aria-label="Filter inquiries by branch" value={filterBranch} onChange={e => setFilterBranch(e.target.value)}>
-            <option value="All">All branches</option>
-            {branches.map(b => <option key={b.id} value={b.name}>{b.name}</option>)}
-          </select>}
+
+
+
+
         </FilterBar>
         {!rows.length && <Notice>No inquiries are assigned to you yet.</Notice>}
         {rows.length > 0 && !visibleRows.length && <Notice>No inquiries match your selected filters.</Notice>}

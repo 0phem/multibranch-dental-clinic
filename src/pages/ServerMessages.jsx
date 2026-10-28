@@ -1,5 +1,5 @@
 import React, { useEffect, useReducer, useRef, useState } from 'react'
-import { Button, ConfirmDialog, Empty, Field, Icon, Notice, PageHeader, Status } from '../components.jsx'
+import { Button, ConfirmDialog, Empty, Field, Icon, Notice, PageHeader, SearchInput, Status } from '../components.jsx'
 import { PageHead } from '../patient/ui.jsx'
 import { commandKey } from '../appointments-api.js'
 import { useVisibleRefresh } from '../use-visible-refresh.js'
@@ -17,6 +17,14 @@ const POLL_MS = 10000
 const SAFETY_POLL_MS = 60000
 const time = iso => (iso ? iso.slice(11, 16) : '')
 const day = iso => (iso ? iso.slice(0, 10) : '')
+function highlightText(text, query) {
+  const raw = String(text ?? '')
+  const q = String(query ?? '').trim()
+  if (!q) return raw
+  const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const parts = raw.split(new RegExp(`(${escaped})`, 'gi'))
+  return parts.map((part, idx) => (part.toLowerCase() === q.toLowerCase() ? <mark key={idx} className="chat-highlight">{part}</mark> : part))
+}
 
 function LiveStatus({ state }) {
   const label = state === 'live' ? 'Live' : state === 'connecting' ? 'Connecting…' : state === 'disabled' ? `Updates every ${POLL_MS / 1000} s` : `Reconnecting — checking every ${POLL_MS / 1000} s`
@@ -47,14 +55,15 @@ export function ServerMessagesPage({ store, role, initial = null }) {
   const selected = list?.find(c => c.id === selectedId) || null
   const thread = selectedId ? threads[selectedId] : null
   const [confirmClose, setConfirmClose] = useState(false)
+  const [search, setSearch] = useState('')
 
   const refreshList = async () => {
     const result = await loadConversations()
-    if (!result.ok) { if (!list) setError(result.message || 'Conversations could not be loaded.'); return }
+    if (!result.ok) { if (!list) setError(result.message || 'Conversations could not be loaded.'); return null }
     setError(''); setList(result.rows); setNextCursor(result.nextCursor)
-    setChannels(previous => (previous.join() === result.channels.join() ? previous : result.channels))
+    setChannels(previous => (previous.join() === result.channels.join() ? previous : result.channels)); return result.rows
   }
-  useEffect(() => { refreshList().then(() => { if (initial?.conversationId) openThread(initial.conversationId) }) }, [])
+  useEffect(() => { refreshList().then(rows => { if (initial?.conversationId) openThread(initial.conversationId); else if (initial?.patientId && Array.isArray(rows)) { const found = rows.find(c => c.patient?.id === initial.patientId || c.patientId === initial.patientId); if (found) openThread(found.id) } }) }, [])
   useEffect(() => onRealtimeState(setLive), [])
   useEffect(() => { startRealtime() }, [])
 
@@ -127,7 +136,29 @@ export function ServerMessagesPage({ store, role, initial = null }) {
     markRead(selectedId, newestShown).then(r => { if (current && r.ok) refreshList() })
     return () => { current = false }
   }, [selectedId, newestShown])
-  useEffect(() => { const el = logRef.current; if (el) el.scrollTop = el.scrollHeight }, [selectedId, thread?.messages?.length, (pending[selectedId] || []).length])
+  const prevSelectedId = useRef(selectedId)
+  const prevLastMessageId = useRef(null)
+  const prevPendingCount = useRef(0)
+
+  useEffect(() => {
+    const el = logRef.current
+    if (!el) return
+    const msgs = thread?.messages || []
+    const lastMsgId = msgs.length ? msgs[msgs.length - 1].id : null
+    const pendingCount = (pending[selectedId] || []).length
+
+    const isNewConversation = prevSelectedId.current !== selectedId
+    const isNewBottomMessage = lastMsgId && lastMsgId !== prevLastMessageId.current
+    const isNewPending = pendingCount > prevPendingCount.current
+
+    prevSelectedId.current = selectedId
+    prevLastMessageId.current = lastMsgId
+    prevPendingCount.current = pendingCount
+
+    if (isNewConversation || isNewPending || isNewBottomMessage) {
+      el.scrollTop = el.scrollHeight
+    }
+  }, [selectedId, thread?.messages, (pending[selectedId] || []).length])
 
   const deliver = async (conversationId, item) => {
     setPending(previous => ({ ...previous, [conversationId]: (previous[conversationId] || []).map(p => (p.key === item.key ? { ...p, status: 'sending', message: '' } : p)) }))
@@ -164,6 +195,15 @@ export function ServerMessagesPage({ store, role, initial = null }) {
 
   const title = c => (patient ? `${c.branchName || 'Clinic'} front desk` : `${c.patientName || 'Patient'}${c.patientCode ? ` · ${c.patientCode}` : ''}`)
   const subtitle = c => (patient ? (c.assignedName ? `With ${c.assignedName}` : 'Waiting for the front desk') : `${c.branchName}${c.assignedName ? ` · ${c.assignedToMe ? 'Handled by you' : `Handled by ${c.assignedName}`}` : ' · Not answered yet'}`)
+  const searchQuery = search.trim()
+  const searchLower = searchQuery.toLowerCase()
+  const filteredList = (list || []).filter(c => {
+    if (!searchLower) return true
+    const contactHaystack = `${title(c)} ${subtitle(c)} ${c.patientName || ''} ${c.patientCode || ''} ${c.branchName || ''} ${c.context || ''} ${(c.participants || []).map(p => p.name).join(' ')}`.toLowerCase()
+    if (contactHaystack.includes(searchLower)) return true
+    const msgs = threads[c.id]?.messages || []
+    return msgs.some(m => (m.body || '').toLowerCase().includes(searchLower) || (m.senderName || '').toLowerCase().includes(searchLower))
+  })
 
   return <div className={patient ? 'pt-page is-wide' : undefined}>
     {patient
@@ -177,9 +217,11 @@ export function ServerMessagesPage({ store, role, initial = null }) {
     {!list && !error && <div className="chat-skeleton" aria-busy="true"><Notice>Loading conversations…</Notice></div>}
     {list && <div className={`chat ${selectedId || composing ? 'has-thread' : ''}`}>
       <section className="chat-list" aria-label="Conversations">
+        <SearchInput className="chat-search" value={search} onChange={setSearch} onClear={() => setSearch('')} placeholder="Search messages or contacts…" ariaLabel="Search messages or contacts"/>
         {!list.length && <Empty title="No conversations yet" text={patient ? 'Start one with “New message”. The front desk usually replies during clinic hours.' : 'New Patient messages for your branch will appear here.'}/>}
-        <ul>{list.map(c => <li key={c.id}><button type="button" aria-current={c.id === selectedId ? 'true' : undefined} className={`chat-row ${c.id === selectedId ? 'selected' : ''} ${c.unread ? 'is-unread' : ''}`} onClick={() => openThread(c.id)}>
-          <span className="chat-row-main"><b>{title(c)}</b><small>{subtitle(c)}</small></span>
+        {list.length > 0 && !filteredList.length && <Empty title="No matching messages or contacts" text="Try a different keyword, patient name, or code."/>}
+        <ul>{filteredList.map(c => <li key={c.id}><button type="button" aria-current={c.id === selectedId ? 'true' : undefined} className={`chat-row ${c.id === selectedId ? 'selected' : ''} ${c.unread ? 'is-unread' : ''}`} onClick={() => openThread(c.id)}>
+          <span className="chat-row-main"><b>{searchQuery ? highlightText(title(c), searchQuery) : title(c)}</b><small>{searchQuery ? highlightText(subtitle(c), searchQuery) : subtitle(c)}</small></span>
           <span className="chat-row-meta">{c.lastMessageAt && <small>{day(c.lastMessageAt)}</small>}{c.unread > 0 ? <span className="chat-badge"><span aria-hidden="true">{c.unread}</span><span className="sr-only">{c.unread} unread</span></span> : c.closed ? <Status>Closed</Status> : null}</span>
         </button></li>)}</ul>
         {nextCursor && <Button variant="soft" onClick={loadMore}>Load more conversations</Button>}
@@ -202,7 +244,7 @@ export function ServerMessagesPage({ store, role, initial = null }) {
             {!thread.messages.length && <p className="muted">No messages yet.</p>}
             {thread.messages.map((m, i) => <React.Fragment key={m.id}>
               {day(m.sentAt) !== day(thread.messages[i - 1]?.sentAt) && <div className="chat-day">{day(m.sentAt)}</div>}
-              <div className={`chat-bubble ${m.mine ? 'mine' : ''}`}><small>{m.mine ? 'You' : `${m.senderName}${m.senderRole ? ` · ${m.senderRole}` : ''}`}</small><p>{m.body}</p><span className="chat-time">{time(m.sentAt)}</span></div>
+              <div className={`chat-bubble ${m.mine ? 'mine' : 'theirs'}`}><small>{m.mine ? 'You' : `${m.senderName}${m.senderRole ? ` · ${m.senderRole}` : ''}`}</small>{searchQuery ? <p>{highlightText(m.body, searchQuery)}</p> : <p>{m.body}</p>}<span className="chat-time">{time(m.sentAt)}</span></div>
             </React.Fragment>)}
             {(pending[selected.id] || []).map(p => <div key={p.key} className={`chat-bubble mine is-${p.status}`}><small>You</small><p>{p.text}</p>
               {p.status === 'sending' ? <span className="chat-time">Sending…</span> : <span className="chat-failed" role="alert">Not sent. {p.message} {!p.final && <button type="button" className="text-link" onClick={() => deliver(selected.id, p)}>Retry</button>} <button type="button" className="text-link" onClick={() => discard(selected.id, p.key)}>Discard</button></span>}
@@ -293,16 +335,16 @@ function AddDentist({ conversationId, onAdded, toast }) {
   const add = async () => {
     const result = await addDentist(conversationId, choice)
     if (!result.ok) return toast(result.message, 'warning')
-    toast(result.added ? 'Dentist added to the conversation.' : 'That Dentist is already in this conversation.', 'success')
+    toast(result.added ? 'Switched dentist for this conversation.' : 'That Dentist is already in this conversation.', 'success')
     setOpen(false); onAdded()
   }
-  if (!open) return <Button size="sm" variant="soft" onClick={show}>Add dentist</Button>
+  if (!open) return <Button size="sm" variant="soft" onClick={show}>Switch dentist</Button>
   return <span className="chat-add-dentist">
-    <label className="sr-only" htmlFor={`dentist-${conversationId}`}>Dentist to add</label>
+    <label className="sr-only" htmlFor={`dentist-${conversationId}`}>Dentist to switch to</label>
     <select id={`dentist-${conversationId}`} value={choice} onChange={e => setChoice(e.target.value)} disabled={!rows}>
       <option value="">{rows ? 'Choose a dentist' : 'Loading…'}</option>
       {(rows || []).map(d => <option key={d.id} value={d.id} disabled={d.participant}>{d.name}{d.participant ? ' (already added)' : ''}</option>)}
     </select>
-    <Button size="sm" disabled={!choice} onClick={add}>Add</Button><Button size="sm" variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
+    <Button size="sm" disabled={!choice} onClick={add}>Switch</Button><Button size="sm" variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
   </span>
 }

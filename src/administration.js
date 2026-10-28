@@ -63,6 +63,7 @@ export function administrationActions(run) {
     if(patientPatch.preferredBranchId&&!state.branches.some(b=>b.id===patientPatch.preferredBranchId))return fail('Choose an existing preferred branch.')
     if(patientPatch.hmo!==undefined)patientPatch.hmoProviderId=HMO_PROVIDERS.find(h=>h.name===patientPatch.hmo)?.id||null
     if(unchanged(person,personPatch)&&unchanged(patient,patientPatch))return {ok:true,unchanged:true,record:patient}
+    if('sex' in personPatch)personPatch.sexOther=['Female','Male',''].includes(personPatch.sex)?'':personPatch.sex
     const record={...patient,...patientPatch,revision:(patient.revision||0)+1}
     state.persons=state.persons.map(p=>p.id===person.id?{...p,...personPatch}:p);state.patients=state.patients.map(p=>p.id===id?record:p)
     event(`patient:updated:${id}:${record.revision}`,'patient','patient.record.updated','Permitted patient fields updated',id,patient.preferredBranchId,{entityType:'patient',entityId:id})

@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { Button, Card, ConfirmDialog, Field, FilterBar, Notice, PageHeader } from '../components.jsx'
 import {
   addScheduleException, cancelLeave, copyProfileHours, decideLeave, leaveCalendar, leaveConflicts, leaveRequests, myLeave, notifyLeaveAffected,
-  notifyScheduleAffected, removeScheduleException, requestLeave, saveWeeklyHours, scheduleAffected, workSchedules,
+  notifyScheduleAffected, removeScheduleException, requestLeave, saveWeeklyHours, scheduleAffected, updateStaffProfile, workSchedules,
 } from '../api-client.js'
 import { commandKey, rescheduleAppointment } from '../appointments-api.js'
 
@@ -52,8 +52,8 @@ export function AffectedAppointments({ rows, wordingApproved, onNotify, onChange
 
 export function WorkSchedulesPage({ store, role }) {
   const toast = store?.toast || (() => {})
-  const [data, setData] = useState(null), [error, setError] = useState(''), [selected, setSelected] = useState(''), [affected, setAffected] = useState(null), [approved, setApproved] = useState(true)
-  const load = () => workSchedules().then(r => { if (r.ok) { setData(r.data); setError(''); setApproved(r.data.wording_approved); setSelected(s => s || r.data.dentists[0]?.id || '') } else setError(r.message || 'Work schedules could not be loaded.') })
+  const [data, setData] = useState(null), [error, setError] = useState(''), [selected, setSelected] = useState(''), [affected, setAffected] = useState(null), [approved, setApproved] = useState(true), [scheduleRole, setScheduleRole] = useState('dentist'), [selectedStaff, setSelectedStaff] = useState(''), [staffEditing, setStaffEditing] = useState(false), [staffStart, setStaffStart] = useState('09:00'), [staffEnd, setStaffEnd] = useState('18:00'), [staffBranch, setStaffBranch] = useState(''), [staffSaving, setStaffSaving] = useState(false)
+  const load = () => workSchedules().then(r => { if (r.ok) { setData(r.data); setError(''); setApproved(r.data.wording_approved); const ownDentist = role === 'dentist' ? (r.data.dentists.find(d => d.id === store?.session?.dentistId || d.userId === store?.session?.userId)) : null; setSelected(s => s || ownDentist?.id || r.data.dentists[0]?.id || '') } else setError(r.message || 'Work schedules could not be loaded.') })
   useEffect(() => { load() }, [])
   const dentist = data?.dentists.find(d => d.id === selected)
   const refreshAffected = () => dentist && scheduleAffected(dentist.id).then(r => { if (r.ok) { setAffected(r.data.affected); setApproved(r.data.wording_approved) } })
@@ -64,9 +64,44 @@ export function WorkSchedulesPage({ store, role }) {
   const ownStaffProfile = role === 'staff'
     ? (store?.state?.staff || []).find(s => s.userId === store?.session?.userId || s.id === store?.session?.staffId)
     : null
+  const rawStaff = (data?.staff && data.staff.length > 0) ? data.staff : (store?.state?.staff || [])
+  const staffList = rawStaff.map(s => {
+    const rawBranchName = s.branch?.name || s.branch || 'Dr. Dana Roxas Dental Clinic'
+    const foundBranch = store?.state?.branches?.find(b => b.name === rawBranchName || b.id === s.branch?.id || b.id === s.branchId)
+    return { id: s.id, name: s.name || s.fullName || s.id, title: s.title || s.staffType || s.role || 'Staff', branch: foundBranch ? foundBranch.name : rawBranchName, branchRef: foundBranch ? foundBranch.id : (s.branch?.id || 'b1'), shiftStart: s.shift_start || s.shiftStart || '09:00', shiftEnd: s.shift_end || s.shiftEnd || '18:00', available: s.available !== false }
+  })
+  const currentStaff = staffList.find(s => s.id === (selectedStaff || staffList[0]?.id)) || staffList[0]
+
+  useEffect(() => {
+    if (currentStaff) {
+      setStaffStart(currentStaff.shiftStart || '09:00')
+      setStaffEnd(currentStaff.shiftEnd || '18:00')
+      setStaffBranch(currentStaff.branchRef || '')
+    }
+  }, [currentStaff?.id])
+
+  const handleSaveStaffShift = async (e) => {
+    e.preventDefault()
+    if (!currentStaff) return
+    setStaffSaving(true)
+    const payload = {
+      shift_start: staffStart,
+      shift_end: staffEnd,
+      branch_ref: staffBranch || currentStaff.branchRef
+    }
+    const r = await updateStaffProfile(currentStaff.id, payload)
+    setStaffSaving(false)
+    if (!r.ok) {
+      toast(firstError(r) || 'Could not update staff schedule', 'warning')
+      return
+    }
+    toast(`Updated shift for ${currentStaff.name}: ${t12(staffStart)}–${t12(staffEnd)}.`, 'success')
+    setStaffEditing(false)
+    load()
+  }
 
   return <div className="st-page">
-    <PageHeader kicker={role === 'dentist' ? 'My hours' : role === 'owner' ? 'Administration' : 'Team'} title="Work schedules"
+    <PageHeader kicker={role === 'dentist' ? 'My hours' : role === 'owner' ? 'Administration' : 'Team'} title={role === 'dentist' ? 'My work hours' : 'Work schedules'}
       text="Each dentist’s weekly hours per branch, and dated exceptions. Online booking, the front desk, walk-ins and the calendar use only these hours, inside the branch’s opening hours and minus approved leave. A change never cancels an appointment."/>
     {role === 'staff' && (
       <Notice tone="info" title="My assigned staff shift (read-only)">
@@ -76,32 +111,108 @@ export function WorkSchedulesPage({ store, role }) {
       </Notice>
     )}
     {error && <Notice tone="warning" title="Unavailable">{error}</Notice>}
-    {!data ? <p className="au-muted" role="status">Loading…</p> : !data.dentists.length ? <Notice>No dentists to show for your branches.</Notice> : <>
-      <Card>
-        <Field label="Dentist"><select value={selected} onChange={e => setSelected(e.target.value)}>{data.dentists.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</select></Field>
-        {role === 'dentist' && <Notice tone="info" title="Roster and working hours are managed by the Clinic Owner and Front Desk staff">Dentists view rostered schedules and shift hours read-only. To request time off or coverage, submit a request under Leave.</Notice>}
-        {dentist?.demo && <Notice tone="info" title="Demo schedule, not confirmed by the clinic">These hours were made up for the demonstration. The clinic still has to give each dentist’s real hours.</Notice>}
-        {dentist?.profile_hours && <Notice tone="info" title="No weekly schedule yet">Booking uses the hours on the profile ({t12(dentist.profile_hours.start)}–{t12(dentist.profile_hours.end)}) on every day the branch is open, and the calendar marks its capacity as estimated.
-          {canEdit && <div className="ns-actions st-gap">{dentist.branches.filter(b => b.editable).map(b => <Button key={b.id} size="sm" variant="soft" onClick={async () => {
-            const r = await copyProfileHours(dentist.id, b.id); if (!r.ok) return toast(firstError(r), 'warning'); toast(`${r.data.created} day(s) added at ${b.name}. Edit any day below.`, 'success'); after(r)
-          }}>Start from these hours at {b.name}</Button>)}</div>}
-          {canEdit && <p className="au-muted">Once a dentist has a weekly schedule, a day without hours is a day off.</p>}</Notice>}
-      </Card>
-      {dentist && <WeeklyGrid dentist={dentist} data={data} toast={toast} onSaved={after} canEdit={canEdit}/>}
-      {dentist && <Card title="Affected appointments" subtitle="The next 90 days: booked times this dentist no longer covers.">
-        <AffectedAppointments rows={affected} wordingApproved={approved} toast={toast} canAct={role !== 'dentist'} onChanged={() => { refreshAffected() }}
-          onNotify={() => notifyScheduleAffected(dentist.id)}/>
-      </Card>}
-      <Exceptions data={data} dentist={dentist} toast={toast} onSaved={after} canEdit={canEdit}/>
-    </>}
+    {role !== 'dentist' && (
+      <div className="st-role-toggle" role="tablist" aria-label="Schedule role selector" style={{display:'flex',gap:'8px',marginBottom:'12px'}}>
+        <Button variant={scheduleRole === 'dentist' ? 'primary' : 'soft'} size="sm" onClick={() => setScheduleRole('dentist')} role="tab" aria-selected={scheduleRole === 'dentist'}>Dentist schedules</Button>
+        <Button variant={scheduleRole === 'staff' ? 'primary' : 'soft'} size="sm" onClick={() => setScheduleRole('staff')} role="tab" aria-selected={scheduleRole === 'staff'}>Staff schedules</Button>
+      </div>
+    )}
+    {scheduleRole === 'staff' ? (
+      !staffList.length ? <Notice>No staff members found for your branch.</Notice> : (
+        <>
+          <Card title="Staff work schedules">
+            <Field label="Staff member">
+              <select value={selectedStaff || currentStaff?.id || ''} onChange={e => { setSelectedStaff(e.target.value); setStaffEditing(false) }} aria-label="Select staff member">
+                {staffList.map(s => <option key={s.id} value={s.id}>{s.name} ({s.title} · {s.branch})</option>)}
+              </select>
+            </Field>
+            {currentStaff && (
+              <div style={{marginTop:'12px',padding:'12px',borderRadius:'6px',background:'var(--surface-subtle, #f8fafc)',border:'1px solid var(--line)'}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',flexWrap:'wrap',gap:'8px'}}>
+                  <div>
+                    <b style={{fontSize:'15px',display:'block'}}>{currentStaff.name}</b>
+                    <span className="au-muted" style={{fontSize:'13px'}}>{currentStaff.title} · Branch: {currentStaff.branch}</span>
+                    <div style={{marginTop:'4px',fontSize:'13px'}}>
+                      <span><b>Assigned shift:</b> {t12(currentStaff.shiftStart)}–{t12(currentStaff.shiftEnd)}</span>
+                      <span style={{marginLeft:'12px'}} className={`fd-badge ${currentStaff.available ? 'is-ok' : 'is-bad'}`}>
+                        {currentStaff.available ? 'Available / On-Duty' : 'Off-Duty'}
+                      </span>
+                    </div>
+                  </div>
+                  {role === 'owner' && !staffEditing && (
+                    <Button size="sm" variant="soft" onClick={() => setStaffEditing(true)}>Change shift</Button>
+                  )}
+                </div>
+                {role === 'owner' && staffEditing && (
+                  <form onSubmit={handleSaveStaffShift} className="au-form" style={{marginTop:'12px',paddingTop:'12px',borderTop:'1px solid var(--line)'}}>
+                    <div className="st-pair">
+                      <Field label="Shift start"><input type="time" value={staffStart} onChange={e => setStaffStart(e.target.value)} required/></Field>
+                      <Field label="Shift end"><input type="time" value={staffEnd} onChange={e => setStaffEnd(e.target.value)} required/></Field>
+                    </div>
+                    <Field label="Assigned branch">
+                      <select value={staffBranch || currentStaff.branchRef} onChange={e => setStaffBranch(e.target.value)}>
+                        {(store?.state?.branches || []).filter(b => b.status !== 'Closed').map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                      </select>
+                    </Field>
+                    <div className="ns-actions" style={{marginTop:'8px'}}>
+                      <Button type="submit" size="sm" disabled={staffSaving}>{staffSaving ? 'Saving…' : 'Save shift'}</Button>
+                      <Button type="button" size="sm" variant="ghost" onClick={() => setStaffEditing(false)}>Cancel</Button>
+                    </div>
+                  </form>
+                )}
+              </div>
+            )}
+          </Card>
+          {currentStaff && (
+            <Card title="Weekly roster coverage" subtitle="Assigned operational shifts across operating days.">
+              <ul className="st-week">
+                {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map((dayName, idx) => {
+                  const isDayOff = idx === 6
+                  return (
+                    <li key={dayName}>
+                      <b className="st-day">{dayName}</b>
+                      <div className="st-cells">
+                        <div className={`st-cell ${!isDayOff ? 'is-on' : ''}`}>
+                          <span className="st-branch">{currentStaff.branch}</span>
+                          <span>{!isDayOff ? `${t12(currentStaff.shiftStart)}–${t12(currentStaff.shiftEnd)}` : 'Day off'}</span>
+                        </div>
+                      </div>
+                    </li>
+                  )
+                })}
+              </ul>
+            </Card>
+          )}
+        </>
+      )
+    ) : (
+      !data ? <p className="au-muted" role="status">Loading…</p> : !data.dentists.length ? <Notice>No dentists to show for your branches.</Notice> : <>
+        <Card>
+          {role === 'dentist' ? (<div className="dentist-hours-header" style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:'12px',flexWrap:'wrap',paddingBottom:'10px',borderBottom:'1px solid var(--line)'}}><div><span className="block-muted" style={{fontSize:'11px',textTransform:'uppercase',letterSpacing:'0.05em',fontWeight:700}}>Rostered Provider</span><b style={{fontSize:'16px',color:'var(--ink)',display:'block',marginTop:'2px'}}>{dentist?.name || store?.session?.name || 'Dr. Dana Roxas'}</b><span className={`fd-badge ${dentist?.on_duty_today !== false ? 'is-ok' : 'is-muted'}`} style={{marginTop:'4px',display:'inline-block'}}>{dentist?.on_duty_today !== false ? 'Doctor is on duty today' : 'Off duty'}</span></div>{data.dentists.length > 1 && (<label style={{fontSize:'12px',display:'flex',alignItems:'center',gap:'6px'}}><span className="au-muted">Select dentist:</span><select value={selected} onChange={e => setSelected(e.target.value)} style={{width:'auto',minHeight:'36px',padding:'4px 8px'}}>{data.dentists.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</select></label>)}</div>) : (<div style={{display:'flex',flexDirection:'column',gap:'8px'}}><Field label="Dentist"><select value={selected} onChange={e => setSelected(e.target.value)}>{data.dentists.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</select></Field>{dentist && <div style={{display:'flex',alignItems:'center',gap:'8px',marginTop:'-4px'}}><span className={`fd-badge ${dentist.on_duty_today !== false ? 'is-ok' : 'is-muted'}`}>{dentist.on_duty_today !== false ? 'Doctor is on duty today' : 'Off duty'}</span></div>}</div>)}
+          {role === 'dentist' && <Notice tone="info" title="Roster and working hours are managed by the Clinic Owner and Front Desk staff">Dentists view rostered schedules and shift hours read-only. To request time off or coverage, submit a request under Leave.</Notice>}
+          {dentist?.demo && <Notice tone="info" title="Demo schedule, not confirmed by the clinic">These hours were made up for the demonstration. The clinic still has to give each dentist’s real hours.</Notice>}
+          {dentist?.profile_hours && <Notice tone="info" title="No weekly schedule yet">Booking uses the hours on the profile ({t12(dentist.profile_hours.start)}–{t12(dentist.profile_hours.end)}) on every day the branch is open, and the calendar marks its capacity as estimated.
+            {canEdit && <div className="ns-actions st-gap">{dentist.branches.filter(b => b.editable).map(b => <Button key={b.id} size="sm" variant="soft" onClick={async () => {
+              const r = await copyProfileHours(dentist.id, b.id); if (!r.ok) return toast(firstError(r), 'warning'); toast(`${r.data.created} day(s) added at ${b.name}. Edit any day below.`, 'success'); after(r)
+            }}>Start from these hours at {b.name}</Button>)}</div>}
+            {canEdit && <p className="au-muted">Once a dentist has a weekly schedule, a day without hours is a day off.</p>}</Notice>}
+        </Card>
+        {dentist && <WeeklyGrid dentist={dentist} data={data} toast={toast} onSaved={after} canEdit={canEdit} role={role}/>}
+        {dentist && <Card title="Affected appointments" subtitle="The next 90 days: booked times this dentist no longer covers.">
+          <AffectedAppointments rows={affected} wordingApproved={approved} toast={toast} canAct={role !== 'dentist'} onChanged={() => { refreshAffected() }}
+            onNotify={() => notifyScheduleAffected(dentist.id)}/>
+        </Card>}
+        <Exceptions data={data} dentist={dentist} toast={toast} onSaved={after} canEdit={canEdit}/>
+      </>
+    )}
   </div>
 }
 
-function WeeklyGrid({ dentist, data, toast, onSaved, canEdit = true }) {
+function WeeklyGrid({ dentist, data, toast, onSaved, canEdit = true, role = 'owner' }) {
   const [editing, setEditing] = useState(null)
   const rowFor = (branch, day) => dentist.weekly.find(w => w.branch.id === branch.id && w.weekday === Number(day))
   const hours = (branchId, day) => data.branches.find(b => b.id === branchId)?.hours?.[day]
-  return <Card title="Weekly hours" subtitle="Tap a day to change it. The hours must fall inside the branch’s opening hours.">
+  return <Card title={role === 'dentist' ? 'My rostered weekly hours' : 'Weekly hours'} subtitle={canEdit ? 'Tap a day to change it. The hours must fall inside the branch’s opening hours.' : 'Scheduled shift hours by branch for each day of the week (read-only).'}>
     <ul className="st-week">{Object.entries(data.weekdays).map(([day, name]) => <li key={day}>
       <b className="st-day">{name}</b>
       <div className="st-cells">{dentist.branches.map(b => {
@@ -227,8 +338,11 @@ function MyLeave({ toast, onChanged }) {
   const submit = async e => {
     e.preventDefault(); setErr('')
     if (f.type === 'other' && !f.private_note.trim()) return setErr('Please explain the reason for “Other” leave.')
+    const endDate = f.partial ? f.start_date : (f.end_date || f.start_date)
+    if (endDate < f.start_date) return setErr('The until date cannot be before the from date.')
+    if (f.partial && f.end_time <= f.start_time) return setErr('The end time must be after the start time.')
     setBusy('add')
-    const r = await requestLeave({ type: f.type, start_date: f.start_date, end_date: f.end_date || f.start_date, private_note: f.private_note.trim() || null, ...(f.partial ? { start_time: f.start_time, end_time: f.end_time } : {}) })
+    const r = await requestLeave({ type: f.type, start_date: f.start_date, end_date: endDate, private_note: f.private_note.trim() || null, ...(f.partial ? { start_time: f.start_time, end_time: f.end_time } : {}) })
     setBusy('')
     if (!r.ok) return setErr(firstError(r))
     // Automated coverage check (Rule 2.12 / 3.10 / 4.9)
@@ -251,14 +365,14 @@ function MyLeave({ toast, onChanged }) {
   return <Card title="My leave">
     <form className="au-form" onSubmit={submit}>
       <Field label="Type"><select value={f.type} onChange={e => set('type', e.target.value)}><option value="vacation">Vacation</option><option value="sick">Sick</option><option value="other">Other</option></select></Field>
-      <div className="st-pair"><Field label="From" required><input type="date" min={manilaToday()} value={f.start_date} onChange={e => set('start_date', e.target.value)} required/></Field>
-        <Field label="To (last day)"><input type="date" min={f.start_date || manilaToday()} value={f.end_date} onChange={e => set('end_date', e.target.value)}/></Field></div>
-      <label className="au-check"><input type="checkbox" checked={f.partial} onChange={e => set('partial', e.target.checked)}/> Only part of the day</label>
+      <div className="st-pair"><Field label="From" required><input type="date" min={manilaToday()} value={f.start_date} onChange={e => setF(x => ({ ...x, start_date: e.target.value, end_date: (x.partial || (x.end_date && x.end_date < e.target.value)) ? e.target.value : x.end_date }))} required/></Field>
+        <Field label="To (last day)"><input type="date" min={f.start_date || manilaToday()} value={f.partial ? f.start_date : f.end_date} disabled={f.partial} onChange={e => set('end_date', e.target.value)}/></Field></div>
+      <label className="au-check"><input type="checkbox" checked={f.partial} onChange={e => setF(x => ({ ...x, partial: e.target.checked, ...(e.target.checked ? { end_date: x.start_date } : {}) }))}/> Only part of the day</label>
       {f.partial && <div className="st-pair"><Field label="From (time, first day)"><input type="time" value={f.start_time} onChange={e => set('start_time', e.target.value)}/></Field>
         <Field label="Until (time, last day)"><input type="time" value={f.end_time} onChange={e => set('end_time', e.target.value)}/></Field></div>}
       <Field label={f.type === 'other' ? 'Specify reason' : 'Private note (optional)'} required={f.type === 'other'} hint="Seen only by you and the approver. Never emailed."><textarea maxLength={500} placeholder={f.type === 'other' ? 'e.g., Family emergency, bereavement, medical appointment' : ''} value={f.private_note} onChange={e => set('private_note', e.target.value)}/></Field>
       {err && <p className="au-error" role="alert">{err}</p>}
-      <div className="au-actions"><Button type="submit" disabled={busy === 'add' || !f.start_date || (f.type === 'other' && !f.private_note.trim())}>{busy === 'add' ? 'Sending…' : 'Request leave'}</Button></div>
+      <div className="au-actions"><Button type="submit" disabled={busy === 'add' || !f.start_date || (!f.partial && f.end_date && f.end_date < f.start_date) || (f.partial && f.end_time <= f.start_time) || (f.type === 'other' && !f.private_note.trim())}>{busy === 'add' ? 'Sending…' : 'Request leave'}</Button></div>
     </form>
     {!rows ? <p className="au-muted" role="status">Loading…</p> : !rows.length ? <p className="au-muted">No leave requested yet.</p> : <ul className="fd-list">{rows.map(l => <li key={l.id}>
       <div><b>{l.label}</b><span>{l.type_label} · <span className={`fd-badge ${STATUS_TONE[l.status]}`}>{l.status}</span>{l.decided_by ? ` · by ${l.decided_by}` : ''}</span>{l.private_note && <span>Note: {l.private_note}</span>}</div>

@@ -56,7 +56,8 @@ export function ArchivesPage({ store, role: propRole, activeBranch = 'All Branch
       if (!inStaffBranch) return false
     } else if (role === 'dentist') {
       const inDentistBranch = (bName && branches.includes(bName)) || inScope(item, session, state)
-      if (!inDentistBranch) return false
+      const isDentistRecord = (item.dentistId && item.dentistId === session?.dentistId) || (item.dentist_id && item.dentist_id === session?.dentistId) || (item.dentist && (item.dentist.id === session?.dentistId || item.dentist === session?.dentistId)) || inScope(item, session, state)
+      if (!inDentistBranch || !isDentistRecord) return false
     }
     if (effectiveBranch === 'All Branches') return true
     return bName === effectiveBranch
@@ -238,10 +239,10 @@ export function ArchivesPage({ store, role: propRole, activeBranch = 'All Branch
               { key: 'status', label: 'Outcome Status', render: r => <Status tone={r.status === 'Completed' || r.status === 'Served' ? 'success' : 'neutral'}>{r.status}</Status> },
               { key: 'actions', label: 'Actions', render: r => (
                 <div className="row-actions">
-                  <Button size="sm" variant="ghost" onClick={() => {
+                  <Button size="sm" variant="soft" icon="file" title="View details" aria-label={`View details for ${r.code || r.id}`} onClick={() => {
                     logArchiveAudit('archive.viewed', r.code || r.id, `Viewed archived visit ${r.code || r.id}`)
                     setViewRecord({ kind: 'visit', record: r })
-                  }}>View</Button>
+                  }}>View details</Button>
                   <Button size="sm" variant="soft" onClick={() => {
                     setRestoreTarget({ kind: 'visit', ...r })
                     setRestoreReason('')
@@ -268,10 +269,10 @@ export function ArchivesPage({ store, role: propRole, activeBranch = 'All Branch
               { key: 'status', label: 'Status', render: r => <Status tone={r.status === 'Void' ? 'danger' : 'neutral'}>{r.status || 'Issued'}</Status> },
               { key: 'actions', label: 'Actions', render: r => (
                 <div className="row-actions">
-                  <Button size="sm" variant="ghost" onClick={() => {
+                  <Button size="sm" variant="soft" icon="file" title="View details" aria-label={`View details for ${r.number || r.id}`} onClick={() => {
                     logArchiveAudit('archive.viewed', r.number || r.id, `Viewed archived prescription ${r.number || r.id}`)
                     setViewRecord({ kind: 'prescription', record: r })
-                  }}>View</Button>
+                  }}>View details</Button>
                 </div>
               ) },
             ]}
@@ -294,10 +295,10 @@ export function ArchivesPage({ store, role: propRole, activeBranch = 'All Branch
               { key: 'status', label: 'Settlement Status', render: r => <Status tone="success">{r.status || 'Paid'}</Status> },
               { key: 'actions', label: 'Actions', render: r => (
                 <div className="row-actions">
-                  <Button size="sm" variant="ghost" onClick={() => {
+                  <Button size="sm" variant="soft" icon="file" title="View details" aria-label={`View details for ${r.invoiceNumber || r.id}`} onClick={() => {
                     logArchiveAudit('archive.viewed', r.invoiceNumber || r.id, `Viewed archived financial record ${r.invoiceNumber || r.id}`)
                     setViewRecord({ kind: 'financial', record: r })
-                  }}>View</Button>
+                  }}>View details</Button>
                 </div>
               ) },
             ]}

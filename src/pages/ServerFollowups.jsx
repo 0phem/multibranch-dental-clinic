@@ -6,7 +6,7 @@ import { AppointmentForm } from './Scheduling.jsx'
 const firstError = r => (r.kind === 'validation' ? Object.values(r.errors || {})[0]?.[0] || r.message : r.message) || 'That did not work.'
 const day = d => d ? new Date(`${d}T00:00:00Z`).toLocaleDateString('en-PH', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' }) : ''
 const manilaToday = () => new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10)
-const TONE = { Open: 'is-late', Contacted: '', Booked: 'is-ok', Closed: '' }
+const TONE = { Open: 'is-pending', Contacted: 'is-info', Booked: 'is-ok', Closed: 'is-done' }
 
 /**
  * M20 Patient Follow-Up (clinic server). Tasks come from a completed treatment's follow-up (automatically) or are added by a Dentist

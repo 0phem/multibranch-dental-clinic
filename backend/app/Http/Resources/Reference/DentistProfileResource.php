@@ -30,6 +30,7 @@ class DentistProfileResource extends JsonResource
             'shiftStart' => $this->shift_start,
             'shiftEnd' => $this->shift_end,
             'available' => $this->available,
+            'on_duty_today' => $this->available !== false,
         ];
     }
 }

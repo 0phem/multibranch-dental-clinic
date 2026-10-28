@@ -60,8 +60,8 @@ export function Card({ title, subtitle, actions, children, className='' }) {
   return <section className={`card ${className}`}>
     {(title||subtitle||actions) && <div className="card-head">
       <div>{title&&<h2>{title}</h2>}{subtitle&&<p>{subtitle}</p>}</div>
-      {actions&&<div className="card-actions">{actions}</div>}
-    </div>}
+      {actions&&<div className="card-actions">{actions}</div>}</div>}
+
     {children}
   </section>
 }
@@ -243,14 +243,14 @@ export function SelectWithOther({ label, value, onChange, options = [], otherVal
         })}
       </select>
     </Field>
-    {isOther && <Field label={`Specify ${label || ''}`.trim()} required error={error}>
-      <input
+    {isOther && <Field label={`Specify ${label || ''}`.trim()} required error={error}><input
+
         type="text"
         value={otherValue || ''}
         onChange={e => onOtherChange?.(e.target.value)}
         placeholder={placeholder}
-        aria-required="true"
-      />
+        aria-required="true"/>
+
     </Field>}
   </div>
 }
@@ -263,17 +263,17 @@ export function FilterBar({ search, onSearchChange, searchPlaceholder='Search…
     (hasFilters && filters.some(f => f.value && f.value !== 'all' && f.value !== 'All' && f.value !== ''))
   )
   return <div className={`filter-bar ${className}`.trim()} role="search" aria-label={ariaLabel}>
-    {onSearchChange && <div className="filter-bar-search">
-      <Icon name="search" size={16} className="filter-search-icon"/>
-      <input
-        type="search"
-        className="filter-search-input"
-        value={search || ''}
-        onChange={e => onSearchChange(e.target.value)}
-        placeholder={searchPlaceholder}
-        aria-label={searchPlaceholder}
-      />
-    </div>}
+    {onSearchChange && <SearchInput className="filter-bar-search" value={search || ''} onChange={onSearchChange} placeholder={searchPlaceholder} ariaLabel={searchPlaceholder} onClear={search ? () => onSearchChange('') : undefined}/>}
+
+
+
+
+
+
+
+
+
+
     {(hasFilters || children) && <div className="filter-bar-controls">
       {hasFilters && filters.map(f => (
         <label key={f.key || f.label} className="field">
@@ -287,8 +287,8 @@ export function FilterBar({ search, onSearchChange, searchPlaceholder='Search…
           </select>
         </label>
       ))}
-      {children}
-    </div>}
+      {children}</div>}
+
     {count != null && totalCount != null && <span className="filter-bar-count block-muted" aria-live="polite">{count} of {totalCount}</span>}
     {clearHandler && (
       <button

@@ -33,8 +33,9 @@ export function mapMessage(row) {
   return { id: row.id, body: row.body ?? '', senderName: row.sender?.name ?? '', senderRole: row.sender?.role ?? '', mine: row.mine === true, sentAt: row.sent_at }
 }
 
-export async function loadConversations(cursor = null) {
-  const result = await api.listConversations({ per_page: 25, ...(cursor ? { cursor } : {}) })
+export async function loadConversations(cursor = null, search = '') {
+  const q = String(search || '').trim()
+  const result = await api.listConversations({ per_page: 25, ...(cursor ? { cursor } : {}), ...(q ? { q } : {}) })
   if (!result.ok) return normalizeFailure(result)
   return { ok: true, rows: (result.data || []).map(mapConversation), nextCursor: result.meta?.next_cursor ?? null, channels: Array.isArray(result.meta?.channels) ? result.meta.channels : [] }
 }

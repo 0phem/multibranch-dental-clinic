@@ -119,7 +119,7 @@ export function HmoPage({ role, activeBranch, store, context }) {
       </select>
       <select aria-label="Filter HMO cases by provider" value={providerFilter} onChange={e => setProviderFilter(e.target.value)}>
         <option value="All">All providers</option>
-        {HMO_PROVIDERS.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
+        {HMO_PROVIDERS.filter(p => !p.legacy).map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
       </select>
     </FilterBar>
     <div className="hmo-workspace">
@@ -213,7 +213,7 @@ function MembershipPanel({ store, busy, setBusy }) {
     {visit && membership && <>
       <p><b>{visit.patientName}</b> — {membership.active ? <>Active: {membership.active.provider_name} • {membership.active.member_number}</> : 'No active HMO membership'}</p>
       <div className="form-grid">
-        <Field label="Provider name" required><input value={form.providerName} onChange={e => setForm({ ...form, providerName: e.target.value })}/></Field>
+        <Field label="Provider name" required><select value={form.providerName} onChange={e => setForm({ ...form, providerName: e.target.value })}><option value="">Select HMO provider</option>{HMO_PROVIDERS.filter(p => !p.legacy).map(p => <option key={p.id} value={p.name}>{p.name}</option>)}</select></Field>
         <Field label="Member number" required><input value={form.memberNumber} onChange={e => setForm({ ...form, memberNumber: e.target.value })}/></Field>
         <div className="form-actions span-2"><Button disabled={busy || !form.providerName.trim() || !form.memberNumber.trim()} onClick={() => save(false)}>{membership.active ? 'Replace membership' : 'Save membership'}</Button>{membership.active && <Button variant="ghost" disabled={busy} onClick={() => save(true)}>End membership</Button>}</div>
       </div>

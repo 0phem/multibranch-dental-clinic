@@ -59,8 +59,8 @@ export function createAppointmentFlow({ getState, getSession, getActions, refres
       return { ok: true, record: projected(result.row.id) }
     },
 
-    async cancel(appointment, key) {
-      const result = await api.cancelAppointment(appointment, key)
+    async cancel(appointment, key, extra = {}) {
+      const result = await api.cancelAppointment(appointment, key, extra)
       if (!result.ok) return afterServerCommand(result)
       await refresh()
       const local = getActions().applyAppointmentCancellation(appointment.id)

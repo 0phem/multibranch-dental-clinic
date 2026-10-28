@@ -81,9 +81,9 @@ function DentistDashboard({ setPage, state, session }) {
   const activeTreatment=state.treatments.find(t=>t.server&&t.dentistId===did&&t.status==='In Treatment')
   const pendingRx=prescriptionTasks(state,session||sessionForRole('dentist',state)).length
   const follow=liveRecords(state.followups).filter(f=>f.dentistId===did&&f.status==='Open').length
-  const next=ownQueue[0]
+  const next=ownQueue[0], currentDentist=state.dentists.find(d=>d.id===did), isDoctorOnDuty=currentDentist ? (currentDentist.on_duty_today !== undefined ? currentDentist.on_duty_today : currentDentist.available !== false) : true
   return <>
-    <PageHeader kicker="Clinical workspace" title="Your day, without the clutter" text="See who is next, open the chart, document treatment and keep follow-up tasks moving." aside={next?<Button onClick={()=>setPage('queue')} icon="queue">Open my queue</Button>:null}/>
+    <PageHeader kicker="Clinical workspace" title="Your day, without the clutter" text="See who is next, open the chart, document treatment and keep follow-up tasks moving." aside={<div style={{display:'flex',alignItems:'center',gap:'8px'}}><span className={`fd-badge ${isDoctorOnDuty?'is-ok':'is-muted'}`}>{isDoctorOnDuty?'Doctor is on duty today':'Off duty'}</span>{next?<Button onClick={()=>setPage('queue')} icon="queue">Open my queue</Button>:null}</div>}/>
     {activeTreatment&&<div className="active-treatment-banner"><div className="pulse-dot"/><div><span>Active treatment</span><b>{patientName(activeTreatment.patientId,state.patients)}</b><small>{activeTreatment.procedure||activeTreatment.plan||'Treatment in progress'}</small></div><Button variant="soft" onClick={()=>setPage('treatment',encounterContext(state.queue.find(q=>q.id===activeTreatment.queueEntryId)))} icon="tooth">Continue treatment</Button></div>}
     <div className="dentist-command-grid">
       <Card className="next-patient-card" title="Ready for Treatment" subtitle="Current waiting queue at chair-side">

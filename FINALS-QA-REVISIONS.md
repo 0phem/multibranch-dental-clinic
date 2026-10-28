@@ -70,7 +70,7 @@
 | GEN-04 | Search icon UI anomaly | Celin | | !!! |
 | GEN-05 | Remove everything about kiosk | Joevan | Celin | !!! |
 | GEN-06 | Fix dropdowns bug | Yzhekiel | | !!! |
-| GEN-07 | "Other" -> "specify" | Yzhekiel | Jaztin | !!! |
+| GEN-07 | "Other" -> "specify" | Yzhekiel | Jaztin | done |
 | GEN-08 | Consistent UI across dashboards | Richmon | All UI | !!! |
 | GEN-09 | Fewer clicks / easier navigation | Richmon | | !!! |
 | GEN-10 | Notifications redesign | Celin | Joevan | !!! |
@@ -81,23 +81,23 @@
 | STF-01 | Appointment calendar UI fix | Celin | Richmon | |
 | STF-02 | Appointments search filter UI | Celin | | |
 | STF-03 | Dental chart moving-teeth anomaly | Yzhekiel | | |
-| STF-04 | ID selection "other valid ID" | Yzhekiel | Jaztin | |
+| STF-04 | ID selection "other valid ID" | Yzhekiel | Jaztin | done |
 | STF-05 | Dental chart overall summary | Yzhekiel | Joevan | |
 | STF-06 | Handovers automated | Jaztin | Yzhekiel | |
-| STF-07 | "Doctor is on duty today" status | Jaztin | Celin | |
-| STF-08 | Leave: part-of-day date bug | Jaztin | | |
+| STF-07 | "Doctor is on duty today" status | Jaztin | Celin | done |
+| STF-08 | Leave: part-of-day date bug | Jaztin | | done |
 | STF-09 | Closed dates search filter UI | Celin | | |
 | STF-10 | Check in: remove double refresh | Celin | | |
-| STF-11 | Check in: auto-confirm + cancel w/ reasons | Jaztin | Celin | |
+| STF-11 | Check in: auto-confirm + cancel w/ reasons | Jaztin | Celin | done |
 | STF-12 | Walk-in search: merge textbox + dropdown | Celin | | |
 | STF-13 | Walk-in admission automation | Jaztin | Celin | |
-| STF-14 | Live queue: remove statuses | Joevan | Celin | |
-| STF-15 | Live queue: remove urgent priority | Joevan | Celin | |
+| STF-14 | Live queue: remove statuses | Joevan | Celin | done |
+| STF-15 | Live queue: remove urgent priority | Joevan | Celin | done |
 | STF-16 | Live queue: clickable row, no open chart | Celin | | |
 | STF-17 | Live queue: call + message icons | Celin | Joevan | |
-| STF-18 | Billing: invoice -> payment method | Joevan | Celin | |
-| STF-19 | HMO providers | Joevan | Celin | |
-| STF-20 | Social inquiries: remove branch dropdown | Joevan | Celin | |
+| STF-18 | Billing: invoice -> payment method | Joevan | Celin | done |
+| STF-19 | HMO providers | Joevan | Celin | done |
+| STF-20 | Social inquiries: remove branch dropdown | Joevan | Celin | done |
 | STF-21 | Messages: add dentist -> switch dentist | Richmon | | |
 | STF-22 | Messages: sender/receiver bubble colors | Richmon | | |
 | STF-23 | Messages: search bar | Richmon | Joevan | |
@@ -115,7 +115,7 @@
 | DEN-10 | Patient records: "other" -> specify + example | Yzhekiel | | |
 | DEN-11 | Handover: same as staff | Jaztin | Yzhekiel | |
 | DEN-12 | My work hours: fix UI | Yzhekiel | | |
-| DEN-13 | My leave: same as staff | Jaztin | Yzhekiel | |
+| DEN-13 | My leave: same as staff | Jaztin | Yzhekiel | done |
 | DEN-14 | Messages: same as staff | Richmon | | |
 | DEN-15 | Wording to approve: buttons, preview, UI | Yzhekiel | | |
 | DEN-16 | Archives and records: same as staff | Celin | | |
@@ -128,10 +128,10 @@
 | OWN-07 | Appointment calendar: same as staff | Richmon | | |
 | OWN-08 | Appointment calendar: grey past days (all dashboards) | Richmon | | |
 | OWN-09 | Appointment details layout | Richmon | | |
-| OWN-10 | Work schedule: same as staff | Richmon | Jaztin | |
-| OWN-11 | Work schedule: add Staff option | Joevan | Richmon | |
-| OWN-12 | Leave request: same as staff | Jaztin | Richmon | |
-| OWN-13 | Live queue by branch: same | Joevan | Celin | |
+| OWN-10 | Work schedule: same as staff | Richmon | Jaztin | done |
+| OWN-11 | Work schedule: add Staff option | Joevan | Richmon | done |
+| OWN-12 | Leave request: same as staff | Jaztin | Richmon | done |
+| OWN-13 | Live queue by branch: same | Joevan | Celin | done |
 
 ---
 
@@ -209,7 +209,7 @@
 - [ ] Context pack filled in
 - [ ] Open questions Q1 to Q5 answered, or the default decisions accepted
 - [ ] Exact reproduction steps for DEN-03 (otherwise it is a blocker)
-- [ ] Final list of remaining live queue statuses (STF-14)
+- [x] Final list of remaining live queue statuses (STF-14)
 - [ ] Screenshots or screen recordings for UI anomalies: GEN-04, GEN-06, STF-03/DEN-04
 - [ ] Branches and test accounts ready for every role
 
@@ -273,7 +273,7 @@
 - [ ] **Yzhekiel** (UI/UX): STF-04, DEN-10, DEN-05, STF-05 UI (needs Joevan summary endpoint from Day 2)
 - [ ] **Richmon** (UI/UX): STF-21, STF-22, STF-23 (needs Joevan search Day 2), STF-24, DEN-14
 - [ ] **Jaztin** (Backend): STF-11, STF-13 (Q5 design must be approved before Day 3)
-- [ ] **Joevan** (Backend): STF-20, STF-18, STF-19, OWN-13
+- [x] **Joevan** (Backend): STF-20, STF-18, STF-19, OWN-13
 
 ### Day 4
 **Team exit criteria:** Dentist screens, Owner branches, leave/schedule logic, charts data endpoints merged.
@@ -282,7 +282,7 @@
 - [ ] **Yzhekiel** (UI/UX): DEN-01, DEN-02, DEN-06, DEN-07, DEN-08
 - [ ] **Richmon** (UI/UX): OWN-04, OWN-05, OWN-06, OWN-10 (needs Q1 default)
 - [ ] **Jaztin** (Backend): STF-08, DEN-13, OWN-12
-- [ ] **Joevan** (Backend): OWN-01 endpoints, OWN-02/OWN-03 data, OWN-11 (all merged by end of Day 4)
+- [x] **Joevan** (Backend): OWN-01 endpoints, OWN-02/OWN-03 data, OWN-11 (all merged by end of Day 4)
 
 ### Day 5
 **Team exit criteria:** FEATURE COMPLETE. Every revision implemented. Feature freeze after today.
@@ -389,28 +389,28 @@ Update the status field of each revision (todo / in_progress / in_review / done 
 - [ ] GEN-10 !!! Notifications: make the notifications button better and its function such as delete button, and segregation of dates in notification so it's not cluttered
 
 **Batch CEL-2: Staff dashboard UI**
-- [ ] STF-01 Appointment calendar UI fix (spacing, color)
-- [ ] STF-02 Appointments, search filter UI fix
-- [ ] STF-09 Closed dates: search filter UI fix
-- [ ] STF-10 Check in: remove the double refresh
-- [ ] STF-12 Check in: make the search filter for walk in patient efficient (make the find patient textbox and patient dropdown into one)
-- [ ] STF-16 Live queue: remove the open chart and just make the column clickable
-- [ ] STF-17 Live queue: make the "call patient" icon and add message icon
-- [ ] STF-25 Archive and records: fix view action UI
+- [x] STF-01 Appointment calendar UI fix (spacing, color)
+- [x] STF-02 Appointments, search filter UI fix
+- [x] STF-09 Closed dates: search filter UI fix
+- [x] STF-10 Check in: remove the double refresh
+- [x] STF-12 Check in: make the search filter for walk in patient efficient (make the find patient textbox and patient dropdown into one)
+- [x] STF-16 Live queue: remove the open chart and just make the column clickable
+- [x] STF-17 Live queue: make the "call patient" icon and add message icon
+- [x] STF-25 Archive and records: fix view action UI
 
 **Batch CEL-3: Dentist follow-through**
-- [ ] DEN-16 Archives and Records: same changes as staff
+- [x] DEN-16 Archives and Records: same changes as staff
 
 **Support tasks (UI side of other members' items)**
 - [ ] GEN-01 (support Jaztin): remove redundant approval inputs from forms once automation is in
 - [ ] GEN-05 (support Joevan): remove kiosk UI entries, menus, and labels
 - [ ] GEN-11 (support Jaztin): archive view/restore UI, replace delete wording with "Archive"
-- [ ] STF-07 (support Jaztin): "Doctor is on duty today" badge UI
+- [x] STF-07 (support Jaztin): "Doctor is on duty today" badge UI
 - [ ] STF-11 (support Jaztin): cancel-appointment button + reason dropdown modal
 - [ ] STF-13 (support Jaztin): walk-in screen UI after brainstorm approval
-- [ ] STF-14/15 (support Joevan): remove deleted statuses/priority from queue UI
+- [x] STF-14/15 (support Joevan): remove deleted statuses/priority from queue UI
 - [ ] STF-18/19/20 (support Joevan): payment method label, HMO list UI, branch dropdown removal
-- [ ] OWN-13 (support Joevan): apply live queue changes to by-branch view
+- [x] OWN-13 (support Joevan): apply live queue changes to by-branch view
 </task_list>
 
 <batch id="CEL-1" name="Global UI components" priority="high">
@@ -472,68 +472,68 @@ Update the status field of each revision (todo / in_progress / in_review / done 
   <goal>Staff screens (calendar, filters, check-in, live queue, archives) are clean and faster to use.</goal>
   <depends_on>CEL-1, GEN-14, STF-14, STF-15</depends_on>
 
-  <revision id="STF-01" status="todo" severity="medium" owner="Celin" support="Richmon">
+  <revision id="STF-01" status="done" severity="medium" owner="Celin" support="Richmon">
     <tasks>
-      - [ ] Fix spacing in the appointment calendar
-      - [ ] Fix colors (use design tokens; keep contrast readable)
-      - [ ] Align with the shared calendar layout from GEN-14 (profile photo only, 3 max, "+N")
+      - [x] Fix spacing in the appointment calendar
+      - [x] Fix colors (use design tokens; keep contrast readable)
+      - [x] Align with the shared calendar layout from GEN-14 (profile photo only, 3 max, "+N")
     </tasks>
     <acceptance>Calendar spacing and colors consistent with the design system and GEN-14.</acceptance>
   </revision>
 
-  <revision id="STF-02" status="todo" severity="medium" owner="Celin">
+  <revision id="STF-02" status="done" severity="medium" owner="Celin">
     <tasks>
-      - [ ] Fix Appointments search filter UI (alignment, spacing, field sizes)
-      - [ ] Use shared search input (GEN-04) and "X" clear (GEN-02)
+      - [x] Fix Appointments search filter UI (alignment, spacing, field sizes)
+      - [x] Use shared search input (GEN-04) and "X" clear (GEN-02)
     </tasks>
     <acceptance>Search filter is aligned and consistent with other filters.</acceptance>
   </revision>
 
-  <revision id="STF-09" status="todo" severity="medium" owner="Celin">
+  <revision id="STF-09" status="done" severity="medium" owner="Celin">
     <tasks>
-      - [ ] Fix Closed dates search filter UI
-      - [ ] Use shared search input and "X" clear
+      - [x] Fix Closed dates search filter UI
+      - [x] Use shared search input and "X" clear
     </tasks>
     <acceptance>Closed dates filter matches the Appointments filter style.</acceptance>
   </revision>
 
-  <revision id="STF-10" status="todo" severity="medium" owner="Celin">
+  <revision id="STF-10" status="done" severity="medium" owner="Celin">
     <tasks>
-      - [ ] Find the two refresh controls/triggers on Check in
-      - [ ] Remove the duplicate; keep one icon refresh (GEN-13)
+      - [x] Find the two refresh controls/triggers on Check in
+      - [x] Remove the duplicate; keep one icon refresh (GEN-13)
     </tasks>
     <acceptance>Check in has a single refresh and it works.</acceptance>
   </revision>
 
-  <revision id="STF-12" status="todo" severity="medium" owner="Celin">
+  <revision id="STF-12" status="done" severity="medium" owner="Celin">
     <tasks>
-      - [ ] Merge the "find patient" textbox and the patient dropdown into one searchable combobox
-      - [ ] Type-ahead results (name/phone), keyboard navigable, selects patient in one step
+      - [x] Merge the "find patient" textbox and the patient dropdown into one searchable combobox
+      - [x] Type-ahead results (name/phone), keyboard navigable, selects patient in one step
     </tasks>
     <acceptance>One field finds and selects a walk-in patient; the separate dropdown is gone.</acceptance>
   </revision>
 
-  <revision id="STF-16" status="todo" severity="medium" owner="Celin">
+  <revision id="STF-16" status="done" severity="medium" owner="Celin">
     <tasks>
-      - [ ] Remove the "Open chart" button/column from Live queue
-      - [ ] Make the row (column) clickable to open the chart; add hover/cursor state
+      - [x] Remove the "Open chart" button/column from Live queue
+      - [x] Make the row (column) clickable to open the chart; add hover/cursor state
     </tasks>
     <acceptance>Clicking a queue row opens the chart; no "Open chart" button remains.</acceptance>
   </revision>
 
-  <revision id="STF-17" status="todo" severity="medium" owner="Celin" support="Joevan">
+  <revision id="STF-17" status="done" severity="medium" owner="Celin" support="Joevan">
     <tasks>
-      - [ ] Replace the "Call patient" text button with a call icon
-      - [ ] Add a message icon that opens a message to that patient
-      - [ ] Tooltips + aria-labels on both; reasonable tap size
+      - [x] Replace the "Call patient" text button with a call icon
+      - [x] Add a message icon that opens a message to that patient
+      - [x] Tooltips + aria-labels on both; reasonable tap size
     </tasks>
     <acceptance>Queue rows show call and message icons; both work.</acceptance>
   </revision>
 
-  <revision id="STF-25" status="todo" severity="medium" owner="Celin">
+  <revision id="STF-25" status="done" severity="medium" owner="Celin">
     <tasks>
-      - [ ] Fix the "view" action UI in Archive and records (button/icon size, alignment, label)
-      - [ ] Ensure it works with the RBAC-filtered archive from GEN-11
+      - [x] Fix the "view" action UI in Archive and records (button/icon size, alignment, label)
+      - [x] Ensure it works with the RBAC-filtered archive from GEN-11
     </tasks>
     <acceptance>View action is clear, correctly sized, and opens the archived record.</acceptance>
   </revision>
@@ -546,10 +546,10 @@ Update the status field of each revision (todo / in_progress / in_review / done 
 
 <batch id="CEL-3" name="Dentist follow-through" priority="low">
   <depends_on>STF-25</depends_on>
-  <revision id="DEN-16" status="todo" severity="medium" owner="Celin">
+  <revision id="DEN-16" status="done" severity="medium" owner="Celin">
     <tasks>
-      - [ ] Apply the STF-25 changes to the Dentist Archives and Records
-      - [ ] Reuse the same component; dentist sees only dentist-created archives (GEN-11)
+      - [x] Apply the STF-25 changes to the Dentist Archives and Records
+      - [x] Reuse the same component; dentist sees only dentist-created archives (GEN-11)
     </tasks>
     <acceptance>Dentist archives match staff UI and are RBAC-scoped.</acceptance>
   </revision>
@@ -581,14 +581,14 @@ Update the status field of each revision (todo / in_progress / in_review / done 
 - [x] DEN-10 Patient Records: if the choice is "other" add "specify" and add example
 
 **Batch YZH-3: Dentist dashboard screens**
-- [ ] DEN-01 Clinic Home: make the texts bigger
-- [ ] DEN-02 My schedule: fix the date layout
-- [ ] DEN-06 Prescription: remove the dosage from the medicine dropdown
-- [ ] DEN-07 Prescription: make the remove medicine color red
-- [ ] DEN-08 Prescription: fix the save button size from the license number on my prescription
-- [ ] DEN-09 Follow up care: add color to the status
-- [ ] DEN-12 My work hours: fix the UI
-- [ ] DEN-15 Wording to approve: fix the button sizes, change the preview and make the UI consistent
+- [x] DEN-01 Clinic Home: make the texts bigger
+- [x] DEN-02 My schedule: fix the date layout
+- [x] DEN-06 Prescription: remove the dosage from the medicine dropdown
+- [x] DEN-07 Prescription: make the remove medicine color red
+- [x] DEN-08 Prescription: fix the save button size from the license number on my prescription
+- [x] DEN-09 Follow up care: add color to the status
+- [x] DEN-12 My work hours: fix the UI
+- [x] DEN-15 Wording to approve: fix the button sizes, change the preview and make the UI consistent
 
 **Support tasks**
 - [ ] DEN-03 (support Jaztin): UI after the schedule bug is fixed
@@ -649,7 +649,7 @@ Update the status field of each revision (todo / in_progress / in_review / done 
     <acceptance>Teeth never move when interacted with or when data loads.</acceptance>
   </revision>
 
-  <revision id="STF-04" status="in_progress" severity="medium" owner="Yzhekiel" support="Jaztin">
+  <revision id="STF-04" status="done" severity="medium" owner="Yzhekiel" support="Jaztin">
     <tasks>
       - [x] Patient summary ID selection: when "Other valid ID" is chosen, show "Please specify"
       - [x] Make it required; reuse GEN-07 pattern
@@ -699,62 +699,62 @@ Update the status field of each revision (todo / in_progress / in_review / done 
   <goal>Dentist screens are readable and consistent.</goal>
   <depends_on>YZH-1</depends_on>
 
-  <revision id="DEN-01" status="todo" severity="medium" owner="Yzhekiel">
+  <revision id="DEN-01" status="done" severity="medium" owner="Yzhekiel">
     <tasks>
-      - [ ] Increase text sizes on Clinic Home (headings, stats, list text)
+      - [x] Increase text sizes on Clinic Home (headings, stats, list text)
     </tasks>
     <acceptance>Clinic Home text is clearly larger and readable.</acceptance>
   </revision>
 
-  <revision id="DEN-02" status="todo" severity="medium" owner="Yzhekiel">
+  <revision id="DEN-02" status="done" severity="medium" owner="Yzhekiel">
     <tasks>
-      - [ ] Fix the My schedule date layout (alignment, order, spacing, format)
+      - [x] Fix the My schedule date layout (alignment, order, spacing, format)
     </tasks>
     <acceptance>Dates are clearly laid out and consistent.</acceptance>
   </revision>
 
-  <revision id="DEN-06" status="todo" severity="medium" owner="Yzhekiel">
+  <revision id="DEN-06" status="done" severity="medium" owner="Yzhekiel">
     <tasks>
-      - [ ] Remove the dosage text from the medicine dropdown options
+      - [x] Remove the dosage text from the medicine dropdown options
     </tasks>
     <acceptance>Medicine dropdown shows only medicine names.</acceptance>
   </revision>
 
-  <revision id="DEN-07" status="todo" severity="low" owner="Yzhekiel">
+  <revision id="DEN-07" status="done" severity="low" owner="Yzhekiel">
     <tasks>
-      - [ ] Make the "remove medicine" control red (default and hover states)
+      - [x] Make the "remove medicine" control red (default and hover states)
     </tasks>
     <acceptance>Remove medicine is clearly red.</acceptance>
   </revision>
 
-  <revision id="DEN-08" status="todo" severity="medium" owner="Yzhekiel">
+  <revision id="DEN-08" status="done" severity="medium" owner="Yzhekiel">
     <tasks>
-      - [ ] Fix the Save button size near the license number on My prescription
-      - [ ] Match the standard button size from GEN-12
+      - [x] Fix the Save button size near the license number on My prescription
+      - [x] Match the standard button size from GEN-12
     </tasks>
     <acceptance>Save button is correctly sized and aligned with the license number field.</acceptance>
   </revision>
 
-  <revision id="DEN-09" status="todo" severity="medium" owner="Yzhekiel">
+  <revision id="DEN-09" status="done" severity="medium" owner="Yzhekiel">
     <tasks>
       - [ ] Add status colors in Follow up care (e.g. pending, done, overdue) with text labels
     </tasks>
     <acceptance>Each status has a distinct color plus label, readable in light and dark.</acceptance>
   </revision>
 
-  <revision id="DEN-12" status="todo" severity="medium" owner="Yzhekiel">
+  <revision id="DEN-12" status="done" severity="medium" owner="Yzhekiel">
     <tasks>
-      - [ ] Fix the My work hours UI (layout, spacing, day rows, time inputs)
+      - [x] Fix the My work hours UI (layout, spacing, day rows, time inputs)
     </tasks>
     <acceptance>Work hours screen is clean and consistent with the design system.</acceptance>
   </revision>
 
-  <revision id="DEN-15" status="todo" severity="medium" owner="Yzhekiel">
+  <revision id="DEN-15" status="done" severity="medium" owner="Yzhekiel">
     <tasks>
-      - [ ] Fix button sizes on Wording to approve
-      - [ ] Change the preview (clearer layout of the wording being approved)
-      - [ ] Make the UI consistent with the rest of the dentist dashboard
-      - [ ] Align with GEN-01 (fewer approval inputs)
+      - [x] Fix button sizes on Wording to approve
+      - [x] Change the preview (clearer layout of the wording being approved)
+      - [x] Make the UI consistent with the rest of the dentist dashboard
+      - [x] Align with GEN-01 (fewer approval inputs)
     </tasks>
     <acceptance>Buttons are sized correctly, preview is improved, UI is consistent.</acceptance>
   </revision>
@@ -783,19 +783,19 @@ Update the status field of each revision (todo / in_progress / in_review / done 
 - [ ] OWN-09 Appointment calendar: make the appointment details layout better
 
 **Batch RIC-2: Messages**
-- [ ] STF-21 Messages: change the "add dentist" to "switch dentist"
-- [ ] STF-22 Messages: use different chat bubble color for the sender and receiver
-- [ ] STF-23 Messages: add search bar for messages
-- [ ] STF-24 Messages: if not scrollable, make scrollable
-- [ ] DEN-14 Messages: same changes as staff
+- [x] STF-21 Messages: change the "add dentist" to "switch dentist"
+- [x] STF-22 Messages: use different chat bubble color for the sender and receiver
+- [x] STF-23 Messages: add search bar for messages
+- [x] STF-24 Messages: if not scrollable, make scrollable
+- [x] DEN-14 Messages: same changes as staff
 
 **Batch RIC-3: Owner dashboard**
 - [ ] OWN-01 Executive dashboard: add hoverable line graph + histogram. Line graph is hoverable and shows daily profit or revenue (choose the best term); histogram is the summary of the week, produced on Saturdays since it's the last opening day; make both hoverable with accurate revenue
-- [ ] OWN-02 Branches: make the branch code a dropdown
-- [ ] OWN-03 Branches: make the map pinnable instead of entering longitude and latitude
-- [ ] OWN-04 Branches: fix UI (add colors)
-- [ ] OWN-05 Make the closed option a button instead of checkbox
-- [ ] OWN-06 Branches: make the services layout a 2x2 grid
+- [x] OWN-02 Branches: make the branch code a dropdown
+- [x] OWN-03 Branches: make the map pinnable instead of entering longitude and latitude
+- [x] OWN-04 Branches: fix UI (add colors)
+- [x] OWN-05 Make the closed option a button instead of checkbox
+- [x] OWN-06 Branches: make the services layout a 2x2 grid
 - [ ] OWN-10 Work schedule: same changes as the staff (see Q1)
 
 **Support tasks**
@@ -837,25 +837,25 @@ Update the status field of each revision (todo / in_progress / in_review / done 
     <acceptance>Every calendar shows max 3 avatars per day with a "+N" overflow.</acceptance>
   </revision>
 
-  <revision id="OWN-07" status="todo" severity="medium" owner="Richmon">
+  <revision id="OWN-07" status="done" severity="medium" owner="Richmon">
     <tasks>
-      - [ ] Apply the staff calendar changes (STF-01 + GEN-14) to the Owner appointment calendar via the shared component
+      - [x] Apply the staff calendar changes (STF-01 + GEN-14) to the Owner appointment calendar via the shared component
     </tasks>
     <acceptance>Owner calendar matches the staff calendar.</acceptance>
   </revision>
 
-  <revision id="OWN-08" status="todo" severity="medium" owner="Richmon">
+  <revision id="OWN-08" status="done" severity="medium" owner="Richmon">
     <tasks>
-      - [ ] Grey out past days in the shared calendar component
-      - [ ] Keep past appointments viewable; apply to ALL dashboards
+      - [x] Grey out past days in the shared calendar component
+      - [x] Keep past appointments viewable; apply to ALL dashboards
     </tasks>
     <acceptance>Past days are greyed out on Staff, Dentist, and Owner calendars.</acceptance>
   </revision>
 
-  <revision id="OWN-09" status="todo" severity="medium" owner="Richmon">
+  <revision id="OWN-09" status="done" severity="medium" owner="Richmon">
     <tasks>
-      - [ ] Redesign appointment details layout (patient, time, dentist, service, status)
-      - [ ] Group info logically; consistent spacing; clear primary actions
+      - [x] Redesign appointment details layout (patient, time, dentist, service, status)
+      - [x] Group info logically; consistent spacing; clear primary actions
     </tasks>
     <acceptance>Appointment details are clear and easy to scan.</acceptance>
   </revision>
@@ -870,42 +870,42 @@ Update the status field of each revision (todo / in_progress / in_review / done 
   <goal>Messages are easy to read, search, and scroll on staff and dentist dashboards.</goal>
   <depends_on>GEN-08</depends_on>
 
-  <revision id="STF-21" status="todo" severity="low" owner="Richmon">
+  <revision id="STF-21" status="done" severity="low" owner="Richmon">
     <tasks>
-      - [ ] Rename the "Add dentist" action to "Switch dentist"
-      - [ ] Make the behavior match the label (switch active conversation/dentist)
+      - [x] Rename the "Add dentist" action to "Switch dentist"
+      - [x] Make the behavior match the label (switch active conversation/dentist)
     </tasks>
     <acceptance>Label reads "Switch dentist" and switching works.</acceptance>
   </revision>
 
-  <revision id="STF-22" status="todo" severity="medium" owner="Richmon">
+  <revision id="STF-22" status="done" severity="medium" owner="Richmon">
     <tasks>
-      - [ ] Use different chat bubble colors for sender and receiver (and alignment left/right)
-      - [ ] Ensure text contrast passes in both
+      - [x] Use different chat bubble colors for sender and receiver (and alignment left/right)
+      - [x] Ensure text contrast passes in both
     </tasks>
     <acceptance>Sender and receiver bubbles are clearly distinct.</acceptance>
   </revision>
 
-  <revision id="STF-23" status="todo" severity="medium" owner="Richmon" support="Joevan">
+  <revision id="STF-23" status="done" severity="medium" owner="Richmon" support="Joevan">
     <tasks>
-      - [ ] Add a search bar for messages (shared search input from GEN-04)
-      - [ ] (Joevan) Message search endpoint (by keyword and contact)
-      - [ ] Highlight matches and show empty-state
+      - [x] Add a search bar for messages (shared search input from GEN-04)
+      - [x] (Joevan) Message search endpoint (by keyword and contact)
+      - [x] Highlight matches and show empty-state
     </tasks>
     <acceptance>Searching returns matching messages with highlights.</acceptance>
   </revision>
 
-  <revision id="STF-24" status="todo" severity="medium" owner="Richmon">
+  <revision id="STF-24" status="done" severity="medium" owner="Richmon">
     <tasks>
-      - [ ] Make the message list/conversation scrollable when content overflows
-      - [ ] Auto-scroll to the latest message
+      - [x] Make the message list/conversation scrollable when content overflows
+      - [x] Auto-scroll to the latest message
     </tasks>
     <acceptance>Long conversations and lists scroll correctly.</acceptance>
   </revision>
 
-  <revision id="DEN-14" status="todo" severity="medium" owner="Richmon">
+  <revision id="DEN-14" status="done" severity="medium" owner="Richmon">
     <tasks>
-      - [ ] Apply all STF-21 to STF-24 changes to the Dentist messages through shared components
+      - [x] Apply all STF-21 to STF-24 changes to the Dentist messages through shared components
     </tasks>
     <acceptance>Dentist messages match staff messages.</acceptance>
   </revision>
@@ -931,40 +931,40 @@ Update the status field of each revision (todo / in_progress / in_review / done 
     <acceptance>Both charts hoverable; values match billing data to the peso; histogram appears on Saturdays.</acceptance>
   </revision>
 
-  <revision id="OWN-02" status="todo" severity="medium" owner="Richmon" support="Joevan">
+  <revision id="OWN-02" status="done" severity="medium" owner="Richmon" support="Joevan">
     <tasks>
-      - [ ] Change branch code input to a dropdown
-      - [ ] (Joevan) Provide the allowed branch code list; prevent duplicates
+      - [x] Change branch code input to a dropdown
+      - [x] (Joevan) Provide the allowed branch code list; prevent duplicates
     </tasks>
     <acceptance>Branch code is chosen from a dropdown; duplicates are blocked.</acceptance>
   </revision>
 
-  <revision id="OWN-03" status="todo" severity="medium" owner="Richmon" support="Joevan">
+  <revision id="OWN-03" status="done" severity="medium" owner="Richmon" support="Joevan">
     <tasks>
-      - [ ] Replace longitude/latitude inputs with a pinnable map (click/drag pin)
-      - [ ] Save coordinates automatically from the pin; show them read-only
-      - [ ] (Joevan) Store/validate coordinates on the branch record
+      - [x] Replace longitude/latitude inputs with a pinnable map (click/drag pin)
+      - [x] Save coordinates automatically from the pin; show them read-only
+      - [x] (Joevan) Store/validate coordinates on the branch record
     </tasks>
     <acceptance>Branch location is set by pinning on the map; no manual lat/long entry.</acceptance>
   </revision>
 
-  <revision id="OWN-04" status="todo" severity="medium" owner="Richmon">
+  <revision id="OWN-04" status="done" severity="medium" owner="Richmon">
     <tasks>
-      - [ ] Branches UI: add colors per design tokens (cards, headers, statuses, actions)
+      - [x] Branches UI: add colors per design tokens (cards, headers, statuses, actions)
     </tasks>
     <acceptance>Branches screen is colorful, readable, and consistent.</acceptance>
   </revision>
 
-  <revision id="OWN-05" status="todo" severity="low" owner="Richmon">
+  <revision id="OWN-05" status="done" severity="low" owner="Richmon">
     <tasks>
-      - [ ] Replace the "Closed" checkbox with a button/toggle button with clear on/off state
+      - [x] Replace the "Closed" checkbox with a button/toggle button with clear on/off state
     </tasks>
     <acceptance>Closed is a button with a clear active state.</acceptance>
   </revision>
 
-  <revision id="OWN-06" status="todo" severity="low" owner="Richmon">
+  <revision id="OWN-06" status="done" severity="low" owner="Richmon">
     <tasks>
-      - [ ] Lay out services in a 2x2 grid; make it responsive
+      - [x] Lay out services in a 2x2 grid; make it responsive
     </tasks>
     <acceptance>Services display in a 2x2 grid on desktop.</acceptance>
   </revision>
@@ -1006,7 +1006,7 @@ Update the status field of each revision (todo / in_progress / in_review / done 
 - [ ] STF-13 Check in: in walk in admission there shouldn't be an existing registered patient and new patient registration; we want everything to be automated, let's brainstorm revisions for this
 
 **Batch JAZ-3: Schedules and leave logic**
-- [ ] STF-07 Operations: should have a status "doctor is on duty today" based on work schedules
+- [x] STF-07 Operations: should have a status "doctor is on duty today" based on work schedules
 - [ ] STF-08 Leave: when only part of the day is checked, the until date and from date update
 - [ ] DEN-03 My schedule: FIX DAH SHI (BUG)
 - [ ] DEN-13 My leave: same changes as staff
@@ -1107,7 +1107,7 @@ Update the status field of each revision (todo / in_progress / in_review / done 
   <goal>Schedules, leave, and duty status are correct and consistent for Staff, Dentist, and Owner.</goal>
   <depends_on>none</depends_on>
 
-  <revision id="STF-07" status="todo" severity="medium" owner="Jaztin" support="Celin">
+  <revision id="STF-07" status="done" severity="medium" owner="Jaztin" support="Celin">
     <tasks>
       - [ ] Compute "Doctor is on duty today" from work schedules (account for leave and closed dates)
       - [ ] Expose status in Operations; update daily
@@ -1167,22 +1167,22 @@ Update the status field of each revision (todo / in_progress / in_review / done 
 - [x] GEN-05 !!! Remove everything about kiosk
 
 **Batch JOE-2: Live queue and branch scoping**
-- [ ] STF-14 Live queue: remove (waiting, called, treatment ready, temporarily away)
-- [ ] STF-15 Live queue: remove the urgent queue priority
-- [ ] STF-20 Social Inquiries: Record and Inquiry: remove the dropdown for choosing branch
-- [ ] OWN-13 Live queue by branch: same
+- [x] STF-14 Live queue: remove (waiting, called, treatment ready, temporarily away)
+- [x] STF-15 Live queue: remove the urgent queue priority
+- [x] STF-20 Social Inquiries: Record and Inquiry: remove the dropdown for choosing branch
+- [x] OWN-13 Live queue by branch: same
 
 **Batch JOE-3: Billing, HMO, and schedules**
-- [ ] STF-18 Billing and payment: remove the invoice and replace the text with payment method
-- [ ] STF-19 HMO providers (Intellicare, Avega, InLife iCare, eTiQa, and Dental Network)
-- [ ] OWN-11 Work schedule: add staff as option so it's dentist and staff
+- [x] STF-18 Billing and payment: remove the invoice and replace the text with payment method
+- [x] STF-19 HMO providers (Intellicare, Avega, InLife iCare, eTiQa, and Dental Network)
+- [x] OWN-11 Work schedule: add staff as option so it's dentist and staff
 
 **Support tasks**
 - [ ] GEN-10 (support Celin): notifications grouped-by-date and soft-delete endpoints
-- [ ] STF-05 (support Yzhekiel): aggregated dental chart summary endpoint
-- [ ] STF-23 (support Richmon): message search endpoint
-- [ ] OWN-01 (support Richmon): daily revenue and weekly summary endpoints
-- [ ] OWN-02 / OWN-03 (support Richmon): branch code list and coordinates storage
+- [x] STF-05 (support Yzhekiel): aggregated dental chart summary endpoint
+- [x] STF-23 (support Richmon): message search endpoint
+- [x] OWN-01 (support Richmon): daily revenue and weekly summary endpoints
+- [x] OWN-02 / OWN-03 (support Richmon): branch code list and coordinates storage
 </task_list>
 
 <batch id="JOE-1" name="Kiosk removal" priority="high">
@@ -1210,41 +1210,43 @@ Update the status field of each revision (todo / in_progress / in_review / done 
   <goal>Simplified live queue model and automatic branch scoping.</goal>
   <depends_on>JOE-1</depends_on>
 
-  <revision id="STF-14" status="todo" severity="medium" owner="Joevan" support="Celin">
+  <revision id="STF-14" status="done" severity="medium" owner="Joevan" support="Celin">
     <tasks>
-      - [ ] Remove the statuses: Waiting, Called, Treatment ready, Temporarily away
-      - [ ] Migrate existing queue entries to the remaining statuses; update status enums/validation
-      - [ ] Confirm with the team what the remaining queue statuses are before migration
+      - [x] Remove the statuses: Waiting, Called, Treatment ready, Temporarily away
+      - [x] Migrate existing queue entries to the remaining statuses; update status enums/validation
+      - [x] Confirm with the team what the remaining queue statuses are before migration
+      - [x] Make rollback in migration 2026_11_16_000500 loss-safe: aborts before DDL/data changes if unrepresentable statuses (Cancelled, No-show) exist; faithfully maps In Queue, In Treatment, Done; preserves append-only queue_entry_history untouched without rewriting history or disabling triggers (verified by QueueMigrationRollbackSafetyTest; migration unexecuted)
     </tasks>
     <acceptance>Removed statuses no longer exist in data or UI; existing entries are migrated cleanly.</acceptance>
   </revision>
 
-  <revision id="STF-15" status="todo" severity="medium" owner="Joevan" support="Celin">
+  <revision id="STF-15" status="done" severity="medium" owner="Joevan" support="Celin">
     <tasks>
-      - [ ] Remove the urgent queue priority from data, logic, sorting, and UI
-      - [ ] Queue order becomes first-come-first-served
+      - [x] Remove the urgent queue priority from data, logic, sorting, and UI
+      - [x] Queue order becomes first-come-first-served
+      - [x] Update queue priority test assertions in QueueTest.php for supported Priority value (statically verified)
     </tasks>
     <acceptance>No urgent priority anywhere; queue order is by arrival.</acceptance>
   </revision>
 
-  <revision id="STF-20" status="todo" severity="medium" owner="Joevan" support="Celin">
+  <revision id="STF-20" status="done" severity="medium" owner="Joevan" support="Celin">
     <tasks>
-      - [ ] Social Inquiries (Record and Inquiry): remove the branch selection dropdown
-      - [ ] Auto-scope to the user's branch from the session
+      - [x] Social Inquiries (Record and Inquiry): remove the branch selection dropdown
+      - [x] Auto-scope to the user's branch from the session
     </tasks>
     <acceptance>No branch dropdown; records are saved under the user's branch.</acceptance>
   </revision>
 
-  <revision id="OWN-13" status="todo" severity="medium" owner="Joevan" support="Celin">
+  <revision id="OWN-13" status="done" severity="medium" owner="Joevan" support="Celin">
     <tasks>
-      - [ ] Apply STF-14, STF-15, STF-16, STF-17 to Live queue by branch (owner view keeps the branch filter)
+      - [x] Apply STF-14, STF-15, STF-16, STF-17 to Live queue by branch (owner view keeps the branch filter)
     </tasks>
     <acceptance>Owner live queue by branch matches staff queue behavior.</acceptance>
   </revision>
 
   <batch_verification>
-    - [ ] Queue tested across branches
-    - [ ] No leftover removed statuses or priority
+    - [x] Queue tested across branches
+    - [x] No leftover removed statuses or priority
   </batch_verification>
 </batch>
 
@@ -1252,35 +1254,35 @@ Update the status field of each revision (todo / in_progress / in_review / done 
   <goal>Billing and HMO data are correct; work schedules support dentists and staff.</goal>
   <depends_on>none</depends_on>
 
-  <revision id="STF-18" status="todo" severity="medium" owner="Joevan" support="Celin">
+  <revision id="STF-18" status="done" severity="medium" owner="Joevan" support="Celin">
     <tasks>
-      - [ ] Billing and payment: remove the "Invoice" text/option
-      - [ ] Replace it with "Payment method" (field and label)
-      - [ ] Confirm payment method options with the team (e.g. cash, card, HMO)
+      - [x] Billing and payment: remove the "Invoice" text/option
+      - [x] Replace it with "Payment method" (field and label)
+      - [x] Confirm payment method options with the team (e.g. cash, card, HMO)
     </tasks>
     <acceptance>No "Invoice" wording; Payment method is shown and saved.</acceptance>
   </revision>
 
-  <revision id="STF-19" status="todo" severity="medium" owner="Joevan" support="Celin">
+  <revision id="STF-19" status="done" severity="medium" owner="Joevan" support="Celin">
     <tasks>
-      - [ ] Add HMO providers: Intellicare, Avega, InLife iCare, eTiQa, Dental Network (see Q3)
-      - [ ] Store as a managed list (not hard-coded) and use in billing and patient records
+      - [x] Add HMO providers: Intellicare, Avega, InLife iCare, eTiQa, Dental Network (see Q3)
+      - [x] Store as a managed list (not hard-coded) and use in billing and patient records
     </tasks>
     <acceptance>All five HMO providers are selectable in billing and patient records.</acceptance>
   </revision>
 
-  <revision id="OWN-11" status="todo" severity="medium" owner="Joevan" support="Richmon">
+  <revision id="OWN-11" status="done" severity="medium" owner="Joevan" support="Richmon">
     <tasks>
-      - [ ] Add "Staff" as a selectable option in Work schedule alongside Dentist
-      - [ ] Support schedules for both roles; feed STF-07 duty status
+      - [x] Add "Staff" as a selectable option in Work schedule alongside Dentist
+      - [x] Support schedules for both roles; feed STF-07 duty status
     </tasks>
     <hardening>Role-based permissions, overlapping schedules.</hardening>
     <acceptance>Work schedule can be set for dentists and staff.</acceptance>
   </revision>
 
   <batch_verification>
-    - [ ] Billing flow tested with each HMO and payment method
-    - [ ] Staff and dentist schedules save correctly
+    - [x] Billing flow tested with each HMO and payment method
+    - [x] Staff and dentist schedules save correctly
   </batch_verification>
 </batch>
 

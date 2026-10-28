@@ -172,7 +172,7 @@ button:disabled { opacity: .65; }
 .btn.primary:hover { transform: none; }
 .btn.soft { border-color: var(--line); }
 .btn.soft:hover { background: var(--surface-3); }
-.btn.ghost { color: var(--text); }
+.btn.ghost { color: var(--text); } .btn.danger { background: var(--red-soft); color: var(--red); border-color: #f3d6d8; } .btn.danger:hover:not(:disabled) { background: #fbe2e5; color: #8c202e; border-color: #e4b5bc; }
 .btn { transition: transform var(--motion-instant) var(--motion-ease), box-shadow var(--motion-normal) var(--motion-ease), background var(--motion-normal) var(--motion-ease), border-color var(--motion-normal) var(--motion-ease); }
 .btn:disabled { opacity: .6; cursor: not-allowed; }
 @media (prefers-reduced-motion: no-preference) {
@@ -252,13 +252,13 @@ dialog.notification-dialog { margin: var(--space-3) var(--space-3) auto auto; wi
 
 /* Reusable FilterBar */
 .filter-bar { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--space-3); padding: var(--space-3) var(--space-4); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); margin-bottom: var(--space-4); }
-.filter-bar-search { position: relative; display: flex; align-items: center; flex: 1 1 240px; min-width: 200px; }
+.filter-bar-search { position: relative; display: flex; align-items: center; flex: 1 1 240px; min-width: 200px; max-width: none; }
 .filter-bar-search .filter-search-icon { position: absolute; left: 12px; color: var(--muted); pointer-events: none; }
 .filter-bar-search .filter-search-input { width: 100%; min-height: var(--control-height); padding: var(--space-2) var(--space-3) var(--space-2) 36px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); font-size: var(--font-sm); background: #fff; color: var(--text); }
 .filter-bar-search .filter-search-input:focus { outline: var(--focus-ring); border-color: var(--brand); }
 .filter-bar-controls { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--space-2); flex: 2 1 auto; }
 .filter-bar-controls .field, .filter-bar-controls > label { margin: 0; min-width: 130px; display: flex; flex-direction: column; gap: 4px; font-size: var(--font-xs); font-weight: var(--weight-strong); color: var(--text); }
-.filter-bar-controls select, .filter-bar-controls input { min-height: var(--control-height); font-size: var(--font-sm); }
+.filter-bar-controls select, .filter-bar-controls input { min-height: var(--control-height); font-size: var(--font-sm); width: auto; flex: 1 1 150px; } .filter-bar-controls .field select, .filter-bar-controls .field input, .filter-bar-controls > label select, .filter-bar-controls > label input { width: 100%; flex: none; } .patient-combobox { position: relative; width: 100%; } .patient-combobox-list { position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 40; max-height: 240px; overflow-y: auto; margin: 0; padding: 4px; list-style: none; background: var(--surface, #fff); border: 1px solid var(--line-strong); border-radius: var(--radius); box-shadow: var(--shadow-md); } .patient-combobox-option { display: flex; align-items: center; justify-content: space-between; width: 100%; min-height: 40px; padding: 8px 12px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--ink); font: inherit; font-size: var(--font-sm); text-align: left; cursor: pointer; } .patient-combobox-option:hover, .patient-combobox-option.is-active { background: var(--brand-soft); color: var(--brand-3); } .patient-combobox-empty { padding: 10px 12px; color: var(--muted); font-size: var(--font-sm); }
 .filter-bar-count { font-size: var(--font-xs); font-weight: var(--weight-medium); color: var(--muted); padding: var(--space-2) 0; white-space: nowrap; }
 .filter-bar-clear {
   margin-left: auto;
@@ -583,8 +583,9 @@ dialog.notification-dialog { margin: var(--space-3) var(--space-3) auto auto; wi
 .chat-live.is-disabled .chat-live-dot, .chat-live.is-idle .chat-live-dot { background: var(--muted-2); }
 .chat { display: grid; grid-template-columns: minmax(240px, 320px) minmax(0, 1fr); gap: var(--space-3); min-height: 520px; }
 .chat-list, .chat-thread { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-lg); min-width: 0; }
-.chat-list { padding: var(--space-2); overflow: auto; max-height: 70vh; }
-.chat-list ul { list-style: none; margin: 0; padding: 0; }
+.chat-list { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-2); overflow-y: auto; max-height: 70vh; }
+.chat-search { margin-bottom: 4px; flex-shrink: 0; }
+.chat-list ul { list-style: none; margin: 0; padding: 0; overflow-y: auto; flex: 1 1 auto; min-height: 0; }
 .chat-row { width: 100%; display: flex; justify-content: space-between; gap: var(--space-2); text-align: left; border: 0; background: transparent; border-radius: var(--radius); padding: 12px; min-height: 56px; color: var(--text); cursor: pointer; }
 .chat-row:hover { background: var(--surface-2); }
 .chat-row.selected { background: var(--brand-soft); }
@@ -595,7 +596,7 @@ dialog.notification-dialog { margin: var(--space-3) var(--space-3) auto auto; wi
 .chat-row-main small, .chat-row-meta small { color: var(--muted); font-size: 12px; }
 .chat-row-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex-shrink: 0; }
 .chat-badge { min-width: 22px; height: 22px; padding: 0 6px; border-radius: 999px; background: var(--brand); color: #fff; font-size: 12px; font-weight: 700; display: inline-grid; place-items: center; }
-.chat-thread { display: flex; flex-direction: column; min-height: 520px; }
+.chat-thread { display: flex; flex-direction: column; min-height: 520px; max-height: 70vh; overflow: hidden; }
 .chat-thread-head { display: flex; align-items: center; gap: var(--space-2); padding: 12px 16px; border-bottom: 1px solid var(--line); }
 .chat-thread-head > div:first-of-type { flex: 1; min-width: 0; }
 .chat-thread-head b, .chat-thread-head small { display: block; overflow-wrap: anywhere; }
@@ -604,10 +605,13 @@ dialog.notification-dialog { margin: var(--space-3) var(--space-3) auto auto; wi
 .chat-add-dentist { display: inline-flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 .chat-add-dentist select { min-height: 36px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 4px 8px; max-width: 200px; }
 .chat-back { display: none; border: 0; background: transparent; width: 44px; height: 44px; border-radius: var(--radius); transform: rotate(180deg); color: var(--ink); }
-.chat-log { flex: 1; overflow: auto; padding: 16px; display: flex; flex-direction: column; gap: 10px; max-height: 60vh; }
+.chat-log { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 10px; max-height: 60vh; scroll-behavior: smooth; }
 .chat-day { align-self: center; font-size: 12px; color: var(--muted); padding: 2px 10px; background: var(--surface-2); border-radius: 999px; }
-.chat-bubble { max-width: min(78%, 560px); align-self: flex-start; background: var(--surface-3); border-radius: 16px 16px 16px 6px; padding: 10px 12px; }
-.chat-bubble.mine { align-self: flex-end; background: var(--brand-soft); border-radius: 16px 16px 6px 16px; }
+.chat-bubble, .chat-bubble.theirs { max-width: min(78%, 560px); align-self: flex-start; background: var(--surface-2, #f1f5f9); border: 1px solid var(--line, #cbd5e1); color: var(--ink, #0f172a); border-radius: 16px 16px 16px 4px; padding: 10px 14px; }
+.chat-bubble.mine { align-self: flex-end; background: var(--brand-3, #115e59); border: 1px solid var(--brand-3, #115e59); color: #ffffff; border-radius: 16px 16px 4px 16px; }
+.chat-bubble.mine p { color: #ffffff; }
+.chat-bubble.mine small, .chat-bubble.mine .chat-time { color: rgba(255, 255, 255, 0.85); }
+.chat-highlight { background: #fef08a; color: #0f172a; padding: 0 2px; border-radius: 3px; }
 .chat-bubble small { display: block; font-size: 12px; color: var(--muted); }
 .chat-bubble p { margin: 4px 0; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--ink); line-height: 1.5; }
 .chat-time { display: block; font-size: 11px; color: var(--muted); text-align: right; }
@@ -624,7 +628,7 @@ dialog.notification-dialog { margin: var(--space-3) var(--space-3) auto auto; wi
   .chat.has-thread .chat-list { display: none; }
   .chat:not(.has-thread) .chat-thread { display: none; }
   .chat-back { display: inline-grid; place-items: center; }
-  .chat-list { max-height: none; }
+  .chat-list { max-height: 65vh; overflow-y: auto; }
   .chat-thread { min-height: 60vh; }
   .chat-log { max-height: 55vh; }
   .chat-bubble { max-width: 88%; }
@@ -652,3 +656,280 @@ dialog.notification-dialog { margin: var(--space-3) var(--space-3) auto auto; wi
 .branding-branch { border: 1px solid var(--line); border-radius: var(--radius-lg); padding: 10px 14px; margin-bottom: 10px; }
 .branding-branch summary { display: flex; justify-content: space-between; gap: 12px; min-height: 44px; align-items: center; cursor: pointer; }
 .branding-bir { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; padding-top: 8px; align-items: end; }
+
+/* STF-16: Live Queue Patient Link to open chart directly */
+.queue-patient-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  display: inline-block;
+  text-decoration: none;
+}
+.queue-patient-link:hover b {
+  color: var(--brand);
+  text-decoration: underline;
+}
+.queue-patient-link:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* STF-17: Queue quick call and message icon buttons */
+.queue-call-btn:hover,
+.queue-message-btn:hover {
+  color: var(--brand);
+  border-color: var(--brand);
+}
+
+/* DEN-01: Increase text sizes on Dentist Clinical Home for readability */
+.dentist-command-grid .next-patient-top h2 { font-size: 22px; font-weight: 700; }
+.dentist-command-grid .next-patient-top p { font-size: 13px; color: var(--muted); }
+.dentist-command-grid .clinical-stat-stack b { font-size: 24px; font-weight: 800; }
+.dentist-command-grid .clinical-stat-stack small { font-size: 13px; }
+.dentist-command-grid .day-list-row b { font-size: 14px; }
+.dentist-command-grid .day-list-row small { font-size: 12px; }
+.dentist-command-grid .day-time { font-size: 13px; font-weight: 700; }
+.dentist-command-grid .task-list b { font-size: 14px; }
+.dentist-command-grid .task-list small { font-size: 12px; }
+.active-treatment-banner b { font-size: 14px; }
+.active-treatment-banner small { font-size: 12px; }
+.active-treatment-banner span { font-size: 11px; font-weight: 750; }
+
+/* DEN-02: Fix My schedule date layout (alignment, width, spacing) */
+.day-schedule .schedule-slot {
+  display: grid;
+  grid-template-columns: 140px 24px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  min-height: 80px;
+}
+.day-schedule .schedule-time {
+  text-align: right;
+  padding-right: 4px;
+}
+.day-schedule .schedule-time b {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+  white-space: nowrap;
+}
+.day-schedule .schedule-time small {
+  font-size: 11px;
+  color: var(--muted);
+  display: block;
+  margin-top: 2px;
+}
+.schedule-date-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+/* DEN-12: My work hours UI enhancements */
+.st-week > li {
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  align-items: start;
+  gap: 14px;
+  padding: 12px 0;
+  border-top: 1px solid var(--line, #e1eaf1);
+}
+.st-week > li:first-child { border-top: 0; }
+.st-week .st-day {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--ink);
+  padding-top: 8px;
+}
+.st-cells {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+.st-cell {
+  padding: 10px 14px;
+  border-radius: var(--radius-lg, 12px);
+  min-height: 64px;
+}
+.st-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+@media (max-width: 640px) {
+  .st-week > li { grid-template-columns: 1fr; gap: 8px; }
+  .st-week .st-day { padding-top: 0; }
+}
+
+
+/* OWN-04, OWN-05, OWN-06: Owner Branch Management UI */
+.branch-overview-card {
+  padding: 14px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.branch-overview-card:hover {
+  border-color: var(--accent, #0284c7);
+}
+.branch-overview-card.branch-card-selected {
+  border: 2px solid var(--accent, #0284c7);
+  background: var(--surface-active, #f0f9ff);
+  box-shadow: 0 1px 3px rgba(2, 132, 199, 0.1);
+}
+.branch-code-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--primary-subtle, #e0f2fe);
+  color: var(--primary, #0284c7);
+  margin-left: 6px;
+  vertical-align: middle;
+}
+.btn-toggle-closed {
+  min-width: 68px;
+  font-weight: 700;
+  transition: all 0.15s ease;
+}
+.btn-toggle-closed.is-closed {
+  background: #fde8e4;
+  color: #8f2a19;
+  border: 1px solid #fca5a5;
+}
+.btn-toggle-closed.is-open {
+  background: #e6f4ef;
+  color: #0b5e55;
+  border: 1px solid #8fd0c4;
+}
+.branch-services-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+@media (max-width: 640px) {
+  .branch-services-grid {
+    grid-template-columns: 1fr;
+  }
+}
+.branch-service-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--line, #e2e8f0);
+  border-radius: 8px;
+  background: var(--surface, #ffffff);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.branch-service-item:hover {
+  border-color: var(--accent, #0284c7);
+}
+.branch-service-item.is-active {
+  background: var(--surface-active, #f0f9ff);
+  border-color: var(--accent, #0284c7);
+}
+.branch-coords-readout {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.branch-coords-readout .coord-value {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+/* STF-01, OWN-07, OWN-08, OWN-09: Shared Calendar & Appointment Details */
+.daycal-cell.past-day,
+.daycal-cell.is-past {
+  background: var(--surface-2, #f8fafc);
+  opacity: 0.75;
+}
+.daycal-cell.past-day .daycal-daylink,
+.daycal-cell.is-past .daycal-daylink {
+  color: var(--muted, #64748b);
+}
+.daycal-cell.past-day:hover,
+.daycal-cell.is-past:hover {
+  opacity: 1;
+}
+.schedule-past-day {
+  background: var(--surface-2, #f8fafc);
+  opacity: 0.94;
+}
+.appt-detail-container {
+  display: grid;
+  gap: 16px;
+}
+.appt-detail-header-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 14px 16px;
+  background: var(--surface-2, #f8fafc);
+  border-radius: 8px;
+  border: 1px solid var(--line, #e2e8f0);
+}
+.appt-detail-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+@media (max-width: 640px) {
+  .appt-detail-grid {
+    grid-template-columns: 1fr;
+  }
+}
+.appt-detail-section {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  background: var(--surface, #ffffff);
+  border: 1px solid var(--line, #e2e8f0);
+  border-radius: 8px;
+}
+.appt-detail-section-title {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted, #64748b);
+  margin: 0 0 2px;
+}
+.appt-detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  font-size: 13px;
+}
+.appt-detail-label {
+  color: var(--muted, #64748b);
+  font-size: 12px;
+}
+.appt-detail-value {
+  color: var(--text, #0f172a);
+  text-align: right;
+}
+.appt-detail-footer-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line, #e2e8f0);
+}

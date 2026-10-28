@@ -53,8 +53,11 @@ class LeaveController extends Controller
             'private_note' => ['nullable', 'required_if:type,other', 'string', 'max:500']]);
         if ($data['start_date'] < ClinicClock::today()) throw ValidationException::withMessages(['start_date' => ['Choose today or a later date.']]);
         if (ClinicClock::addDays($data['start_date'], 366) < $data['end_date']) throw ValidationException::withMessages(['end_date' => ['Choose at most one year.']]);
-        // Partial: from start_time on the first day to end_time on the last day. Full days: midnight to midnight (Asia/Manila).
+        // Partial: single-day leave from start_time to end_time on start_date. Full days: midnight to midnight (Asia/Manila).
         $partial = ! empty($data['start_time']);
+        if ($partial && $data['end_date'] !== $data['start_date']) {
+            throw ValidationException::withMessages(['end_date' => ['Partial-day leave must be on a single date.']]);
+        }
         $starts = ClinicClock::at($data['start_date'], $partial ? $data['start_time'] : '00:00');
         $ends = $partial ? ClinicClock::at($data['end_date'], $data['end_time']) : ClinicClock::at($data['end_date'], '00:00')->addDay();
         if ($ends->lessThanOrEqualTo($starts)) throw ValidationException::withMessages(['end_time' => ['The end must be after the start.']]);

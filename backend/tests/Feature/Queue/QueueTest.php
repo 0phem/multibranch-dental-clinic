@@ -179,15 +179,16 @@ class QueueTest extends TestCase
         $this->actingAsUser('staffB1');
         $this->walkIn('A')->assertCreated();
         $entry = $this->entryFor('A');
-        $this->command($entry, 'priority', null, null, ['priority' => 'Urgent', 'reason' => '   '])->assertStatus(422)->assertJsonValidationErrors('reason');
+        $this->command($entry, 'priority', null, null, ['priority' => 'Priority', 'reason' => '   '])->assertStatus(422)->assertJsonValidationErrors('reason');
         $this->command($entry, 'priority', null, null, ['priority' => 'Emergency', 'reason' => 'x'])->assertStatus(422)->assertJsonValidationErrors('priority');
+        $this->command($entry, 'priority', null, null, ['priority' => 'Urgent', 'reason' => 'x'])->assertStatus(422)->assertJsonValidationErrors('priority');
         $this->actingAsUser('dentist1');
-        $this->command($entry, 'priority', null, null, ['priority' => 'Urgent', 'reason' => 'x'])->assertForbidden();
+        $this->command($entry, 'priority', null, null, ['priority' => 'Priority', 'reason' => 'x'])->assertForbidden();
         $this->actingAsUser('owner');
-        $this->command($entry, 'priority', null, null, ['priority' => 'Urgent', 'reason' => 'Front desk request'])->assertOk()
-            ->assertJsonPath('data.priority', 'Urgent')->assertJsonPath('data.status', 'Waiting');
+        $this->command($entry, 'priority', null, null, ['priority' => 'Priority', 'reason' => 'Front desk request'])->assertOk()
+            ->assertJsonPath('data.priority', 'Priority')->assertJsonPath('data.status', 'Waiting');
         $history = QueueEntryHistory::where('event', 'queue.priority_changed')->sole();
-        $this->assertSame(['Normal', 'Urgent', 'Front desk request', 'Waiting', 'Waiting'], [$history->from_priority, $history->to_priority, $history->priority_reason, $history->from_status, $history->to_status]);
+        $this->assertSame(['Normal', 'Priority', 'Front desk request', 'Waiting', 'Waiting'], [$history->from_priority, $history->to_priority, $history->priority_reason, $history->from_status, $history->to_status]);
     }
 
     public function test_priority_does_not_reorder_patients_already_called_or_treatment_ready(): void

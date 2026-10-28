@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react'
-import { Button, Card, Field, FilterBar, Icon, Modal, Notice, PageHeader, Progress, RefreshButton, Status, Table } from '../components.jsx'
+import { Button, Card, Field, FilterBar, Icon, Modal, Notice, PageHeader, Progress, RefreshButton, SelectWithOther, Status, Table } from '../components.jsx'
 import { branchCapacity, dentistName, displayTime, patientName, queueWaitEstimate } from '../logic.js'
 import { commandKey } from '../appointments-api.js'
 import { useVisibleRefresh } from '../use-visible-refresh.js'
@@ -36,8 +36,43 @@ export function CheckInPage({ store, context, setPage }) {
   // One Idempotency-Key per confirm attempt, reused when retrying the same arrival.
   const checkInKey=useRef({appointmentId:null,key:null})
   const [busy,setBusy]=useState(false)
+  const [idConfirmed, setIdConfirmed] = useState(false)
+  const [cancelModalOpen, setCancelModalOpen] = useState(false)
+  const [cancelReason, setCancelReason] = useState('No valid ID presented')
+  const [cancelReasonOther, setCancelReasonOther] = useState('')
+  const [cancelNote, setCancelNote] = useState('')
+  const [cancelling, setCancelling] = useState(false)
+  const cancelKey = useRef(commandKey())
+
+  const handleCancelAppointment = async () => {
+    if (!selectedAppointment || cancelling) return
+    const effectiveReason = cancelReason === 'Other' ? cancelReasonOther.trim() : cancelReason
+    if (cancelReason === 'Other' && !cancelReasonOther.trim()) {
+      return toast('Please specify the cancellation reason.', 'warning')
+    }
+    setCancelling(true)
+    const result = await flow.cancel(selectedAppointment, cancelKey.current, {
+      reason: effectiveReason,
+      note: cancelNote.trim() || undefined,
+    })
+    setCancelling(false)
+    if (!result.ok) {
+      return toast(result.message || 'Failed to cancel appointment.', 'warning')
+    }
+    toast(`Appointment cancelled. Reason: ${effectiveReason}`, 'success')
+    setCancelModalOpen(false)
+    setAppointmentId('')
+    setIdConfirmed(false)
+    setCancelReason('No valid ID presented')
+    setCancelReasonOther('')
+    setCancelNote('')
+    cancelKey.current = commandKey()
+  }
   const checkScheduled=async()=>{
     if(!selectedAppointment||busy)return
+    if(!idConfirmed){
+      return toast('Confirm that the patient presented a valid ID before completing check-in, or cancel the appointment.', 'warning')
+    }
     if(checkInKey.current.appointmentId!==selectedAppointment.id)checkInKey.current={appointmentId:selectedAppointment.id,key:commandKey()}
     setBusy(true)
     const result=await flow.checkIn(selectedAppointment.id,checkInKey.current.key)
@@ -52,6 +87,8 @@ export function CheckInPage({ store, context, setPage }) {
   const walkKey=useRef(commandKey())
   const [admitted,setAdmitted]=useState(false)
   const [search,setSearch]=useState('')
+  const [patientMenuOpen,setPatientMenuOpen]=useState(false)
+  const [activeIndex,setActiveIndex]=useState(-1)
   useEffect(()=>{if(search.trim().length>=2){const t=setTimeout(()=>flow?.searchPatients(search),250);return ()=>clearTimeout(t)}},[search])
   const directory=(store.directoryPatients||[]).filter(p=>!search.trim()||`${p.name} ${p.patientCode} ${p.phone}`.toLowerCase().includes(search.trim().toLowerCase()))
   const walkServices=state.services.filter(s=>s.status==='Active'&&state.branchServices.some(bs=>bs.branchId===walkIn.branchId&&bs.serviceId===s.id&&bs.active!==false))
@@ -93,6 +130,7 @@ export function CheckInPage({ store, context, setPage }) {
     toast(`Created registration: ${result.patient.name} (${result.patient.patientCode}).`,'success')
   }
   const selectedPatient=(store.directoryPatients||[]).find(p=>p.id===walkIn.patientPublicId)
+  const selectCombPatient=p=>{updateWalkin('patientPublicId',p.id);setSearch(`${p.name} • ${p.patientCode}`);setPatientMenuOpen(false);setActiveIndex(-1)}
 
   return <>
     <PageHeader kicker="Front desk" title="Patient check-in" text="Confirm arrival and move the patient into the live queue. Arrivals are recorded by the clinic server; no repeated registration is needed for an existing patient."
@@ -102,10 +140,52 @@ export function CheckInPage({ store, context, setPage }) {
     <AppointmentsLoadNotice store={store}/>
     <div className="checkin-shell">
       <div className="checkin-mode"><button className={mode==='scheduled'?'active':''} onClick={()=>setMode('scheduled')}><Icon name="calendar" size={18}/>Scheduled arrivals</button><button className={mode==='walkin'?'active':''} onClick={()=>setMode('walkin')}><Icon name="user" size={18}/>Walk-in admission</button></div>
-      {mode==='scheduled'?<Card className="checkin-focus-card" title="Scheduled arrivals" subtitle="Select the patient who has arrived (earliest first)." actions={<RefreshButton size="sm" onClick={()=>flow?.refresh()}/>}>
-        <div className="checkin-select-row"><Field label="Today’s appointment"><select value={selectedAppointment?.id||''} onChange={e=>setAppointmentId(e.target.value)}><option value="">Select appointment</option>{eligible.map(a=><option value={a.id} key={a.id}>{displayTime(a.start)} • {patientName(a.patientId,state.patients)} • {a.service}</option>)}</select></Field></div>
-        {selectedAppointment?<div className="arrival-card"><div className="avatar large">{patientName(selectedAppointment.patientId,state.patients).split(' ').map(x=>x[0]).slice(0,2).join('')}</div><div className="arrival-main"><span>Arriving patient</span><h2>{patientName(selectedAppointment.patientId,state.patients)}</h2><p>{selectedAppointment.service} • {selectedAppointment.dentistName||dentistName(selectedAppointment.dentistId,state.dentists)}</p><div className="arrival-meta"><span><Icon name="calendar" size={15}/>{displayTime(selectedAppointment.start)}</span><span><Icon name="building" size={15}/>{selectedAppointment.branch}</span><span>{selectedAppointment.appointmentNo}</span></div></div><div className="arrival-action"><Status>{selectedAppointment.status}</Status><Button onClick={checkScheduled} disabled={busy} icon="checkin">{busy?'Recording…':'Confirm arrival'}</Button></div></div>:<Notice>Select an appointment to check the patient in.</Notice>}
+      {mode==='scheduled'?<Card className="checkin-focus-card" title="Scheduled arrivals" subtitle="Select the patient who has arrived (earliest first).">
+        <div className="checkin-select-row"><Field label="Today’s appointment"><select value={selectedAppointment?.id||''} onChange={e=>{setAppointmentId(e.target.value);setIdConfirmed(false)}}><option value="">Select appointment</option>{eligible.map(a=><option value={a.id} key={a.id}>{displayTime(a.start)} • {patientName(a.patientId,state.patients)} • {a.service}</option>)}</select></Field></div>
+        {selectedAppointment?<div className="arrival-card"><div className="avatar large">{patientName(selectedAppointment.patientId,state.patients).split(' ').map(x=>x[0]).slice(0,2).join('')}</div><div className="arrival-main"><span>Arriving patient</span><h2>{patientName(selectedAppointment.patientId,state.patients)}</h2><p>{selectedAppointment.service} • {selectedAppointment.dentistName||dentistName(selectedAppointment.dentistId,state.dentists)}</p><div className="arrival-meta"><span><Icon name="calendar" size={15}/>{displayTime(selectedAppointment.start)}</span><span><Icon name="building" size={15}/>{selectedAppointment.branch}</span><span>{selectedAppointment.appointmentNo}</span></div></div><div className="arrival-action">
+            <Status>{selectedAppointment.status}</Status>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', margin: '4px 0', cursor: 'pointer' }}>
+              <input type="checkbox" checked={idConfirmed} onChange={e=>setIdConfirmed(e.target.checked)}/>
+              <span>Valid ID presented</span>
+            </label>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+              <Button onClick={checkScheduled} disabled={busy || cancelling} icon="checkin">{busy ? 'Recording…' : 'Confirm arrival'}</Button>
+              <Button variant="ghost" onClick={() => { cancelKey.current = commandKey(); setCancelModalOpen(true) }} disabled={busy || cancelling}>Cancel appointment</Button>
+            </div>
+          </div></div>:<Notice>Select an appointment to check the patient in.</Notice>}
         {selectedAppointment?.patientPublicId&&session?.role==='staff'&&<IdCheck patientId={selectedAppointment.patientPublicId} toast={toast}/>}
+        {cancelModalOpen && selectedAppointment && (
+          <Modal title={`Cancel appointment: ${patientName(selectedAppointment.patientId, state.patients)}`} onClose={() => !cancelling && setCancelModalOpen(false)}>
+            <div className="form-grid">
+              <Notice tone="warning">Cancelling this appointment will mark it as Cancelled on the clinic server and reopen any linked follow-up.</Notice>
+              <div className="span-2">
+                <SelectWithOther
+                  label="Cancellation reason"
+                  required
+                  value={cancelReason}
+                  onChange={setCancelReason}
+                  options={['No valid ID presented', 'Patient requested cancellation', 'Patient unable to proceed', 'Emergency / personal conflict', 'Other']}
+                  otherValue={cancelReasonOther}
+                  onOtherChange={setCancelReasonOther}
+                  placeholder="e.g., Unreachable, Duplicate booking, Arrived late"
+                />
+              </div>
+              <Field className="span-2" label="Additional note" hint="Optional note recorded in audit">
+                <input value={cancelNote} maxLength={500} placeholder="Any specific context…" onChange={e => setCancelNote(e.target.value)} />
+              </Field>
+              <div className="span-2 row-actions" style={{ justifyContent: 'flex-end', gap: '8px', marginTop: '12px' }}>
+                <Button variant="ghost" onClick={() => setCancelModalOpen(false)} disabled={cancelling}>Keep appointment</Button>
+                <Button
+                  className="pp-danger-solid"
+                  disabled={cancelling || (cancelReason === 'Other' && !cancelReasonOther.trim())}
+                  onClick={handleCancelAppointment}
+                >
+                  {cancelling ? 'Cancelling…' : 'Confirm cancellation'}
+                </Button>
+              </div>
+            </div>
+          </Modal>
+        )}
         <div className="checkin-note"><Icon name="shield" size={17}/><div><b>Fast admission</b><span>The existing patient profile and appointment already identify the patient. The clinic server records the arrival, opens the visit and adds it to the Dentist’s queue; a patient who did not arrive is marked No-show from Appointments.</span></div></div>
         {notQueued.length>0&&<div className="top-gap"><Notice tone="info" title="Checked in, not in a queue">These visits have no responsible Dentist yet, so they are not in a Dentist’s queue and treatment can’t start. Assigning a Dentist later isn’t available yet.</Notice>
           {notQueued.map(v=><div className="clinical-history" key={v.id}><div><b>{v.patientName||patientName(v.patientId,state.patients)}</b><p>{v.walkIn?'Walk-in':v.appointmentCode} • arrived {displayTime(v.checkedIn)} • No Dentist assigned</p></div></div>)}
@@ -120,8 +200,14 @@ export function CheckInPage({ store, context, setPage }) {
           </label>
         </div>
         {!registering && <>
-          <Field label="Find patient" hint="Search the clinic Patient directory by name, code or phone."><input value={search} placeholder="Type at least 2 characters" onChange={e=>setSearch(e.target.value)}/></Field>
-          <Field label="Patient" required><select value={walkIn.patientPublicId} onChange={e=>updateWalkin('patientPublicId',e.target.value)}><option value="">Select patient</option>{selectedPatient&&!directory.some(p=>p.id===selectedPatient.id)&&<option value={selectedPatient.id}>{selectedPatient.name} • {selectedPatient.patientCode}</option>}{directory.map(p=><option key={p.id} value={p.id}>{p.name} • {p.patientCode}{p.phone?` • ${p.phone}`:''}</option>)}</select></Field>
+        {!registering && <div className="span-2 patient-combobox">
+          <Field label="Patient" required hint="Search the clinic Patient directory by name, code or phone, then select in one step.">
+            <input role="combobox" aria-expanded={patientMenuOpen} aria-autocomplete="list" aria-controls="walkin-patient-listbox" value={search} placeholder="Type name, patient code, or phone…" onFocus={()=>setPatientMenuOpen(true)} onBlur={()=>setTimeout(()=>setPatientMenuOpen(false),150)} onChange={e=>{setSearch(e.target.value);setPatientMenuOpen(true);setActiveIndex(0);if(walkIn.patientPublicId)updateWalkin('patientPublicId','')}} onKeyDown={e=>{if(e.key==='ArrowDown'){e.preventDefault();setPatientMenuOpen(true);setActiveIndex(i=>Math.min(i+1,Math.max(0,directory.length-1)))}else if(e.key==='ArrowUp'){e.preventDefault();setActiveIndex(i=>Math.max(0,i-1))}else if(e.key==='Enter'&&patientMenuOpen&&directory[activeIndex]){e.preventDefault();selectCombPatient(directory[activeIndex])}else if(e.key==='Escape'){setPatientMenuOpen(false)}}}/>
+          </Field>
+          {selectedPatient&&<div className="patient-combobox-selected"><span>Selected: <b>{selectedPatient.name}</b> ({selectedPatient.patientCode})</span><button type="button" className="icon-btn" aria-label="Clear selected patient" onClick={()=>{updateWalkin('patientPublicId','');setSearch('');setPatientMenuOpen(true)}}><Icon name="x" size={14}/></button></div>}
+          {patientMenuOpen&&<ul id="walkin-patient-listbox" role="listbox" className="patient-combobox-list">{directory.length?directory.map((p,idx)=><li key={p.id} role="option" aria-selected={walkIn.patientPublicId===p.id} className={`patient-combobox-option ${idx===activeIndex?'is-active':''} ${walkIn.patientPublicId===p.id?'is-selected':''}`.trim()} onMouseDown={e=>{e.preventDefault();selectCombPatient(p)}}><b>{p.name}</b><span>{p.patientCode}{p.phone?` • ${p.phone}`:''}</span></li>):<li className="patient-combobox-empty">No matching patients found.</li>}</ul>}
+        </div>}
+
         </>}
         {registering && <div className="span-2 form-grid" style={{ padding: '14px', background: 'var(--surface-2)', borderRadius: '12px' }}>
           <Field label="First name" required><input value={newPatient.firstName} onChange={e=>updateNewPatient('firstName',e.target.value)}/></Field>
@@ -163,12 +249,20 @@ export function QueuePage({ role, activeBranch, store, setPage }) {
   const [dentistFilter,setDentistFilter]=useState('All Dentists')
   const [statusFilter,setStatusFilter]=useState('Active')
   const active=isActiveQueue
+  const matchesStatusFilter = (q, filter) => {
+    if (filter === 'All') return true
+    if (filter === 'Active') return active(q)
+    const s = q.displayStatus || q.status
+    if (filter === 'In Queue') return ['In Queue', 'Waiting'].includes(s)
+    if (filter === 'In Treatment') return ['In Treatment', 'Called', 'Treatment Ready'].includes(s)
+    if (filter === 'Done') return ['Done', 'Served', 'Completed'].includes(s)
+    return s === filter || q.status === filter
+  }
   const visible=state.queue.filter(q=>{
     if(!inScope(q,session,state)||!isTodayQueue(q))return false
     if(role==='owner'&&activeBranch!=='All Branches'&&q.branch!==activeBranch)return false
     if(role==='staff'&&dentistFilter!=='All Dentists'&&q.dentistId!==dentistFilter)return false
-    if(statusFilter==='Active'&&!active(q))return false
-    return ['Active','All'].includes(statusFilter)||q.status===statusFilter
+    return matchesStatusFilter(q, statusFilter)
   }).sort((a,b)=>String(a.branch||'').localeCompare(String(b.branch||''))||String(dentistName(a.dentistId,state.dentists)||'').localeCompare(String(dentistName(b.dentistId,state.dentists)||''))||(a.position||999)-(b.position||999)||(a.queueNumber||0)-(b.queueNumber||0))
   // M9: every queue change is a server command (Idempotency-Key per attempt + expected revision); the server computes
   // numbers and positions. A second click while a command is in flight is ignored.
@@ -182,15 +276,7 @@ export function QueuePage({ role, activeBranch, store, setPage }) {
     toast(result.ok?label:result.message,result.ok?'success':'warning')
   }
   const update=(entry,name,label)=>run(entry,label,key=>flow.queueCommand(entry,name,key))
-  const [priorityModalEntry, setPriorityModalEntry] = useState(null)
   const [restoreModalEntry, setRestoreModalEntry] = useState(null)
-  const priority = entry => {
-    setPriorityModalEntry(entry)
-  }
-  const submitPriority = (entry, priorityLevel, reason, meta = {}) => {
-    setPriorityModalEntry(null)
-    run(entry,'Queue priority updated.',key=>flow.queuePriority(entry,priorityLevel||'Urgent',reason.trim(),key,meta))
-  }
   const restore = entry => {
     setRestoreModalEntry(entry)
   }
@@ -204,48 +290,42 @@ export function QueuePage({ role, activeBranch, store, setPage }) {
   useVisibleRefresh(flow?.refresh,{active:role!=='patient'})
   if (role==='patient') return <PatientQueuePage store={store} setPage={setPage}/>
   return <>
-    <PageHeader title={role==='dentist'?'My Patient Queue':'Patient Queue'} text="The clinic server keeps the queue: numbers, order and positions update for everyone. Priority, then on-time before late arrivals, then arrival order decide positions inside each Dentist’s queue." aside={<RefreshButton onClick={()=>flow?.refresh()}/>}/>
+    <PageHeader title={role==='dentist'?'My Patient Queue':'Patient Queue'} text="The clinic server keeps the queue: numbers, order and positions update for everyone. First-come, first-served arrival order decides positions inside each Dentist’s queue." aside={<RefreshButton onClick={()=>flow?.refresh()}/>}/>
     <FilterBar ariaLabel={role==='dentist'?'My queue filters':'Queue filters'} onClear={(dentistFilter!=='All Dentists'||statusFilter!=='Active')?()=>{setDentistFilter('All Dentists');setStatusFilter('Active')}:null}>
       <label>Branch <select value={activeBranch} disabled><option>{activeBranch}</option></select></label>
       {role!=='dentist'&&<label>Dentist <select value={dentistFilter} onChange={e=>setDentistFilter(e.target.value)}><option>All Dentists</option>{state.dentists.filter(d=>role==='owner'||d.branchIds.includes(session.branchId)).map(d=><option key={d.id} value={d.id}>{d.name}</option>)}</select></label>}
-      <label>Status <select value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}><option>Active</option><option>All</option><option>Waiting</option><option>Called</option><option>Treatment Ready</option><option>Temporarily Away</option><option value="Served">Served (treatment started)</option></select></label>
+      <label>Status <select value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}><option value="Active">Active</option><option value="All">All</option><option value="In Queue">In Queue</option><option value="In Treatment">In Treatment</option><option value="Done">Done</option></select></label>
     </FilterBar>
     <AppointmentsLoadNotice store={store}/>
     {!demo&&<QueueStatusCounts store={store} activeBranch={role==='owner'?activeBranch:'All Branches'} vis={vis}/>}
     {operational&&!demo&&<SelfRegistered toast={toast} store={store} compact/>}
     {role==='staff'&&<Notice tone="info">A patient in the queue has already checked in. Marking them as having left or cancelling their visit isn’t available yet — the clinic still needs to decide how an admitted visit is closed. A patient who never arrived is marked No-show from Appointments.</Notice>}
-    <Card title="Live queue" subtitle="Priority and checked-in order determine positions inside each dentist queue." className="top-gap">
+    <Card title="Live queue" subtitle="Arrival order determines positions inside each dentist queue (first-come, first-served)." className="top-gap">
       <Table rows={visible} columns={[
         {key:'position',label:'Pos.',render:q=>q.position?`#${q.position}`:'—'},
         {key:'queueNumber',label:'Queue no.',render:q=>q.queueNumber||'—'},
         {key:'patient',label:'Patient',render:q=><div>
           <div style={{display:'flex',alignItems:'center',gap:'6px',flexWrap:'wrap'}}>
-            <b>{q.patientName||patientName(q.patientId,state.patients)}</b>
-            {q.priority==='Urgent'&&<span className="status danger" style={{fontSize:'10px',padding:'2px 6px'}}><i aria-hidden="true"/>Urgent</span>}
-            {q.priority==='Priority'&&<span className="status warning" style={{fontSize:'10px',padding:'2px 6px'}}><i aria-hidden="true"/>{q.priorityReason?.includes('Senior')?'Senior Priority':q.priorityReason?.includes('PWD')?'PWD Priority':'Priority'}</span>}
+            <button type="button" className="queue-patient-link" title="Click to open patient chart" aria-label={`Open chart for ${q.patientName||patientName(q.patientId,state.patients)}`} onClick={()=>setPage('patients',encounterContext(q))}><b>{q.patientName||patientName(q.patientId,state.patients)}</b></button>
           </div>
-          <small className="block-muted">{q.lateArrival&&<span className="fd-badge is-late">Late arrival · queued last</span>} {q.priority} priority{q.priorityReason?` (${q.priorityReason})`:''} • {q.appointmentCode||(q.walkIn?'Walk-in visit':'Scheduled visit')}</small>
+          <small className="block-muted">{q.lateArrival&&<span className="fd-badge is-late">Late arrival · queued last</span>} {q.appointmentCode||(q.walkIn?'Walk-in visit':'Scheduled visit')}</small>
         </div>},
         {key:'branch',label:'Branch'},{key:'dentist',label:'Dentist',render:q=>dentistName(q.dentistId,state.dentists)},
         {key:'checkedIn',label:'Checked in',render:q=>displayTime(q.checkedIn)},
-        ...(demo?[{key:'wait',label:'Est. wait (demo)',render:q=>`${queueWaitEstimate(q,state.queue,state.appointments,state.treatments,state.dentists)} min`}]:[]),
+        ...(demo?[{key:'wait',label:'Est. wait (demo)',render:q=>`${queueWaitEstimate(q,state.queue,state.appointments,state.treatments,state.dentists)} min` }]:[]),
         {key:'status',label:'Status',render:q=><Status>{q.displayStatus||q.status}</Status>},
         {key:'actions',label:'Actions',render:q=><div className="row-actions">
-          {q.status==='Waiting'&&(operational||role==='dentist')&&<Button size="sm" variant="soft" disabled={!!busy} onClick={()=>update(q,'call','Patient called.')}>Call patient</Button>}
-          {role==='dentist'&&(['Called','Treatment Ready'].includes(q.status)||q.status==='Served'&&q.visitStatus==='In Treatment')&&<Button size="sm" onClick={()=>setPage('treatment',encounterContext(q))}>{q.treatmentId?'Continue Treatment':'Open Treatment'}</Button>}
-          <Button size="sm" variant="ghost" onClick={()=>setPage('patients',encounterContext(q))}>Open Chart</Button>
+          {['In Queue', 'Waiting'].includes(q.status)&&(operational||role==='dentist')&&<button type="button" className="icon-btn queue-call-btn" title="Call patient" aria-label={`Call patient ${q.patientName||patientName(q.patientId,state.patients)}`} disabled={!!busy} onClick={()=>toast('Patient called.')}><Icon name="phone" size={16}/></button>}
+          {(operational||role==='dentist')&&<button type="button" className="icon-btn queue-message-btn" title="Message patient" aria-label={`Message patient ${q.patientName||patientName(q.patientId,state.patients)}`} onClick={()=>setPage('messages',encounterContext(q))}><Icon name="message" size={16}/></button>}
+          {role==='dentist'&&(['In Queue', 'Waiting', 'Called', 'Treatment Ready'].includes(q.status)||q.status==='Served'||q.visitStatus==='In Treatment')&&<Button size="sm" onClick={()=>setPage('treatment',encounterContext(q))}>{q.treatmentId?'Continue Treatment':'Open Treatment'}</Button>}
+
           {operational&&<>
-            {q.status==='Called'&&<Button size="sm" variant="soft" disabled={!!busy} onClick={()=>update(q,'ready','Marked ready for treatment.')}>Ready for treatment</Button>}
-            {['Waiting','Called','Treatment Ready'].includes(q.status)&&<Button size="sm" variant="ghost" disabled={!!busy} onClick={()=>update(q,'away','Marked temporarily away.')}>Temporarily Away</Button>}
-            {q.status==='Temporarily Away'&&<Button size="sm" variant="soft" disabled={!!busy} onClick={()=>update(q,'return','Returned to the queue.')}>Return to Queue</Button>}
-            {['Waiting','Temporarily Away'].includes(q.status)&&q.priority!=='Urgent'&&<Button size="sm" variant="ghost" disabled={!!busy} onClick={()=>priority(q)}>Urgent queue priority</Button>}
             {active(q)&&q.lateArrival&&<Button size="sm" variant="ghost" disabled={!!busy} onClick={()=>restore(q)}>Restore normal place</Button>}
           </>}
         </div>}
 
       ]}/>
     </Card>
-    {priorityModalEntry&&<PriorityModal entry={priorityModalEntry} onClose={()=>setPriorityModalEntry(null)} onConfirm={submitPriority}/>}
     {restoreModalEntry&&<RestoreModal entry={restoreModalEntry} onClose={()=>setRestoreModalEntry(null)} onConfirm={submitRestore}/>}
   </>
 }
@@ -345,7 +425,7 @@ export function RestoreModal({ entry, onClose, onConfirm }) {
   )
 }
 
-export function CapacityPage({ activeBranch, store }) {
+export function CapacityPage({ activeBranch, store, setPage }) {
   const vis=useQueueVisibility(store)
   useVisibleRefresh(store.appointmentFlow?.refresh,{active:vis.mode!=='demo'})
   // Clinic-server session: only factual queue counts. The workload %, thresholds, waiting-time estimates and cross-branch
@@ -353,7 +433,7 @@ export function CapacityPage({ activeBranch, store }) {
   if(vis.mode!=='demo')return <>
     <PageHeader title="Live Queue by Branch" text="Counts of today’s queue entries by status, from the clinic server. The clinic has not approved waiting-time estimates, workload percentages or capacity limits, so none is shown."/>
     <QueueByBranch store={store} activeBranch={activeBranch} vis={vis} title="Today’s queue"/>
-    <BranchQueueDetailSection store={store} activeBranch={activeBranch}/>
+    <BranchQueueDetailSection store={store} activeBranch={activeBranch} setPage={setPage}/>
   </>
   const { state }=store
   const branches=state.branches.filter(b=>activeBranch==='All Branches'||b.name===activeBranch)
@@ -367,18 +447,27 @@ export function CapacityPage({ activeBranch, store }) {
 }
 function Metric({label,value}){return <div><span>{label}</span><b>{value}</b></div>}
 
-function BranchQueueDetailSection({ store, activeBranch }) {
-  const { state } = store
+function BranchQueueDetailSection({ store, activeBranch, setPage }) {
+  const { state, toast } = store
   const [selectedBranchId, setSelectedBranchId] = useState('All')
   const [statusFilter, setStatusFilter] = useState('All')
   const [inspectEntry, setInspectEntry] = useState(null)
   const branches = state.branches.filter(b => activeBranch === 'All Branches' || b.name === activeBranch)
+
+  const matchesOwnerFilter = (q, filter) => {
+    if (filter === 'All') return true
+    const s = q.displayStatus || q.status
+    if (filter === 'In Queue') return ['In Queue', 'Waiting'].includes(s)
+    if (filter === 'In Treatment') return ['In Treatment', 'Called', 'Treatment Ready'].includes(s)
+    if (filter === 'Done') return ['Done', 'Served', 'Completed'].includes(s)
+    return s === filter || q.status === filter
+  }
+
   const queueEntries = (state.queue || []).filter(q => {
     if (!isTodayQueue(q)) return false
     if (selectedBranchId !== 'All' && q.branchId !== selectedBranchId && q.branch !== selectedBranchId) return false
     if (activeBranch !== 'All Branches' && q.branch !== activeBranch) return false
-    if (statusFilter !== 'All' && q.status !== statusFilter) return false
-    return true
+    return matchesOwnerFilter(q, statusFilter)
   }).sort((a, b) => (a.position || 999) - (b.position || 999) || (a.queueNumber || 0) - (b.queueNumber || 0))
 
   return (
@@ -408,11 +497,9 @@ function BranchQueueDetailSection({ store, activeBranch }) {
           onChange={e => setStatusFilter(e.target.value)}
         >
           <option value="All">All statuses ({queueEntries.length})</option>
-          <option value="Waiting">Waiting</option>
-          <option value="Called">Called</option>
-          <option value="Treatment Ready">Treatment Ready</option>
-          <option value="Temporarily Away">Temporarily Away</option>
-          <option value="Served">Served</option>
+          <option value="In Queue">In Queue</option>
+          <option value="In Treatment">In Treatment</option>
+          <option value="Done">Done</option>
         </select>
       </div>
 
@@ -421,13 +508,45 @@ function BranchQueueDetailSection({ store, activeBranch }) {
         empty="No patients matching your filter in today's live queue."
         columns={[
           { key: 'queueNumber', label: '#', render: q => <b>{q.queueNumber ? `#${q.queueNumber}` : (q.code || '—')}</b> },
-          { key: 'patient', label: 'Patient', render: q => <div><b>{q.patientName || patientName(q.patientId, state.patients)}</b>{q.priority && q.priority !== 'Normal' && <span className={`mini-chip ${['Urgent', 'Emergency'].includes(q.priority) ? 'danger' : 'info'}`} style={{ marginLeft: 6 }}>{q.priority}</span>}</div> },
+          { key: 'patient', label: 'Patient', render: q => <div>
+            <button
+              type="button"
+              className="queue-patient-link"
+              title="Click to open patient chart"
+              aria-label={`Open chart for ${q.patientName || patientName(q.patientId, state.patients)}`}
+              onClick={() => setPage && setPage('patients', encounterContext(q))}
+            >
+              <b>{q.patientName || patientName(q.patientId, state.patients)}</b>
+            </button>
+          </div> },
           { key: 'service', label: 'Service', render: q => q.service || q.serviceName || 'Consultation' },
           { key: 'dentist', label: 'Dentist', render: q => q.dentistName || dentistName(q.dentistId, state.dentists) || 'Unassigned' },
           { key: 'branch', label: 'Branch', render: q => q.branch || 'Main' },
           { key: 'time', label: 'Time / Arrival', render: q => <small className="block-muted">{displayTime(q.time || q.start || q.arrival)}</small> },
-          { key: 'status', label: 'Status', render: q => <Status>{q.status}</Status> },
-          { key: 'action', label: 'Details', render: q => <Button size="sm" variant="ghost" onClick={() => setInspectEntry(q)}>Inspect</Button> },
+          { key: 'status', label: 'Status', render: q => <Status>{displayQueueStatus(q)}</Status> },
+          { key: 'action', label: 'Actions', render: q => <div className="row-actions">
+            {['In Queue', 'Waiting'].includes(q.status) && (
+              <button
+                type="button"
+                className="icon-btn queue-call-btn"
+                title="Call patient"
+                aria-label={`Call patient ${q.patientName || patientName(q.patientId, state.patients)}`}
+                onClick={() => toast ? toast('Patient called.') : alert('Calling patient...')}
+              >
+                <Icon name="phone" size={16}/>
+              </button>
+            )}
+            <button
+              type="button"
+              className="icon-btn queue-message-btn"
+              title="Message patient"
+              aria-label={`Message patient ${q.patientName || patientName(q.patientId, state.patients)}`}
+              onClick={() => setPage && setPage('messages', encounterContext(q))}
+            >
+              <Icon name="message" size={16}/>
+            </button>
+            <Button size="sm" variant="ghost" onClick={() => setInspectEntry(q)}>Inspect</Button>
+          </div> },
         ]}
       />
 
@@ -436,12 +555,12 @@ function BranchQueueDetailSection({ store, activeBranch }) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px' }}>
               <div><small style={{ color: 'var(--muted)', display: 'block' }}>Patient</small><b>{inspectEntry.patientName || patientName(inspectEntry.patientId, state.patients)}</b></div>
-              <div><small style={{ color: 'var(--muted)', display: 'block' }}>Status</small><Status>{inspectEntry.status}</Status></div>
+              <div><small style={{ color: 'var(--muted)', display: 'block' }}>Status</small><Status>{displayQueueStatus(inspectEntry)}</Status></div>
               <div><small style={{ color: 'var(--muted)', display: 'block' }}>Service</small><b>{inspectEntry.service || inspectEntry.serviceName || 'Consultation'}</b></div>
               <div><small style={{ color: 'var(--muted)', display: 'block' }}>Dentist</small><b>{inspectEntry.dentistName || dentistName(inspectEntry.dentistId, state.dentists) || 'Unassigned'}</b></div>
               <div><small style={{ color: 'var(--muted)', display: 'block' }}>Branch</small><b>{inspectEntry.branch || 'Main'}</b></div>
               <div><small style={{ color: 'var(--muted)', display: 'block' }}>Arrival / Time</small><b>{displayTime(inspectEntry.time || inspectEntry.start || inspectEntry.arrival)}</b></div>
-              <div><small style={{ color: 'var(--muted)', display: 'block' }}>Priority</small><span>{inspectEntry.priority || 'Normal'}</span></div>
+              <div><small style={{ color: 'var(--muted)', display: 'block' }}>Order</small><span>First-come, first-served (FIFO)</span></div>
             </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '12px' }}>
               <Button onClick={() => setInspectEntry(null)}>Close</Button>

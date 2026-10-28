@@ -83,7 +83,7 @@ export function encounterContext(entry) {
 
 // Display projections must not become duplicate sources of identity or branch data.
 export function persistableCollection(key, rows) {
-  const identity=['name','firstName','lastName','email','phone','dob','sex','address']
+  const identity=['name','firstName','lastName','email','phone','dob','sex','sexOther','address']
   const omitted={
     hmo:['branch','provider','pendingHours','missing','eligibility'],conversations:['unreadBy','assignedTo','assignedRole'],inquiries:['assigned'],appointments:['branch','service'],queue:['branch'],treatments:['branch'],invoices:['branch'],
     patients:[...identity,'preferredBranch'],dentists:[...identity,'branches','assistant'],

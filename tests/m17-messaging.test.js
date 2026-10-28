@@ -140,3 +140,30 @@ test('undecryptable message displays neutral fallback text without exposing inte
   const page = read('src/pages/ServerMessages.jsx')
   assert.match(page, /<p>\{m\.body\}<\/p>/)
 })
+
+test('STF-21..24 & DEN-14: Switch dentist label, distinct sender/receiver chat bubbles, message search with highlighting, and scrollable thread', async () => {
+  const page = read('src/pages/ServerMessages.jsx')
+  const css = read('src/foundation.css')
+
+  // STF-21: Switch dentist label and button
+  assert.match(page, /Switch dentist/)
+  assert.doesNotMatch(page, />Add dentist</)
+  assert.match(page, /Dentist to switch to/)
+
+  // STF-22: Distinct sender (.mine) and receiver (.theirs) chat bubble classes and colors
+  assert.match(page, /chat-bubble \$\{m\.mine \? 'mine' : 'theirs'\}/)
+  assert.match(css, /\.chat-bubble,\s*\.chat-bubble\.theirs\s*\{[^}]*align-self:\s*flex-start;[^}]*background:\s*var\(--surface-2/s)
+  assert.match(css, /\.chat-bubble\.mine\s*\{[^}]*align-self:\s*flex-end;[^}]*background:\s*var\(--brand-3/s)
+
+  // STF-23: Shared SearchInput in messages with keyword/contact search, match highlighting, and empty state
+  assert.match(page, /<SearchInput className="chat-search"/)
+  assert.match(page, /No matching messages or contacts/)
+  assert.match(page, /className="chat-highlight"/)
+  stubFetch(json(200, { data: [], meta: { next_cursor: null, channels: [] } }))
+  await messaging.loadConversations(null, 'Reyes')
+  assert.match(calls.at(-1).url, /q=Reyes/)
+
+  // STF-24 & DEN-14: Scrollable list and log with auto-scroll to latest message shared across Staff and Dentist
+  assert.match(css, /\.chat-log\s*\{[^}]*overflow-y:\s*auto;[^}]*scroll-behavior:\s*smooth;/s)
+  assert.match(page, /el\.scrollTop = el\.scrollHeight/)
+})

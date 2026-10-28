@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { Button, Field, Icon, Notice } from '../components.jsx'
+import { Button, Field, Icon, Notice, SelectWithOther } from '../components.jsx'
 import { AuthShell } from './AuthShell.jsx'
 import { intakeBranch, joinQueueWithAccount, myDependents, submitIntake } from '../api-client.js'
 import { addCalendarMonths, clinicDate } from '../clock.js'
@@ -113,7 +113,7 @@ function IntakeForm({ branch, code: initialCode, onDone, onBack }) {
     e.preventDefault()
     setBusy(true); setErrors({}); setMessage('')
     const r = await submitIntake({ branch_ref: branch.id, code, consent, channel: 'phone', join_queue: joinQueue, visit_for: visitFor,
-      self: { ...self, email: self.email.trim() || null, sex: self.sex || null }, dependents: deps,
+      self: { ...self, email: self.email.trim() || null, sex: self.sex || null }, dependents: deps.map(({ relationship_other, ...d }) => ({ ...d, ...(d.relationship === 'Other' ? { relationship_other: (relationship_other || '').trim() } : {}) })),
       ...(scan ? { scan: { id_type: scan.id_type, fields: scan.fields } } : {}) })
     setBusy(false)
     if (!r.ok) { setErrors(r.errors || {}); setMessage(r.kind === 'rate_limited' ? 'Too many tries from this phone. Please wait a minute or ask the front desk.' : firstError(r)); return }
@@ -156,13 +156,13 @@ function IntakeForm({ branch, code: initialCode, onDone, onBack }) {
       <span>I agree that the clinic keeps these details for my dental care and may contact me about my visits, as explained in the <a href="#privacy" target="_blank" rel="noreferrer">Privacy Policy</a>.{deps.length ? ' I am the parent or guardian of the people I added and agree for them too.' : ''}</span></label>
     {err('consent') && <p className="pp-error-text" role="alert">Please agree to the privacy notice to register.</p>}
     {message && <p className="pp-error-text" role="alert">{message}</p>}
-    <Button type="submit" width="full" disabled={busy || !consent}>{busy ? 'Sending…' : joinQueue ? 'Register and join today’s queue' : 'Register'}</Button>
+    <Button type="submit" width="full" disabled={busy || !consent || deps.some(d => d.relationship === 'Other' && !(d.relationship_other || '').trim())}>{busy ? 'Sending…' : joinQueue ? 'Register and join today’s queue' : 'Register'}</Button>
     <button type="button" className="link-button join-back" onClick={onBack}>Back</button>
   </form>
 }
 
 function Dependents({ deps, setDeps, errors, minDob, maxDob }) {
-  const add = () => setDeps(d => [...d, { first_name: '', last_name: '', date_of_birth: '', sex: '', relationship: 'Child' }])
+  const add = () => setDeps(d => [...d, { first_name: '', last_name: '', date_of_birth: '', sex: '', relationship: 'Child', relationship_other: '' }])
   const set = (i, k, v) => setDeps(d => d.map((x, j) => (j === i ? { ...x, [k]: v } : x)))
   return <fieldset className="join-fieldset"><legend>Children or others in your care</legend>
     <p className="join-why">Under 18? A parent or guardian registers them here. They need no ID or email: your ID is the one checked.</p>
@@ -173,7 +173,7 @@ function Dependents({ deps, setDeps, errors, minDob, maxDob }) {
       </div>
       <div className="join-row">
         <Field label="Date of birth" required error={errors[`dependents.${i}.date_of_birth`]?.[0]}><input type="date" min={minDob} max={maxDob} value={d.date_of_birth} onChange={e => set(i, 'date_of_birth', e.target.value)}/></Field>
-        <Field label="Relationship" required><select value={d.relationship} onChange={e => set(i, 'relationship', e.target.value)}>{['Child', 'Daughter', 'Son', 'Grandchild', 'Ward', 'Parent', 'Other'].map(r => <option key={r}>{r}</option>)}</select></Field>
+        <SelectWithOther label="Relationship" required value={d.relationship} onChange={v => set(i, 'relationship', v)} options={['Child', 'Daughter', 'Son', 'Grandchild', 'Ward', 'Parent', 'Other']} otherValue={d.relationship_other} onOtherChange={v => set(i, 'relationship_other', v)} placeholder="e.g., Niece, Nephew, Cousin" error={errors[`dependents.${i}.relationship_other`]?.[0] || errors[`dependents.${i}.relationship`]?.[0]}/>
       </div>
       <button type="button" className="link-button" onClick={() => setDeps(x => x.filter((_, j) => j !== i))}>Remove</button>
     </div>)}

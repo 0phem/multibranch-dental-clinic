@@ -82,6 +82,12 @@ class LeaveTest extends TestCase
         $this->assertNotContains('13:00', $times);
         $this->assertNotContains('14:30', $times);
         $this->assertContains('15:00', $times);
+
+        // STF-08: partial-day leave across multiple dates is rejected; end_time <= start_time is rejected.
+        $this->request(['start_date' => '2026-10-01', 'end_date' => '2026-10-02', 'start_time' => '09:00', 'end_time' => '12:00'])
+            ->assertStatus(422)->assertJsonValidationErrors('end_date');
+        $this->request(['start_date' => '2026-10-01', 'end_date' => '2026-10-01', 'start_time' => '14:00', 'end_time' => '12:00'])
+            ->assertStatus(422)->assertJsonValidationErrors('end_time');
     }
 
     public function test_approving_with_booked_appointments_lists_them_with_cover_and_never_cancels(): void

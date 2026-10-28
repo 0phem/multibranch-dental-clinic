@@ -57,6 +57,7 @@ class Patient extends Model
         'consent',
         'emergency_contact',
         'preferred_branch_id',
+        'other_details',
     ];
 
     protected function casts(): array

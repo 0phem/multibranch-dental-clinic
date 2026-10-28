@@ -106,7 +106,11 @@ class IntakeController extends Controller
         $this->assertBranch($request, $intakeSubmission->branch_id);
         $data = $request->validate(['use_patient' => ['nullable', 'string', 'max:40'], 'corrections' => ['sometimes', 'array'], 'corrections.*' => ['nullable'],
             'id_verified' => ['sometimes', 'boolean'], 'id_type' => ['nullable', 'string', 'max:30'], 'id_last4' => ['nullable', 'string', 'max:8'],
+            'other_details' => ['nullable', 'string', 'max:100'],
             'service_ref' => ['nullable', 'string', 'max:50'], 'dentist_ref' => ['nullable', 'string', 'max:50']]);
+        if (! empty($data['id_verified']) && ($data['id_type'] ?? null) === 'other' && (! isset($data['other_details']) || trim((string) $data['other_details']) === '')) {
+            throw ValidationException::withMessages(['other_details' => ['Specify the ID type.']]);
+        }
         if (isset($data['corrections'])) $data['corrections'] = $this->validateCorrections($data['corrections']);
         [$submission, $patient, $visitId] = $this->intake->confirm($intakeSubmission, $request->user(), $data);
 
@@ -125,10 +129,22 @@ class IntakeController extends Controller
     public function verifyId(Request $request, Patient $patient): JsonResponse
     {
         Gate::authorize('update', $patient);
-        $data = $request->validate(['id_type' => ['required', 'string', 'max:30'], 'id_last4' => ['nullable', 'string', 'max:8']]);
-        $p = $this->intake->recordIdCheck($patient, $request->user(), $data['id_type'], $data['id_last4'] ?? null);
+        $data = $request->validate([
+            'id_type' => ['required', 'string', 'max:30'],
+            'id_last4' => ['nullable', 'string', 'max:8'],
+            'other_details' => ['nullable', 'string', 'max:100'],
+        ]);
+        if ($data['id_type'] === 'other' && (! isset($data['other_details']) || trim((string) $data['other_details']) === '')) {
+            throw ValidationException::withMessages(['other_details' => ['Specify the ID type.']]);
+        }
+        $p = $this->intake->recordIdCheck($patient, $request->user(), $data['id_type'], $data['id_last4'] ?? null, $data['other_details'] ?? null);
 
-        return response()->json(['data' => ['id_type' => $p->id_type, 'id_verified_at' => $p->id_verified_at?->toIso8601String(), 'id_last4' => $p->id_last4]]);
+        return response()->json(['data' => [
+            'id_type' => $p->id_type,
+            'other_details' => $p->id_type === 'other' ? $p->other_details : null,
+            'id_verified_at' => $p->id_verified_at?->toIso8601String(),
+            'id_last4' => $p->id_last4,
+        ]]);
     }
 
     /**
@@ -139,12 +155,19 @@ class IntakeController extends Controller
     public function offerAccount(Request $request, Patient $patient): JsonResponse
     {
         Gate::authorize('update', $patient);
-        $data = $request->validate(['email' => ['required', 'email:rfc', 'max:255'], 'id_type' => ['nullable', 'string', 'max:30']]);
+        $data = $request->validate([
+            'email' => ['required', 'email:rfc', 'max:255'],
+            'id_type' => ['nullable', 'string', 'max:30'],
+            'other_details' => ['nullable', 'string', 'max:100'],
+        ]);
         // One transaction: a refused offer (a minor, an email in use) also leaves no ID-check record behind.
         $result = DB::transaction(function () use ($patient, $data, $request) {
             if (! $patient->id_verified_at) {
                 if (empty($data['id_type'])) throw ValidationException::withMessages(['id_type' => ['Check the patient’s ID in person first.']]);
-                $this->intake->recordIdCheck($patient, $request->user(), $data['id_type']);
+                if ($data['id_type'] === 'other' && (! isset($data['other_details']) || trim((string) $data['other_details']) === '')) {
+                    throw ValidationException::withMessages(['other_details' => ['Specify the ID type.']]);
+                }
+                $this->intake->recordIdCheck($patient, $request->user(), $data['id_type'], null, $data['other_details'] ?? null);
             }
 
             return app(\App\Services\Intake\AccountClaims::class)->offer($patient, $data['email'], $request->user(), 'staff');
@@ -189,7 +212,7 @@ class IntakeController extends Controller
             'dependents' => ['sometimes', 'array', 'max:6'],
             'dependents.*.first_name' => ['required', 'string', 'max:100'], 'dependents.*.last_name' => ['required', 'string', 'max:100'],
             'dependents.*.date_of_birth' => ['required', 'date_format:Y-m-d', 'before_or_equal:'.ClinicClock::today()],
-            'dependents.*.sex' => ['nullable', 'in:Female,Male,Prefer not to say'], 'dependents.*.relationship' => ['required', 'string', 'max:40'],
+            'dependents.*.sex' => ['nullable', 'in:Female,Male,Prefer not to say'], 'dependents.*.relationship' => ['required', 'string', 'max:40'], 'dependents.*.relationship_other' => ['nullable', 'string', 'max:100'],
             'join_queue' => ['sometimes', 'boolean'], 'visit_for' => ['nullable', 'regex:/^(self|dependent:[0-5])$/'],
             'scan.id_type' => ['nullable', 'in:'.implode(',', array_keys(IntakeService::ID_TYPES))], 'scan.fields' => ['sometimes', 'array'], 'scan.fields.*' => ['string', 'max:30'],
             // An ID image or number is never accepted, even by mistake.
@@ -199,6 +222,11 @@ class IntakeController extends Controller
             data_set($data, $field, $this->phone(data_get($data, $field), $field));
         }
         if (! empty($data['self']['email'])) $data['self']['email'] = strtolower(trim($data['self']['email']));
+        foreach ($data['dependents'] ?? [] as $i => $d) {
+            if (strcasecmp(trim((string) ($d['relationship'] ?? '')), 'Other') === 0 && trim((string) ($d['relationship_other'] ?? '')) === '') {
+                throw ValidationException::withMessages(["dependents.{$i}.relationship_other" => ['Please specify the relationship.']]);
+            }
+        }
         if (str_starts_with($data['visit_for'] ?? 'self', 'dependent:') && ! isset($data['dependents'][(int) substr($data['visit_for'], 10)])) {
             throw ValidationException::withMessages(['visit_for' => ['Choose who the visit is for.']]);
         }

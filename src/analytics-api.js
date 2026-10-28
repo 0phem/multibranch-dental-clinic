@@ -14,6 +14,18 @@ export async function fetchBranchPerformance(params = {}) {
   return res.data
 }
 
+export async function fetchDailyRevenue(params = {}) {
+  const res = await api.getDailyRevenue(params)
+  if (!res.ok) throw normalizeFailure(res)
+  return res.data
+}
+
+export async function fetchWeeklyRevenueHistogram(params = {}) {
+  const res = await api.getWeeklyRevenueHistogram(params)
+  if (!res.ok) throw normalizeFailure(res)
+  return res.data
+}
+
 export async function downloadAnalyticsCsv(params = {}) {
   const query = Object.entries(params)
     .filter(([, v]) => v !== null && v !== undefined && v !== '' && v !== 'all')

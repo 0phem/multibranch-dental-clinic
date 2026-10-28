@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 class Invoice extends Model {
     use HasUlids;
+    protected $dateFormat = 'Y-m-d H:i:sP';
     protected $guarded=['id','public_id'];
     protected function casts(): array { return ['gross_amount'=>'decimal:2','discount_amount'=>'decimal:2','hmo_coverage_amount'=>'decimal:2','patient_responsibility_amount'=>'decimal:2','paid_amount'=>'decimal:2','hmo_approved_amount'=>'decimal:2','issued_at'=>'immutable_datetime','paid_at'=>'immutable_datetime','revision'=>'integer']; }
     public function uniqueIds(): array { return ['public_id']; }

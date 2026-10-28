@@ -65,7 +65,7 @@ export function SelfRegistered({ toast = () => {}, compact = false, onChanged, s
 function ReviewDialog({ row, idTypes, toast, onClose, onDone, store }) {
   const account = row.channel === 'account'
   const [fields, setFields] = useState(() => ({ ...(row.self || {}) }))
-  const [use, setUse] = useState(''), [idType, setIdType] = useState(row.id_type || 'philid'), [idChecked, setIdChecked] = useState(false), [busy, setBusy] = useState(''), [err, setErr] = useState('')
+  const [use, setUse] = useState(''), [idType, setIdType] = useState(row.id_type || 'philid'), [idOther, setIdOther] = useState(''), [idChecked, setIdChecked] = useState(false), [busy, setBusy] = useState(''), [err, setErr] = useState('')
   // A walk-in enters a Dentist's queue only with a responsible Dentist (existing rule): choose the service and the Dentist.
   const state = store?.state || {}
   const services = (state.services || []).filter(sv => sv.status === 'Active' && (state.branchServices || []).some(bs => bs.branchId === row.branch_ref && bs.serviceId === sv.id && bs.active !== false))
@@ -74,7 +74,7 @@ function ReviewDialog({ row, idTypes, toast, onClose, onDone, store }) {
   const corrections = Object.fromEntries(FIELDS.map(([k]) => k).filter(k => (fields[k] ?? '') !== (row.self?.[k] ?? '')).map(k => [k, fields[k] || null]))
   const confirm = async () => {
     setBusy('confirm'); setErr('')
-    const r = await confirmIntake(row.id, { use_patient: use || null, corrections: use ? {} : corrections, id_verified: idChecked, id_type: idType,
+    const r = await confirmIntake(row.id, { use_patient: use || null, corrections: use ? {} : corrections, id_verified: idChecked, id_type: idType, ...(idType === 'other' ? { other_details: idOther.trim() } : {}),
       ...(row.join_queue && serviceId ? { service_ref: serviceId } : {}), ...(row.join_queue && serviceId && dentistId ? { dentist_ref: dentistId } : {}) })
     setBusy('')
     if (!r.ok) return setErr(firstError(r))
@@ -100,7 +100,7 @@ function ReviewDialog({ row, idTypes, toast, onClose, onDone, store }) {
       <input type={type || 'text'} value={fields[k] || ''} disabled={!!use} className={row.scanned_fields?.includes(k) ? 'from-id' : ''} onChange={e => setFields(f => ({ ...f, [k]: e.target.value }))}/>
     </Field>)}
       <p className="au-muted">Emergency contact: {row.self?.emergency_contact?.name} · {row.self?.emergency_contact?.phone}</p>
-      {(row.dependents || []).map((d, i) => <p key={i} className="au-muted">Dependent: <b>{d.first_name} {d.last_name}</b> · born {d.date_of_birth}{d.minor ? ` · minor (age ${age(d.date_of_birth)}), guardian ${holder}` : ''} · {d.relationship}</p>)}
+      {(row.dependents || []).map((d, i) => <p key={i} className="au-muted">Dependent: <b>{d.first_name} {d.last_name}</b> · born {d.date_of_birth}{d.minor ? ` · minor (age ${age(d.date_of_birth)}), guardian ${holder}` : ''} · {d.relationship}{d.relationship_other ? ` (${d.relationship_other})` : ''}</p>)}
       {Object.keys(corrections).length > 0 && !use && <p className="au-muted">You changed: {Object.keys(corrections).join(', ')} (recorded in the audit trail, field names only).</p>}
     </div>}
     {row.join_queue && <p className="au-muted">If the patient already has a booking today at this branch, that booking is checked in (its Dentist’s queue) and the choice below is not used.</p>}
@@ -115,8 +115,8 @@ function ReviewDialog({ row, idTypes, toast, onClose, onDone, store }) {
           <input
             type="text"
             placeholder="e.g., PhilHealth ID, School ID, Company ID"
-            value={corrections.id_other || ''}
-            onChange={e => setCorrections({ ...corrections, id_other: e.target.value })}
+            value={idOther}
+            onChange={e => setIdOther(e.target.value)}
             aria-required="true"
           />
         </Field>
@@ -126,7 +126,7 @@ function ReviewDialog({ row, idTypes, toast, onClose, onDone, store }) {
     {err && <p className="au-error" role="alert">{err}</p>}
     <div className="form-actions">
       <Button variant="ghost" disabled={!!busy} onClick={cancel}>Remove</Button>
-      <Button disabled={!!busy} onClick={confirm}>{busy === 'confirm' ? 'Confirming…' : row.join_queue ? 'Confirm and add to today’s queue' : 'Confirm'}</Button>
+      <Button disabled={!!busy || (idChecked && idType === 'other' && !idOther.trim())} onClick={confirm}>{busy === 'confirm' ? 'Confirming…' : row.join_queue ? 'Confirm and add to today’s queue' : 'Confirm'}</Button>
     </div>
   </Modal>
 }
@@ -160,17 +160,17 @@ export function IdCheck({ patientId, toast = () => {} }) {
   useEffect(() => { setRecord(null); getPatientRecord(patientId).then(r => { if (r.ok) setRecord(r.data) }) }, [patientId])
   if (!record) return null
   const minor = record.minor ? <p className="fd-badge is-late">Minor{record.guardians?.length ? `: guardian ${record.guardians.map(g => g.name).join(', ')}` : ': no guardian linked yet'}</p> : null
-  if (record.id_check) return <div className="ci-idcheck">{minor}<p className="au-muted">ID checked: {ID_TYPES[record.id_check.type] || record.id_check.type}{record.id_check.by ? ` by ${record.id_check.by}` : ''}. {record.id_check.type === 'senior' && <span className="fd-badge is-info">Senior Citizen Priority Eligible</span>}{record.id_check.type === 'pwd' && <span className="fd-badge is-info">PWD Priority Eligible</span>}</p>
+  if (record.id_check) return <div className="ci-idcheck">{minor}<p className="au-muted">ID checked: {ID_TYPES[record.id_check.type] || record.id_check.type}{record.id_check.other_details ? ` (${record.id_check.other_details})` : ''}{record.id_check.by ? ` by ${record.id_check.by}` : ''}. {record.id_check.type === 'senior' && <span className="fd-badge is-info">Senior Citizen Priority Eligible</span>}{record.id_check.type === 'pwd' && <span className="fd-badge is-info">PWD Priority Eligible</span>}</p>
     {!record.has_online_account && (record.minor
       ? <p className="au-muted">Under 18: no online account of their own. Their guardian’s account books and pays for them; they can claim their own account at 18.</p>
       : <OfferAccount patientId={patientId} email={record.email} toast={toast}/>)}</div>
   const go = async () => {
     setBusy(true)
-    const r = await verifyPatientId(patientId, { id_type: type, ...(type === 'other' && otherText ? { other_details: otherText } : {}) })
+    const r = await verifyPatientId(patientId, { id_type: type, ...(type === 'other' ? { other_details: otherText.trim() } : {}) })
     setBusy(false)
     if (!r.ok) return toast(firstError(r), 'warning')
     toast('ID check recorded (type only).', 'success')
-    setRecord(x => ({ ...x, id_check: { type, by: 'you' } }))
+    setRecord(x => ({ ...x, id_check: { type, other_details: type === 'other' ? (r.data?.other_details || otherText.trim()) : null, by: 'you' } }))
   }
   return <div className="ci-idcheck">{minor}
     <p><b>First visit: check the ID.</b> {record.minor ? 'For a minor, check the guardian’s ID.' : ''}</p>

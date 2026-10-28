@@ -126,3 +126,18 @@ test('dashboards and analytics: Staff show the server count (or unavailable), Ow
   assert.match(page, /does not mean the clinic has an official account there/)
   assert.doesNotMatch(page, /Channel reported|official (Facebook|Instagram) channel|connected account/i)
 })
+
+test('STF-20: social inquiries has no branch dropdown and auto-scopes to the user session branch', async () => {
+  const page = read('src/pages/Inquiries.jsx')
+  assert.doesNotMatch(page, /<Field label="Branch"/)
+  assert.doesNotMatch(page, /Filter inquiries by branch/)
+  assert.match(page, /const sessionBranchId = session\?\.branchId && \(!branches\.length \|\| branches\.some\(b => b\.id === session\.branchId\)\) \? session\.branchId : ''/)
+  assert.doesNotMatch(page, /branches\[0\]\?\.id/)
+  assert.match(page, /if \(!sessionBranchId\) return toast\('Your active branch could not be determined for this session\.', 'warning'\)/)
+  assert.match(page, /const scopedForm = \{ \.\.\.form, branchId: sessionBranchId \}/)
+  assert.match(page, /if \(!sessionBranchId \|\| i\.branchId !== sessionBranchId\) return false/)
+  stubFetch(json(200, {}), json(201, { data: row(5) }))
+  const result = await inquiries.captureInquiry({ branchId: '', source: 'Facebook', name: 'Carlos', contact: '', topic: 'Cleaning' }, 'key-stf20')
+  assert.equal(result.ok, true)
+  assert.deepEqual(posts().at(-1).body, { source: 'Facebook', name: 'Carlos', topic: 'Cleaning' })
+})

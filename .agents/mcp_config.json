@@ -1,0 +1,46 @@
+{
+  "mcpServers": {
+    "playwright": {
+      "command": "npx.cmd",
+      "args": [
+        "-y",
+        "@playwright/mcp@latest"
+      ]
+    },
+    "context7": {
+      "command": "npx.cmd",
+      "args": [
+        "-y",
+        "@upstash/context7-mcp"
+      ]
+    },
+    "github": {
+      "serverUrl": "https://api.githubcopilot.com/mcp/",
+      "headers": {
+        "Authorization": "Bearer YOUR_FINE_GRAINED_PAT"
+      }
+    },
+    "postgres": {
+      "command": "npx.cmd",
+      "args": [
+        "-y",
+        "@kaiva/postgres-mcp",
+        "postgresql://readonly_user:YOUR_DB_PASSWORD@localhost:5432/your_dev_db"
+      ]
+    },
+    "sequential-thinking": {
+      "command": "npx.cmd",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-sequential-thinking"
+      ]
+    },
+    "paymongo": {
+      "serverUrl": "https://mcp.paymongo.com/mcp",
+      "headers": {
+        "X-Public-Key": "YOUR_PAYMONGO_TEST_PUBLIC_KEY",
+        "X-Secret-Key": "YOUR_PAYMONGO_TEST_SECRET_KEY"
+      }
+    }
+  }
+}

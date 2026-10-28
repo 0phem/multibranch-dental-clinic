@@ -19,7 +19,9 @@ abstract class TestCase extends BaseTestCase
         $app = parent::createApplication();
         // This runs BEFORE RefreshDatabase can invoke any migrations.
         $connection = $app['db']->connection();
-        if (! $app->environment('testing') || $connection->getDatabaseName() !== 'dental_clinic_test' ||
+        // Environment and configured database name are checked before the first query, so a wrong target is never connected to.
+        if (! $app->environment('testing') ||
+            $connection->getDatabaseName() !== 'dental_clinic_test' ||
             $connection->selectOne('select current_database() as name')->name !== 'dental_clinic_test') {
             throw new \RuntimeException('Tests may rebuild only dental_clinic_test.');
         }

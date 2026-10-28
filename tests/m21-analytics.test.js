@@ -56,3 +56,115 @@ test('M21 shows no workload percentage in a server session and labels the offlin
   assert.ok(!analyticsPage.includes('capacity_threshold || 80'), 'no invented 80 fallback denominator')
   assert.match(analyticsPage, /Offline demo preview — example capacity values, not clinic data/)
 })
+
+import * as api from '../src/api-client.js'
+
+test('OWN-01 analytics API client and wrapper export daily revenue and weekly histogram helpers', () => {
+  assert.equal(typeof api.getDailyRevenue, 'function')
+  assert.equal(typeof api.getWeeklyRevenueHistogram, 'function')
+  assert.equal(typeof analyticsApi.fetchDailyRevenue, 'function')
+  assert.equal(typeof analyticsApi.fetchWeeklyRevenueHistogram, 'function')
+})
+
+test('OWN-01 fetchDailyRevenue and fetchWeeklyRevenueHistogram use existing request/response and error conventions', async () => {
+  const originalFetch = globalThis.fetch
+  const calls = []
+  const jsonResponse = (status, body) => ({
+    ok: status >= 200 && status < 300,
+    status,
+    json: async () => body,
+  })
+
+  try {
+    const dailyPayload = {
+      period: 'custom',
+      period_label: 'Sep 25, 2026 – Sep 26, 2026',
+      timezone: 'Asia/Manila',
+      date_basis: { collections: 'payments.recorded_at', refunds: 'invoice_refunds.refunded_at' },
+      date_from: '2026-09-25',
+      date_to: '2026-09-26',
+      branch: { public_id: '01j00000000000000000000b01', name: 'Branch B1' },
+      totals: {
+        gross_collected_php: '12500.00',
+        refunded_php: '500.00',
+        net_cash_flow_php: '12000.00',
+        payments_count: 2,
+        refunds_count: 1,
+      },
+      days: [
+        { date: '2026-09-25', label: 'Sep 25', day_of_week: 5, day_name: 'Fri', gross_collected_php: '0.00', refunded_php: '0.00', net_cash_flow_php: '0.00', payments_count: 0, refunds_count: 0 },
+        { date: '2026-09-26', label: 'Sep 26', day_of_week: 6, day_name: 'Sat', gross_collected_php: '12500.00', refunded_php: '500.00', net_cash_flow_php: '12000.00', payments_count: 2, refunds_count: 1 },
+      ],
+    }
+
+    globalThis.fetch = async (url, options = {}) => {
+      calls.push({ url, method: options.method || 'GET' })
+      return jsonResponse(200, { data: dailyPayload })
+    }
+
+    const daily = await analyticsApi.fetchDailyRevenue({
+      date_from: '2026-09-25',
+      date_to: '2026-09-26',
+      branch_id: '01j00000000000000000000b01',
+    })
+    assert.deepEqual(daily, dailyPayload)
+    assert.match(calls[0].url, /\/api\/analytics\/daily-revenue\?/)
+    assert.match(calls[0].url, /date_from=2026-09-25/)
+    assert.match(calls[0].url, /date_to=2026-09-26/)
+    assert.match(calls[0].url, /branch_id=01j00000000000000000000b01/)
+
+    const histogramPayload = {
+      reference_date: '2026-09-28',
+      week_start_date: '2026-09-28',
+      week_end_date: '2026-10-03',
+      week_label: 'Sep 28 – Oct 03, 2026',
+      timezone: 'Asia/Manila',
+      date_basis: { collections: 'payments.recorded_at', refunds: 'invoice_refunds.refunded_at' },
+      is_finalized: false,
+      branch: null,
+      totals: {
+        gross_collected_php: '6000.00',
+        refunded_php: '500.00',
+        net_cash_flow_php: '5500.00',
+        payments_count: 1,
+        refunds_count: 1,
+      },
+      buckets: [
+        { date: '2026-09-28', day_of_week: 1, short_day: 'Mon', gross_collected_php: '6000.00', refunded_php: '500.00', net_cash_flow_php: '5500.00', payments_count: 1, refunds_count: 1 },
+        { date: '2026-09-29', day_of_week: 2, short_day: 'Tue', gross_collected_php: '0.00', refunded_php: '0.00', net_cash_flow_php: '0.00', payments_count: 0, refunds_count: 0 },
+        { date: '2026-09-30', day_of_week: 3, short_day: 'Wed', gross_collected_php: '0.00', refunded_php: '0.00', net_cash_flow_php: '0.00', payments_count: 0, refunds_count: 0 },
+        { date: '2026-10-01', day_of_week: 4, short_day: 'Thu', gross_collected_php: '0.00', refunded_php: '0.00', net_cash_flow_php: '0.00', payments_count: 0, refunds_count: 0 },
+        { date: '2026-10-02', day_of_week: 5, short_day: 'Fri', gross_collected_php: '0.00', refunded_php: '0.00', net_cash_flow_php: '0.00', payments_count: 0, refunds_count: 0 },
+        { date: '2026-10-03', day_of_week: 6, short_day: 'Sat', gross_collected_php: '0.00', refunded_php: '0.00', net_cash_flow_php: '0.00', payments_count: 0, refunds_count: 0 },
+      ],
+    }
+
+    globalThis.fetch = async (url, options = {}) => {
+      calls.push({ url, method: options.method || 'GET' })
+      return jsonResponse(200, { data: histogramPayload })
+    }
+
+    const histogram = await analyticsApi.fetchWeeklyRevenueHistogram({ date: '2026-09-28' })
+    assert.deepEqual(histogram, histogramPayload)
+    assert.equal(histogram.buckets.length, 6)
+    assert.match(calls[1].url, /\/api\/analytics\/weekly-histogram\?date=2026-09-28/)
+
+    // Failures throw normalized error objects rather than fabricating empty or demo data
+    globalThis.fetch = async () => jsonResponse(403, { message: 'Executive analytics and reports are restricted to the clinic Owner.' })
+    await assert.rejects(
+      () => analyticsApi.fetchDailyRevenue({ period: 'today' }),
+      err => err.ok === false && err.kind === 'forbidden'
+    )
+
+    globalThis.fetch = async () => jsonResponse(422, {
+      message: 'Use a real calendar date in YYYY-MM-DD format.',
+      errors: { date: ['Use a real calendar date in YYYY-MM-DD format.'] },
+    })
+    await assert.rejects(
+      () => analyticsApi.fetchWeeklyRevenueHistogram({ date: '2026-02-30' }),
+      err => err.ok === false && err.kind === 'validation'
+    )
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})

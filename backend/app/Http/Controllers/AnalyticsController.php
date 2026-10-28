@@ -5,9 +5,11 @@ namespace App\Http\Controllers;
 use App\Enums\Role;
 use App\Http\Requests\Analytics\AnalyticsQueryRequest;
 use App\Services\Analytics\AnalyticsService;
+use App\Support\ClinicClock;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class AnalyticsController extends Controller
@@ -40,6 +42,44 @@ class AnalyticsController extends Controller
 
         return response()->json([
             'data' => $branches,
+        ]);
+    }
+
+    public function dailyRevenue(AnalyticsQueryRequest $request): JsonResponse
+    {
+        $this->authorizeOwner($request);
+
+        $trend = $this->analyticsService->getDailyRevenueTrend(
+            $request->period(),
+            $request->branch(),
+            $request->dateFrom(),
+            $request->dateTo()
+        );
+
+        return response()->json([
+            'data' => $trend,
+        ]);
+    }
+
+    public function weeklyRevenueHistogram(AnalyticsQueryRequest $request): JsonResponse
+    {
+        $this->authorizeOwner($request);
+
+        $targetDate = null;
+        if ($request->exists('date') && $request->input('date') !== null && $request->input('date') !== '') {
+            $rawDate = $request->input('date');
+            if (! is_string($rawDate) || ! ClinicClock::validDate($rawDate)) {
+                throw ValidationException::withMessages([
+                    'date' => ['Use a real calendar date in YYYY-MM-DD format.'],
+                ]);
+            }
+            $targetDate = $rawDate;
+        }
+
+        $histogram = $this->analyticsService->getWeeklyRevenueHistogram($request->branch(), $targetDate);
+
+        return response()->json([
+            'data' => $histogram,
         ]);
     }
 

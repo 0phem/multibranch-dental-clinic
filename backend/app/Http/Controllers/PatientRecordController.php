@@ -57,7 +57,7 @@ class PatientRecordController extends Controller
                 $person = Person::whereKey($locked->person_id)->lockForUpdate()->firstOrFail();
 
                 $personFields = array_intersect_key($data, array_flip(['first_name', 'last_name', 'email', 'phone', 'date_of_birth', 'sex', 'address']));
-                $patientFields = array_intersect_key($data, array_flip(['emergency_contact']));
+                $patientFields = array_intersect_key($data, array_flip(['emergency_contact', 'hmo_provider_name', 'hmo_member_number']));
 
                 if (array_key_exists('email', $personFields) && $personFields['email'] !== $person->email) {
                     $this->guardEmailChange($person, $personFields['email']);
