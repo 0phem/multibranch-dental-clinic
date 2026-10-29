@@ -85,8 +85,9 @@ export async function addDentist(conversationId, dentistId) {
 export function sendPresence() { return api.conversationPresence() }
 
 /** Newest-first page (the server order). `cursor` continues to OLDER messages; a failed page is an error, never a shorter history. */
-export async function loadMessages(conversationId, cursor = null) {
-  const result = await api.listConversationMessages(conversationId, { per_page: PAGE_SIZE, ...(cursor ? { cursor } : {}) })
+export async function loadMessages(conversationId, cursor = null, search = '') {
+  const q = String(search || '').trim()
+  const result = await api.listConversationMessages(conversationId, { per_page: PAGE_SIZE, ...(cursor ? { cursor } : {}), ...(q ? { q } : {}) })
   if (!result.ok) return normalizeFailure(result)
   return { ok: true, rows: (result.data || []).map(mapMessage), nextCursor: result.meta?.next_cursor ?? null }
 }
