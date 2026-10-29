@@ -192,10 +192,10 @@ For bug fixes, self-check before PR, and end-of-day status, use templates B, C, 
 
 **Batch CEL-2: Staff dashboard UI**
 - [ ] STF-01 Appointment calendar UI fix (spacing, color)
-- [ ] STF-02 Appointments, search filter UI fix
-- [ ] STF-09 Closed dates: search filter UI fix
-- [ ] STF-10 Check in: remove the double refresh
-- [ ] STF-12 Check in: make the search filter for walk in patient efficient (make the find patient textbox and patient dropdown into one)
+- [x] STF-02 Appointments, search filter UI fix (verified by Developer B)
+- [x] STF-09 Closed dates: search filter UI fix (completed by Developer B)
+- [x] STF-10 Check in: remove the double refresh (verified by Developer B)
+- [x] STF-12 Check in: make the search filter for walk in patient efficient (completed by Developer B)
 - [ ] STF-16 Live queue: remove the open chart and just make the column clickable
 - [ ] STF-17 Live queue: make the "call patient" icon and add message icon
 - [ ] STF-25 Archive and records: fix view action UI
@@ -283,36 +283,40 @@ For bug fixes, self-check before PR, and end-of-day status, use templates B, C, 
     <acceptance>Calendar spacing and colors consistent with the design system and GEN-14.</acceptance>
   </revision>
 
-  <revision id="STF-02" status="todo" severity="medium" owner="Celin">
+  <revision id="STF-02" status="done" severity="medium" owner="Celin">
     <tasks>
-      - [ ] Fix Appointments search filter UI (alignment, spacing, field sizes)
-      - [ ] Use shared search input (GEN-04) and "X" clear (GEN-02)
+      - [x] Fix Appointments search filter UI (alignment, spacing, field sizes)
+      - [x] Use shared search input (GEN-04) and "X" clear (GEN-02)
     </tasks>
     <acceptance>Search filter is aligned and consistent with other filters.</acceptance>
+    <evidence>Developer B verified the existing shared FilterBar in a rendered Staff session: text filtering and X clear worked, search height was 44px at 1440px and 390px, and the mobile page had no horizontal overflow. No production change was needed.</evidence>
   </revision>
 
-  <revision id="STF-09" status="todo" severity="medium" owner="Celin">
+  <revision id="STF-09" status="done" severity="medium" owner="Celin">
     <tasks>
-      - [ ] Fix Closed dates search filter UI
-      - [ ] Use shared search input and "X" clear
+      - [x] Fix Closed dates search filter UI
+      - [x] Use shared search input and "X" clear
     </tasks>
     <acceptance>Closed dates filter matches the Appointments filter style.</acceptance>
+    <evidence>Developer B verified the shared FilterBar and X clear in a rendered Staff session. A read-only browser response fixture showed an active closure, its filtered empty message, and restoration after clearing. Fixed the missing empty result message. At 390px the search was 44px high with no page overflow. The scratch dataset itself had no active closures.</evidence>
   </revision>
 
-  <revision id="STF-10" status="todo" severity="medium" owner="Celin">
+  <revision id="STF-10" status="done" severity="medium" owner="Celin">
     <tasks>
-      - [ ] Find the two refresh controls/triggers on Check in
-      - [ ] Remove the duplicate; keep one icon refresh (GEN-13)
+      - [x] Find the two refresh controls/triggers on Check in
+      - [x] Remove the duplicate; keep one icon refresh (GEN-13)
     </tasks>
     <acceptance>Check in has a single refresh and it works.</acceptance>
+    <evidence>Developer B found only one visible Refresh control in the rendered Check-In page; clicking it returned successful patient, intake, front-desk, and appointment API reads. Existing background polling was preserved. No production change was needed.</evidence>
   </revision>
 
-  <revision id="STF-12" status="todo" severity="medium" owner="Celin">
+  <revision id="STF-12" status="done" severity="medium" owner="Celin">
     <tasks>
-      - [ ] Merge the "find patient" textbox and the patient dropdown into one searchable combobox
-      - [ ] Type-ahead results (name/phone), keyboard navigable, selects patient in one step
+      - [x] Merge the "find patient" textbox and the patient dropdown into one searchable combobox
+      - [x] Type-ahead results (name/phone), keyboard navigable, selects patient in one step
     </tasks>
     <acceptance>One field finds and selects a walk-in patient; the separate dropdown is gone.</acceptance>
+    <evidence>Developer B verified the existing single combobox in a rendered Staff session against fictional scratch data: name, patient code, and phone searches, empty results, Arrow/Enter selection, Escape, and clearing. Fixed stale selected identity when switching to new registration, required a current directory patient before admission, and exposed the active option to assistive technology. A selected-patient admission reached POST /api/visits/walk-in; the server correctly returned 422 because the chosen Dentist was off shift, so successful admission was not claimed. Focused frontend regressions passed.</evidence>
   </revision>
 
   <revision id="STF-16" status="todo" severity="medium" owner="Celin">

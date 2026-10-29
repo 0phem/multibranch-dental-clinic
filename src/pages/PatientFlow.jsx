@@ -98,9 +98,11 @@ export function CheckInPage({ store, context, setPage }) {
     setWalkIn(previous=>({...previous,[key]:value,...(key==='branchId'?{serviceId:'',dentistId:''}:key==='serviceId'?{dentistId:''}:{})}))
   }
   const [walking,setWalking]=useState(false)
+  const [registering,setRegistering]=useState(!!context?.register)
+  const selectedPatient=(store.directoryPatients||[]).find(p=>p.id===walkIn.patientPublicId)
   // The Dentist is required here only because the browser-local M9 queue is organized per Dentist; the server Visit
   // itself allows an unresolved Dentist.
-  const canWalkIn=!!walkIn.patientPublicId&&!!walkIn.branchId&&!!walkIn.serviceId&&!!walkIn.dentistId&&!walking&&!admitted
+  const canWalkIn=!registering&&!!selectedPatient&&!!walkIn.branchId&&!!walkIn.serviceId&&!!walkIn.dentistId&&!walking&&!admitted
   const checkWalkin=async()=>{
     if(!canWalkIn)return
     setWalking(true)
@@ -113,7 +115,6 @@ export function CheckInPage({ store, context, setPage }) {
 
   // Minimal front-desk registration of a new walk-in Patient (Person + Patient on the server, no login account).
   const emptyPatient={firstName:'',lastName:'',phone:'',email:'',dob:''}
-  const [registering,setRegistering]=useState(!!context?.register)
   const [newPatient,setNewPatient]=useState(emptyPatient)
   const registerKey=useRef(commandKey())
   const [registerError,setRegisterError]=useState('')
@@ -129,7 +130,6 @@ export function CheckInPage({ store, context, setPage }) {
     setNewPatient(emptyPatient);setRegistering(false);registerKey.current=commandKey()
     toast(`Created registration: ${result.patient.name} (${result.patient.patientCode}).`,'success')
   }
-  const selectedPatient=(store.directoryPatients||[]).find(p=>p.id===walkIn.patientPublicId)
   const selectCombPatient=p=>{updateWalkin('patientPublicId',p.id);setSearch(`${p.name} • ${p.patientCode}`);setPatientMenuOpen(false);setActiveIndex(-1)}
 
   return <>
@@ -196,16 +196,16 @@ export function CheckInPage({ store, context, setPage }) {
             <input type="radio" name="walkinType" checked={!registering} onChange={()=>setRegistering(false)}/> Existing registered patient
           </label>
           <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontWeight: registering ? 'bold' : 'normal' }}>
-            <input type="radio" name="walkinType" checked={registering} onChange={()=>setRegistering(true)}/> New patient registration
+            <input type="radio" name="walkinType" checked={registering} onChange={()=>{setRegistering(true);updateWalkin('patientPublicId','');setSearch('');setPatientMenuOpen(false);setActiveIndex(-1)}}/> New patient registration
           </label>
         </div>
         {!registering && <>
         {!registering && <div className="span-2 patient-combobox">
           <Field label="Patient" required hint="Search the clinic Patient directory by name, code or phone, then select in one step.">
-            <input role="combobox" aria-expanded={patientMenuOpen} aria-autocomplete="list" aria-controls="walkin-patient-listbox" value={search} placeholder="Type name, patient code, or phone…" onFocus={()=>setPatientMenuOpen(true)} onBlur={()=>setTimeout(()=>setPatientMenuOpen(false),150)} onChange={e=>{setSearch(e.target.value);setPatientMenuOpen(true);setActiveIndex(0);if(walkIn.patientPublicId)updateWalkin('patientPublicId','')}} onKeyDown={e=>{if(e.key==='ArrowDown'){e.preventDefault();setPatientMenuOpen(true);setActiveIndex(i=>Math.min(i+1,Math.max(0,directory.length-1)))}else if(e.key==='ArrowUp'){e.preventDefault();setActiveIndex(i=>Math.max(0,i-1))}else if(e.key==='Enter'&&patientMenuOpen&&directory[activeIndex]){e.preventDefault();selectCombPatient(directory[activeIndex])}else if(e.key==='Escape'){setPatientMenuOpen(false)}}}/>
+            <input role="combobox" aria-expanded={patientMenuOpen} aria-autocomplete="list" aria-controls="walkin-patient-listbox" aria-activedescendant={patientMenuOpen&&directory[activeIndex]?`walkin-patient-option-${activeIndex}`:undefined} value={search} placeholder="Type name, patient code, or phone…" onFocus={()=>setPatientMenuOpen(true)} onBlur={()=>setTimeout(()=>setPatientMenuOpen(false),150)} onChange={e=>{setSearch(e.target.value);setPatientMenuOpen(true);setActiveIndex(-1);if(walkIn.patientPublicId)updateWalkin('patientPublicId','')}} onKeyDown={e=>{if(e.key==='ArrowDown'){e.preventDefault();setPatientMenuOpen(true);setActiveIndex(i=>Math.min(i+1,Math.max(0,directory.length-1)))}else if(e.key==='ArrowUp'){e.preventDefault();setActiveIndex(i=>Math.max(0,i-1))}else if(e.key==='Enter'&&patientMenuOpen&&directory[activeIndex]){e.preventDefault();selectCombPatient(directory[activeIndex])}else if(e.key==='Escape'){setPatientMenuOpen(false);setActiveIndex(-1)}}}/>
           </Field>
           {selectedPatient&&<div className="patient-combobox-selected"><span>Selected: <b>{selectedPatient.name}</b> ({selectedPatient.patientCode})</span><button type="button" className="icon-btn" aria-label="Clear selected patient" onClick={()=>{updateWalkin('patientPublicId','');setSearch('');setPatientMenuOpen(true)}}><Icon name="x" size={14}/></button></div>}
-          {patientMenuOpen&&<ul id="walkin-patient-listbox" role="listbox" className="patient-combobox-list">{directory.length?directory.map((p,idx)=><li key={p.id} role="option" aria-selected={walkIn.patientPublicId===p.id} className={`patient-combobox-option ${idx===activeIndex?'is-active':''} ${walkIn.patientPublicId===p.id?'is-selected':''}`.trim()} onMouseDown={e=>{e.preventDefault();selectCombPatient(p)}}><b>{p.name}</b><span>{p.patientCode}{p.phone?` • ${p.phone}`:''}</span></li>):<li className="patient-combobox-empty">No matching patients found.</li>}</ul>}
+          {patientMenuOpen&&<ul id="walkin-patient-listbox" role="listbox" className="patient-combobox-list">{directory.length?directory.map((p,idx)=><li key={p.id} id={`walkin-patient-option-${idx}`} role="option" aria-selected={walkIn.patientPublicId===p.id} className={`patient-combobox-option ${idx===activeIndex?'is-active':''} ${walkIn.patientPublicId===p.id?'is-selected':''}`.trim()} onMouseDown={e=>{e.preventDefault();selectCombPatient(p)}}><b>{p.name}</b><span>{p.patientCode}{p.phone?` • ${p.phone}`:''}</span></li>):<li className="patient-combobox-empty">No matching patients found.</li>}</ul>}
         </div>}
 
         </>}

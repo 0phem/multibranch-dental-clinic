@@ -56,6 +56,17 @@ export function ClosedDatesPage({ store, role }) {
     toast(r.data.added ? `${r.data.added} holiday suggestion(s) added. Confirm each one you close.` : 'No new holiday suggestions.', 'success'); load()
   }
   const active = (rows || []).filter(r => r.status === 'active'), suggested = (rows || []).filter(r => r.status === 'suggested')
+  const visibleActive = active.filter(r => {
+    if (filterBranch !== 'All' && r.branch?.name !== filterBranch && r.branch?.legacy_ref !== filterBranch) return false
+    if (filterSearch.trim()) {
+      const q = filterSearch.trim().toLowerCase()
+      const d = (r.date || '').toLowerCase()
+      const re = (r.reason || '').toLowerCase()
+      const b = (r.branch?.name || '').toLowerCase()
+      if (!d.includes(q) && !re.includes(q) && !b.includes(q)) return false
+    }
+    return true
+  })
 
   return <div className="cd-page">
     <PageHeader kicker={owner ? 'Administration' : 'Front desk'} title="Closed dates"
@@ -104,17 +115,8 @@ export function ClosedDatesPage({ store, role }) {
         </select>}
       </FilterBar>
       {!rows ? <p className="au-muted" role="status">Loading…</p> : !active.length ? <p className="au-muted">No upcoming closures.</p>
-        : <ul className="fd-list">{active.filter(r => {
-          if (filterBranch !== 'All' && r.branch?.name !== filterBranch && r.branch?.legacy_ref !== filterBranch) return false
-          if (filterSearch.trim()) {
-            const q = filterSearch.trim().toLowerCase()
-            const d = (r.date || '').toLowerCase()
-            const re = (r.reason || '').toLowerCase()
-            const b = (r.branch?.name || '').toLowerCase()
-            if (!d.includes(q) && !re.includes(q) && !b.includes(q)) return false
-          }
-          return true
-        }).map(c => <ClosureRow key={c.id} row={c} owner={owner} busy={busy} toast={toast} onRemove={() => change(c, 'remove', 'Closure removed. The date is bookable again.')}/>)}</ul>}
+        : !visibleActive.length ? <p className="au-muted" role="status">No closures matching your filters.</p>
+          : <ul className="fd-list">{visibleActive.map(c => <ClosureRow key={c.id} row={c} owner={owner} busy={busy} toast={toast} onRemove={() => change(c, 'remove', 'Closure removed. The date is bookable again.')}/>)}</ul>}
     </Card>
     {owner && <Card title={`Holiday suggestions (${suggested.length})`} subtitle="Philippine national holidays from the usual rules. Suggestions only: nothing closes until you confirm a date. Check the official proclamation for the year."
       actions={<Button size="sm" variant="soft" disabled={busy === 'suggest'} onClick={suggest}>{busy === 'suggest' ? 'Adding…' : 'Suggest holidays'}</Button>}>
