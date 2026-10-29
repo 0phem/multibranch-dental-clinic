@@ -5,6 +5,12 @@ import { createPrescription, downloadPrescriptionPdf, issuePrescription, listPre
 const firstError = r => (r.kind === 'validation' ? Object.values(r.errors || {})[0]?.[0] || r.message : r.message) || 'That did not work.'
 const day = d => d ? new Date(`${d}T00:00:00Z`).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }) : ''
 const EMPTY_LINE = { medicine: '', dosage: '', frequency: '', duration: '', instructions: '' }
+const OTHER_OPTION = '__other__'
+const LINE_FIELDS = Object.keys(EMPTY_LINE)
+const CUSTOM_FIELDS = ['medicine', 'dosage', 'frequency', 'duration']
+const selectedOption = (line, field, catalog) => line[`${field}Other`] || (line[field] && !catalog.includes(line[field])) ? OTHER_OPTION : line[field]
+const chooseOption = (line, field, option) => ({ ...line, [field]: option === OTHER_OPTION ? '' : option, [`${field}Other`]: option === OTHER_OPTION })
+const apiLine = line => Object.fromEntries(LINE_FIELDS.map(field => [field, line[field]]))
 const TONE = { Draft: 'is-late', Issued: 'is-ok', Void: 'is-bad' }
 
 // Medicine name autocomplete list only. Dosing, frequency, duration, and instructions are never pre-filled or presented as clinic-approved defaults.
@@ -99,11 +105,14 @@ function WriteCard({ toast, onDone, editing, onEdited }) {
     prescription(editing).then(r => { if (r.ok) { setDraft(r.data); setVisitId(r.data.visit); setLines(r.data.lines.map(l => ({ ...EMPTY_LINE, ...l }))); setNote(r.data.note || '') } })
   }, [editing])
   const visit = (visits || []).find(v => v.id === visitId)
-  const set = (i, k, v) => setLines(ls => ls.map((l, j) => j === i ? { ...l, [k]: v } : l))
+  const set = (i, k, v, custom = false) => setLines(ls => ls.map((l, j) => j === i ? { ...l, [k]: v, ...(custom ? { [`${k}Other`]: true } : {}) } : l))
+  const choose = (i, field, option) => setLines(ls => ls.map((l, j) => j === i ? chooseOption(l, field, option) : l))
+  const missingCustomValue = lines.some(line => CUSTOM_FIELDS.some(field => line[`${field}Other`] && !line[field].trim()))
   const reset = () => { setDraft(null); setVisitId(''); setLines([{ ...EMPTY_LINE }]); setNote(''); onEdited() }
   const save = async issue => {
+    if (missingCustomValue) return setErr('Specify the selected Other values before saving.')
     setBusy(issue ? 'issue' : 'save'); setErr('')
-    const body = { lines: lines.filter(l => l.medicine.trim()), note: note.trim() || null }
+    const body = { lines: lines.filter(l => l.medicine.trim()).map(apiLine), note: note.trim() || null }
     let r = draft ? await updatePrescription(draft.id, { ...body, expected_revision: draft.revision }) : await createPrescription({ visit_id: visitId, ...body })
     if (r.ok && issue) r = await issuePrescription(r.data.id, r.data.revision)
     setBusy('')
@@ -119,14 +128,10 @@ function WriteCard({ toast, onDone, editing, onEdited }) {
       <datalist id="rx-common">{[...new Set([...(meta.common_medicines || []), ...COMMON_MEDICINE_NAMES])].map(m => <option key={m} value={m}/>)}</datalist>
       {lines.map((l, i) => {
         const medicineCatalog = [...new Set([...(meta.common_medicines || []), ...COMMON_MEDICINE_NAMES])]
-        const isMedMatch = medicineCatalog.includes(l.medicine)
-        const medSelect = isMedMatch ? l.medicine : (l.medicine ? '__other__' : '')
-        const isDosageMatch = COMMON_DOSAGES.includes(l.dosage)
-        const dosageSelect = isDosageMatch ? l.dosage : (l.dosage ? '__other__' : '')
-        const isFreqMatch = COMMON_FREQUENCIES.includes(l.frequency)
-        const freqSelect = isFreqMatch ? l.frequency : (l.frequency ? '__other__' : '')
-        const isDurationMatch = COMMON_DURATIONS.includes(l.duration)
-        const durationSelect = isDurationMatch ? l.duration : (l.duration ? '__other__' : '')
+        const medSelect = selectedOption(l, 'medicine', medicineCatalog)
+        const dosageSelect = selectedOption(l, 'dosage', COMMON_DOSAGES)
+        const freqSelect = selectedOption(l, 'frequency', COMMON_FREQUENCIES)
+        const durationSelect = selectedOption(l, 'duration', COMMON_DURATIONS)
 
         return <fieldset key={i} className="rx-line"><legend>Medicine {i + 1}</legend>
           <Field label="Medicine" required hint="Choose standard medicine or Other to specify">
@@ -135,7 +140,7 @@ function WriteCard({ toast, onDone, editing, onEdited }) {
               value={medSelect}
               onChange={e => {
                 const val = e.target.value
-                set(i, 'medicine', val === '__other__' ? '' : val)
+                choose(i, 'medicine', val)
               }}
             >
               <option value="">Choose medicine…</option>
@@ -145,7 +150,7 @@ function WriteCard({ toast, onDone, editing, onEdited }) {
           </Field>
           {medSelect === '__other__' && (
             <Field label="Specify medicine name" required>
-              <input value={l.medicine} maxLength={200} onChange={e => set(i, 'medicine', e.target.value)} placeholder="Type medicine name (e.g. Ciprofloxacin)"/>
+              <input value={l.medicine} maxLength={200} onChange={e => set(i, 'medicine', e.target.value, true)} placeholder="Type medicine name (e.g. Ciprofloxacin)"/>
             </Field>
           )}
 
@@ -156,7 +161,7 @@ function WriteCard({ toast, onDone, editing, onEdited }) {
                 value={dosageSelect}
                 onChange={e => {
                   const val = e.target.value
-                  set(i, 'dosage', val === '__other__' ? '' : val)
+                  choose(i, 'dosage', val)
                 }}
               >
                 <option value="">Choose dosage…</option>
@@ -170,7 +175,7 @@ function WriteCard({ toast, onDone, editing, onEdited }) {
                 value={freqSelect}
                 onChange={e => {
                   const val = e.target.value
-                  set(i, 'frequency', val === '__other__' ? '' : val)
+                  choose(i, 'frequency', val)
                 }}
               >
                 <option value="">Choose frequency…</option>
@@ -183,12 +188,12 @@ function WriteCard({ toast, onDone, editing, onEdited }) {
           <div className="st-pair">
             {dosageSelect === '__other__' && (
               <Field label="Specify custom dosage" required>
-                <input value={l.dosage} maxLength={120} onChange={e => set(i, 'dosage', e.target.value)} placeholder="e.g. 750mg twice daily"/>
+                <input value={l.dosage} maxLength={120} onChange={e => set(i, 'dosage', e.target.value, true)} placeholder="e.g. 750mg twice daily"/>
               </Field>
             )}
             {freqSelect === '__other__' && (
               <Field label="Specify custom frequency" required>
-                <input value={l.frequency} maxLength={120} onChange={e => set(i, 'frequency', e.target.value)} placeholder="e.g. Every 4 hours"/>
+                <input value={l.frequency} maxLength={120} onChange={e => set(i, 'frequency', e.target.value, true)} placeholder="e.g. Every 4 hours"/>
               </Field>
             )}
           </div>
@@ -199,7 +204,7 @@ function WriteCard({ toast, onDone, editing, onEdited }) {
               value={durationSelect}
               onChange={e => {
                 const val = e.target.value
-                set(i, 'duration', val === '__other__' ? '' : val)
+                choose(i, 'duration', val)
               }}
             >
               <option value="">Choose duration…</option>
@@ -209,7 +214,7 @@ function WriteCard({ toast, onDone, editing, onEdited }) {
           </Field>
           {durationSelect === '__other__' && (
             <Field label="Specify custom duration" required>
-              <input value={l.duration} maxLength={120} onChange={e => set(i, 'duration', e.target.value)} placeholder="e.g. 10 days or until finished"/>
+              <input value={l.duration} maxLength={120} onChange={e => set(i, 'duration', e.target.value, true)} placeholder="e.g. 10 days or until finished"/>
             </Field>
           )}
 
@@ -221,8 +226,8 @@ function WriteCard({ toast, onDone, editing, onEdited }) {
       <Field label="Note (optional)"><textarea value={note} maxLength={1000} onChange={e => setNote(e.target.value)}/></Field>
       {err && <p className="au-error" role="alert">{err}</p>}
       <div className="ns-actions">
-        <Button type="submit" variant="soft" disabled={!!busy || (!draft && !visitId) || !lines.some(l => l.medicine.trim())}>{busy === 'save' ? 'Saving…' : 'Save draft'}</Button>
-        <Button disabled={!!busy || (!draft && !visitId) || !lines.some(l => l.medicine.trim())} onClick={() => setConfirmIssue(true)}>{busy === 'issue' ? 'Issuing…' : 'Issue prescription'}</Button>
+        <Button type="submit" variant="soft" disabled={!!busy || (!draft && !visitId) || missingCustomValue || !lines.some(l => l.medicine.trim())}>{busy === 'save' ? 'Saving…' : 'Save draft'}</Button>
+        <Button disabled={!!busy || (!draft && !visitId) || missingCustomValue || !lines.some(l => l.medicine.trim())} onClick={() => setConfirmIssue(true)}>{busy === 'issue' ? 'Issuing…' : 'Issue prescription'}</Button>
         {draft && <Button variant="ghost" onClick={reset}>Cancel</Button>}
       </div>
       <p className="au-muted">Issuing locks the prescription and gives it a number. It cannot be edited afterwards, only voided.</p>

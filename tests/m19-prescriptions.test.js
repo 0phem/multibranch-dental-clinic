@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
+import { runInNewContext } from 'node:vm'
 import { INITIAL_PRESCRIPTIONS, NAV } from '../src/data.js'
 
 const read = p => readFileSync(new URL(`../${p}`, import.meta.url), 'utf8')
@@ -28,6 +29,44 @@ test('M19 (4.4): medicine name autocomplete and Other free-text option exist wit
   assert.match(page, /<option value="__other__">Other \(free-text entry\)<\/option>/)
   assert.doesNotMatch(page, /COMMON_PRESETS/)
   assert.doesNotMatch(page, /Every 8 hours|Every 4 to 6 hours|Every 12 hours|Maximum 4000mg/i)
+})
+
+test('M19: Other selection retains custom values and sends only clinical line fields', () => {
+  const page = read('src/pages/ServerPrescriptions.jsx')
+  const names = ['OTHER_OPTION', 'EMPTY_LINE', 'LINE_FIELDS', 'selectedOption', 'chooseOption', 'apiLine']
+  const declarations = names.map(name => {
+    const line = page.match(new RegExp(`^const ${name} = .+$`, 'm'))?.[0]
+    assert.ok(line, `${name} helper is present`)
+    return line
+  })
+  const { selectedOption, chooseOption, apiLine } = runInNewContext(`${declarations.join(';')}; ({ selectedOption, chooseOption, apiLine })`)
+  const catalogs = { medicine: ['Amoxicillin'], dosage: ['500mg'], frequency: ['Once daily'], duration: ['3 days'] }
+  let line = { medicine: '', dosage: '', frequency: '', duration: '', instructions: '' }
+  for (const [field, custom] of Object.entries({ medicine: 'Custom medicine', dosage: '750mg', frequency: 'Every 4 hours', duration: '9 days' })) {
+    line = chooseOption(line, field, '__other__')
+    assert.equal(selectedOption(line, field, catalogs[field]), '__other__', `${field}: Other stays selected while empty`)
+    assert.equal(apiLine(line)[field], '', `${field}: selection marker is not a clinical value`)
+    line = { ...line, [field]: custom }
+    assert.equal(selectedOption(line, field, catalogs[field]), '__other__', `${field}: custom input stays selected after typing`)
+  }
+  line = { ...line, instructions: 'After meals' }
+  assert.deepEqual({ ...apiLine(line) }, { medicine: 'Custom medicine', dosage: '750mg', frequency: 'Every 4 hours', duration: '9 days', instructions: 'After meals' })
+  assert.equal(Object.keys(apiLine(line)).some(key => key.endsWith('Other')), false, 'UI selection flags stay out of payload')
+  for (const [field, catalog] of Object.entries(catalogs)) {
+    line = chooseOption(line, field, catalog[0])
+    assert.equal(selectedOption(line, field, catalog), catalog[0], `${field}: catalog value remains selectable`)
+  }
+  line = chooseOption(line, 'medicine', '__other__')
+  line = { ...line, medicine: 'Amoxicillin' }
+  assert.equal(selectedOption(line, 'medicine', catalogs.medicine), '__other__', 'custom editing keeps Other selected even when text matches catalog')
+  assert.equal(selectedOption({ medicine: 'Previously saved custom' }, 'medicine', catalogs.medicine), '__other__', 'saved custom value remains editable')
+  for (const field of Object.keys(catalogs)) {
+    assert.match(page, new RegExp(`set\\(i, '${field}', e\\.target\\.value, true\\)`), `${field}: custom input preserves Other selection`)
+    assert.match(page, new RegExp(`choose\\(i, '${field}', val\\)`), `${field}: selector uses separate option state`)
+  }
+  assert.match(page, /lines\.filter\(l => l\.medicine\.trim\(\)\)\.map\(apiLine\)/)
+  assert.match(page, /const missingCustomValue = lines\.some/)
+  assert.match(page, /\|\| missingCustomValue \|\| !lines\.some/)
 })
 
 test('M19: the patient sees issued prescriptions read-only with a PDF, and a void one is marked', () => {
