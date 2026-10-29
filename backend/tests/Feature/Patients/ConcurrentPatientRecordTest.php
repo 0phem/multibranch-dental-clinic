@@ -18,7 +18,7 @@ class ConcurrentPatientRecordTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->assertSame('dental_clinic_test', config('database.connections.pgsql.database'), 'refusing to run outside the test database');
+        $this->assertSame('dental_clinic_scratch', config('database.connections.pgsql.database'), 'refusing to run outside the test database');
         $this->artisan('migrate:fresh')->assertSuccessful();
         $this->setUpSchedulingWorld();
         $this->travelBack();
@@ -41,7 +41,7 @@ class ConcurrentPatientRecordTest extends TestCase
                 [1 => ['pipe', 'w'], 2 => ['pipe', 'w']],
                 $pipes,
                 base_path(),
-                array_merge(getenv(), ['APP_ENV' => 'testing', 'DB_CONNECTION' => 'pgsql', 'DB_DATABASE' => 'dental_clinic_test', 'DB_URL' => '',
+                array_merge(getenv(), ['APP_ENV' => 'testing', 'DB_CONNECTION' => 'pgsql', 'DB_DATABASE' => 'dental_clinic_scratch', 'DB_URL' => '',
                     'CACHE_STORE' => 'array', 'SESSION_DRIVER' => 'array', 'QUEUE_CONNECTION' => 'sync', 'BCRYPT_ROUNDS' => '4'])
             );
             $children[] = [$process, $pipes];

@@ -5,11 +5,13 @@
 // Usage: php concurrent_booking.php <bearer-token> <json-payload> <start-at-unix-microtime>
 
 require __DIR__.'/../../vendor/autoload.php';
+require_once __DIR__.'/ScratchDatabaseGuard.php';
 $app = require __DIR__.'/../../bootstrap/app.php';
 
 [, $token, $payload, $startAt] = $argv;
 $kernel = $app->make(Illuminate\Contracts\Http\Kernel::class);
 $kernel->bootstrap();
+\Tests\Support\ScratchDatabaseGuard::assertSafe($app);
 $request = Illuminate\Http\Request::create('/api/appointments', 'POST', [], [], [], [
     'HTTP_AUTHORIZATION' => 'Bearer '.$token,
     'HTTP_ACCEPT' => 'application/json',

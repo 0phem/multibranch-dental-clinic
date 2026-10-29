@@ -5,12 +5,14 @@
 // Usage: php concurrent_request.php <bearer-token> <path> <json-payload> <start-at-unix-microtime> [<json-headers>] [<http-method>]
 
 require __DIR__.'/../../vendor/autoload.php';
+require_once __DIR__.'/ScratchDatabaseGuard.php';
 $app = require __DIR__.'/../../bootstrap/app.php';
 
 [, $token, $path, $payload, $startAt] = $argv;
 $headers = json_decode($argv[5] ?? '{}', true) ?: [];
 $kernel = $app->make(Illuminate\Contracts\Http\Kernel::class);
 $kernel->bootstrap();
+\Tests\Support\ScratchDatabaseGuard::assertSafe($app);
 $server = ['HTTP_AUTHORIZATION' => 'Bearer '.$token, 'HTTP_ACCEPT' => 'application/json', 'CONTENT_TYPE' => 'application/json'];
 foreach ($headers as $name => $value) {
     $server['HTTP_'.strtoupper(str_replace('-', '_', $name))] = $value;

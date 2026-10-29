@@ -5,11 +5,13 @@
 // Usage: php concurrent_checkout.php <bearer-token> <path> <start-at-unix-microtime> <session-id>
 
 require __DIR__.'/../../vendor/autoload.php';
+require_once __DIR__.'/ScratchDatabaseGuard.php';
 $app = require __DIR__.'/../../bootstrap/app.php';
 
 [, $token, $path, $startAt, $sessionId] = $argv;
 $kernel = $app->make(Illuminate\Contracts\Http\Kernel::class);
 $kernel->bootstrap();
+\Tests\Support\ScratchDatabaseGuard::assertSafe($app);
 config(['services.paymongo.secret_key' => 'sk_test_unit_secret', 'services.paymongo.webhook_secret' => 'whsec_unit_test_secret', 'services.paymongo.mode' => 'test', 'services.paymongo.payment_method_types' => 'gcash', 'services.paymongo.base_url' => 'https://api.paymongo.com', 'app.frontend_url' => 'http://localhost:5173']);
 Illuminate\Support\Facades\Http::fake(['https://api.paymongo.com/v2/checkout_sessions' => function () use ($sessionId) {
     usleep(400000);

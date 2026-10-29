@@ -16,7 +16,7 @@ class ConcurrentPrescriptionTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->assertSame('dental_clinic_test', config('database.connections.pgsql.database'), 'refusing to run outside the test database');
+        $this->assertSame('dental_clinic_scratch', config('database.connections.pgsql.database'), 'refusing to run outside the test database');
         $this->artisan('migrate:fresh')->assertSuccessful();
         $this->setUpSchedulingWorld();
         $this->travelBack();
@@ -45,7 +45,7 @@ class ConcurrentPrescriptionTest extends TestCase
         foreach ($ids as $id) {
             $process = proc_open([PHP_BINARY, base_path('tests/Support/concurrent_request.php'), $token, "/api/prescriptions/$id/issue", json_encode(['expected_revision' => 1]), (string) $startAt],
                 [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, base_path(),
-                array_merge(getenv(), ['APP_ENV' => 'testing', 'DB_CONNECTION' => 'pgsql', 'DB_DATABASE' => 'dental_clinic_test', 'DB_URL' => '', 'CACHE_STORE' => 'array', 'SESSION_DRIVER' => 'array', 'QUEUE_CONNECTION' => 'sync', 'MAIL_MAILER' => 'array', 'BCRYPT_ROUNDS' => '4']));
+                array_merge(getenv(), ['APP_ENV' => 'testing', 'DB_CONNECTION' => 'pgsql', 'DB_DATABASE' => 'dental_clinic_scratch', 'DB_URL' => '', 'CACHE_STORE' => 'array', 'SESSION_DRIVER' => 'array', 'QUEUE_CONNECTION' => 'sync', 'MAIL_MAILER' => 'array', 'BCRYPT_ROUNDS' => '4']));
             $children[] = [$process, $pipes];
         }
         $statuses = [];

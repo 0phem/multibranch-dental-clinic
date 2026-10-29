@@ -30,7 +30,7 @@ class ConcurrentVerificationTest extends TestCase
         for($i=0;$i<2;$i++) {
             $process=proc_open([PHP_BINARY,base_path('tests/Support/concurrent_verification.php'),$user->email,'123456',(string)$start],
                 [1=>['pipe','w'],2=>['pipe','w']],$pipes,base_path(),array_merge(getenv(),[
-                    'APP_ENV'=>'testing','DB_CONNECTION'=>'pgsql','DB_DATABASE'=>'dental_clinic_test','DB_URL'=>'',
+                    'APP_ENV'=>'testing','DB_CONNECTION'=>'pgsql','DB_DATABASE'=>'dental_clinic_scratch','DB_URL'=>'',
                     'CACHE_STORE'=>'array','SESSION_DRIVER'=>'array','MAIL_MAILER'=>'array','BCRYPT_ROUNDS'=>'4',
                 ]));
             $children[]=[$process,$pipes];

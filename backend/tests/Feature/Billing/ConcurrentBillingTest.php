@@ -18,7 +18,7 @@ class ConcurrentBillingTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->assertSame('dental_clinic_test', config('database.connections.pgsql.database'));
+        $this->assertSame('dental_clinic_scratch', config('database.connections.pgsql.database'));
         $this->artisan('migrate:fresh')->assertSuccessful();
         $this->setUpSchedulingWorld();
         DB::table('m11_billing_cutovers')->where('id', 1)->update(['established_at' => '2026-09-01 00:00:00+08']);
@@ -53,7 +53,7 @@ class ConcurrentBillingTest extends TestCase
         $startAt = microtime(true) + 1.0;
         $children = [];
         foreach ($requests as [$path, $payload, $headers]) {
-            $process = proc_open([PHP_BINARY, base_path('tests/Support/concurrent_request.php'), $token, $path, json_encode($payload), (string) $startAt, json_encode($headers)], [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, base_path(), array_merge(getenv(), ['APP_ENV' => 'testing', 'DB_CONNECTION' => 'pgsql', 'DB_DATABASE' => 'dental_clinic_test', 'DB_URL' => '', 'CACHE_STORE' => 'array', 'SESSION_DRIVER' => 'array', 'QUEUE_CONNECTION' => 'sync']));
+            $process = proc_open([PHP_BINARY, base_path('tests/Support/concurrent_request.php'), $token, $path, json_encode($payload), (string) $startAt, json_encode($headers)], [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, base_path(), array_merge(getenv(), ['APP_ENV' => 'testing', 'DB_CONNECTION' => 'pgsql', 'DB_DATABASE' => 'dental_clinic_scratch', 'DB_URL' => '', 'CACHE_STORE' => 'array', 'SESSION_DRIVER' => 'array', 'QUEUE_CONNECTION' => 'sync']));
             $children[] = [$process, $pipes];
         }
         $results = [];
@@ -111,7 +111,7 @@ class ConcurrentBillingTest extends TestCase
         $startAt = microtime(true) + 1.5;
         $children = [];
         foreach ([1, 2, 3] as $n) {
-            $process = proc_open([PHP_BINARY, base_path('tests/Support/concurrent_checkout.php'), $token, "/api/invoices/{$invoice->public_id}/paymongo-checkout", (string) $startAt, 'cs_race'], [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, base_path(), array_merge(getenv(), ['APP_ENV' => 'testing', 'DB_CONNECTION' => 'pgsql', 'DB_DATABASE' => 'dental_clinic_test', 'DB_URL' => '', 'CACHE_STORE' => 'array', 'SESSION_DRIVER' => 'array', 'QUEUE_CONNECTION' => 'sync']));
+            $process = proc_open([PHP_BINARY, base_path('tests/Support/concurrent_checkout.php'), $token, "/api/invoices/{$invoice->public_id}/paymongo-checkout", (string) $startAt, 'cs_race'], [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, base_path(), array_merge(getenv(), ['APP_ENV' => 'testing', 'DB_CONNECTION' => 'pgsql', 'DB_DATABASE' => 'dental_clinic_scratch', 'DB_URL' => '', 'CACHE_STORE' => 'array', 'SESSION_DRIVER' => 'array', 'QUEUE_CONNECTION' => 'sync']));
             $children[] = [$process, $pipes];
         }
         $results = [];
