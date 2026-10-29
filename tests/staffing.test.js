@@ -94,16 +94,18 @@ test('OWN-11: work schedule supports both Dentist and Staff schedules with shift
   assert.match(staffing, /Staff schedules/)
   assert.match(staffing, /Staff work schedules/)
   assert.ok(staffing.includes('updateStaffProfile(currentStaff.id'))
-  assert.match(staffing, /Available \/ On-Duty/)
+  assert.match(staffing, /Marked available/)
+  assert.doesNotMatch(staffing, /Available \/ On-Duty/)
   assert.match(staffing, /Weekly roster coverage/)
 })
 
-test('STF-07: Doctor is on duty today status badge on dentist profiles, dashboard, and schedules', () => {
+test('STF-07: dashboard and profile retain duty status; Work Hours uses branch-scoped server duty', () => {
   const dashboards = read('src/pages/Dashboards.jsx')
   const staffing = read('src/pages/Staffing.jsx')
   const admin = read('src/pages/Admin.jsx')
   assert.match(dashboards, /Doctor is on duty today/)
   assert.match(dashboards, /isDoctorOnDuty/)
-  assert.match(staffing, /Doctor is on duty today/)
+  assert.match(staffing, /dutyForBranch\(data\.duty, dentist\.id, branch\.id, manilaToday\(\)\)/)
+  assert.match(staffing, /Duty status unavailable/)
   assert.match(admin, /Doctor is on duty today/)
 })

@@ -1,0 +1,19 @@
+.den12-duty { display: grid; gap: 8px; margin-top: 12px; }
+.den12-duty-title { margin: 0; font-size: var(--font-sm); font-weight: 700; color: var(--ink); }
+.den12-duty-list { display: flex; flex-wrap: wrap; gap: 8px; }
+.den12-duty-item { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; min-width: 0; padding: 6px 10px; border: 1px solid var(--line); border-radius: 10px; }
+.den12-duty-item strong { overflow-wrap: anywhere; }
+.den12-duty-item .fd-badge { display: inline-block; margin: 0; padding: 4px 9px; border-radius: 999px; font-size: var(--font-sm); font-weight: 700; }
+.den12-duty-item .fd-badge.is-ok { background: var(--green-soft); color: var(--green); }
+.den12-duty-item .fd-badge.is-muted, .den12-duty-item .fd-badge.is-unknown { background: var(--surface-3); color: var(--ink); }
+.den12-roster .st-cell { display: grid; align-content: start; justify-items: start; gap: 5px; }
+.den12-roster .st-branch { display: block; font-weight: 700; color: var(--ink); }
+.den12-roster .st-hours { min-width: 0; }
+.den12-roster .st-hours input[type='time'] { width: 100%; min-width: 0; }
+.den12-roster .ns-actions { flex-wrap: wrap; gap: 8px; }
+.den12-roster .ns-actions button { min-height: 40px; }
+@media (max-width: 640px) {
+  .den12-roster .st-cells { grid-template-columns: minmax(0, 1fr); }
+  .den12-roster .st-pair { grid-template-columns: minmax(0, 1fr); }
+  .den12-roster .ns-actions button { min-height: 44px; }
+}

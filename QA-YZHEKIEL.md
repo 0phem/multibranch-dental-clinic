@@ -203,7 +203,7 @@ For bug fixes, self-check before PR, and end-of-day status, use templates B, C, 
 - [x] DEN-07 Prescription: make the remove medicine color red
 - [x] DEN-08 Prescription: fix the save button size from the license number on my prescription
 - [x] DEN-09 Follow up care: add color to the status
-- [ ] DEN-12 My work hours: fix the UI
+- [x] DEN-12 My work hours: fix the UI (completed by Yzhekiel in B7)
 - [x] DEN-15 Wording to approve: fix the button sizes, change the preview and make the UI consistent
 
 **Support tasks**
@@ -363,11 +363,12 @@ For bug fixes, self-check before PR, and end-of-day status, use templates B, C, 
     <evidence>A6 / Joevan: Existing Open/Contacted/Booked/Closed and Overdue labelled colors verified as five distinct fills with text contrast at least 4.5:1. No status or booking change. Playwright 1440px/390px, light/dark OS preferences; existing app palette retained (no separate dark theme). See docs/DENTIST_UI_A6_ACCEPTANCE.md for synthetic-data boundaries and focused results.</evidence>
   </revision>
 
-  <revision id="DEN-12" status="todo" severity="medium" owner="Yzhekiel">
+  <revision id="DEN-12" status="done" severity="medium" owner="Yzhekiel" implementer="Yzhekiel">
     <tasks>
-      - [ ] Fix the My work hours UI (layout, spacing, day rows, time inputs)
+      - [x] Fix the My work hours UI (layout, spacing, day rows, time inputs)
     </tasks>
     <acceptance>Work hours screen is clean and consistent with the design system.</acceptance>
+    <evidence>B7 / Yzhekiel: Rendered the production WorkSchedulesPage with fictional Dentist, Owner and Staff data at 1440px and 390px. Rows display Monday–Sunday, per-branch scheduled hours and breaks, day off, branch closed, and estimated profile hours without horizontal overflow. Scoped styles separate branch names from times and align time controls; Owner Save, Cancel, day-off, keyboard activation, and backend error feedback were exercised. Dentist and Staff had no edit controls. The dated, branch-scoped server duty projection now displays On duty today, Off duty, or Duty status unavailable; missing/stale data is never treated as on duty. Focused tests 23/23 and production build passed. No production backend or booking rules changed. See docs/DEN12_B7_WORK_HOURS_ACCEPTANCE.md. FINALS-QA-REVISIONS.md already marked DEN-12 done before this batch; it was not edited.</evidence>
   </revision>
 
   <revision id="DEN-15" status="done" severity="medium" owner="Yzhekiel" implementer="Joevan">
