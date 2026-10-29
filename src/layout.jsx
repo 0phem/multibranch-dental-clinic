@@ -1,6 +1,8 @@
 import React from 'react'
 import { NAV, ROLE_INFO } from './data.js'
 import { visibleNotifications, notificationDestination } from './phase3-contracts.js'
+import { clinicDate } from './clock.js'
+import { groupNotificationsByDate } from './notification-date-groups.js'
 import { sessionForRole } from './contracts.js'
 import { canAccessPage } from './safeguards.js'
 import { Button, ConfirmDialog, Field, Icon, Modal, Notice, ShellActionsContext } from './components.jsx'
@@ -85,11 +87,15 @@ export function NotificationPanel({role,store,onClose,setPage}){
   const items=visibleNotifications(state,session)
   const [all,setAll]=React.useState(false)
   const visible=all?items:items.slice(0,8)
+  const dateGroups=groupNotificationsByDate(visible,clinicDate())
   const mark=id=>{const result=actions.markNotificationRead(id);if(!result.ok)toast(result.message,'warning');return result.ok}
   const open=n=>{const destination=notificationDestination(state,session,n);if(destination&&mark(n.id)){setPage(destination.page,destination.context);onClose()}}
   return <Modal open title="Notifications" subtitle="Your updates and reminders" onClose={onClose} className="notification-dialog"><div className="notification-popover">
     <div className="notification-toolbar"><button onClick={()=>{const result=actions.markAllNotificationsRead();if(!result.ok)toast(result.message,'warning')}} disabled={!items.some(n=>!n.read)}>Mark my notifications read</button><button onClick={()=>setAll(v=>!v)}>{all?'Recent only':`View all (${items.length})`}</button></div>
-    <div className="notification-scroll">{visible.length?visible.map(n=><div className={`notification-row ${n.read?'':'unread'}`} key={n.id}><span className="notification-dot"/><div><b>{!n.read&&<span className="sr-only">Unread: </span>}{n.title}</b><p>{n.body}</p><small>{n.createdAt} • {n.legacy?'Historical demo record':n.channel}</small><div className="row-actions">{!n.read&&<button onClick={()=>mark(n.id)}>Mark read</button>}{notificationDestination(state,session,n)&&<button onClick={()=>open(n)}>View update</button>}</div></div></div>):<div className="notification-empty">You're all caught up.</div>}</div>
+    <div className="notification-scroll">{visible.length?dateGroups.map(group=><div key={group.key}>
+      <h3 className="notification-date-heading">{group.label}</h3>
+      {group.items.map(n=><div className={`notification-row ${n.read?'':'unread'}`} key={n.id}><span className="notification-dot"/><div><b>{!n.read&&<span className="sr-only">Unread: </span>}{n.title}</b><p>{n.body}</p><small>{n.createdAt} • {n.legacy?'Historical demo record':n.channel}</small><div className="row-actions">{!n.read&&<button onClick={()=>mark(n.id)}>Mark read</button>}{notificationDestination(state,session,n)&&<button onClick={()=>open(n)}>View update</button>}</div></div></div>)}
+    </div>):<div className="notification-empty">You're all caught up.</div>}</div>
   </div></Modal>
 }
 
