@@ -40,33 +40,53 @@ export function HandoversPage({ store, role }) {
 }
 
 export function HandoverDialog({ id, toast, onClose, onChanged }) {
-  const [h, setH] = useState(null), [error, setError] = useState(''), [busy, setBusy] = useState(''), [confirmCancel, setConfirmCancel] = useState(false)
+  const [h, setH] = useState(null), [error, setError] = useState(''), [busy, setBusy] = useState(false), [confirmCancel, setConfirmCancel] = useState(false)
+  const ackingRef = React.useRef(false)
+
   useEffect(() => {
+    let active = true
+    ackingRef.current = false
     handover(id).then(r => {
+      if (!active) return
       if (r.ok) {
         setH(r.data)
-        // Auto-accepted handover (Rule 2.10 & 3.8)
-        if (r.data.can_acknowledge) {
+        // Auto-accepted handover (STF-06 & DEN-11): receiving staff or dentist immediately auto-accepts on open
+        if (r.data.can_acknowledge && !ackingRef.current) {
+          ackingRef.current = true
           acknowledgeHandover(id).then(ackRes => {
+            if (!active) return
             if (ackRes.ok) {
               setH(ackRes.data)
               toast?.('Handover transferred and auto-accepted.', 'success')
               onChanged?.()
+            } else if (ackRes.data?.status === 'Acknowledged') {
+              setH(ackRes.data)
+              onChanged?.()
             }
+          }).catch(() => {
+            // Acknowledgment failure does not break viewing of already-loaded record
           })
         }
       } else {
         setError(r.message || 'This handover could not be opened.')
       }
+    }).catch(err => {
+      if (!active) return
+      setError(err?.message || 'This handover could not be opened.')
     })
+    return () => { active = false }
   }, [id])
-  const act = async (fn, done) => {
-    setBusy(done)
-    const r = await fn(id)
-    setBusy('')
+
+  const cancel = async () => {
+    setBusy(true)
+    const r = await cancelHandover(id)
+    setBusy(false)
     if (!r.ok) return toast(firstError(r), 'warning')
-    setH(r.data); toast(done === 'ack' ? 'Acknowledged. The sending team can see it.' : 'Handover cancelled.', 'success'); onChanged?.()
+    setH(r.data)
+    toast('Handover cancelled.', 'success')
+    onChanged?.()
   }
+
   return <Modal open title={h ? `Handover: ${h.patient.name}` : 'Handover'} onClose={onClose}>
     {error && <Notice tone="warning" title="Unavailable">{error}</Notice>}
     {!h ? !error && <p className="au-muted" role="status">Loading…</p> : <div className="st-handover">
@@ -78,15 +98,14 @@ export function HandoverDialog({ id, toast, onClose, onChanged }) {
         <dt>Documents</dt><dd>{h.documents?.length ? <ul>{h.documents.map(d => <li key={d.id}>{d.title} · {d.category} · {d.date}</li>)}</ul> : 'None attached.'}</dd>
       </dl> : <Notice tone="info">The clinical notes are visible only to the sending and receiving teams.</Notice>}
       <div className="ns-actions">
-        {h.can_acknowledge && <Button disabled={!!busy} onClick={() => act(acknowledgeHandover, 'ack')}>{busy === 'ack' ? 'Saving…' : 'Acknowledge'}</Button>}
-        {h.can_cancel && <Button variant="ghost" disabled={!!busy} onClick={() => setConfirmCancel(true)}>Cancel handover</Button>}
+        {h.can_cancel && <Button variant="ghost" disabled={busy} onClick={() => setConfirmCancel(true)}>Cancel handover</Button>}
         <Button variant="ghost" onClick={onClose}>Close</Button>
       </div>
       <ConfirmDialog
         open={confirmCancel}
         title="Cancel patient handover?"
         confirmLabel="Cancel handover"
-        onConfirm={() => { setConfirmCancel(false); act(cancelHandover, 'cancel') }}
+        onConfirm={() => { setConfirmCancel(false); cancel() }}
         onCancel={() => setConfirmCancel(false)}
       >
         <p>Cancelling withdraws this handover to <b>{h.to?.branch?.name || 'the receiving branch'}</b> and revokes temporary cross-branch handover access.</p>
