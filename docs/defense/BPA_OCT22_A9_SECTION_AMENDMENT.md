@@ -16,7 +16,7 @@ Global addition after the quick-reference table: "Development evidence clarifica
 
 ## Module 1: User Management
 
-**Original owner:** Licanda, Celin. **Existing table block:** tables 2-14 (one-based top-level table numbering; table 1 is the assignment reference).
+**Original owner:** Licanda, Celin. **Existing table block:** tables 2-14 (one-based top-level table numbering; table 1 is the assignment reference).
 
 Append the following text; preserve the existing content before it.
 
@@ -34,7 +34,7 @@ Append the following text; preserve the existing content before it.
 
 ## Module 2: Branch Management
 
-**Original owner:** Licanda, Celin. **Existing table block:** tables 15-27 (one-based top-level table numbering; table 1 is the assignment reference).
+**Original owner:** Licanda, Celin. **Existing table block:** tables 15-27 (one-based top-level table numbering; table 1 is the assignment reference).
 
 Append the following text; preserve the existing content before it.
 
@@ -52,7 +52,7 @@ Append the following text; preserve the existing content before it.
 
 ## Module 3: Staff Management
 
-**Original owner:** Licanda, Celin. **Existing table block:** tables 28-40 (one-based top-level table numbering; table 1 is the assignment reference).
+**Original owner:** Licanda, Celin. **Existing table block:** tables 28-40 (one-based top-level table numbering; table 1 is the assignment reference).
 
 Append the following text; preserve the existing content before it.
 
@@ -70,13 +70,13 @@ Append the following text; preserve the existing content before it.
 
 ## Module 4: Service Management
 
-**Original owner:** Licanda, Celin. **Existing table block:** tables 41-53 (one-based top-level table numbering; table 1 is the assignment reference).
+**Original owner:** Licanda, Celin. **Existing table block:** tables 41-53 (one-based top-level table numbering; table 1 is the assignment reference).
 
 No new feature-level replacement to Inputs, Activities, Outputs, Flow, Automation, Issues or Improvements is required by the reviewed batches. Retain sections 1-13 and original owner. In section 13 append: "Current scope review (2026-10-30): No A1-A8 or B3-B5 change to service pricing or eligibility policy is established. Existing Partial classification retained; final clinic prices remain pending. Historical classification Partial retained; this review does not recertify all original claims."
 
 ## Module 5: Clinic Policy Management
 
-**Original owner:** Licanda, Celin. **Existing table block:** tables 54-66 (one-based top-level table numbering; table 1 is the assignment reference).
+**Original owner:** Licanda, Celin. **Existing table block:** tables 54-66 (one-based top-level table numbering; table 1 is the assignment reference).
 
 Append the following text; preserve the existing content before it.
 
@@ -94,7 +94,7 @@ Append the following text; preserve the existing content before it.
 
 ## Module 6: Appointment Management
 
-**Original owner:** Alejo, Hart Jaztin A.. **Existing table block:** tables 67-79 (one-based top-level table numbering; table 1 is the assignment reference).
+**Original owner:** Alejo, Hart Jaztin A.. **Existing table block:** tables 67-79 (one-based top-level table numbering; table 1 is the assignment reference).
 
 Append the following text; preserve the existing content before it.
 
@@ -112,13 +112,13 @@ Append the following text; preserve the existing content before it.
 
 ## Module 7: Attendance Management
 
-**Original owner:** Alejo, Hart Jaztin A.. **Existing table block:** tables 80-92 (one-based top-level table numbering; table 1 is the assignment reference).
+**Original owner:** Alejo, Hart Jaztin A.. **Existing table block:** tables 80-92 (one-based top-level table numbering; table 1 is the assignment reference).
 
 No new feature-level replacement to Inputs, Activities, Outputs, Flow, Automation, Issues or Improvements is required by the reviewed batches. Retain sections 1-13 and original owner. In section 13 append: "Current scope review (2026-10-30): No A1-A8 or B3-B5 change to attendance thresholds or cancellation policy is accepted. Historical timing defaults remain subject to the existing clinic-policy approvals; no new AS-IS claim. Historical classification Implemented retained; this review does not recertify all original claims."
 
 ## Module 8: Check-In Management
 
-**Original owner:** Alejo, Hart Jaztin A.. **Existing table block:** tables 93-105 (one-based top-level table numbering; table 1 is the assignment reference).
+**Original owner:** Alejo, Hart Jaztin A.. **Existing table block:** tables 93-105 (one-based top-level table numbering; table 1 is the assignment reference).
 
 Append the following text; preserve the existing content before it.
 
@@ -136,7 +136,7 @@ Append the following text; preserve the existing content before it.
 
 ## Module 9: Queue Management
 
-**Original owner:** Alejo, Hart Jaztin A.. **Existing table block:** tables 106-118 (one-based top-level table numbering; table 1 is the assignment reference).
+**Original owner:** Alejo, Hart Jaztin A.. **Existing table block:** tables 106-118 (one-based top-level table numbering; table 1 is the assignment reference).
 
 Append the following text; preserve the existing content before it.
 
@@ -154,7 +154,7 @@ Append the following text; preserve the existing content before it.
 
 ## Module 10: Patient Flow Management
 
-**Original owner:** Alejo, Hart Jaztin A.. **Existing table block:** tables 119-131 (one-based top-level table numbering; table 1 is the assignment reference).
+**Original owner:** Alejo, Hart Jaztin A.. **Existing table block:** tables 119-131 (one-based top-level table numbering; table 1 is the assignment reference).
 
 Append the following text; preserve the existing content before it.
 
@@ -172,7 +172,7 @@ Append the following text; preserve the existing content before it.
 
 ## Module 11: Patient Records Management
 
-**Original owner:** Ecal, Richmon. **Existing table block:** tables 132-144 (one-based top-level table numbering; table 1 is the assignment reference).
+**Original owner:** Ecal, Richmon. **Existing table block:** tables 132-144 (one-based top-level table numbering; table 1 is the assignment reference).
 
 Append the following text; preserve the existing content before it.
 
@@ -190,19 +190,19 @@ Append the following text; preserve the existing content before it.
 
 ## Module 12: Document Management
 
-**Original owner:** Ecal, Richmon. **Existing table block:** tables 145-157 (one-based top-level table numbering; table 1 is the assignment reference).
+**Original owner:** Ecal, Richmon. **Existing table block:** tables 145-157 (one-based top-level table numbering; table 1 is the assignment reference).
 
 No new feature-level replacement to Inputs, Activities, Outputs, Flow, Automation, Issues or Improvements is required by the reviewed batches. Retain sections 1-13 and original owner. In section 13 append: "Current scope review (2026-10-30): Existing on-device draft ID prefill and supported Other details do not add a production extraction or new document storage contract. Partial classification retained; no A9 expansion of consent, image retention or document access policy. Historical classification Partial retained; this review does not recertify all original claims."
 
 ## Module 13: Treatment Management
 
-**Original owner:** Ecal, Richmon. **Existing table block:** tables 158-170 (one-based top-level table numbering; table 1 is the assignment reference).
+**Original owner:** Ecal, Richmon. **Existing table block:** tables 158-170 (one-based top-level table numbering; table 1 is the assignment reference).
 
 No new feature-level replacement to Inputs, Activities, Outputs, Flow, Automation, Issues or Improvements is required by the reviewed batches. Retain sections 1-13 and original owner. In section 13 append: "Current scope review (2026-10-30): Exact encounter context remains required for treatment; schedule presentation changes do not automate diagnosis, chart decisions, procedures or completion. No new treatment-domain API/policy. Broad clinical workflow production acceptance is not claimed. Historical classification Implemented retained; this review does not recertify all original claims."
 
 ## Module 14: Prescription Management
 
-**Original owner:** Ecal, Richmon. **Existing table block:** tables 171-183 (one-based top-level table numbering; table 1 is the assignment reference).
+**Original owner:** Ecal, Richmon. **Existing table block:** tables 171-183 (one-based top-level table numbering; table 1 is the assignment reference).
 
 Append the following text; preserve the existing content before it.
 
@@ -220,7 +220,7 @@ Append the following text; preserve the existing content before it.
 
 ## Module 15: Follow-Up Management
 
-**Original owner:** Ecal, Richmon. **Existing table block:** tables 184-196 (one-based top-level table numbering; table 1 is the assignment reference).
+**Original owner:** Ecal, Richmon. **Existing table block:** tables 184-196 (one-based top-level table numbering; table 1 is the assignment reference).
 
 Append the following text; preserve the existing content before it.
 
@@ -238,13 +238,13 @@ Append the following text; preserve the existing content before it.
 
 ## Module 16: Social Media Management
 
-**Original owner:** Millar, John Yzhekiel. **Existing table block:** tables 197-209 (one-based top-level table numbering; table 1 is the assignment reference).
+**Original owner:** Millar, John Yzhekiel. **Existing table block:** tables 197-209 (one-based top-level table numbering; table 1 is the assignment reference).
 
 No new feature-level replacement to Inputs, Activities, Outputs, Flow, Automation, Issues or Improvements is required by the reviewed batches. Retain sections 1-13 and original owner. In section 13 append: "Current scope review (2026-10-30): No new social-provider integration or campaign delivery is introduced. Existing Partial classification retained; external channel integrations remain separate work. Historical classification Partial retained; this review does not recertify all original claims."
 
 ## Module 17: AI Chatbot Management
 
-**Original owner:** Millar, John Yzhekiel. **Existing table block:** tables 210-222 (one-based top-level table numbering; table 1 is the assignment reference).
+**Original owner:** Millar, John Yzhekiel. **Existing table block:** tables 210-222 (one-based top-level table numbering; table 1 is the assignment reference).
 
 Append the following text; preserve the existing content before it.
 
@@ -262,7 +262,7 @@ Append the following text; preserve the existing content before it.
 
 ## Module 18: Messaging Management
 
-**Original owner:** Millar, John Yzhekiel. **Existing table block:** tables 223-235 (one-based top-level table numbering; table 1 is the assignment reference).
+**Original owner:** Millar, John Yzhekiel. **Existing table block:** tables 223-235 (one-based top-level table numbering; table 1 is the assignment reference).
 
 Append the following text; preserve the existing content before it.
 
@@ -280,7 +280,7 @@ Append the following text; preserve the existing content before it.
 
 ## Module 19: Notification Management
 
-**Original owner:** Millar, John Yzhekiel. **Existing table block:** tables 236-248 (one-based top-level table numbering; table 1 is the assignment reference).
+**Original owner:** Millar, John Yzhekiel. **Existing table block:** tables 236-248 (one-based top-level table numbering; table 1 is the assignment reference).
 
 Append the following text; preserve the existing content before it.
 
@@ -298,13 +298,13 @@ Append the following text; preserve the existing content before it.
 
 ## Module 20: Marketing Management (PE)
 
-**Original owner:** Millar, John Yzhekiel. **Existing table block:** tables 249-261 (one-based top-level table numbering; table 1 is the assignment reference).
+**Original owner:** Millar, John Yzhekiel. **Existing table block:** tables 249-261 (one-based top-level table numbering; table 1 is the assignment reference).
 
 No new feature-level replacement to Inputs, Activities, Outputs, Flow, Automation, Issues or Improvements is required by the reviewed batches. Retain sections 1-13 and original owner. In section 13 append: "Current scope review (2026-10-30): Campaign tracking and proposed consent/targeting/delivery are distinct. No A1-A8 or B3-B5 batch establishes the full campaign lifecycle. Proposed enhancement boundaries preserved; no promotion of prototype rules or marketing automation to confirmed clinic policy. Historical classification Implemented retained; this review does not recertify all original claims."
 
 ## Module 21: Billing Management
 
-**Original owner:** Delos Santos, Joevan. **Existing table block:** tables 262-274 (one-based top-level table numbering; table 1 is the assignment reference).
+**Original owner:** Delos Santos, Joevan. **Existing table block:** tables 262-274 (one-based top-level table numbering; table 1 is the assignment reference).
 
 Append the following text; preserve the existing content before it.
 
@@ -322,13 +322,13 @@ Append the following text; preserve the existing content before it.
 
 ## Module 22: Loyalty Management (PE)
 
-**Original owner:** Delos Santos, Joevan. **Existing table block:** tables 275-287 (one-based top-level table numbering; table 1 is the assignment reference).
+**Original owner:** Delos Santos, Joevan. **Existing table block:** tables 275-287 (one-based top-level table numbering; table 1 is the assignment reference).
 
 No new feature-level replacement to Inputs, Activities, Outputs, Flow, Automation, Issues or Improvements is required by the reviewed batches. Retain sections 1-13 and original owner. In section 13 append: "Current scope review (2026-10-30): Existing whole-point ledger/redemption demonstration does not establish a clinic loyalty program. Partial/proposed enhancement classification retained; 50-point and reward rules remain team-designed prototype rules, not confirmed clinic policy. Historical classification Partial retained; this review does not recertify all original claims."
 
 ## Module 23: Archives & Historical Records Management
 
-**Original owner:** Delos Santos, Joevan. **Existing table block:** tables 288-300 (one-based top-level table numbering; table 1 is the assignment reference).
+**Original owner:** Delos Santos, Joevan. **Existing table block:** tables 288-300 (one-based top-level table numbering; table 1 is the assignment reference).
 
 Append the following text; preserve the existing content before it.
 
@@ -346,7 +346,7 @@ Append the following text; preserve the existing content before it.
 
 ## Module 24: Analytics Management
 
-**Original owner:** Delos Santos, Joevan. **Existing table block:** tables 301-313 (one-based top-level table numbering; table 1 is the assignment reference).
+**Original owner:** Delos Santos, Joevan. **Existing table block:** tables 301-313 (one-based top-level table numbering; table 1 is the assignment reference).
 
 Append the following text; preserve the existing content before it.
 
@@ -364,7 +364,7 @@ Append the following text; preserve the existing content before it.
 
 ## Module 25: Audit Management
 
-**Original owner:** Delos Santos, Joevan. **Existing table block:** tables 314-326 (one-based top-level table numbering; table 1 is the assignment reference).
+**Original owner:** Delos Santos, Joevan. **Existing table block:** tables 314-326 (one-based top-level table numbering; table 1 is the assignment reference).
 
 No new feature-level replacement to Inputs, Activities, Outputs, Flow, Automation, Issues or Improvements is required by the reviewed batches. Retain sections 1-13 and original owner. In section 13 append: "Current scope review (2026-10-30): Existing sanitized audit evidence remains append-only; UI shortcuts do not authorize disclosure of private clinical text or change audit policy. No new universal audit-completeness or production compliance certification from A9. Historical classification Implemented retained; this review does not recertify all original claims."
 
