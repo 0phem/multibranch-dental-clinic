@@ -1,0 +1,6 @@
+.queue-open-row { cursor: pointer; }
+.queue-open-row:hover > td { background: var(--brand-soft); }
+.queue-open-row:focus-visible { outline: 3px solid var(--brand); outline-offset: -3px; }
+.queue-open-row:focus-visible > td { background: var(--brand-soft); }
+.queue-open-row .queue-call-btn,
+.queue-open-row .queue-message-btn { min-width: var(--control-height); min-height: var(--control-height); }

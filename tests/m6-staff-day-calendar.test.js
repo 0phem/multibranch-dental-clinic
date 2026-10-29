@@ -225,7 +225,7 @@ test('appointment management operations: reschedule, cancel, no-show, create act
 
 // ---- render (offline demo + first paint) -----------------------------------------------------------------------------------------
 // Hooks need the same React instance as react-dom/server, so React stays external and the bundle is written under node_modules.
-const bundle = await build({ stdin: { contents: "export * from './src/pages/StaffDayCalendar.jsx'; export { setClockSource as setBundledClock } from './src/clock.js'", resolveDir: process.cwd() }, bundle: true, write: false, platform: 'node', format: 'esm', external: ['react', 'react-dom'] })
+const bundle = await build({ stdin: { contents: "export * from './src/pages/StaffDayCalendar.jsx'; export { setClockSource as setBundledClock } from './src/clock.js'", resolveDir: process.cwd() }, bundle: true, write: false, platform: 'node', format: 'esm', external: ['react', 'react-dom'], loader: { '.css': 'empty' } })
 const bundleDir = new URL('../node_modules/.cache/', import.meta.url)
 mkdirSync(bundleDir, { recursive: true })
 const bundleFile = new URL('m6-day-calendar-test-bundle.mjs', bundleDir)

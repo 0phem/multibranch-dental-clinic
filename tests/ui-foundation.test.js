@@ -71,10 +71,10 @@ test('STF-16 & STF-17: Queue row patient is clickable to open chart and queue ac
 
   // STF-17: Call and message icon buttons with tooltips and aria-labels
   assert.match(patientFlow, /className="icon-btn queue-call-btn"/)
-  assert.match(patientFlow, /title="Call patient"/)
+  assert.match(patientFlow, /title="Call patient in queue"/)
   assert.match(patientFlow, /<Icon name="phone"/)
   assert.match(patientFlow, /className="icon-btn queue-message-btn"/)
-  assert.match(patientFlow, /title="Message patient"/)
+  assert.match(patientFlow, /title="Open patient conversation"/)
   assert.match(patientFlow, /<Icon name="message"/)
 })
 

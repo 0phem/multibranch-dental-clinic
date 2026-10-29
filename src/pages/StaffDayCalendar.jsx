@@ -6,6 +6,7 @@ import { useVisibleRefresh } from '../use-visible-refresh.js'
 import { calendarLoad, getAppointment } from '../api-client.js'
 import { commandKey } from '../appointments-api.js'
 import { AppointmentForm } from './Scheduling.jsx'
+import '../b4-calendar.css'
 import {
   VIEWS, WEEKDAYS, createDayLoader, dayTotals, defaultCalendarDate, groupByDate, isValidClinicDate, monthCells,
   periodContains, periodTarget, shiftPeriod, sourceLabel, statusMeaning, busynessStatus, COUNT_BUSYNESS_THRESHOLDS,

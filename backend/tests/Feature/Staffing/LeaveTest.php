@@ -84,10 +84,49 @@ class LeaveTest extends TestCase
         $this->assertContains('15:00', $times);
 
         // STF-08: partial-day leave across multiple dates is rejected; end_time <= start_time is rejected.
+        $this->actingAsUser('dentist1');
         $this->request(['start_date' => '2026-10-01', 'end_date' => '2026-10-02', 'start_time' => '09:00', 'end_time' => '12:00'])
             ->assertStatus(422)->assertJsonValidationErrors('end_date');
         $this->request(['start_date' => '2026-10-01', 'end_date' => '2026-10-01', 'start_time' => '14:00', 'end_time' => '12:00'])
             ->assertStatus(422)->assertJsonValidationErrors('end_time');
+    }
+
+    public function test_staff_and_dentist_partial_leave_round_trip_in_manila_and_owner_can_decide(): void
+    {
+        StaffProfile::create(['legacy_ref' => 's-b1', 'person_id' => $this->u['staffB1']->person_id, 'title' => 'Front desk', 'branch_id' => $this->b['b1']->id,
+            'shift_start' => '09:00', 'shift_end' => '18:00', 'available' => true]);
+
+        $this->actingAsUser('dentist1');
+        $dentist = $this->request(['start_time' => '13:00', 'end_time' => '15:00'])->assertCreated()
+            ->assertJsonPath('data.starts_at', '2026-09-30T13:00:00+08:00')
+            ->assertJsonPath('data.ends_at', '2026-09-30T15:00:00+08:00');
+        $dentistId = $dentist->json('data.id');
+        $this->getJson('/api/leave/mine')->assertOk()->assertJsonPath('data.0.ends_at', '2026-09-30T15:00:00+08:00');
+
+        $this->actingAsUser('staffB1');
+        $staffId = $this->request(['start_date' => '2026-10-01', 'end_date' => '2026-10-01', 'start_time' => '09:00', 'end_time' => '12:00'])
+            ->assertCreated()->assertJsonPath('data.starts_at', '2026-10-01T09:00:00+08:00')
+            ->assertJsonPath('data.ends_at', '2026-10-01T12:00:00+08:00')->json('data.id');
+        $this->request(['start_date' => '2026-10-01', 'end_date' => '2026-10-01', 'start_time' => '11:00', 'end_time' => '13:00'])
+            ->assertStatus(422)->assertJsonValidationErrors('start_date');
+        $this->request(['start_date' => '2026-10-02', 'end_date' => '2026-10-02', 'start_time' => '12:00', 'end_time' => '12:00'])
+            ->assertStatus(422)->assertJsonValidationErrors('end_time');
+        $this->request(['start_date' => '2026-09-27', 'end_date' => '2026-09-27', 'start_time' => '09:00', 'end_time' => '12:00'])
+            ->assertStatus(422)->assertJsonValidationErrors('start_date');
+
+        $this->actingAsUser('owner');
+        $this->postJson('/api/leave', ['type' => 'vacation', 'start_date' => '2026-10-02', 'end_date' => '2026-10-02'])
+            ->assertForbidden();
+        $pending = collect($this->getJson('/api/leave?status=Pending')->assertOk()->json('data'))->keyBy('id');
+        $this->assertSame('2026-09-30T13:00:00+08:00', $pending[$dentistId]['starts_at']);
+        $this->assertSame('2026-10-01T12:00:00+08:00', $pending[$staffId]['ends_at']);
+        $this->assertTrue($pending[$dentistId]['can_decide']);
+        $this->assertTrue($pending[$staffId]['can_decide']);
+        $this->postJson("/api/leave/$dentistId/decide", ['decision' => 'approve'])
+            ->assertOk()->assertJsonPath('data.status', 'Approved')
+            ->assertJsonPath('data.ends_at', '2026-09-30T15:00:00+08:00');
+        $this->postJson("/api/leave/$staffId/decide", ['decision' => 'approve'])
+            ->assertOk()->assertJsonPath('data.status', 'Approved');
     }
 
     public function test_approving_with_booked_appointments_lists_them_with_cover_and_never_cancels(): void
