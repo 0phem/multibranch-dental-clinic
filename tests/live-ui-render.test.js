@@ -10,7 +10,7 @@ import { setClockSource } from '../src/clock.js'
 
 const require=createRequire(import.meta.url)
 const files=['data.js','clock.js','contracts.js','safeguards.js','phase3-contracts.js','workflow.js','hmo-presentation.js','hmo-api.js','patient-ui.jsx','patient-view.js','pages/Scheduling.jsx','pages/FinanceCommunication.jsx','pages/PatientCare.jsx','pages/PatientMe.jsx']
-const bundle=await build({stdin:{contents:files.map(file=>`export * from './src/${file}';`).join('\n'),resolveDir:process.cwd()},bundle:true,write:false,platform:'node',format:'esm',plugins:[{name:'shared-react',setup(build){build.onResolve({filter:/^react$/},()=>({path:pathToFileURL(require.resolve('react')).href,external:true}))}}]})
+const bundle=await build({stdin:{contents:files.map(file=>`export * from './src/${file}';`).join('\n'),resolveDir:process.cwd()},bundle:true,write:false,loader:{'.css':'empty'},platform:'node',format:'esm',plugins:[{name:'shared-react',setup(build){build.onResolve({filter:/^react$/},()=>({path:pathToFileURL(require.resolve('react')).href,external:true}))}}]})
 const m=await import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].text).toString('base64')}`)
 m.setClockSource(()=>new Date('2026-09-19T02:08:00Z'))
 // The server-flow helper's dry run uses the unbundled modules, so pin that clock too.

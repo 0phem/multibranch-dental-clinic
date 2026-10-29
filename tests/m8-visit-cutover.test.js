@@ -218,7 +218,10 @@ test('the front desk uses server commands only; no local arrival, walk-in or que
   assert.doesNotMatch(page, /actions\.admitWalkIn|actions\.updateQueue|checkIns|'No-show'\)|Add to queue|retryAdmit/)
   assert.match(page, /isn’t available yet — the clinic still needs to decide how an admitted visit is closed/)
   // The walk-in form still requires a Dentist: the queue is organized per Dentist and there is no assignment step yet.
-  assert.match(page, /const canWalkIn=!!walkIn\.patientPublicId&&!!walkIn\.branchId&&!!walkIn\.serviceId&&!!walkIn\.dentistId/)
+  // B2 requires an actually selected directory Patient and blocks the registration mode,
+  // in addition to the existing branch/service/Dentist requirements.
+  assert.match(page, /const selectedPatient=\(store\.directoryPatients\|\|\[\]\)\.find\(p=>p\.id===walkIn\.patientPublicId\)/)
+  assert.match(page, /const canWalkIn=!registering&&!!selectedPatient&&!!walkIn\.branchId&&!!walkIn\.serviceId&&!!walkIn\.dentistId/)
   const scheduling = read('src/pages/Scheduling.jsx')
   assert.match(scheduling, /store\.appointmentFlow\.noShow\(a,commandKey\(\)\)/)
   assert.match(scheduling, /Use this only when the patient did not arrive; no visit is created/)
