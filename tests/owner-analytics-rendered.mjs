@@ -42,7 +42,7 @@ export async function runOwnerAnalyticsAcceptance(page, base = 'http://127.0.0.1
     await page.getByText('Loading daily revenue…',{exact:true}).waitFor()
     const charts=page.locator('.owner-revenue')
     await charts.getByRole('group',{name:'Daily gross collections line chart',exact:true}).waitFor()
-    await charts.getByRole('group',{name:'Monday–Saturday gross collections histogram',exact:true}).waitFor()
+    await charts.getByRole('group',{name:'Monday–Saturday gross collections and net cash flow chart',exact:true}).waitFor()
     assert.ok((await charts.innerText()).includes('Saturday summary — in progress'))
     assert.ok(!(await page.locator('body').innerText()).includes('₱94,500 attributed revenue'),'server report excludes fabricated campaign example')
     const daily=charts.getByRole('group',{name:'Daily gross collections line chart',exact:true})
@@ -50,7 +50,7 @@ export async function runOwnerAnalyticsAcceptance(page, base = 'http://127.0.0.1
     await charts.getByRole('tooltip').waitFor()
     assert.ok((await charts.getByRole('tooltip').innerText()).includes('2026-10-31'))
     assert.ok((await charts.getByRole('tooltip').innerText()).includes('₱3,000.30'))
-    const weekly=charts.getByRole('group',{name:'Monday–Saturday gross collections histogram',exact:true})
+    const weekly=charts.getByRole('group',{name:'Monday–Saturday gross collections and net cash flow chart',exact:true})
     await weekly.getByRole('button').last().hover()
     const tooltips=await charts.getByRole('tooltip').allTextContents()
     assert.ok(tooltips.some(t=>t.includes('2026-10-31')&&t.includes('₱150.10')&&t.includes('₱2,850.20')))
@@ -81,9 +81,9 @@ export async function runOwnerAnalyticsAcceptance(page, base = 'http://127.0.0.1
   mode='normal'
   await page.goto(`${base}/tests/fixtures/owner-analytics.html?today=2026-10-29`)
   await page.getByRole('button',{name:'Preview in-progress week'}).waitFor()
-  assert.equal(await page.getByRole('group',{name:'Monday–Saturday gross collections histogram',exact:true}).count(),0)
+  assert.equal(await page.getByRole('group',{name:'Monday–Saturday gross collections and net cash flow chart',exact:true}).count(),0)
   await page.getByRole('button',{name:'Preview in-progress week'}).click()
-  await page.getByRole('group',{name:'Monday–Saturday gross collections histogram',exact:true}).waitFor()
+  await page.getByRole('group',{name:'Monday–Saturday gross collections and net cash flow chart',exact:true}).waitFor()
   assert.ok(!(await page.locator('.owner-revenue').innerText()).includes('Week finalized'))
   for(const state of ['empty','error']) {
     mode=state

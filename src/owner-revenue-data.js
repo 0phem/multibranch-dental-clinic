@@ -1,4 +1,4 @@
-import { validDate } from './clock.js'
+import { addDays, validDate } from './clock.js'
 
 export const REVENUE_FIELDS = ['gross_collected_php', 'refunded_php', 'net_cash_flow_php']
 
@@ -43,4 +43,43 @@ export function validateRevenueReport(data, weekly = false) {
 
 export function weeklyChartAvailable(data, today, preview = false) {
   return data.is_finalized || data.week_end_date <= today || preview
+}
+
+export function last30DayWindows(today) {
+  if (!validDate(today)) throw new Error('Invalid reporting date.')
+  return { current: { date_from: addDays(today, -29), date_to: today },
+    previous: { date_from: addDays(today, -59), date_to: addDays(today, -30) } }
+}
+
+/** Exact one-decimal percentage; a zero/invalid denominator is not growth. */
+export function performanceChange(current, previous) {
+  if (typeof current !== 'bigint' || typeof previous !== 'bigint' || current < 0n || previous <= 0n) return { direction: 'none', text: 'No comparable baseline' }
+  const delta = current - previous
+  if (delta === 0n) return { direction: 'flat', text: '0.0%' }
+  const magnitude = delta < 0n ? -delta : delta
+  const tenths = (magnitude * 1000n + previous / 2n) / previous
+  return { direction: delta > 0n ? 'up' : 'down', text: tenths === 0n ? '<0.1%' : `${tenths / 10n}.${tenths % 10n}%` }
+}
+
+export function validateRevenueScope(data, branchId) {
+  if (branchId && (!data?.branch || (/^[0-9a-z]{26}$/i.test(branchId) && data.branch.public_id?.toLowerCase() !== branchId.toLowerCase()))) throw new Error('Branch response mismatch.')
+  if (!branchId && data?.branch) throw new Error('Branch response mismatch.')
+  return data
+}
+
+export function revenueGeometry(rows, weekly = false) {
+  let minimum = 0n, maximum = 0n
+  for (const row of rows) {
+    const gross = pesoCentavos(row.gross_collected_php), net = weekly ? pesoCentavos(row.net_cash_flow_php) : 0n
+    if (gross > maximum) maximum = gross
+    if (net > maximum) maximum = net
+    if (net < minimum) minimum = net
+  }
+  if (minimum === maximum) maximum = 100n // display scale only; zero transaction amounts stay zero
+  const y = cents => 32 + Number(maximum - cents) / Number(maximum - minimum) * 158
+  const zeroY = y(0n)
+  const ticks = [...new Set([minimum, 0n, maximum / 2n, maximum])].sort((a,b) => a < b ? -1 : a > b ? 1 : 0)
+  return { zeroY, minimum, maximum, ticks: ticks.map(cents => ({ cents, y: y(cents) })),
+    points: rows.map((row, i) => ({ row, x: weekly ? 108 + i * 90 : rows.length === 1 ? 320 : 68 + i * 504 / (rows.length - 1),
+      y: y(pesoCentavos(row.gross_collected_php)), netY: y(pesoCentavos(row.net_cash_flow_php)) })) }
 }

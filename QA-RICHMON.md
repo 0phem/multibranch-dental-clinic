@@ -339,6 +339,7 @@ For bug fixes, self-check before PR, and end-of-day status, use templates B, C, 
       - [x] Loading/empty/error/retry, current-scope remounting, delayed-response rejection and 1440px/390px rendered acceptance passed
     </tasks>
     <evidence>A4: docs/OWN01_A4_ACCEPTANCE.md. Backend 5 tests/84 assertions; frontend 25 tests; rendered desktop/mobile and timing/error scenarios passed. Campaign example figures are excluded from authenticated financial reporting. No live financial data used.</evidence>
+    <evidence>A5 (Joevan): added fixed Last 30 Days collections/arrival comparisons and scoped outstanding cards; weekly gross bars plus signed net line/markers. 30 focused Node tests and 6 PostgreSQL tests/96 assertions passed; 1440px/390px Playwright interaction, stale-response, baseline and retry cases passed. Synthetic screenshots and professor showcase: docs/defense/OWNER_ANALYTICS_FEATURE_SHOWCASE.md; technical evidence: docs/OWN01_A5_ACCEPTANCE.md. No production financial acceptance or immutable Saturday close claimed; A4 semantics preserved.</evidence>
     <acceptance>Both charts hoverable; values match billing data to the peso; histogram appears on Saturdays.</acceptance>
   </revision>
 

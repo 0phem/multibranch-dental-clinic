@@ -1,5 +1,7 @@
 # Multi-Branch Dental Clinic Operation System
 
+Current Owner Analytics includes authoritative payment/refund charts, a Last 30 Days collections/visit comparison overview, scoped outstanding balances and an accessible weekly gross-bar/net-line chart. See the [professor-ready showcase](docs/defense/OWNER_ANALYTICS_FEATURE_SHOWCASE.md) for definitions, synthetic screenshots and verified limitations; historical milestone notes below retain their original context.
+
 React/Vite frontend for Patient, Staff, Dentist and Owner/Admin experiences. This is the canonical repository for the clinic operations project (client: Dr. Dana Roxas; Business Process Automation, Group 3 — BSIT 3B).
 
 The protected implementation checkpoint is **`dac864e` — Complete Phase 3.5 safeguards and user acceptance hardening**. Phases 1–3.5 implement and test the frontend workflow with local persistence; they do not constitute a production backend or a finished production UI. Phase 4A (the shared UI foundation) and Phase 4B (the Patient experience, including the M24 Referral & Loyalty prototype) have since been completed on top of that checkpoint; the Staff, Dentist and Owner/Admin role experiences are later phases.

@@ -1,5 +1,7 @@
 # OWN-01 Owner Analytics — A4 acceptance, 2026-10-29 (Asia/Manila)
 
+> A5 appendix (2026-10-29): the later visual enhancement adds fixed 30-day collections/visit comparisons and a weekly gross-bar/net-line chart. See [A5 acceptance](OWN01_A5_ACCEPTANCE.md) and the [professor showcase with synthetic screenshots](defense/OWNER_ANALYTICS_FEATURE_SHOWCASE.md). The original A4 evidence below is preserved; Saturday calendar status, payment/refund authority and production-acceptance limits remain unchanged.
+
 ## Separate Git stages
 
 Stage 1 verified clean tracked files, fetched both remote heads and confirmed accepted A3 `08ec129668cef58c32ce82ae8dfc98e254f40eda` was a fast-forward successor of development integration `2fa7333b94f444e032df4e67f8f25336fd2bda2a`. Per explicit approval, fast-forwarded local and remote `integration/developer-a-b` normally, then verified the remote equals A3's exact SHA. No force, reset, rebase, production/main update, PR #7 change or Developer B branch operation occurred. No A3 tests were repeated for that unchanged integration.

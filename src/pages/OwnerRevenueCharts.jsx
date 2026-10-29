@@ -2,7 +2,8 @@ import React, { useEffect, useId, useState } from 'react'
 import { Button, Card, Field, Notice } from '../components.jsx'
 import { fetchDailyRevenue, fetchWeeklyRevenueHistogram } from '../analytics-api.js'
 import { clinicDate, validDate } from '../clock.js'
-import { exactPeso, pesoCentavos, validateRevenueReport, weeklyChartAvailable } from '../owner-revenue-data.js'
+import { exactPeso, revenueGeometry, validateRevenueReport, validateRevenueScope, weeklyChartAvailable } from '../owner-revenue-data.js'
+import { OwnerPerformanceOverview } from './OwnerPerformanceOverview.jsx'
 import '../owner-revenue.css'
 
 function MoneySummary({ amounts }) {
@@ -18,37 +19,41 @@ export function RevenuePlot({ data, weekly = false }) {
   const rows = weekly ? data.buckets : data.days
   const [active, setActive] = useState(null)
   const tooltipId = useId()
-  const maximum = rows.reduce((max, row) => { const amount = pesoCentavos(row.gross_collected_php); return amount > max ? amount : max }, 100n)
-  // Number conversion is used only for pixel geometry, never for financial totals or displayed amounts.
-  const points = rows.map((row, i) => ({ row, x: weekly ? 108 + i * 90 : rows.length === 1 ? 320 : 68 + i * 504 / (rows.length - 1),
-    y: 190 - Number(pesoCentavos(row.gross_collected_php)) / Number(maximum) * 150 }))
+  const { points, ticks, zeroY } = revenueGeometry(rows, weekly)
   const point = active === null ? null : points[active]
   const description = row => `${row.date}. Gross collections ${exactPeso(row.gross_collected_php)}. Refunds ${exactPeso(row.refunded_php)}. Net cash flow ${exactPeso(row.net_cash_flow_php)}.`
-  const label = weekly ? 'Monday–Saturday gross collections histogram' : 'Daily gross collections line chart'
+  const label = weekly ? 'Monday–Saturday gross collections and net cash flow chart' : 'Daily gross collections line chart'
   return <>
     <MoneySummary amounts={data.totals}/>
-    <p className="muted-copy">The chart plots gross collections, not profit. Refunds and net cash flow are shown below and in each tooltip. Dates use Asia/Manila.</p>
+    {weekly ? <div className="owner-revenue-legend"><span><i className="legend-gross"/>Gross collections · bars</span><span><i className="legend-net"/>Net cash flow · line</span><small>Not profit · Asia/Manila</small></div>
+      : <p className="muted-copy">Gross collections by payment date, not profit. Exact refunds and net cash flow are included in each tooltip and table.</p>}
     <svg viewBox="0 0 620 232" role="group" aria-label={label} className="owner-revenue-plot">
       <title>{label}</title>
-      {[0, 1, 2].map(i => {
-        const cents = maximum * BigInt(i) / 2n
-        const amount = `${cents / 100n}.${String(cents % 100n).padStart(2, '0')}`
-        return <g key={i}><line x1="68" x2="580" y1={190 - i * 75} y2={190 - i * 75}/><text x="62" y={194 - i * 75} textAnchor="end">{exactPeso(amount)}</text></g>
+      {ticks.map(({ cents, y }) => {
+        const magnitude = cents < 0n ? -cents : cents
+        const amount = `${cents < 0n ? '-' : ''}${magnitude / 100n}.${String(magnitude % 100n).padStart(2, '0')}`
+        return <g key={String(cents)}><line x1="68" x2="580" y1={y} y2={y} className={cents === 0n ? 'owner-revenue-zero' : undefined}/><text x="62" y={y + 4} textAnchor="end">{exactPeso(amount)}</text></g>
       })}
       {!weekly && <path d={points.map((p, i) => `${i ? 'L' : 'M'}${p.x},${p.y}`).join(' ')} className="owner-revenue-line"/>}
       {points.map((p, i) => <g key={p.row.date} role="button" tabIndex={0} aria-label={description(p.row)}
-        aria-describedby={active === i ? tooltipId : undefined} className="owner-revenue-point"
+        aria-describedby={active === i ? tooltipId : undefined} className={`owner-revenue-point ${active === i ? 'is-active' : ''}`}
         onMouseEnter={() => setActive(i)} onFocus={() => setActive(i)} onClick={() => setActive(i)}
         onKeyDown={e => { if (e.key === 'Escape') setActive(null); if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setActive(i) } }}>
         <title>{description(p.row)}</title>
-        {weekly ? <><rect x={p.x - 23} y="30" width="46" height="160" className="owner-revenue-hit"/><rect x={p.x - 23} y={p.y} width="46" height={190 - p.y} rx="3"/></> : <>
+        {weekly ? <><rect x={p.x - 26} y="25" width="52" height="175" className="owner-revenue-hit"/><rect x={p.x - 23} y={p.y} width="46" height={Math.max(0, zeroY - p.y)} rx="7" className="owner-revenue-bar"/>
+          <circle cx={p.x} cy={p.netY} r="13" className="owner-revenue-hit"/>
+        </> : <>
           <circle cx={p.x} cy={p.y} r="14" className="owner-revenue-hit"/><circle cx={p.x} cy={p.y} r="5"/>
         </>}
         {(weekly || i === 0 || i === rows.length - 1 || i % Math.max(1, Math.ceil(rows.length / 5)) === 0) && <text x={p.x} y="215" textAnchor="middle">{weekly ? p.row.short_day : p.row.date.slice(5)}</text>}
       </g>)}
+      {weekly && <>
+        <path d={points.map((p, i) => `${i ? 'L' : 'M'}${p.x},${p.netY}`).join(' ')} className="owner-revenue-net-line" pointerEvents="none"/>
+        {points.map((p,i) => <circle key={p.row.date} cx={p.x} cy={p.netY} r={active === i ? 6 : 4.5} className="owner-revenue-net-marker" pointerEvents="none"/>)}
+      </>}
     </svg>
-    {point ? <div id={tooltipId} role="tooltip" className="owner-revenue-tooltip"><b>{point.row.date}</b><MoneySummary amounts={point.row}/></div>
-      : <p className="muted-copy">Hover, tap or keyboard-focus a point or bar for the exact date and peso amounts.</p>}
+    <div className="owner-revenue-detail-slot">{point ? <div id={tooltipId} role="tooltip" className="owner-revenue-tooltip"><b>{point.row.date}</b><MoneySummary amounts={point.row}/></div>
+      : <p className="muted-copy">Hover, tap or keyboard-focus a bar or marker for exact date and peso amounts.</p>}</div>
     <details className="owner-revenue-table"><summary>Exact amounts by date</summary><div>
       <table><caption>{weekly ? 'Monday–Saturday' : 'Daily'} collections and refunds in Philippine pesos</caption>
         <thead><tr><th scope="col">Date</th><th scope="col">Gross collections</th><th scope="col">Refunds</th><th scope="col">Net cash flow</th></tr></thead>
@@ -66,10 +71,7 @@ function RevenueReport({ weekly = false, params, today }) {
     setResult({ loading: true })
     const fetcher = weekly ? fetchWeeklyRevenueHistogram : fetchDailyRevenue
     fetcher(params).then(value => {
-      const data = validateRevenueReport(value, weekly)
-      if (params.branch_id && !data.branch) throw new Error('Selected branch figures are unavailable.')
-      if (params.branch_id && /^[0-9a-z]{26}$/i.test(params.branch_id) && data.branch.public_id?.toLowerCase() !== params.branch_id.toLowerCase()) throw new Error('Branch response mismatch.')
-      if (!params.branch_id && data.branch) throw new Error('Branch response mismatch.')
+      const data = validateRevenueScope(validateRevenueReport(value, weekly), params.branch_id)
       if (active) setResult({ data })
     }).catch(() => { if (active) setResult({ error: true }) })
     return () => { active = false }
@@ -97,6 +99,7 @@ export function OwnerRevenueCharts({ branchId, branchName, period, serverSession
   if (!validBranch) return <Notice tone="warning">Select an available branch to view revenue.</Notice>
   const validWeek = validDate(weekDate) && weekDate <= today
   return <section className="owner-revenue" aria-label={`Revenue analytics: ${branchName || 'All Branches'}`}>
+    <OwnerPerformanceOverview branchId={branchId} branchName={branchName} today={today}/>
     <p className="muted-copy">Daily revenue follows the report period. The weekly summary uses its own Monday–Saturday date selection and the same branch filter; Sunday is excluded.</p>
     <p className="muted-copy">Charts use payment and refund dates. Paid-invoice KPIs below use invoice creation dates and may differ.</p>
     <div className="owner-revenue-grid">

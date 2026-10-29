@@ -5,17 +5,47 @@
 .owner-revenue-totals dt { color: var(--muted); font-size: 12px; }
 .owner-revenue-totals dd { margin: 3px 0 0; color: var(--ink); font-weight: 700; overflow-wrap: anywhere; }
 .owner-revenue-plot { display: block; width: 100%; height: auto; }
-.owner-revenue-plot line { stroke: var(--line); }
+.owner-revenue-plot line { stroke: var(--line); stroke-dasharray: 3 5; }
+.owner-revenue-plot .owner-revenue-zero { stroke: var(--muted-2); stroke-dasharray: none; }
 .owner-revenue-plot text { fill: var(--muted); font-size: 11px; }
 .owner-revenue-line { stroke: var(--brand); fill: none; stroke-width: 3; }
 .owner-revenue-point { cursor: pointer; fill: var(--brand); }
 .owner-revenue-point:focus-visible { outline: 2px solid var(--ink); outline-offset: 4px; }
 .owner-revenue-point:hover, .owner-revenue-point:focus-visible { fill: var(--brand-3); }
 .owner-revenue-hit { fill: transparent; }
+.owner-revenue-bar { fill: var(--brand); fill-opacity: .65; transition: fill .15s, fill-opacity .15s; }
+.owner-revenue-point.is-active .owner-revenue-bar { fill: var(--ink); fill-opacity: 1; }
+.owner-revenue-net-line { fill: none; stroke: var(--accent-dark, #0b6b60); stroke-width: 3; stroke-linejoin: round; stroke-linecap: round; }
+.owner-revenue-net-marker { fill: var(--surface); stroke: var(--accent-dark, #0b6b60); stroke-width: 2.5; }
+.owner-revenue-legend { display: flex; gap: 12px 20px; flex-wrap: wrap; align-items: center; margin: 16px 0; color: var(--text); font-size: 12px; }
+.owner-revenue-legend span { display: inline-flex; align-items: center; gap: 7px; }
+.owner-revenue-legend i { display: inline-block; width: 18px; }
+.legend-gross { height: 10px; background: var(--brand); border-radius: 3px; }
+.legend-net { height: 3px; background: var(--accent-dark, #0b6b60); }
+.owner-revenue-detail-slot { min-height: 108px; }
 .owner-revenue-tooltip { border: 1px solid var(--line); background: var(--surface-2); padding: 10px; border-radius: var(--radius-md, 8px); margin: 8px 0; overflow-wrap: anywhere; }
 .owner-revenue-table summary { cursor: pointer; color: var(--brand-3); margin-top: 12px; }
 .owner-revenue-table > div { overflow-x: auto; }
 .owner-revenue-table table { width: 100%; font-size: 12px; border-collapse: collapse; }
 .owner-revenue-table :is(th, td) { padding: 8px; text-align: left; border-bottom: 1px solid var(--line); white-space: nowrap; }
 .owner-revenue-week-status { color: var(--ink); font-weight: 600; }
+.owner-performance { margin-bottom: 28px; }
+.owner-performance-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.owner-performance-heading h2 { font-size: clamp(24px, 3vw, 32px); letter-spacing: -.04em; margin: 4px 0; color: var(--ink); }
+.owner-revenue-eyebrow { text-transform: uppercase; letter-spacing: .08em; font-size: 11px; color: var(--muted); font-weight: 650; }
+.owner-period-chip { color: var(--text); background: var(--surface-2); border: 1px solid var(--line); padding: 8px 12px; border-radius: 8px; font-size: 12px; }
+.owner-comparison-note { color: var(--muted); font-size: 12px; line-height: 1.7; margin: 8px 0 18px; }
+.owner-kpi-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.owner-kpi { padding: 22px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-lg, 14px); box-shadow: 0 2px 6px #182b4104; min-width: 0; }
+.owner-kpi h3 { color: var(--text); font-size: 13px; font-weight: 600; margin: 0 0 12px; }
+.owner-kpi-value { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.owner-kpi-value strong { font-size: clamp(24px, 2.3vw, 34px); letter-spacing: -.04em; font-weight: 750; color: var(--ink); overflow-wrap: anywhere; }
+.owner-kpi p, .owner-kpi small { color: var(--muted); font-size: 12px; line-height: 1.6; margin: 10px 0 0; }
+.owner-kpi small { display: block; }
+.owner-growth { border-radius: 6px; padding: 4px 7px; font-size: 12px; font-weight: 650; white-space: nowrap; }
+.owner-growth.is-up { color: #236441; background: #eef7f1; }
+.owner-growth.is-down { color: #a32c3c; background: #fdf0f2; }
+.owner-growth.is-flat, .owner-growth.is-none { color: var(--muted); background: var(--surface-2); }
 @media (max-width: 1000px) { .owner-revenue-grid { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 700px) { .owner-kpi-grid { grid-template-columns: minmax(0, 1fr); } .owner-kpi { padding: 18px; } }
+@media (prefers-reduced-motion: reduce) { .owner-revenue-bar { transition: none; } }
