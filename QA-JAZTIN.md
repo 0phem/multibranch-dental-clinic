@@ -12,7 +12,7 @@
 - [ ] **Day 2:** GEN-01, STF-06, DEN-11
 - [ ] **Day 3:** STF-11, STF-13 (Q5 design must be approved before Day 3)
 - [ ] **Day 4:** STF-08, DEN-13, OWN-12
-- [ ] **Day 5:** STF-07 (needs Joevan OWN-11), DEN-03 (needs repro steps), OWN-10 support
+- [ ] **Day 5:** STF-07 (Developer B B5 complete); DEN-03 still needs repro steps, OWN-10 support remains separate
 - [ ] **Day 6:** Hardening: tests, audit logs, edge cases across all owned items (no new features)
 - [ ] **Day 7:** Backend regression (RBAC, check-in, leave, schedules); final retest; sign-off
 
@@ -194,7 +194,7 @@ For bug fixes, self-check before PR, and end-of-day status, use templates B, C, 
 - [ ] STF-13 Check in: in walk in admission there shouldn't be an existing registered patient and new patient registration; we want everything to be automated, let's brainstorm revisions for this
 
 **Batch JAZ-3: Schedules and leave logic**
-- [ ] STF-07 Operations: should have a status "doctor is on duty today" based on work schedules
+- [x] STF-07 Operations: should have a status "doctor is on duty today" based on work schedules (Developer B B5)
 - [x] STF-08 Leave: when only part of the day is checked, the until date and from date update (Developer B B3)
 - [ ] DEN-03 My schedule: FIX DAH SHI (BUG)
 - [x] DEN-13 My leave: same changes as staff (Developer B B3)
@@ -295,12 +295,13 @@ For bug fixes, self-check before PR, and end-of-day status, use templates B, C, 
   <goal>Schedules, leave, and duty status are correct and consistent for Staff, Dentist, and Owner.</goal>
   <depends_on>none</depends_on>
 
-  <revision id="STF-07" status="todo" severity="medium" owner="Jaztin" support="Celin">
+  <revision id="STF-07" status="done" severity="medium" owner="Jaztin" support="Celin">
     <tasks>
-      - [ ] Compute "Doctor is on duty today" from work schedules (account for leave and closed dates)
-      - [ ] Expose status in Operations; update daily
+      - [x] Compute "Doctor is on duty today" from work schedules (account for leave and closed dates) (Developer B)
+      - [x] Expose status in Operations; update daily (Developer B)
     </tasks>
     <acceptance>Operations shows correct on-duty status per doctor per branch.</acceptance>
+    <evidence>Developer B B5: the existing work-schedules GET now includes a branch-scoped, read-only duty projection computed by WorkSchedules::minutes()/workingNow(), with Manila date and as-of time. Staff Operations shows each authorized Dentist/branch, an on/off badge, server refresh, empty/forbidden/error states and a clinic-day rollover refresh. Four scratch-guarded synthetic API tests passed (79 assertions) for weekly hours, breaks, closures, dated exceptions, full/partial approved leave, cross-branch scope, role authorization and Manila midnight; seven existing work-schedule tests passed (77 assertions). Rendered fictional fixture checks at 1440px and 390px found no overflow and verified branch filtering, refresh/failure states, recovery and date rollover without reload. See docs/STF07_B5_ACCEPTANCE.md. This status is Staff Operations acceptance, not a production release claim.</evidence>
   </revision>
 
   <revision id="STF-08" status="done" severity="high" owner="Jaztin">
