@@ -15,7 +15,9 @@ test('M20: follow-ups come from the clinic server; the browser mock pages and se
 test('M20: book from the task with the normal booking form, close needs a note, the Owner sees counts only', () => {
   const page = read('src/pages/ServerFollowups.jsx'), form = read('src/pages/Scheduling.jsx')
   assert.match(page, /prefill=\{\{ patientPublicId: t\.patient\.id, patientName: .*branchId: t\.branch\.id, serviceId: t\.service\?\.id \|\| '', date: t\.due_on \}\}/)
-  assert.match(form, /if\(prefill\)return \{patientPublicId:prefill\.patientPublicId,branchId:prefill\.branchId,serviceId:prefill\.serviceId/)
+  assert.match(form, /if\(prefill\)return \{patientPublicId:prefill\.patientPublicId/)
+  assert.match(form, /branchId:prefill\.branchId\|\|branches\[0\]\?\.id/)
+  assert.match(form, /serviceId:prefill\.serviceId\|\|/)
   assert.match(page, /Why is it closed without a booking\?/)
   assert.match(page, /owner \? `Due \$\{day\(t\.due_on\)\}`/) // no patient or reason for the Owner
   assert.match(read('src/pages/Clinical.jsx'), /<FollowupPanel patientId=\{patient\.id\}/)
