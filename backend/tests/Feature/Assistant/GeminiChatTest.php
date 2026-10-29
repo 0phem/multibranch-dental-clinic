@@ -9,6 +9,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Auth;
 use Tests\TestCase;
 use Tests\Feature\Appointments\SchedulingFixture;
 
@@ -25,6 +26,7 @@ class GeminiChatTest extends TestCase
         $this->actingAsUser('patientA');
         Config::set('services.gemini.api_key', self::FAKE_KEY);
         Config::set('services.gemini.model', 'gemini-1.5-flash');
+        Http::preventStrayRequests();
     }
 
     public function test_gemini_chat_returns_generated_response(): void
@@ -145,6 +147,95 @@ class GeminiChatTest extends TestCase
 
         $response->assertOk();
         $this->assertStringContainsString('text/event-stream', $response->headers->get('Content-Type'));
+        $content = $response->streamedContent();
+        $this->assertStringContainsString('event: delta', $content);
+        $this->assertStringContainsString('event: done', $content);
+        $this->assertStringContainsString('our clinic!', $content);
+        Http::assertSentCount(1);
+    }
+
+    private function loginPersisted(string $key): void
+    {
+        Auth::forgetGuards();
+        $this->postJson('/api/login', ['email' => $this->u[$key]->email, 'password' => 'Passw0rd!'])->assertOk();
+        Auth::forgetGuards();
+    }
+
+    public function test_real_patient_login_can_use_json_and_sse(): void
+    {
+        $this->loginPersisted('patientA');
+        Http::fake(['*' => Http::response(['candidates' => [['content' => ['parts' => [['text' => 'Welcome!']]]]]])]);
+        $this->postJson('/api/gemini/chat', ['message' => 'Hello clinic'])->assertOk()
+            ->assertJsonPath('data.answer', 'Welcome!')->assertJsonPath('data.mode', 'gemini');
+        Http::assertSentCount(1);
+        Auth::forgetGuards();
+        Http::swap(new \Illuminate\Http\Client\Factory());
+        Http::preventStrayRequests();
+        Http::fake(['*' => Http::response('data: '.json_encode(['candidates' => [['content' => ['parts' => [['text' => 'Welcome!']]]]]])."\n\n")]);
+        $response = $this->postJson('/api/gemini/stream', ['message' => 'Hello clinic'])->assertOk();
+        $this->assertStringContainsString('text/event-stream', $response->headers->get('Content-Type'));
+        $content = $response->streamedContent();
+        $this->assertStringContainsString('event: delta', $content);
+        $this->assertStringContainsString('event: done', $content);
+        $this->assertStringContainsString('Welcome!', $content);
+        Http::assertSentCount(1);
+    }
+
+    public function test_persisted_roles_are_denied_on_both_routes(): void
+    {
+        Http::fake();
+        foreach (['staffB1', 'dentist1', 'owner'] as $key) {
+            $this->loginPersisted($key);
+            foreach (['chat', 'stream'] as $action) {
+                $this->postJson("/api/gemini/$action", ['message' => 'Hello clinic'])->assertForbidden();
+                Auth::forgetGuards();
+            }
+        }
+        Http::assertNothingSent();
+    }
+
+    public function test_persisted_patient_role_without_profile_is_denied(): void
+    {
+        Http::fake();
+        // Create a Patient-role account with no Patient entity; do not delete patient data.
+        $this->u['noProfile'] = $this->account(\App\Enums\Role::Patient, null);
+        $this->loginPersisted('noProfile');
+        foreach (['chat', 'stream'] as $action) {
+            $this->postJson("/api/gemini/$action", ['message' => 'Hello clinic'])->assertForbidden();
+            Auth::forgetGuards();
+        }
+        Http::assertNothingSent();
+    }
+
+    public function test_suspension_revokes_persisted_patient_access_on_both_routes(): void
+    {
+        Http::fake();
+        foreach (['chat' => 'patientA', 'stream' => 'patientB'] as $action => $key) {
+            $this->loginPersisted($key);
+            $this->u[$key]->update(['account_status' => 'Suspended']);
+            Auth::forgetGuards();
+            $this->postJson("/api/gemini/$action", ['message' => 'Hello clinic'])->assertForbidden()
+                ->assertJsonPath('code', 'session_revoked');
+            Auth::forgetGuards();
+            $this->postJson("/api/gemini/$action", ['message' => 'Hello clinic'])->assertUnauthorized();
+        }
+        Http::assertNothingSent();
+    }
+
+    public function test_restored_account_cannot_reuse_stale_session_on_both_routes(): void
+    {
+        Http::fake();
+        foreach (['chat' => 'patientA', 'stream' => 'patientB'] as $action => $key) {
+            $this->loginPersisted($key);
+            $oldVersion = (int) $this->u[$key]->auth_version;
+            $this->u[$key]->update(['account_status' => 'Suspended']);
+            $this->u[$key]->update(['account_status' => 'Active']);
+            // Model an old in-flight session write surviving deletion, as in M1 regression coverage.
+            $this->withSession(['auth_version' => $oldVersion]);
+            $this->postJson("/api/gemini/$action", ['message' => 'Hello clinic'])->assertForbidden()
+                ->assertJsonPath('code', 'session_revoked');
+        }
+        Http::assertNothingSent();
     }
 
     public function test_gemini_system_prompt_grounded_in_clinic_facts(): void
