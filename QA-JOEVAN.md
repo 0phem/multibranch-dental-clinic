@@ -1,5 +1,9 @@
 # QA SLICE: JOEVAN (Backend)
 
+## Rapid A2 — RIC-2 messaging (2026-10-29)
+
+Joevan implements STF-21/22/23/24 and DEN-14 under the authorized reassignment, independently from integration on `feature/joevan-ric2-messaging-rapid-20261029`. Evidence and limitations: `docs/RIC2_MESSAGING_ACCEPTANCE.md`; affected entries updated in `QA-RICHMON.md`. STF-22/23/24 and DEN-14 pass focused backend/browser acceptance; STF-21 stays partial pending a reviewed active-Dentist/history contract. No Gemini application changes, GEN-07/09 files, production data or shared-branch merges are included.
+
 > Self-contained slice of FINALS-QA-REVISIONS.md. Give Claude THIS file only, plus the context pack and the code files for the batch you are working on.
 > **This file is the source of truth for Joevan's status.** Update `status` fields and tick checkboxes here.
 > Master reference: FINALS-QA-REVISIONS.md (assumptions, default decisions, full matrix, other members' work).

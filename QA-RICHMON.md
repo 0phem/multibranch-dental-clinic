@@ -192,11 +192,11 @@ For bug fixes, self-check before PR, and end-of-day status, use templates B, C, 
 - [ ] OWN-09 Appointment calendar: make the appointment details layout better
 
 **Batch RIC-2: Messages**
-- [ ] STF-21 Messages: change the "add dentist" to "switch dentist"
-- [ ] STF-22 Messages: use different chat bubble color for the sender and receiver
-- [ ] STF-23 Messages: add search bar for messages
-- [ ] STF-24 Messages: if not scrollable, make scrollable
-- [ ] DEN-14 Messages: same changes as staff
+- [ ] STF-21 Messages: label already implemented; switch-to-new Dentist verified by Joevan; history/active-assignment semantics remain partial (see RIC-2 evidence).
+- [x] STF-22 Messages: existing sender/receiver colors and alignment verified by Joevan in rendered browser checks.
+- [x] STF-23 Messages: server search of authorized encrypted history, paginated matching-message view and safe highlights implemented/tested by Joevan.
+- [x] STF-24 Messages: existing scroll containers verified; prepend position and new-arrival behavior corrected/tested by Joevan.
+- [x] DEN-14 Messages: shared search/scroll/bubbles verified for Dentist, preserving Staff-only participant management.
 
 **Batch RIC-3: Owner dashboard**
 - [ ] OWN-01 Executive dashboard: add hoverable line graph + histogram. Line graph is hoverable and shows daily profit or revenue (choose the best term); histogram is the summary of the week, produced on Saturdays since it's the last opening day; make both hoverable with accurate revenue
@@ -279,42 +279,43 @@ For bug fixes, self-check before PR, and end-of-day status, use templates B, C, 
   <goal>Messages are easy to read, search, and scroll on staff and dentist dashboards.</goal>
   <depends_on>GEN-08</depends_on>
 
-  <revision id="STF-21" status="todo" severity="low" owner="Richmon">
+  <!-- Implementing developer: Joevan, authorized reassignment, 2026-10-29. See docs/RIC2_MESSAGING_ACCEPTANCE.md. -->
+  <revision id="STF-21" status="partial" severity="low" owner="Richmon" implementer="Joevan">
     <tasks>
-      - [ ] Rename the "Add dentist" action to "Switch dentist"
-      - [ ] Make the behavior match the label (switch active conversation/dentist)
+      - [x] Rename the "Add dentist" action to "Switch dentist" (already implemented, rendered verified)
+      - [ ] Make the behavior match the label completely: switch to another eligible Dentist verified; existing deletion of non-author participant rows and timestamp-based active assignment remain unresolved. No participant/history mutation was introduced in this batch.
     </tasks>
     <acceptance>Label reads "Switch dentist" and switching works.</acceptance>
   </revision>
 
-  <revision id="STF-22" status="todo" severity="medium" owner="Richmon">
+  <revision id="STF-22" status="done" severity="medium" owner="Richmon" implementer="Joevan">
     <tasks>
-      - [ ] Use different chat bubble colors for sender and receiver (and alignment left/right)
-      - [ ] Ensure text contrast passes in both
+      - [x] Use different chat bubble colors for sender and receiver (and alignment left/right): existing styles verified
+      - [x] Ensure text contrast passes in both: computed body and metadata contrast >= 4.5:1 in browser fixture
     </tasks>
     <acceptance>Sender and receiver bubbles are clearly distinct.</acceptance>
   </revision>
 
-  <revision id="STF-23" status="todo" severity="medium" owner="Richmon" support="Joevan">
+  <revision id="STF-23" status="done" severity="medium" owner="Richmon" support="Joevan" implementer="Joevan">
     <tasks>
-      - [ ] Add a search bar for messages (shared search input from GEN-04)
-      - [ ] (Joevan) Message search endpoint (by keyword and contact)
-      - [ ] Highlight matches and show empty-state
+      - [x] Existing shared search input now calls debounced server search, retaining drafts/selection
+      - [x] Existing endpoints extended for authorized contact/metadata and encrypted message-body search, including older pages
+      - [x] Safe highlights, empty/error states and paginated matching-message view verified
     </tasks>
     <acceptance>Searching returns matching messages with highlights.</acceptance>
   </revision>
 
-  <revision id="STF-24" status="todo" severity="medium" owner="Richmon">
+  <revision id="STF-24" status="done" severity="medium" owner="Richmon" implementer="Joevan">
     <tasks>
-      - [ ] Make the message list/conversation scrollable when content overflows
-      - [ ] Auto-scroll to the latest message
+      - [x] Existing overflow containers rendered verified at 390px/1440px with 25 conversations and 60 messages
+      - [x] Latest-message scrolling retained for readers at bottom; history readers keep position with new-message indicator; older-page prepend preserves position
     </tasks>
     <acceptance>Long conversations and lists scroll correctly.</acceptance>
   </revision>
 
-  <revision id="DEN-14" status="todo" severity="medium" owner="Richmon">
+  <revision id="DEN-14" status="done" severity="medium" owner="Richmon" implementer="Joevan">
     <tasks>
-      - [ ] Apply all STF-21 to STF-24 changes to the Dentist messages through shared components
+      - [x] Shared search, bubbles, scroll and keyboard input rendered verified for Dentist; actual backend participation/branch permissions tested. Switch dentist remains Staff-only; STF-21 semantic limitations remain explicit.
     </tasks>
     <acceptance>Dentist messages match staff messages.</acceptance>
   </revision>

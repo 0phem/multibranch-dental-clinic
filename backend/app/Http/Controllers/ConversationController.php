@@ -13,6 +13,7 @@ use App\Models\Conversation;
 use App\Models\ConversationMessage;
 use App\Services\Messaging\MessagingService;
 use App\Services\Messaging\Presence;
+use App\Services\Messaging\MessageSearch;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -101,17 +102,27 @@ class ConversationController extends Controller
             $query->where('status', $v['status']);
         }
         $term = trim((string) ($v['q'] ?? ''));
+        if (! empty($v['cursor'])) {
+            $query->where('id', '<', Conversation::visibleTo($user)->select('id')->where('public_id', strtolower($v['cursor']))->limit(1));
+        }
         if ($term !== '') {
-            $like = '%'.str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], strtolower($term)).'%';
-            $query->where(function ($sub) use ($like) {
+            $this->limitSearch($request);
+            $bodyMatches = MessageSearch::conversationIds($query, $term);
+            $like = '%'.str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], mb_strtolower($term, 'UTF-8')).'%';
+            $query->where(function ($sub) use ($like, $bodyMatches, $user) {
                 $sub->whereRaw('LOWER(conversations.context) LIKE ?', [$like])
+                    ->orWhereIn('conversations.id', $bodyMatches)
+                    ->orWhereHas('participants', function ($participants) use ($like, $user) {
+                        if ($user->role === \App\Enums\Role::Patient) {
+                            $participants->where(fn ($p) => $p->whereColumn('user_id', 'conversations.assigned_user_id')
+                                ->orWhereHas('user', fn ($u) => $u->where('role', 'dentist')));
+                        }
+                        $participants->whereHas('user.person', fn ($person) => $person->whereRaw("LOWER(COALESCE(first_name, '') || ' ' || COALESCE(last_name, '')) LIKE ?", [$like]));
+                    })
                     ->orWhereHas('patient', fn ($pq) => $pq->whereRaw('LOWER(patient_code) LIKE ?', [$like])
                         ->orWhereHas('person', fn ($perQ) => $perQ->whereRaw("LOWER( COALESCE(first_name, '') || ' ' || COALESCE(last_name, '') ) LIKE ?", [$like])))
                     ->orWhereHas('branch', fn ($bq) => $bq->whereRaw('LOWER(name) LIKE ?', [$like]));
             });
-        }
-        if (! empty($v['cursor'])) {
-            $query->where('id', '<', Conversation::visibleTo($user)->select('id')->where('public_id', strtolower($v['cursor']))->limit(1));
         }
         $rows = $query->with(['patient.person', 'branch', 'participants.user.person', 'assignee.person'])->orderByDesc('id')->limit($per + 1)->get();
         $page = $rows->take($per)->values();
@@ -151,7 +162,7 @@ class ConversationController extends Controller
     {
         abort_unless($conversation->accessibleTo($request->user()), 403);
         Presence::touch($request->user());
-        $v = $request->validate(['per_page' => ['nullable', 'integer', 'min:1', 'max:'.self::MAX_PER_PAGE], 'cursor' => ['nullable', 'string', 'size:26'], 'after' => ['nullable', 'string', 'size:26', 'prohibits:cursor']]);
+        $v = $request->validate(['per_page' => ['nullable', 'integer', 'min:1', 'max:'.self::MAX_PER_PAGE], 'cursor' => ['nullable', 'string', 'size:26'], 'after' => ['nullable', 'string', 'size:26', 'prohibits:cursor,q'], 'q' => ['nullable', 'string', 'max:120']]);
         $per = (int) ($v['per_page'] ?? 30);
         if (! empty($v['after'])) {
             // Realtime and polling sync: messages NEWER than `after` (a message of THIS conversation), oldest first. This is the one read
@@ -167,6 +178,22 @@ class ConversationController extends Controller
         if (! empty($v['cursor'])) {
             // The cursor is looked up inside THIS conversation only: a message from elsewhere reveals nothing.
             $query->where('id', '<', ConversationMessage::where('conversation_id', $conversation->id)->select('id')->where('public_id', strtolower($v['cursor']))->limit(1));
+        }
+        $term = trim((string) ($v['q'] ?? ''));
+        if ($term !== '') {
+            $this->limitSearch($request);
+            // The existing newest-first cursor now pages matching messages, including encrypted old history.
+            // Decrypt in bounded chunks, stop after one result page plus lookahead; never export all history.
+            $matches = new \Illuminate\Database\Eloquent\Collection();
+            foreach ($query->lazyByIdDesc(200) as $message) {
+                if (MessageSearch::contains($message->body, $term)) $matches->push($message);
+                if ($matches->count() > $per) break;
+            }
+            $page = $matches->take($per)->values();
+            $page->load('sender.person');
+            return response()->json(['data' => MessageResource::collection($page)->resolve($request), 'meta' => [
+                'per_page' => $per, 'next_cursor' => $matches->count() > $per ? $page->last()->public_id : null,
+            ]]);
         }
         $rows = $query->with('sender.person')->orderByDesc('id')->limit($per + 1)->get();
         $page = $rows->take($per)->values();
@@ -201,6 +228,13 @@ class ConversationController extends Controller
     }
 
     /** Adds the viewer's unread count and the latest message time (no message text) to a conversation query. */
+    private function limitSearch(Request $request): void
+    {
+        // Technical cost bound for decrypting history; keys never contain search text.
+        $allowed = \Illuminate\Support\Facades\RateLimiter::attempt('m17-search:'.$request->user()->id, 30, fn () => true, 60);
+        abort_unless($allowed, 429, 'Please wait a moment before searching again.');
+    }
+
     private function summaries($user)
     {
         return Conversation::query()
