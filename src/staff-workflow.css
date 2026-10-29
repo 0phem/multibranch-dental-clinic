@@ -1,0 +1,5 @@
+.staff-workflow-record-header { flex-wrap: wrap; }
+.staff-workflow-record-header .card-head { width: 100%; margin-bottom: 0; }
+.staff-workflow-record-header .patient-record-head { min-width: 0; justify-content: flex-start; }
+.staff-workflow-record-header .patient-record-head > div:last-child { min-width: 0; overflow-wrap: anywhere; }
+.staff-workflow-record-header button { min-height: 44px; }

@@ -2,6 +2,8 @@ import React, { useState } from 'react'
 import { ROLE_INFO } from '../data.js'
 import { Button, Card, ConfirmDialog, Field, Modal, Notice, PageHeader, SearchInput, SelectWithOther, Status, Table, Tabs } from '../components.jsx'
 import { dateLabel, dentistName, displayTime, patientName } from '../logic.js'
+import { publicPatientIdFor } from '../appointment-projection.js'
+import '../staff-workflow.css'
 import { AppointmentForm } from './Scheduling.jsx'
 import { IdCheck } from './CounterIntake.jsx'
 import { HandoverPanel } from './Handovers.jsx'
@@ -28,6 +30,7 @@ export function PatientsPage({ role, store, context, setPage }) {
   const [branchFilter,setBranchFilter]=useState('All')
   const [selected,setSelected]=useState(context?.patientId||availablePatients[0]?.id||'')
   React.useEffect(()=>{if(context?.patientId)setSelected(context.patientId)},[context?.patientId])
+  const [bookingPatient,setBookingPatient]=useState(null)
   const [tab,setTab]=useState('summary')
   const [search,setSearch]=useState('')
   const filteredPatients=availablePatients.filter(p=>{
@@ -106,17 +109,25 @@ export function PatientsPage({ role, store, context, setPage }) {
         <div className="patient-list-scroll">{filteredPatients.length?filteredPatients.map(p=><button key={p.id} className={selected===p.id?'selected':''} onClick={()=>{setSelected(p.id);setTab('summary')}}><span className="avatar">{p.name.split(' ').map(x=>x[0]).slice(0,2).join('')}</span><div><b>{p.name}</b><small>{p.serverProjection?p.patientCode:`${p.patientCode||p.id} • ${p.preferredBranch} • ${p.hmo}`}</small></div></button>):<p className="muted" style={{padding:'12px 8px'}}>No matching patients found.</p>}</div>
       </Card>
       {patient?      <div>
-        <Card className="patient-header-card"><div className="patient-record-head"><div className="avatar xl">{patient.name.split(' ').map(x=>x[0]).slice(0,2).join('')}</div><div><h2>{patient.name}</h2><p>{patient.serverProjection?patient.patientCode:<>{patient.patientCode||patient.id} • {patient.dob||'DOB not set'} • {patient.sex||'—'} • {patient.preferredBranch}</>}</p><div className="chip-row">{!patient.serverProjection&&<span className="mini-chip">Allergies: {patient?.['allergies']}</span>}{patient.consent&&<span className="mini-chip success">Consent on file</span>}</div></div></div></Card>
+        <Card className={role==='staff'?'patient-header-card staff-workflow-record-header':'patient-header-card'} actions={role==='staff'&&session.role==='staff'?<Button disabled={!publicPatientIdFor(patient.id,{session,users:state.users,patients:state.patients})} onClick={()=>setBookingPatient(patient.id)}>Book Appointment</Button>:null}><div className="patient-record-head"><div className="avatar xl">{patient.name.split(' ').map(x=>x[0]).slice(0,2).join('')}</div><div><h2>{patient.name}</h2><p>{patient.serverProjection?patient.patientCode:<>{patient.patientCode||patient.id} • {patient.dob||'DOB not set'} • {patient.sex||'—'} • {patient.preferredBranch}</>}</p><div className="chip-row">{!patient.serverProjection&&<span className="mini-chip">Allergies: {patient?.['allergies']}</span>}{patient.consent&&<span className="mini-chip success">Consent on file</span>}</div></div></div></Card>
         <Tabs tabs={tabs} active={tab} onChange={setTab}/>
         {tab==='summary'&&(serverPatient
           ?<ServerPatientSummary key={patient.id} patient={patient} role={role} branches={state.branches} toast={toast} store={store}/>
           :<SummaryTab key={patient.id} patient={patient} role={role} onSave={saveRecord}/>)}
+        {role==='staff'&&!publicPatientIdFor(patient.id,{session,users:state.users,patients:state.patients})&&<Notice>This patient has no verified clinic server identity. Select a server-backed record before booking.</Notice>}
         {tab==='visits'&&<Card title="Cross-branch visit history"><Table rows={visits} columns={[{key:'date',label:'Date',render:a=>dateLabel(a.date)},{key:'branch',label:'Branch'},{key:'service',label:'Service'},{key:'dentist',label:'Dentist',render:a=>dentistName(a.dentistId,state.dentists)},{key:'status',label:'Status',render:a=><Status>{a.status}</Status>}]} /></Card>}
         {tab==='clinical'&&<Card title="Treatment history" subtitle={role==='dentist'?'Clinic server records you may read: your own treatments and, while you treat this patient, their earlier completed treatments. Read-only unless you are the treating Dentist.':'Staff read-only clinical record'}>{treatments.length?treatments.map(t=><div className="clinical-history" key={t.id}><div><b>{dateLabel(t.date)} • {t.procedure||t.plan||'Treatment in progress'}</b>{t.complaint&&<p>Complaint: {t.complaint}</p>}{t.plan&&<p>Plan: {t.plan}</p>}{t.notes&&<p>{t.notes}</p>}{Array.isArray(t.procedures)&&t.procedures.length>0&&<p>{t.procedures.map(p=>`${p.serviceName||state.services.find(s=>s.id===p.serviceId)?.name||'Service'} × ${p.quantity}`).join(', ')}</p>}<small>{t.dentistName||dentistName(t.dentistId,state.dentists)} • {t.status}</small>{!t.server&&<small className="block-muted">{t.legacyAppointment?'Historical demo record':'Recorded before server treatment records'} — read-only</small>}</div><Status>{t.status}</Status></div>):<Notice>No treatment history recorded.</Notice>}</Card>}
         {tab==='hmo'&&<Card title="HMO record" subtitle="Server HMO cases for this patient's visits; earlier browser records are marked as history. Membership is recorded in HMO Management."><Table rows={hmo} columns={[{key:'provider',label:'Provider'},{key:'memberId',label:'Member ID'},{key:'clinicDate',label:'Visit',render:h=>h.clinicDate?dateLabel(h.clinicDate):h.legacy?'Earlier record':'—'},{key:'eligibility',label:'Eligibility',render:h=><Status>{h.eligibility}</Status>},{key:'status',label:'Status',render:h=><Status>{h.status}</Status>}]} /></Card>}
         {tab==='documents'&&<PatientDocumentsTab patient={patient} role={role} store={store}/>}
       </div>:<Card title="Patient record"><p>Select a patient from the list to open their record.</p></Card>}
     </div>}
+    <Modal open={!!bookingPatient} onClose={()=>setBookingPatient(null)} title="Book Appointment" wide>
+      {bookingPatient&&role==='staff'&&session.role==='staff'&&(()=>{
+        const selectedPatient=availablePatients.find(p=>p.id===bookingPatient)
+        const publicId=selectedPatient&&publicPatientIdFor(selectedPatient.id,{session,users:state.users,patients:state.patients})
+        return publicId?<AppointmentForm key={bookingPatient} role={role} store={store} prefill={{patientPublicId:publicId,patientName:selectedPatient.name}} onSaved={()=>setBookingPatient(null)}/>:<Notice>The selected patient is unavailable for booking. Close this form and select an accessible server-backed patient.</Notice>
+      })()}
+    </Modal>
     {serverSession?<Modal open={newOpen} onClose={()=>setNewOpen(false)} title="Register patient" subtitle="Creates one clinic-wide patient record on the clinic server (no login account). If the email is already on file, select that patient instead."><div className="form-grid">
       <Field label="First name" required><input value={registration.firstName} onChange={e=>updateRegistration('firstName',e.target.value)}/></Field>
       <Field label="Last name" required><input value={registration.lastName} onChange={e=>updateRegistration('lastName',e.target.value)}/></Field>

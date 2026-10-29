@@ -404,3 +404,7 @@ For bug fixes, self-check before PR, and end-of-day status, use templates B, C, 
 ## A7 GEN-09 partial evidence (2026-10-29)
 
 Implementer: Joevan; QA owner remains Richmon. Global GEN-09 remains TODO. Rendered Dentist draft review to editing reduced from 2 clicks (Close, Edit draft) to 1 (Edit draft). Schedule adjacent-day/Today and list-to-edit already take 1 click and remain unchanged. No clinical decisions or confirmation removed. See [measurement and limitations](docs/DENTIST_WORKFLOW_A7_ACCEPTANCE.md).
+
+## A8 GEN-09 partial Staff evidence (2026-10-29)
+
+Implementer: Joevan; original QA owner: Richmon. Global GEN-09 remains TODO. Synthetic rendered appointment to exact Patient record: 2 to 1 control activations; selected Patient record to Patient-prefilled booking form: 3 to 1. Existing Patient selection state can reduce the old path already; no universal saving or production acceptance is claimed. Service/time selection and explicit booking confirmation remain required. See [A8 acceptance](docs/GEN09_A8_STAFF_WORKFLOW_ACCEPTANCE.md).
