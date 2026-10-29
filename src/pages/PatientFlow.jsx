@@ -2,6 +2,8 @@ import React, { useEffect, useState, useRef } from 'react'
 import { Button, Card, Field, FilterBar, Icon, Modal, Notice, PageHeader, Progress, RefreshButton, SelectWithOther, Status, Table } from '../components.jsx'
 import { branchCapacity, dentistName, displayTime, patientName, queueWaitEstimate } from '../logic.js'
 import { commandKey } from '../appointments-api.js'
+import { findPatientConversation } from '../messaging-api.js'
+import '../b4-queue.css'
 import { useVisibleRefresh } from '../use-visible-refresh.js'
 import { patientKeyResolver } from '../appointment-projection.js'
 import { DEFAULT_COUNTRY, normalizePhoneNumber } from '../phone.js'
@@ -243,6 +245,21 @@ function AppointmentsLoadNotice({ store }) {
   return null
 }
 
+function QueueTable({ rows, columns, onOpen, nameOf }) {
+  if (!rows.length) return <Table rows={rows} columns={columns}/>
+  const isAction = target => target.closest?.('button, a, input, select, textarea, [role="button"]')
+  return <div className="table-wrap"><table role="table">
+    <caption className="sr-only">Live queue</caption>
+    <thead role="rowgroup"><tr role="row">{columns.map(c => <th scope="col" role="columnheader" key={c.key}>{c.label}</th>)}</tr></thead>
+    <tbody role="rowgroup">{rows.map(row => <tr role="row" key={row.id} className="queue-open-row" tabIndex={0}
+      aria-label={`Open chart for ${nameOf(row)}. Press Enter or Space.`}
+      onClick={e => { if (!isAction(e.target)) onOpen(row) }}
+      onKeyDown={e => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onOpen(row) } }}>
+      {columns.map(c => <td role="cell" key={c.key}><span className="mobile-cell-label" aria-hidden="true">{c.label}</span><div className="cell-value">{c.render ? c.render(row) : row[c.key]}</div></td>)}
+    </tr>)}</tbody>
+  </table></div>
+}
+
 export function QueuePage({ role, activeBranch, store, setPage }) {
   const { state, toast }=store
   const session=store.session||sessionForRole(role,state)
@@ -268,14 +285,24 @@ export function QueuePage({ role, activeBranch, store, setPage }) {
   // numbers and positions. A second click while a command is in flight is ignored.
   const flow=store.appointmentFlow
   const [busy,setBusy]=useState(null)
+  const [messageBusy,setMessageBusy]=useState(null)
   const run=async(entry,label,send)=>{
     if(busy)return
     setBusy(entry.id)
     const result=await send(commandKey())
     setBusy(null)
-    toast(result.ok?label:result.message,result.ok?'success':'warning')
+    toast(result.ok?label:(result.message||'The queue could not be updated. Refresh and try again.'),result.ok?'success':'warning')
   }
   const update=(entry,name,label)=>run(entry,label,key=>flow.queueCommand(entry,name,key))
+  const openMessage=async entry=>{
+    if(messageBusy)return
+    setMessageBusy(entry.id)
+    const result=await findPatientConversation(entry.patientPublicId,entry.branchId,entry.patientCode)
+    setMessageBusy(null)
+    if(!result.ok)return toast(result.message||'Conversations could not be checked. Try again.','warning')
+    if(!result.conversation)return toast('No accessible conversation for this patient at this branch. Ask the patient to start a message from their portal.','warning')
+    setPage('messages',{conversationId:result.conversation.id,conversation:result.conversation,patientCode:entry.patientCode,patientPublicId:entry.patientPublicId,branchId:entry.branchId})
+  }
   const [restoreModalEntry, setRestoreModalEntry] = useState(null)
   const restore = entry => {
     setRestoreModalEntry(entry)
@@ -301,7 +328,7 @@ export function QueuePage({ role, activeBranch, store, setPage }) {
     {operational&&!demo&&<SelfRegistered toast={toast} store={store} compact/>}
     {role==='staff'&&<Notice tone="info">A patient in the queue has already checked in. Marking them as having left or cancelling their visit isn’t available yet — the clinic still needs to decide how an admitted visit is closed. A patient who never arrived is marked No-show from Appointments.</Notice>}
     <Card title="Live queue" subtitle="Arrival order determines positions inside each dentist queue (first-come, first-served)." className="top-gap">
-      <Table rows={visible} columns={[
+      <QueueTable rows={visible} onOpen={q=>setPage('patients',encounterContext(q))} nameOf={q=>q.patientName||patientName(q.patientId,state.patients)} columns={[
         {key:'position',label:'Pos.',render:q=>q.position?`#${q.position}`:'—'},
         {key:'queueNumber',label:'Queue no.',render:q=>q.queueNumber||'—'},
         {key:'patient',label:'Patient',render:q=><div>
@@ -314,9 +341,9 @@ export function QueuePage({ role, activeBranch, store, setPage }) {
         {key:'checkedIn',label:'Checked in',render:q=>displayTime(q.checkedIn)},
         ...(demo?[{key:'wait',label:'Est. wait (demo)',render:q=>`${queueWaitEstimate(q,state.queue,state.appointments,state.treatments,state.dentists)} min` }]:[]),
         {key:'status',label:'Status',render:q=><Status>{q.displayStatus||q.status}</Status>},
-        {key:'actions',label:'Actions',render:q=><div className="row-actions">
-          {['In Queue', 'Waiting'].includes(q.status)&&(operational||role==='dentist')&&<button type="button" className="icon-btn queue-call-btn" title="Call patient" aria-label={`Call patient ${q.patientName||patientName(q.patientId,state.patients)}`} disabled={!!busy} onClick={()=>toast('Patient called.')}><Icon name="phone" size={16}/></button>}
-          {(operational||role==='dentist')&&<button type="button" className="icon-btn queue-message-btn" title="Message patient" aria-label={`Message patient ${q.patientName||patientName(q.patientId,state.patients)}`} onClick={()=>setPage('messages',encounterContext(q))}><Icon name="message" size={16}/></button>}
+        {key:'actions',label:'Actions',render:q=><div className="row-actions" onClick={e=>e.stopPropagation()}>
+          {['In Queue', 'Waiting'].includes(q.status)&&(operational||role==='dentist')&&<button type="button" className="icon-btn queue-call-btn" title="Call patient in queue" aria-label={`Call patient ${q.patientName||patientName(q.patientId,state.patients)} in queue`} disabled={!!busy} onClick={()=>update(q,'call','Patient called in queue.')}><Icon name="phone" size={16}/></button>}
+          {['staff','dentist'].includes(role)&&<button type="button" className="icon-btn queue-message-btn" title="Open patient conversation" aria-label={`Open conversation with ${q.patientName||patientName(q.patientId,state.patients)}`} disabled={!!messageBusy} onClick={()=>openMessage(q)}><Icon name="message" size={16}/></button>}
           {role==='dentist'&&(['In Queue', 'Waiting', 'Called', 'Treatment Ready'].includes(q.status)||q.status==='Served'||q.visitStatus==='In Treatment')&&<Button size="sm" onClick={()=>setPage('treatment',encounterContext(q))}>{q.treatmentId?'Continue Treatment':'Open Treatment'}</Button>}
 
           {operational&&<>
@@ -449,6 +476,7 @@ function Metric({label,value}){return <div><span>{label}</span><b>{value}</b></d
 
 function BranchQueueDetailSection({ store, activeBranch, setPage }) {
   const { state, toast } = store
+  const [callingId, setCallingId] = useState(null)
   const [selectedBranchId, setSelectedBranchId] = useState('All')
   const [statusFilter, setStatusFilter] = useState('All')
   const [inspectEntry, setInspectEntry] = useState(null)
@@ -529,22 +557,20 @@ function BranchQueueDetailSection({ store, activeBranch, setPage }) {
               <button
                 type="button"
                 className="icon-btn queue-call-btn"
-                title="Call patient"
-                aria-label={`Call patient ${q.patientName || patientName(q.patientId, state.patients)}`}
-                onClick={() => toast ? toast('Patient called.') : alert('Calling patient...')}
+                title="Call patient in queue"
+                aria-label={`Call patient ${q.patientName || patientName(q.patientId, state.patients)} in queue`}
+                disabled={!!callingId}
+                onClick={async () => {
+                  if (callingId) return
+                  setCallingId(q.id)
+                  const result = await store.appointmentFlow.queueCommand(q, 'call', commandKey())
+                  setCallingId(null)
+                  toast(result.ok ? 'Patient called in queue.' : (result.message || 'The queue could not be updated. Refresh and try again.'), result.ok ? 'success' : 'warning')
+                }}
               >
                 <Icon name="phone" size={16}/>
               </button>
             )}
-            <button
-              type="button"
-              className="icon-btn queue-message-btn"
-              title="Message patient"
-              aria-label={`Message patient ${q.patientName || patientName(q.patientId, state.patients)}`}
-              onClick={() => setPage && setPage('messages', encounterContext(q))}
-            >
-              <Icon name="message" size={16}/>
-            </button>
             <Button size="sm" variant="ghost" onClick={() => setInspectEntry(q)}>Inspect</Button>
           </div> },
         ]}
