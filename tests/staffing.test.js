@@ -72,8 +72,11 @@ test('STF-08 / DEN-13 / OWN-12: partial-day leave syncs end_date to start_date a
   const staffing = read('src/pages/Staffing.jsx')
   assert.match(staffing, /const endDate = f\.partial \? f\.start_date : \(f\.end_date \|\| f\.start_date\)/)
   assert.match(staffing, /if \(endDate < f\.start_date\) return setErr\('The until date cannot be before the from date\.'\)/)
-  assert.match(staffing, /if \(f\.partial && f\.end_time <= f\.start_time\) return setErr\('The end time must be after the start time\.'\)/)
+  assert.match(staffing, /if \(f\.partial && \(!f\.start_time \|\| !f\.end_time \|\| f\.end_time <= f\.start_time\)\) return setErr\('The end time must be after the start time\.'\)/)
   assert.match(staffing, /value=\{f\.partial \? f\.start_date : f\.end_date\} disabled=\{f\.partial\}/)
+  assert.match(staffing, /onChange=\{e => set\('partial', e\.target\.checked\)\}/)
+  assert.match(staffing, /end_date: x\.end_date && x\.end_date < e\.target\.value \? '' : x\.end_date/)
+  assert.match(staffing, /\{l\.can_decide && <>/)
 })
 
 test('OWN-11: work schedule supports both Dentist and Staff schedules with shift management and duty status', () => {
