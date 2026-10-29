@@ -227,7 +227,7 @@ For bug fixes, self-check before PR, and end-of-day status, use templates B, C, 
   </revision>
 
   <revision id="GEN-07" status="todo" severity="high" owner="Yzhekiel" support="Jaztin">
-    <note>SelectWithOther exists in src/components.jsx and is used in Clinical.jsx (NewPatientModal), but other forms (e.g. Join.jsx, Family.jsx) still lack the specify field, and server-side validation is pending.</note>
+    <note>Frontend source uses SelectWithOther in Clinical.jsx, Join.jsx, and src/patient/pages/Family.jsx. Backend validation in GuardianController, IntakeController, and Guardianship stores relationship_other and ID other_details. Four focused backend acceptance cases passed; after fixing a random guardian-age test fixture found by the full backend suite, IntakeTest passed 21/21 with 584 assertions on dental_clinic_scratch. Focused frontend source/helper checks passed 18/18. Browser control and Playwright were unavailable, so rendered cross-form transitions, saved-record reopening, and UI permission boundaries remain unverified; keep GEN-07 open.</note>
     <tasks>
       - [ ] Find every dropdown that has an "Other" choice
       - [ ] When "Other" is chosen, show a required "Specify" text field (with placeholder example)
@@ -382,3 +382,9 @@ For bug fixes, self-check before PR, and end-of-day status, use templates B, C, 
 </batch>
 
 </member_section>
+
+## GEN-09 prescription-flow baseline (support evidence, 2026-10-29)
+
+GEN-09 is owned by Richmon in `FINALS-QA-REVISIONS.md`; this note does not change its status. Source-derived path: a Dentist opens Prescriptions from role navigation, selects a recent visit, reviews the allergy notice, enters prescription lines, chooses Issue prescription, confirms the locking action, and the issued record opens automatically (`src/data.js`, `src/layout.jsx`, `src/App.jsx`, `src/pages/ServerPrescriptions.jsx`). Save draft is optional: the Issue path creates or updates the draft before issuing it. No runtime user actions were counted; the page loads server-backed visits and prescriptions, and no verified database-free runtime was available under this batch's restrictions.
+
+Potential navigation repetition, not a measured saving: Treatment already resolves the exact visit ID (`src/pages/Clinical.jsx`), while ordinary navigation clears page context and the Prescriptions page receives none (`src/layout.jsx`, `src/App.jsx`). A later shortcut could carry that encounter context and preselect only a matching server-authorized visit; the Dentist must still review allergies, choose medicines and instructions, and confirm issue. The existing `tests/m19-prescriptions.test.js` checks source structure, not this interaction. Source also suggests the prescription form's Other options may reset to blank before their custom input appears; that behavior needs runtime verification before claiming a defect.
