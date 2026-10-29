@@ -79,6 +79,15 @@ test('STF-08 / DEN-13 / OWN-12: partial-day leave syncs end_date to start_date a
   assert.match(staffing, /\{l\.can_decide && <>/)
 })
 
+test('leave requester submits for authorized review without trying to approve their own request', () => {
+  const staffing = read('src/pages/Staffing.jsx')
+  const myLeave = staffing.slice(staffing.indexOf('function MyLeave('), staffing.indexOf('function Approvals('))
+  assert.match(myLeave, /await requestLeave\(/)
+  assert.match(myLeave, /Leave requested\. An authorized approver can review it\./)
+  assert.doesNotMatch(myLeave, /decideLeave\(/)
+  assert.match(staffing.slice(staffing.indexOf('function LeaveRow(')), /decideLeave\(l\.id, decision\)/)
+})
+
 test('OWN-11: work schedule supports both Dentist and Staff schedules with shift management and duty status', () => {
   const staffing = read('src/pages/Staffing.jsx')
   assert.match(staffing, /Dentist schedules/)

@@ -336,7 +336,7 @@ For bug fixes, self-check before PR, and end-of-day status, use templates B, C, 
       - [x] Apply the staff leave changes to Owner Leave requests
     </tasks>
     <acceptance>Owner leave requests match staff behavior.</acceptance>
-    <evidence>Developer B B3: Owner remains an approver, not a requester. The backend already exposed can_decide and accepted authorized Owner decisions; the UI incorrectly hid the controls and described the page as read-only. Fixed the controls and text. Rendered Owner harness showed the stored date/time label and approval confirmation and captured the decide POST; guarded API test verified Owner list timestamps, both approval round trips, and Owner request denial. Approval policy was unchanged. Separate existing concern: MyLeave attempts an approval call as the requester after creation, which the backend correctly denies; this does not auto-approve the request and needs a coordinated policy decision.</evidence>
+    <evidence>Developer B B3: Owner remains an approver, not a requester. The backend already exposed can_decide and accepted authorized Owner decisions; the UI incorrectly hid the controls and described the page as read-only. Fixed the controls and text. Rendered Owner harness showed the stored date/time label and approval confirmation and captured the decide POST; guarded API test verified Owner list timestamps, both approval round trips, and Owner request denial. The B3 follow-up removed the requester's unauthorized approval attempt; successful creation now reports that an authorized approver can review it. Approval policy was unchanged.</evidence>
   </revision>
 
   <batch_verification>

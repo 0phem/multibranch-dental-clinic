@@ -346,21 +346,7 @@ function MyLeave({ toast, onChanged }) {
     const r = await requestLeave({ type: f.type, start_date: f.start_date, end_date: endDate, private_note: f.private_note.trim() || null, ...(f.partial ? { start_time: f.start_time, end_time: f.end_time } : {}) })
     setBusy('')
     if (!r.ok) return setErr(firstError(r))
-    // Automated coverage check (Rule 2.12 / 3.10 / 4.9)
-    try {
-      if (r.data?.id) {
-        const dec = await decideLeave(r.data.id, 'approve')
-        if (dec.ok) {
-          toast('Leave requested and auto-approved: roster coverage confirmed.', 'success')
-        } else {
-          toast('Leave requested. The approver was told.', 'success')
-        }
-      } else {
-        toast('Leave requested. The approver was told.', 'success')
-      }
-    } catch {
-      toast('Leave requested. The approver was told.', 'success')
-    }
+    toast('Leave requested. An authorized approver can review it.', 'success')
     setF(x => ({ ...x, start_date: '', end_date: '', private_note: '' })); load()
   }
   return <Card title="My leave">
