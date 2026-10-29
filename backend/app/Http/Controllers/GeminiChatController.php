@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\Role;
 use App\Models\Branch;
 use App\Models\Service;
 use App\Services\Assistant\IntentGuard;
@@ -137,7 +138,7 @@ class GeminiChatController extends Controller
                     'mode' => 'gemini',
                 ]);
             } catch (\Throwable $e) {
-                Log::warning('gemini.stream_exception', ['message' => $e->getMessage()]);
+                Log::warning('gemini.stream_exception');
                 $fallback = $this->fallbackAnswer($message);
                 $this->sendSse('delta', ['text' => $fallback['answer']]);
                 $this->sendSse('done', $fallback);
@@ -147,9 +148,15 @@ class GeminiChatController extends Controller
 
     private function validateChatInput(Request $request): array
     {
+        abort_unless($request->user()?->role === Role::Patient && $request->user()->patient !== null, 403);
+        $extra = array_diff(array_keys($request->all()), ['message', 'history']);
+        if ($extra) {
+            throw ValidationException::withMessages([reset($extra) => 'Only a message and this chat\'s history can be sent to the assistant.']);
+        }
         $v = $request->validate([
             'message' => ['required', 'string', 'min:2', 'max:1000'],
             'history' => ['sometimes', 'array', 'max:20'],
+            'history.*' => ['array:role,text'],
             'history.*.role' => ['required_with:history', 'in:user,assistant,model'],
             'history.*.text' => ['required_with:history', 'string', 'max:1000'],
         ]);
@@ -330,7 +337,7 @@ PROMPT;
                 'mode' => 'gemini',
             ];
         } catch (\Throwable $e) {
-            Log::warning('gemini.exception', ['message' => $e->getMessage()]);
+            Log::warning('gemini.exception');
             return $this->fallbackAnswer($userMessage);
         }
     }

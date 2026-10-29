@@ -1,5 +1,15 @@
 # Clinic Assistant: privacy and data sent to Anthropic
 
+## Separate Gemini route concern — Batch A1 acceptance, 2026-10-29
+
+The mode descriptions below concern the existing `/api/assistant/*` pipeline. They do **not** establish that all AI routes avoid external transfer in knowledge mode. `GeminiChatController` separately handles `/api/gemini/chat` and `/api/gemini/stream`, now restricted to authenticated active Patients with linked profiles.
+
+When `services.gemini.api_key` is configured, these Gemini routes can send the submitted message and up to 20 history turns (each bounded to 1,000 characters), plus server-built clinic branding/contact details, branch names/addresses/phones, service names/descriptions and current Manila time, to Google's Gemini API. They do not retrieve Patient records, but submitted free text/history can itself contain identifying or health information. Their key-based activation does not consult `ASSISTANT_MODE`; selecting knowledge mode for `/api/assistant/*` alone does not disable Gemini egress. No current frontend caller of `/api/gemini/*` was found.
+
+Authentication closes anonymous resource consumption; it does not resolve provider approval, patient notice, permitted content, retention, processing terms or cross-border handling. Clinic/Owner/DPO governance acceptance for this separate path remains outstanding. This batch records the existing concern without approving a provider or changing activation policy. All acceptance tests use fake credentials and mocked HTTP; no live provider transfer was performed. A production decision must cover both pipelines explicitly before real patient text is sent externally.
+
+The Gemini adapter also currently includes the provider credential in its outbound query string. Batch A1 removed exception-message logging that could expose that URL; broader infrastructure URL logging and provider output/privacy safeguards were not verified in this focused acceptance task.
+
 Status: **open item for the clinic** (data privacy decision). This describes what the system does today; it is not legal advice.
 
 ## Two modes (`ASSISTANT_MODE` in backend/.env)

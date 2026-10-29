@@ -63,14 +63,13 @@ Route::get('/public/hmos', [\App\Http\Controllers\AcceptedHmoController::class, 
 Route::get('/public/respond', [\App\Http\Controllers\AppointmentResponseController::class, 'describe'])->middleware('throttle:30,1');
 Route::post('/public/respond', [\App\Http\Controllers\AppointmentResponseController::class, 'perform'])->middleware('throttle:20,1');
 
-// Gemini Chatbot Integration: prompt-response and SSE streaming
-Route::post('/gemini/chat', [\App\Http\Controllers\GeminiChatController::class, 'chat'])->middleware('throttle:m7-assistant');
-Route::post('/gemini/stream', [\App\Http\Controllers\GeminiChatController::class, 'stream'])->middleware('throttle:m7-assistant');
-
 // Public Payment Gateway Webhook (PayMongo HMAC-SHA256 signature verified)
 Route::post('/webhooks/paymongo', [PayMongoController::class, 'webhook']);
 
 Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureAccountAccess::class])->group(function () {
+    // Gemini follows the same authenticated Patient-only contract as the M7 assistant.
+    Route::post('/gemini/chat', [\App\Http\Controllers\GeminiChatController::class, 'chat'])->middleware(['role:patient', 'throttle:m7-assistant']);
+    Route::post('/gemini/stream', [\App\Http\Controllers\GeminiChatController::class, 'stream'])->middleware(['role:patient', 'throttle:m7-assistant']);
     Route::post('/logout', [AuthenticatedSessionController::class, 'destroy']);
     Route::get('/me', [CurrentUserController::class, 'show']);
     // Identity-specific notifications written by real server events (each user sees only their own).

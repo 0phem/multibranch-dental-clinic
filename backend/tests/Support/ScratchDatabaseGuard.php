@@ -11,6 +11,13 @@ final class ScratchDatabaseGuard
         }
 
         $config = $app['config'];
+        // Docker publishes on localhost but PostgreSQL reports its container address.
+        // Opt in only after independently inspecting the disposable container and its empty schema.
+        // The client host, port, database and URL checks below remain mandatory.
+        $serverAddress = getenv('TEST_SCRATCH_SERVER_ADDRESS') ?: '127.0.0.1';
+        if (filter_var($serverAddress, FILTER_VALIDATE_IP) === false) {
+            throw new \RuntimeException('Refusing test work: invalid expected scratch server address.');
+        }
 
         if ($config->get('database.default') !== 'pgsql') {
             throw new \RuntimeException('Refusing test work: the default connection must be pgsql.');
@@ -38,7 +45,7 @@ final class ScratchDatabaseGuard
 
         if (
             ($row->database_name ?? null) !== 'dental_clinic_scratch' ||
-            ($row->server_address ?? null) !== '127.0.0.1' ||
+            ($row->server_address ?? null) !== $serverAddress ||
             (int) ($row->server_port ?? 0) !== 5432
         ) {
             throw new \RuntimeException(
