@@ -197,14 +197,14 @@ For bug fixes, self-check before PR, and end-of-day status, use templates B, C, 
 - [x] DEN-10 Patient Records: if the choice is "other" add "specify" and add example
 
 **Batch YZH-3: Dentist dashboard screens**
-- [ ] DEN-01 Clinic Home: make the texts bigger
+- [x] DEN-01 Clinic Home: make the texts bigger
 - [ ] DEN-02 My schedule: fix the date layout
-- [ ] DEN-06 Prescription: remove the dosage from the medicine dropdown
-- [ ] DEN-07 Prescription: make the remove medicine color red
-- [ ] DEN-08 Prescription: fix the save button size from the license number on my prescription
-- [ ] DEN-09 Follow up care: add color to the status
+- [x] DEN-06 Prescription: remove the dosage from the medicine dropdown
+- [x] DEN-07 Prescription: make the remove medicine color red
+- [x] DEN-08 Prescription: fix the save button size from the license number on my prescription
+- [x] DEN-09 Follow up care: add color to the status
 - [ ] DEN-12 My work hours: fix the UI
-- [ ] DEN-15 Wording to approve: fix the button sizes, change the preview and make the UI consistent
+- [x] DEN-15 Wording to approve: fix the button sizes, change the preview and make the UI consistent
 
 **Support tasks**
 - [ ] DEN-03 (support Jaztin): UI after the schedule bug is fixed
@@ -315,11 +315,12 @@ For bug fixes, self-check before PR, and end-of-day status, use templates B, C, 
   <goal>Dentist screens are readable and consistent.</goal>
   <depends_on>YZH-1</depends_on>
 
-  <revision id="DEN-01" status="todo" severity="medium" owner="Yzhekiel">
+  <revision id="DEN-01" status="done" severity="medium" owner="Yzhekiel" implementer="Joevan">
     <tasks>
-      - [ ] Increase text sizes on Clinic Home (headings, stats, list text)
+      - [x] Increase text sizes on Clinic Home (headings, stats, list text)
     </tasks>
     <acceptance>Clinic Home text is clearly larger and readable.</acceptance>
+    <evidence>A6 / Joevan: Scoped Clinic Home heading, stats, schedule and task typography enlarged; navigation and counts preserved. Playwright 1440px/390px, light/dark OS preferences; existing app palette retained (no separate dark theme). See docs/DENTIST_UI_A6_ACCEPTANCE.md for synthetic-data boundaries and focused results.</evidence>
   </revision>
 
   <revision id="DEN-02" status="todo" severity="medium" owner="Yzhekiel">
@@ -329,33 +330,37 @@ For bug fixes, self-check before PR, and end-of-day status, use templates B, C, 
     <acceptance>Dates are clearly laid out and consistent.</acceptance>
   </revision>
 
-  <revision id="DEN-06" status="todo" severity="medium" owner="Yzhekiel">
+  <revision id="DEN-06" status="done" severity="medium" owner="Yzhekiel" implementer="Joevan">
     <tasks>
-      - [ ] Remove the dosage text from the medicine dropdown options
+      - [x] Remove the dosage text from the medicine dropdown options
     </tasks>
     <acceptance>Medicine dropdown shows only medicine names.</acceptance>
+    <evidence>A6 / Joevan: Existing names-only local and synthetic server medicine options verified; separate empty dosage and custom draft save/reload/edit passed. No prescribing logic changed. Playwright 1440px/390px, light/dark OS preferences; existing app palette retained (no separate dark theme). See docs/DENTIST_UI_A6_ACCEPTANCE.md for synthetic-data boundaries and focused results.</evidence>
   </revision>
 
-  <revision id="DEN-07" status="todo" severity="low" owner="Yzhekiel">
+  <revision id="DEN-07" status="done" severity="low" owner="Yzhekiel" implementer="Joevan">
     <tasks>
-      - [ ] Make the "remove medicine" control red (default and hover states)
+      - [x] Make the "remove medicine" control red (default and hover states)
     </tasks>
     <acceptance>Remove medicine is clearly red.</acceptance>
+    <evidence>A6 / Joevan: Existing danger variant verified red with readable normal/hover/keyboard-focus contrast; removal does not submit. No code change required. Playwright 1440px/390px, light/dark OS preferences; existing app palette retained (no separate dark theme). See docs/DENTIST_UI_A6_ACCEPTANCE.md for synthetic-data boundaries and focused results.</evidence>
   </revision>
 
-  <revision id="DEN-08" status="todo" severity="medium" owner="Yzhekiel">
+  <revision id="DEN-08" status="done" severity="medium" owner="Yzhekiel" implementer="Joevan">
     <tasks>
-      - [ ] Fix the Save button size near the license number on My prescription
-      - [ ] Match the standard button size from GEN-12
+      - [x] Fix the Save button size near the license number on My prescription
+      - [x] Match the standard button size from GEN-12
     </tasks>
     <acceptance>Save button is correctly sized and aligned with the license number field.</acceptance>
+    <evidence>A6 / Joevan: Scoped 44px license Save/input alignment, mobile wrapping, busy/disabled, success and failure feedback verified. Persistence unchanged. Playwright 1440px/390px, light/dark OS preferences; existing app palette retained (no separate dark theme). See docs/DENTIST_UI_A6_ACCEPTANCE.md for synthetic-data boundaries and focused results.</evidence>
   </revision>
 
-  <revision id="DEN-09" status="todo" severity="medium" owner="Yzhekiel">
+  <revision id="DEN-09" status="done" severity="medium" owner="Yzhekiel" implementer="Joevan">
     <tasks>
-      - [ ] Add status colors in Follow up care (e.g. pending, done, overdue) with text labels
+      - [x] Add status colors in Follow up care (e.g. pending, done, overdue) with text labels
     </tasks>
     <acceptance>Each status has a distinct color plus label, readable in light and dark.</acceptance>
+    <evidence>A6 / Joevan: Existing Open/Contacted/Booked/Closed and Overdue labelled colors verified as five distinct fills with text contrast at least 4.5:1. No status or booking change. Playwright 1440px/390px, light/dark OS preferences; existing app palette retained (no separate dark theme). See docs/DENTIST_UI_A6_ACCEPTANCE.md for synthetic-data boundaries and focused results.</evidence>
   </revision>
 
   <revision id="DEN-12" status="todo" severity="medium" owner="Yzhekiel">
@@ -365,14 +370,15 @@ For bug fixes, self-check before PR, and end-of-day status, use templates B, C, 
     <acceptance>Work hours screen is clean and consistent with the design system.</acceptance>
   </revision>
 
-  <revision id="DEN-15" status="todo" severity="medium" owner="Yzhekiel">
+  <revision id="DEN-15" status="done" severity="medium" owner="Yzhekiel" implementer="Joevan">
     <tasks>
-      - [ ] Fix button sizes on Wording to approve
-      - [ ] Change the preview (clearer layout of the wording being approved)
-      - [ ] Make the UI consistent with the rest of the dentist dashboard
-      - [ ] Align with GEN-01 (fewer approval inputs)
+      - [x] Fix button sizes on Wording to approve
+      - [x] Change the preview (clearer layout of the wording being approved)
+      - [x] Make the UI consistent with the rest of the dentist dashboard
+      - [x] Align with GEN-01 (fewer approval inputs)
     </tasks>
     <acceptance>Buttons are sized correctly, preview is improved, UI is consistent.</acceptance>
+    <evidence>A6 / Joevan: Scoped read-only wording/preview and 44px controls; loading, empty, retry, approval-state visibility and manual revision-bound approval verified. Shared Automations untouched. Playwright 1440px/390px, light/dark OS preferences; existing app palette retained (no separate dark theme). See docs/DENTIST_UI_A6_ACCEPTANCE.md for synthetic-data boundaries and focused results.</evidence>
   </revision>
 
   <batch_verification>

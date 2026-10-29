@@ -14,6 +14,7 @@ import { countQueue } from '../queue-counts.js'
 import { QueueByBranch, useQueueVisibility } from './QueueCounts.jsx'
 import { clinicNow } from '../clock.js'
 import { fetchDailyRevenue, fetchWeeklyRevenueHistogram } from '../analytics-api.js'
+import '../dentist-dashboard.css'
 
 export function DashboardPage({ role, activeBranch, setPage, store }) {
   const { state }=store
@@ -83,7 +84,7 @@ function DentistDashboard({ setPage, state, session }) {
   const pendingRx=prescriptionTasks(state,session||sessionForRole('dentist',state)).length
   const follow=liveRecords(state.followups).filter(f=>f.dentistId===did&&f.status==='Open').length
   const next=ownQueue[0], currentDentist=state.dentists.find(d=>d.id===did), isDoctorOnDuty=currentDentist ? (currentDentist.on_duty_today !== undefined ? currentDentist.on_duty_today : currentDentist.available !== false) : true
-  return <>
+  return <section className="dentist-home" aria-label="Dentist Clinic Home">
     <PageHeader kicker="Clinical workspace" title="Your day, without the clutter" text="See who is next, open the chart, document treatment and keep follow-up tasks moving." aside={<div style={{display:'flex',alignItems:'center',gap:'8px'}}><span className={`fd-badge ${isDoctorOnDuty?'is-ok':'is-muted'}`}>{isDoctorOnDuty?'Doctor is on duty today':'Off duty'}</span>{next?<Button onClick={()=>setPage('queue')} icon="queue">Open my queue</Button>:null}</div>}/>
     {activeTreatment&&<div className="active-treatment-banner"><div className="pulse-dot"/><div><span>Active treatment</span><b>{patientName(activeTreatment.patientId,state.patients)}</b><small>{activeTreatment.procedure||activeTreatment.plan||'Treatment in progress'}</small></div><Button variant="soft" onClick={()=>setPage('treatment',encounterContext(state.queue.find(q=>q.id===activeTreatment.queueEntryId)))} icon="tooth">Continue treatment</Button></div>}
     <div className="dentist-command-grid">
@@ -122,7 +123,7 @@ function DentistDashboard({ setPage, state, session }) {
       </Card>
       <Card title="Clinical task list" subtitle="Handoffs created by completed treatment"><div className="task-list"><button onClick={()=>setPage('prescriptions')}><span><Icon name="pill" size={18}/></span><div><b>Prescription tasks</b><small>{pendingRx?`${pendingRx} awaiting authorization`:'No outstanding prescription tasks'}</small></div><Icon name="chevron" size={16}/></button><button onClick={()=>setPage('followups')}><span><Icon name="followup" size={18}/></span><div><b>Follow-up care</b><small>{follow?`${follow} return-visit obligation${follow>1?'s':''}`:'No unscheduled follow-ups'}</small></div><Icon name="chevron" size={16}/></button><button onClick={()=>setPage('messages')}><span><Icon name="message" size={18}/></span><div><b>Patient messages</b><small>Clinical conversations assigned to you</small></div><Icon name="chevron" size={16}/></button></div></Card>
     </div>
-  </>
+  </section>
 }
 
 export function formatCurrencyPhp(value) {

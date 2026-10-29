@@ -1,0 +1,20 @@
+/* Dentist presentation of the existing read-only TemplateEditor. */
+.dentist-wording { display: grid; gap: 18px; }
+.dentist-wording .au-tpl-edit { gap: 24px; align-items: start; }
+.dentist-wording-context { display: flex; flex-wrap: wrap; gap: 8px 18px; color: var(--muted); font-size: 14px; }
+.dentist-wording-context [role=status] { color: var(--ink); font-weight: 650; }
+.dentist-wording .au-readonly-wording { padding: 18px; gap: 18px; background: var(--surface-2); }
+.dentist-wording .au-readonly-field { gap: 8px; min-width: 0; }
+.dentist-wording .au-readonly-label { font-size: 12px; }
+.dentist-wording .au-readonly-value { font-size: 17px; line-height: 1.5; overflow-wrap: anywhere; }
+.dentist-wording .au-readonly-body { font-size: 16px; line-height: 1.7; padding: 14px; background: var(--surface); overflow-wrap: anywhere; }
+.dentist-wording .au-actions { align-items: center; gap: 10px; margin-top: 6px; }
+.dentist-wording .au-actions .btn, .dentist-wording .au-preview-empty .btn { min-height: 44px; padding: 10px 16px; font-size: 14px; }
+.dentist-wording .au-approval-status-bar { gap: 8px; }
+.dentist-wording .au-tag { white-space: normal; line-height: 1.6; }
+.dentist-wording .au-preview-header { gap: 8px; margin-bottom: 12px; }
+.dentist-wording .au-preview-header small { overflow-wrap: anywhere; font-size: 14px; }
+.dentist-wording .au-preview-title { color: var(--ink); font-size: 14px; }
+.dentist-wording .au-preview iframe { display: block; }
+@media (max-width: 900px) { .dentist-wording .au-tpl-edit { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 520px) { .dentist-wording .au-readonly-wording { padding: 14px; } .dentist-wording .au-actions .btn { width: 100%; } }

@@ -1,0 +1,9 @@
+/* Prescription-only layout; shared controls and clinical behavior stay unchanged. */
+.dentist-prescriptions .rx-license-row { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
+.dentist-prescriptions .rx-license-row > .field { flex: 1 1 240px; margin: 0; }
+.dentist-prescriptions .rx-license-row > .au-actions { flex: 0 0 auto; margin: 0; align-self: flex-end; }
+.dentist-prescriptions .rx-license-row .btn { min-height: 44px; height: 44px; }
+@media (max-width: 520px) {
+  .dentist-prescriptions .rx-license-row > .field { flex-basis: 100%; }
+  .dentist-prescriptions .rx-license-row > .au-actions { width: 100%; }
+}
