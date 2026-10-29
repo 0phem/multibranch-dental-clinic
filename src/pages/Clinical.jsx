@@ -130,7 +130,7 @@ export function PatientsPage({ role, store, context, setPage }) {
       <Field label="Last name" required><input value={newPatient.lastName} onChange={e=>setNewPatient({...newPatient,lastName:e.target.value})}/></Field>
       <Field label="Phone" required><input value={newPatient.phone} maxLength={10} placeholder="9171234567" onChange={e=>setNewPatient({...newPatient,phone:e.target.value.replace(/\D/g, '').replace(/^0+/, '').slice(0, 10)})}/></Field>
       <Field label="Date of birth"><input type="date" min={addCalendarMonths(clinicDate(), -12 * 120)} max={clinicDate()} value={newPatient.dob} onChange={e=>setNewPatient({...newPatient,dob:e.target.value})}/></Field>
-      <SelectWithOther label="Sex" value={newPatient.sex} onChange={val=>setNewPatient({...newPatient,sex:val})} options={['Female','Male','Other']} otherValue={newPatient.sexOther} onOtherChange={val=>setNewPatient({...newPatient,sexOther:val})} placeholder="Please specify sex / gender"/>
+      <SelectWithOther label="Sex" value={newPatient.sex} onChange={val=>setNewPatient(patient=>({...patient,sex:val}))} options={['Female','Male','Other']} otherValue={newPatient.sexOther} onOtherChange={val=>setNewPatient(patient=>({...patient,sexOther:val}))} placeholder="Please specify sex / gender"/>
       <Field label="Email"><input type="email" value={newPatient.email} onChange={e=>setNewPatient({...newPatient,email:e.target.value})}/></Field>
       <Field label="Preferred branch"><select value={newPatient.preferredBranch} onChange={e=>setNewPatient({...newPatient,preferredBranch:e.target.value})}>{state.branches.filter(b=>role==='owner'||b.id===session.branchId).map(b=><option key={b.id}>{b.name}</option>)}</select></Field>
       <Field label="Address"><textarea value={newPatient.address} onChange={e=>setNewPatient({...newPatient,address:e.target.value})}/></Field>
@@ -651,11 +651,16 @@ function PatientDocumentsTab({ patient, role, store }) {
 
 // The editable Treatment form, derived from the server record (or empty before treatment starts). Unsaved changes live
 // only in React memory; there are no browser Treatment drafts.
+const FOLLOWUP_REASONS = ['Post-Op Check','Suture Removal','Crown / Bridge Fitting','Restoration Polish','Ortho Adjustment','Routine Cleaning / Recall']
+const savedFollowupReasonOther = reason => !!reason && !FOLLOWUP_REASONS.includes(reason)
+const followupReasonOption = form => form.followupReasonOther ? 'Other' : FOLLOWUP_REASONS.includes(form.followupReason) ? form.followupReason : 'Post-Op Check'
+const chooseFollowupReason = (form, option) => ({...form, followupReason: option === 'Other' ? '' : option, followupReasonOther: option === 'Other'})
+const missingFollowupReason = form => form.followupRequired && form.followupReasonOther && !form.followupReason.trim()
 const treatmentForm=(t,dentist)=>({
   complaint:t?.complaint||'',plan:t?.plan||'',procedure:t?.procedure||'',notes:t?.notes||'',
   assistant:t?t.assistant||'Unassigned':dentist?.assistant||'Unassigned',
   prescriptionRequired:!!t?.prescriptionRequired,followupRequired:!!t?.followupRequired,
-  followupDate:t?.followupDate||'',followupReason:t?.followupReason||'',followupInterval:t?.followupInterval||'',
+  followupDate:t?.followupDate||'',followupReason:t?.followupReason||'',followupReasonOther:savedFollowupReasonOther(t?.followupReason),followupInterval:t?.followupInterval||'',
   procedures:(t?.procedures||[]).map(p=>({id:p.id,serviceId:p.serviceId,quantity:p.quantity,notes:p.notes||''})),
 })
 const formKey=form=>JSON.stringify({...form,assistant:undefined,procedures:form.procedures.map(p=>({...p,quantity:String(p.quantity)}))})
@@ -677,6 +682,7 @@ export function TreatmentPage({ store, context, setPage }) {
   const [saving,setSaving]=useState(false)
   const [confirmCompleteOpen,setConfirmCompleteOpen]=useState(false)
   const dirty=formKey(form)!==formKey(treatmentForm(base,dentist))
+  const followupReasonMissing=missingFollowupReason(form)
   // Adopt the latest server record when nothing is unsaved; otherwise keep the Dentist's text and flag the newer version.
   React.useEffect(()=>{
     if(!dirty||!base){setBase(treatment);setForm(treatmentForm(treatment,dentist))}
@@ -735,30 +741,28 @@ export function TreatmentPage({ store, context, setPage }) {
           <Field label="Recommended follow-up date"><input type="date" value={form.followupDate} onChange={e=>setForm({...form,followupDate:e.target.value})}/></Field>
           <Field label="Follow-up reason">
             <select
-              value={['Post-Op Check','Suture Removal','Crown / Bridge Fitting','Restoration Polish','Ortho Adjustment','Routine Cleaning / Recall'].includes(form.followupReason) ? form.followupReason : (form.followupReason ? 'Other' : 'Post-Op Check')}
-              onChange={e => {
-                const val = e.target.value;
-                setForm({ ...form, followupReason: val === 'Other' ? '' : val });
-              }}
+              value={followupReasonOption(form)}
+              onChange={e => setForm(chooseFollowupReason(form,e.target.value))}
             >
-              {['Post-Op Check','Suture Removal','Crown / Bridge Fitting','Restoration Polish','Ortho Adjustment','Routine Cleaning / Recall','Other'].map(r => <option key={r} value={r}>{r}</option>)}
+              {[...FOLLOWUP_REASONS,'Other'].map(r => <option key={r} value={r}>{r}</option>)}
             </select>
           </Field>
-          {!['Post-Op Check','Suture Removal','Crown / Bridge Fitting','Restoration Polish','Ortho Adjustment','Routine Cleaning / Recall'].includes(form.followupReason) && (
+          {form.followupReasonOther && (
             <Field label="Specify reason / instructions" required>
               <input
                 value={form.followupReason}
                 placeholder="Specify follow-up details..."
                 onChange={e => setForm({ ...form, followupReason: e.target.value })}
+                aria-required="true"
               />
             </Field>
           )}
           <Field label="Recommended interval"><input value={form.followupInterval} placeholder="e.g. 1 week, 2 weeks" onChange={e=>setForm({...form,followupInterval:e.target.value})}/></Field>
         </div>}
         {!readOnly&&<div className="form-actions">
-          {!treatment?<Button disabled={saving||!canStart} onClick={start}>Start Treatment</Button>:<>
-            <Button variant="ghost" disabled={saving||!dirty} onClick={save}>Save Treatment Progress</Button>
-            <Button disabled={saving} onClick={()=>setConfirmCompleteOpen(true)}>Complete Treatment</Button></>}
+          {!treatment?<Button disabled={saving||!canStart||followupReasonMissing} onClick={start}>Start Treatment</Button>:<>
+            <Button variant="ghost" disabled={saving||!dirty||followupReasonMissing} onClick={save}>Save Treatment Progress</Button>
+            <Button disabled={saving||followupReasonMissing} onClick={()=>setConfirmCompleteOpen(true)}>Complete Treatment</Button></>}
         </div>}
         {!treatment&&queueEntry&&!canStart&&<Notice>Treatment can start once this patient is Called or Ready for treatment.</Notice>}
         {dirty&&!readOnly&&treatment&&<small className="block-muted">Unsaved changes — they are kept only on this screen until you save.</small>}

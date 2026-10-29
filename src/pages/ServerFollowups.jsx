@@ -106,7 +106,7 @@ export function FollowupPanel({ patientId, branches = [], toast, store, role = '
     {adding ? <form className="au-form" onSubmit={add}>
       <Field label="Branch"><select value={f.branch_ref} onChange={e => setF(x => ({ ...x, branch_ref: e.target.value }))}>{branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</select></Field>
       <Field label="Follow-up reason" required hint="Seen by the branch team only, never by the patient.">
-        <select value={reasonCategory} onChange={e => setReasonCategory(e.target.value)}>
+        <select value={reasonCategory} onChange={e => { setReasonCategory(e.target.value); if (e.target.value !== 'Other') setCustomReason('') }}>
           {STANDARD_REASONS.map(r => <option key={r} value={r}>{r}</option>)}
         </select>
       </Field>

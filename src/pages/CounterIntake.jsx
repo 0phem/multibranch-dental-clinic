@@ -109,7 +109,7 @@ function ReviewDialog({ row, idTypes, toast, onClose, onDone, store }) {
       <Field label="Dentist" hint="Any available: the Dentist for this service with the shortest queue now"><select value={dentistId} disabled={!serviceId} onChange={e => setDentistId(e.target.value)}><option value="">Any available (shortest queue)</option>{dentists.map(d => <option key={d.id} value={d.id}>{dentistName(d.id, state.dentists)}</option>)}</select></Field>
     </div>}
     <div className="ci-id">
-      <Field label="ID shown"><select value={idType} onChange={e => setIdType(e.target.value)}>{Object.entries(idTypes).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></Field>
+      <Field label="ID shown"><select value={idType} onChange={e => { setIdType(e.target.value); if (e.target.value !== 'other') setIdOther('') }}>{Object.entries(idTypes).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></Field>
       {idType === 'other' && (
         <Field label="Specify ID type" required>
           <input
@@ -174,7 +174,7 @@ export function IdCheck({ patientId, toast = () => {} }) {
   }
   return <div className="ci-idcheck">{minor}
     <p><b>First visit: check the ID.</b> {record.minor ? 'For a minor, check the guardian’s ID.' : ''}</p>
-    <div className="au-actions"><select aria-label="ID shown" value={type} onChange={e => setType(e.target.value)}>{Object.entries(ID_TYPES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
+    <div className="au-actions"><select aria-label="ID shown" value={type} onChange={e => { setType(e.target.value); if (e.target.value !== 'other') setOtherText('') }}>{Object.entries(ID_TYPES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
       {type === 'other' && <input type="text" placeholder="Specify ID (e.g. PhilHealth, Company ID)" value={otherText} onChange={e => setOtherText(e.target.value)} aria-label="Specify ID type" style={{ minWidth: '200px' }}/>}
       <Button size="sm" variant="soft" disabled={busy || (type === 'other' && !otherText.trim())} onClick={go}>ID checked</Button></div>
   </div>

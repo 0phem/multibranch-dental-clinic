@@ -136,7 +136,7 @@ function CancelDialog({ appointment, onClose, onDone }) {
     <div style={{ marginTop: '14px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
       <label className="field">
         <span>Reason for cancellation <b className="required" aria-hidden="true">*</b></span>
-        <select value={reason} onChange={e => { setReason(e.target.value); setError('') }}>
+        <select value={reason} onChange={e => { setReason(e.target.value); if (e.target.value !== 'Other') setCustomReason(''); setError('') }}>
           <option value="Schedule conflict">Schedule conflict</option>
           <option value="No longer need the appointment">No longer need the appointment</option>
           <option value="Feeling unwell">Feeling unwell / Medical reason</option>

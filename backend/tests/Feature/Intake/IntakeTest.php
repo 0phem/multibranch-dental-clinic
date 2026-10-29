@@ -445,6 +445,7 @@ class IntakeTest extends TestCase
     public function test_verify_id_requires_other_details_when_id_type_is_other(): void
     {
         $patient = $this->p['A'];
+        $this->existing('A', 'd1', 'b1', 'svc1', '2026-09-29', '09:00');
         $this->actingAsUser('staffB1');
 
         $this->postJson("/api/patients/{$patient->public_id}/verify-id", [
@@ -460,6 +461,8 @@ class IntakeTest extends TestCase
     public function test_verify_id_stores_other_details_and_clears_stale_details_on_subsequent_standard_id(): void
     {
         $patient = $this->p['A'];
+        $identity = [$patient->person_id, $patient->patient_code, $patient->consent, $patient->person->fullName()];
+        $this->existing('A', 'd1', 'b1', 'svc1', '2026-09-29', '09:00');
         $this->actingAsUser('staffB1');
 
         // 1. Submit Other with specification
@@ -487,6 +490,8 @@ class IntakeTest extends TestCase
         $this->assertNull($switchRes->json('data.other_details'));
         $this->assertSame('philid', $patient->fresh()->id_type);
         $this->assertNull($patient->fresh()->other_details);
+        $unchanged = $patient->fresh();
+        $this->assertSame($identity, [$unchanged->person_id, $unchanged->patient_code, $unchanged->consent, $unchanged->person->fullName()]);
 
         $recordRes2 = $this->getJson("/api/patients/{$patient->public_id}")->assertOk();
         $this->assertSame('philid', $recordRes2->json('data.id_check.type'));
@@ -495,17 +500,18 @@ class IntakeTest extends TestCase
 
     public function test_confirm_intake_validates_other_details_when_id_verified_and_other(): void
     {
+        $this->submitForm($this->form())->assertCreated();
         $this->actingAsUser('staffB1');
-        $row = $this->submitForm($this->form())->json('data');
+        $id = $this->getJson('/api/intake/submissions')->assertOk()->json('data.0.id');
 
         // Missing other_details on id_verified = true and id_type = other
-        $this->postJson("/api/intake/submissions/{$row['id']}/confirm", [
+        $this->postJson("/api/intake/submissions/{$id}/confirm", [
             'id_verified' => true,
             'id_type' => 'other',
         ])->assertStatus(422)->assertJsonValidationErrors('other_details');
 
         // Valid submission with other_details
-        $this->postJson("/api/intake/submissions/{$row['id']}/confirm", [
+        $this->postJson("/api/intake/submissions/{$id}/confirm", [
             'id_verified' => true,
             'id_type' => 'other',
             'other_details' => 'Company Health Card',
@@ -518,6 +524,7 @@ class IntakeTest extends TestCase
 
     public function test_gen07_relationship_other_is_required_when_relationship_is_other(): void
     {
+        $this->p['A']->person->update(['date_of_birth' => '1985-01-01']);
         $this->actingAsUser('patientA');
 
         // 1. Portal /api/me/dependents rejects Relationship = Other without relationship_other
