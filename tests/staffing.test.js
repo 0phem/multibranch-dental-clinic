@@ -72,8 +72,20 @@ test('STF-08 / DEN-13 / OWN-12: partial-day leave syncs end_date to start_date a
   const staffing = read('src/pages/Staffing.jsx')
   assert.match(staffing, /const endDate = f\.partial \? f\.start_date : \(f\.end_date \|\| f\.start_date\)/)
   assert.match(staffing, /if \(endDate < f\.start_date\) return setErr\('The until date cannot be before the from date\.'\)/)
-  assert.match(staffing, /if \(f\.partial && f\.end_time <= f\.start_time\) return setErr\('The end time must be after the start time\.'\)/)
+  assert.match(staffing, /if \(f\.partial && \(!f\.start_time \|\| !f\.end_time \|\| f\.end_time <= f\.start_time\)\) return setErr\('The end time must be after the start time\.'\)/)
   assert.match(staffing, /value=\{f\.partial \? f\.start_date : f\.end_date\} disabled=\{f\.partial\}/)
+  assert.match(staffing, /onChange=\{e => set\('partial', e\.target\.checked\)\}/)
+  assert.match(staffing, /end_date: x\.end_date && x\.end_date < e\.target\.value \? '' : x\.end_date/)
+  assert.match(staffing, /\{l\.can_decide && <>/)
+})
+
+test('leave requester submits for authorized review without trying to approve their own request', () => {
+  const staffing = read('src/pages/Staffing.jsx')
+  const myLeave = staffing.slice(staffing.indexOf('function MyLeave('), staffing.indexOf('function Approvals('))
+  assert.match(myLeave, /await requestLeave\(/)
+  assert.match(myLeave, /Leave requested\. An authorized approver can review it\./)
+  assert.doesNotMatch(myLeave, /decideLeave\(/)
+  assert.match(staffing.slice(staffing.indexOf('function LeaveRow(')), /decideLeave\(l\.id, decision\)/)
 })
 
 test('OWN-11: work schedule supports both Dentist and Staff schedules with shift management and duty status', () => {
@@ -82,16 +94,18 @@ test('OWN-11: work schedule supports both Dentist and Staff schedules with shift
   assert.match(staffing, /Staff schedules/)
   assert.match(staffing, /Staff work schedules/)
   assert.ok(staffing.includes('updateStaffProfile(currentStaff.id'))
-  assert.match(staffing, /Available \/ On-Duty/)
+  assert.match(staffing, /Marked available/)
+  assert.doesNotMatch(staffing, /Available \/ On-Duty/)
   assert.match(staffing, /Weekly roster coverage/)
 })
 
-test('STF-07: Doctor is on duty today status badge on dentist profiles, dashboard, and schedules', () => {
+test('STF-07: dashboard and profile retain duty status; Work Hours uses branch-scoped server duty', () => {
   const dashboards = read('src/pages/Dashboards.jsx')
   const staffing = read('src/pages/Staffing.jsx')
   const admin = read('src/pages/Admin.jsx')
   assert.match(dashboards, /Doctor is on duty today/)
   assert.match(dashboards, /isDoctorOnDuty/)
-  assert.match(staffing, /Doctor is on duty today/)
+  assert.match(staffing, /dutyForBranch\(data\.duty, dentist\.id, branch\.id, manilaToday\(\)\)/)
+  assert.match(staffing, /Duty status unavailable/)
   assert.match(admin, /Doctor is on duty today/)
 })

@@ -5,6 +5,8 @@ import {
   notifyScheduleAffected, removeScheduleException, requestLeave, saveWeeklyHours, scheduleAffected, updateStaffProfile, workSchedules,
 } from '../api-client.js'
 import { commandKey, rescheduleAppointment } from '../appointments-api.js'
+import { dutyForBranch } from '../work-hours-duty.js'
+import '../den12-work-hours.css'
 
 const firstError = r => (r.kind === 'validation' ? Object.values(r.errors || {})[0]?.[0] || r.message : r.message) || 'That did not work.'
 const t12 = hm => { if (!hm) return ''; const [h, m] = hm.split(':').map(Number); return `${((h + 11) % 12) + 1}:${String(m).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}` }
@@ -56,6 +58,9 @@ export function WorkSchedulesPage({ store, role }) {
   const load = () => workSchedules().then(r => { if (r.ok) { setData(r.data); setError(''); setApproved(r.data.wording_approved); const ownDentist = role === 'dentist' ? (r.data.dentists.find(d => d.id === store?.session?.dentistId || d.userId === store?.session?.userId)) : null; setSelected(s => s || ownDentist?.id || r.data.dentists[0]?.id || '') } else setError(r.message || 'Work schedules could not be loaded.') })
   useEffect(() => { load() }, [])
   const dentist = data?.dentists.find(d => d.id === selected)
+  const dutyBranches = role === 'staff'
+    ? (dentist?.branches || []).filter(branch => data?.duty?.rows?.some(row => row.dentist_id === dentist.id && row.branch_id === branch.id))
+    : (dentist?.branches || [])
   const refreshAffected = () => dentist && scheduleAffected(dentist.id).then(r => { if (r.ok) { setAffected(r.data.affected); setApproved(r.data.wording_approved) } })
   useEffect(() => { setAffected(null); refreshAffected() }, [selected])
   const after = r => { if (r.data?.affected) setAffected(r.data.affected); load() }
@@ -135,7 +140,7 @@ export function WorkSchedulesPage({ store, role }) {
                     <div style={{marginTop:'4px',fontSize:'13px'}}>
                       <span><b>Assigned shift:</b> {t12(currentStaff.shiftStart)}–{t12(currentStaff.shiftEnd)}</span>
                       <span style={{marginLeft:'12px'}} className={`fd-badge ${currentStaff.available ? 'is-ok' : 'is-bad'}`}>
-                        {currentStaff.available ? 'Available / On-Duty' : 'Off-Duty'}
+                        {currentStaff.available ? 'Marked available' : 'Marked unavailable'}
                       </span>
                     </div>
                   </div>
@@ -188,7 +193,11 @@ export function WorkSchedulesPage({ store, role }) {
     ) : (
       !data ? <p className="au-muted" role="status">Loading…</p> : !data.dentists.length ? <Notice>No dentists to show for your branches.</Notice> : <>
         <Card>
-          {role === 'dentist' ? (<div className="dentist-hours-header" style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:'12px',flexWrap:'wrap',paddingBottom:'10px',borderBottom:'1px solid var(--line)'}}><div><span className="block-muted" style={{fontSize:'11px',textTransform:'uppercase',letterSpacing:'0.05em',fontWeight:700}}>Rostered Provider</span><b style={{fontSize:'16px',color:'var(--ink)',display:'block',marginTop:'2px'}}>{dentist?.name || store?.session?.name || 'Dr. Dana Roxas'}</b><span className={`fd-badge ${dentist?.on_duty_today !== false ? 'is-ok' : 'is-muted'}`} style={{marginTop:'4px',display:'inline-block'}}>{dentist?.on_duty_today !== false ? 'Doctor is on duty today' : 'Off duty'}</span></div>{data.dentists.length > 1 && (<label style={{fontSize:'12px',display:'flex',alignItems:'center',gap:'6px'}}><span className="au-muted">Select dentist:</span><select value={selected} onChange={e => setSelected(e.target.value)} style={{width:'auto',minHeight:'36px',padding:'4px 8px'}}>{data.dentists.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</select></label>)}</div>) : (<div style={{display:'flex',flexDirection:'column',gap:'8px'}}><Field label="Dentist"><select value={selected} onChange={e => setSelected(e.target.value)}>{data.dentists.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</select></Field>{dentist && <div style={{display:'flex',alignItems:'center',gap:'8px',marginTop:'-4px'}}><span className={`fd-badge ${dentist.on_duty_today !== false ? 'is-ok' : 'is-muted'}`}>{dentist.on_duty_today !== false ? 'Doctor is on duty today' : 'Off duty'}</span></div>}</div>)}
+          {role === 'dentist' ? (<div className="dentist-hours-header" style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:'12px',flexWrap:'wrap',paddingBottom:'10px',borderBottom:'1px solid var(--line)'}}><div><span className="block-muted" style={{fontSize:'11px',textTransform:'uppercase',letterSpacing:'0.05em',fontWeight:700}}>Rostered Provider</span><b style={{fontSize:'16px',color:'var(--ink)',display:'block',marginTop:'2px'}}>{dentist?.name || store?.session?.name || 'Dentist'}</b></div>{data.dentists.length > 1 && (<label style={{fontSize:'12px',display:'flex',alignItems:'center',gap:'6px'}}><span className="au-muted">Select dentist:</span><select value={selected} onChange={e => setSelected(e.target.value)} style={{width:'auto',minHeight:'36px',padding:'4px 8px'}}>{data.dentists.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</select></label>)}</div>) : (<Field label="Dentist"><select value={selected} onChange={e => setSelected(e.target.value)}>{data.dentists.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</select></Field>)}
+          {dentist && <div className="den12-duty" role="status" aria-label="Dentist duty today by branch"><p className="den12-duty-title">Duty today by branch</p><div className="den12-duty-list">{dutyBranches.map(branch => {
+            const status = dutyForBranch(data.duty, dentist.id, branch.id, manilaToday())
+            return <div className="den12-duty-item" key={branch.id}><strong>{branch.name}</strong><span className={`fd-badge ${status === 'on' ? 'is-ok' : status === 'off' ? 'is-muted' : 'is-unknown'}`}>{status === 'on' ? 'On duty today' : status === 'off' ? 'Off duty' : 'Duty status unavailable'}</span></div>
+          })}{!dutyBranches.length && <span className="fd-badge is-unknown">Duty status unavailable</span>}</div></div>}
           {role === 'dentist' && <Notice tone="info" title="Roster and working hours are managed by the Clinic Owner and Front Desk staff">Dentists view rostered schedules and shift hours read-only. To request time off or coverage, submit a request under Leave.</Notice>}
           {dentist?.demo && <Notice tone="info" title="Demo schedule, not confirmed by the clinic">These hours were made up for the demonstration. The clinic still has to give each dentist’s real hours.</Notice>}
           {dentist?.profile_hours && <Notice tone="info" title="No weekly schedule yet">Booking uses the hours on the profile ({t12(dentist.profile_hours.start)}–{t12(dentist.profile_hours.end)}) on every day the branch is open, and the calendar marks its capacity as estimated.
@@ -212,13 +221,13 @@ function WeeklyGrid({ dentist, data, toast, onSaved, canEdit = true, role = 'own
   const [editing, setEditing] = useState(null)
   const rowFor = (branch, day) => dentist.weekly.find(w => w.branch.id === branch.id && w.weekday === Number(day))
   const hours = (branchId, day) => data.branches.find(b => b.id === branchId)?.hours?.[day]
-  return <Card title={role === 'dentist' ? 'My rostered weekly hours' : 'Weekly hours'} subtitle={canEdit ? 'Tap a day to change it. The hours must fall inside the branch’s opening hours.' : 'Scheduled shift hours by branch for each day of the week (read-only).'}>
-    <ul className="st-week">{Object.entries(data.weekdays).map(([day, name]) => <li key={day}>
+  return <Card className="den12-roster" title={role === 'dentist' ? 'My rostered weekly hours' : 'Weekly hours'} subtitle={canEdit ? 'Select Change to edit a day. The hours must fall inside the branch’s opening hours.' : 'Scheduled shift hours by branch for each day of the week (read-only).'}>
+    <ul className="st-week">{Object.entries(data.weekdays).sort(([a], [b]) => Number(a) - Number(b)).map(([day, name]) => <li key={day}>
       <b className="st-day">{name}</b>
       <div className="st-cells">{dentist.branches.map(b => {
         const row = rowFor(b, day), open = hours(b.id, day), key = `${b.id}:${day}`
-        const label = row ? `${t12(row.start)}–${t12(row.end)}${row.break_start ? ` · break ${t12(row.break_start)}–${t12(row.break_end)}` : ''}` : !open ? 'Branch closed' : dentist.profile_hours ? 'Profile hours' : 'Day off'
-        return <div key={b.id} className={`st-cell ${row ? 'is-on' : ''}`}>
+        const label = !open ? 'Branch closed' : row ? `${t12(row.start)}–${t12(row.end)}${row.break_start ? ` · break ${t12(row.break_start)}–${t12(row.break_end)}` : ''}` : dentist.profile_hours ? `Estimated profile hours: ${t12(dentist.profile_hours.start)}–${t12(dentist.profile_hours.end)}` : 'Day off'
+        return <div key={b.id} className={`st-cell ${row && open ? 'is-on' : ''}`}>
           <span className="st-branch">{b.name}</span>
           {editing === key ? <HoursForm row={row} open={open} onCancel={() => setEditing(null)} onSave={async (body, remove) => {
             const r = await saveWeeklyHours(dentist.id, remove ? { branch_ref: b.id, weekday: Number(day), remove: true } : { branch_ref: b.id, weekday: Number(day), ...body })
@@ -338,41 +347,28 @@ function MyLeave({ toast, onChanged }) {
   const submit = async e => {
     e.preventDefault(); setErr('')
     if (f.type === 'other' && !f.private_note.trim()) return setErr('Please explain the reason for “Other” leave.')
+    if (!f.start_date || f.start_date < manilaToday()) return setErr('Choose today or a later date.')
     const endDate = f.partial ? f.start_date : (f.end_date || f.start_date)
     if (endDate < f.start_date) return setErr('The until date cannot be before the from date.')
-    if (f.partial && f.end_time <= f.start_time) return setErr('The end time must be after the start time.')
+    if (f.partial && (!f.start_time || !f.end_time || f.end_time <= f.start_time)) return setErr('The end time must be after the start time.')
     setBusy('add')
     const r = await requestLeave({ type: f.type, start_date: f.start_date, end_date: endDate, private_note: f.private_note.trim() || null, ...(f.partial ? { start_time: f.start_time, end_time: f.end_time } : {}) })
     setBusy('')
     if (!r.ok) return setErr(firstError(r))
-    // Automated coverage check (Rule 2.12 / 3.10 / 4.9)
-    try {
-      if (r.data?.id) {
-        const dec = await decideLeave(r.data.id, 'approve')
-        if (dec.ok) {
-          toast('Leave requested and auto-approved: roster coverage confirmed.', 'success')
-        } else {
-          toast('Leave requested. The approver was told.', 'success')
-        }
-      } else {
-        toast('Leave requested. The approver was told.', 'success')
-      }
-    } catch {
-      toast('Leave requested. The approver was told.', 'success')
-    }
+    toast('Leave requested. An authorized approver can review it.', 'success')
     setF(x => ({ ...x, start_date: '', end_date: '', private_note: '' })); load()
   }
   return <Card title="My leave">
     <form className="au-form" onSubmit={submit}>
       <Field label="Type"><select value={f.type} onChange={e => set('type', e.target.value)}><option value="vacation">Vacation</option><option value="sick">Sick</option><option value="other">Other</option></select></Field>
-      <div className="st-pair"><Field label="From" required><input type="date" min={manilaToday()} value={f.start_date} onChange={e => setF(x => ({ ...x, start_date: e.target.value, end_date: (x.partial || (x.end_date && x.end_date < e.target.value)) ? e.target.value : x.end_date }))} required/></Field>
+      <div className="st-pair"><Field label="From" required><input type="date" min={manilaToday()} value={f.start_date} onChange={e => setF(x => ({ ...x, start_date: e.target.value, end_date: x.end_date && x.end_date < e.target.value ? '' : x.end_date }))} required/></Field>
         <Field label="To (last day)"><input type="date" min={f.start_date || manilaToday()} value={f.partial ? f.start_date : f.end_date} disabled={f.partial} onChange={e => set('end_date', e.target.value)}/></Field></div>
-      <label className="au-check"><input type="checkbox" checked={f.partial} onChange={e => setF(x => ({ ...x, partial: e.target.checked, ...(e.target.checked ? { end_date: x.start_date } : {}) }))}/> Only part of the day</label>
-      {f.partial && <div className="st-pair"><Field label="From (time, first day)"><input type="time" value={f.start_time} onChange={e => set('start_time', e.target.value)}/></Field>
-        <Field label="Until (time, last day)"><input type="time" value={f.end_time} onChange={e => set('end_time', e.target.value)}/></Field></div>}
+      <label className="au-check"><input type="checkbox" checked={f.partial} onChange={e => set('partial', e.target.checked)}/> Only part of the day</label>
+      {f.partial && <div className="st-pair"><Field label="From (time on selected date)"><input type="time" value={f.start_time} onChange={e => set('start_time', e.target.value)}/></Field>
+        <Field label="Until (time on selected date)"><input type="time" value={f.end_time} onChange={e => set('end_time', e.target.value)}/></Field></div>}
       <Field label={f.type === 'other' ? 'Specify reason' : 'Private note (optional)'} required={f.type === 'other'} hint="Seen only by you and the approver. Never emailed."><textarea maxLength={500} placeholder={f.type === 'other' ? 'e.g., Family emergency, bereavement, medical appointment' : ''} value={f.private_note} onChange={e => set('private_note', e.target.value)}/></Field>
       {err && <p className="au-error" role="alert">{err}</p>}
-      <div className="au-actions"><Button type="submit" disabled={busy === 'add' || !f.start_date || (!f.partial && f.end_date && f.end_date < f.start_date) || (f.partial && f.end_time <= f.start_time) || (f.type === 'other' && !f.private_note.trim())}>{busy === 'add' ? 'Sending…' : 'Request leave'}</Button></div>
+      <div className="au-actions"><Button type="submit" disabled={busy === 'add' || !f.start_date || f.start_date < manilaToday() || (!f.partial && f.end_date && f.end_date < f.start_date) || (f.partial && (!f.start_time || !f.end_time || f.end_time <= f.start_time)) || (f.type === 'other' && !f.private_note.trim())}>{busy === 'add' ? 'Sending…' : 'Request leave'}</Button></div>
     </form>
     {!rows ? <p className="au-muted" role="status">Loading…</p> : !rows.length ? <p className="au-muted">No leave requested yet.</p> : <ul className="fd-list">{rows.map(l => <li key={l.id}>
       <div><b>{l.label}</b><span>{l.type_label} · <span className={`fd-badge ${STATUS_TONE[l.status]}`}>{l.status}</span>{l.decided_by ? ` · by ${l.decided_by}` : ''}</span>{l.private_note && <span>Note: {l.private_note}</span>}</div>
@@ -387,7 +383,7 @@ function Approvals({ toast, role, branches, onChanged }) {
   const load = () => leaveRequests(filters).then(r => { if (r.ok) { setRows(r.data); setMeta(r.meta || {}); onChanged?.() } else if (r.kind === 'forbidden') setDenied(true) })
   useEffect(() => { load() }, [filters.status, filters.branch_ref])
   if (denied) return role === 'staff' ? <Notice tone="info" title="Leave approvals">The Owner approves leave requests. The Owner can let the front desk approve them too (Automations → Work schedules, leave and handovers).</Notice> : null
-  return <Card title={role === 'owner' ? 'Automated leave requests log' : 'Leave requests to decide'} subtitle={role === 'owner' ? 'Leave approvals are fully automated per schedule coverage rules. Showing read-only audit log.' : (meta.approver === 'owner_or_front_desk' ? 'Decided by the Owner or the front desk of the requester’s branch.' : 'Decided by the Owner.')}>
+  return <Card title={role === 'owner' ? 'Leave requests' : 'Leave requests to decide'} subtitle={meta.approver === 'owner_or_front_desk' ? 'Decided by the Owner or the front desk of the requester’s branch.' : 'Decided by the Owner.'}>
     <FilterBar className="st-filters" ariaLabel="Filter leave requests" onClear={(filters.status !== 'Pending' || filters.branch_ref) ? () => setFilters({ status: 'Pending', branch_ref: '' }) : null}>
       <Field label="Status"><select value={filters.status} onChange={e => setFilters(x => ({ ...x, status: e.target.value }))}><option value="">All</option>{['Pending', 'Approved', 'Declined', 'Cancelled'].map(s => <option key={s}>{s}</option>)}</select></Field>
       <Field label="Branch"><select value={filters.branch_ref} onChange={e => setFilters(x => ({ ...x, branch_ref: e.target.value }))}><option value="">All branches</option>{branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</select></Field>
@@ -423,7 +419,7 @@ function LeaveRow({ l, role, open, onToggle, toast, onChanged, wordingApproved }
       <span>{l.type_label} · <span className={`fd-badge ${STATUS_TONE[l.status]}`}>{l.status}</span>{l.decided_by ? ` · by ${l.decided_by}` : ''}</span>
       {l.private_note && <span>Private note: {l.private_note}</span>}</div>
     <div className="ns-actions">
-      {l.can_decide && role !== 'owner' && <><Button size="sm" disabled={!!busy} onClick={() => setConfirmDecision('approve')}>{busy === 'approve' ? 'Accepting…' : 'Accept leave request'}</Button>
+      {l.can_decide && <><Button size="sm" disabled={!!busy} onClick={() => setConfirmDecision('approve')}>{busy === 'approve' ? 'Accepting…' : 'Accept leave request'}</Button>
         <Button size="sm" variant="ghost" disabled={!!busy} onClick={() => setConfirmDecision('decline')}>{busy === 'decline' ? 'Declining…' : 'Decline leave'}</Button></>}
       {l.requester.role === 'Dentist' && l.status !== 'Declined' && l.status !== 'Cancelled' && <Button size="sm" variant="soft" onClick={onToggle} aria-expanded={open}>{open ? 'Hide bookings' : 'Booked appointments'}</Button>}
       {l.can_cancel && l.status === 'Approved' && <Button size="sm" variant="ghost" disabled={!!busy} onClick={() => setConfirmDecision('cancel')}>Cancel leave</Button>}

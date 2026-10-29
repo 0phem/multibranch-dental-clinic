@@ -46,38 +46,46 @@ class WorkScheduleController extends Controller
         $branches = Branch::where('status', 'Open')->orderBy('id')->get();
         $staffProfiles = \App\Models\StaffProfile::with(['person', 'branch'])->orderBy('id')->get();
 
-        $todayDate = ClinicClock::today();
-        $todayWeekday = (int) (new \DateTime($todayDate))->format('N');
+        $now = ClinicClock::now();
+        $todayDate = $now->toDateString();
+        $visibleBranchIds = $user->role->value === 'staff'
+            ? UserBranchScope::where('user_id', $user->id)->pluck('branch_id')->all()
+            : null;
+        // Staff Operations reads only this branch-scoped projection. WorkSchedules is also the booking authority;
+        // no schedule, closure, break, or leave decision is copied into the browser.
+        $duty = $dentists->flatMap(function (DentistProfile $d) use ($todayDate, $visibleBranchIds, $work) {
+            return $d->branches->filter(fn (Branch $b) => $visibleBranchIds === null || in_array($b->id, $visibleBranchIds, true))
+                ->map(function (Branch $b) use ($d, $todayDate, $work) {
+                    $minutes = $d->available && $b->status === 'Open' ? $work->minutes($d, $b, $todayDate) : 0;
+
+                    return [
+                        'dentist_id' => $d->legacy_ref,
+                        'dentist_name' => $this->name($d),
+                        'branch_id' => $b->legacy_ref,
+                        'branch_name' => $b->name,
+                        'on_duty_today' => $minutes > 0,
+                        'working_now' => $minutes > 0 && $work->workingNow($d, $b),
+                        'working_minutes' => $minutes,
+                        'estimated' => $work->usesProfileHours($d),
+                    ];
+                });
+        })->values();
+        $dutyByDentist = $duty->groupBy('dentist_id');
 
         return response()->json(['data' => [
-            'dentists' => $dentists->map(function (DentistProfile $d) use ($todayDate, $todayWeekday, $exceptions, $weekly, $work, $editable) {
-                $todayEx = $exceptions->first(fn ($e) => $e->dentist_profile_id === $d->id && (string) $e->on_date === $todayDate);
-                $onDuty = false;
-                if ($todayEx) {
-                    $onDuty = $todayEx->kind === 'custom_hours';
-                } else {
-                    $hasWeekly = ($weekly[$d->id] ?? collect())->contains('weekday', $todayWeekday);
-                    if ($hasWeekly) {
-                        $onDuty = true;
-                    } elseif ($work->usesProfileHours($d)) {
-                        $onDuty = $d->branches->contains(fn ($b) => $b->hoursOnDay($todayWeekday) !== null);
-                    }
-                }
-                if (! $d->available) {
-                    $onDuty = false;
-                }
-
+            'dentists' => $dentists->map(function (DentistProfile $d) use ($dutyByDentist, $weekly, $work, $editable) {
                 return [
                     'id' => $d->legacy_ref,
                     'name' => $this->name($d),
                     'available' => (bool) $d->available,
-                    'on_duty_today' => (bool) $onDuty,
+                    'on_duty_today' => ($dutyByDentist->get($d->legacy_ref) ?? collect())->contains('on_duty_today', true),
                     'profile_hours' => $work->usesProfileHours($d) ? ['start' => substr((string) $d->shift_start, 0, 5), 'end' => substr((string) $d->shift_end, 0, 5)] : null,
                     'branches' => $d->branches->map(fn (Branch $b) => ['id' => $b->legacy_ref, 'name' => $b->name, 'editable' => in_array($b->id, $editable, true)])->values(),
                     'weekly' => ($weekly[$d->id] ?? collect())->map(fn (DentistSchedule $s) => $this->rowView($s))->values(),
                     'demo' => ($weekly[$d->id] ?? collect())->contains('demo', true),
                 ];
             })->values(),
+            'duty' => ['date' => $todayDate, 'as_of' => $now->toIso8601String(), 'rows' => $duty],
             'staff' => $staffProfiles->map(fn (\App\Models\StaffProfile $s) => [
                 'id' => $s->legacy_ref,
                 'name' => $s->person ? $s->person->fullName() : $s->legacy_ref,

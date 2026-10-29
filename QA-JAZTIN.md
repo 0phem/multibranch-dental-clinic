@@ -12,7 +12,7 @@
 - [ ] **Day 2:** GEN-01, STF-06, DEN-11
 - [ ] **Day 3:** STF-11, STF-13 (Q5 design must be approved before Day 3)
 - [ ] **Day 4:** STF-08, DEN-13, OWN-12
-- [ ] **Day 5:** STF-07 (needs Joevan OWN-11), DEN-03 (needs repro steps), OWN-10 support
+- [ ] **Day 5:** STF-07 (Developer B B5 complete); DEN-03 still needs repro steps, OWN-10 support remains separate
 - [ ] **Day 6:** Hardening: tests, audit logs, edge cases across all owned items (no new features)
 - [ ] **Day 7:** Backend regression (RBAC, check-in, leave, schedules); final retest; sign-off
 
@@ -194,11 +194,11 @@ For bug fixes, self-check before PR, and end-of-day status, use templates B, C, 
 - [ ] STF-13 Check in: in walk in admission there shouldn't be an existing registered patient and new patient registration; we want everything to be automated, let's brainstorm revisions for this
 
 **Batch JAZ-3: Schedules and leave logic**
-- [ ] STF-07 Operations: should have a status "doctor is on duty today" based on work schedules
-- [ ] STF-08 Leave: when only part of the day is checked, the until date and from date update
+- [x] STF-07 Operations: should have a status "doctor is on duty today" based on work schedules (Developer B B5)
+- [x] STF-08 Leave: when only part of the day is checked, the until date and from date update (Developer B B3)
 - [ ] DEN-03 My schedule: FIX DAH SHI (BUG)
-- [ ] DEN-13 My leave: same changes as staff
-- [ ] OWN-12 Leave request: same changes as staff
+- [x] DEN-13 My leave: same changes as staff (Developer B B3)
+- [x] OWN-12 Leave request: same changes as staff (Developer B B3)
 
 **Support tasks**
 - [ ] GEN-07 (support Yzhekiel): server-side "specify required when Other" validation
@@ -295,22 +295,24 @@ For bug fixes, self-check before PR, and end-of-day status, use templates B, C, 
   <goal>Schedules, leave, and duty status are correct and consistent for Staff, Dentist, and Owner.</goal>
   <depends_on>none</depends_on>
 
-  <revision id="STF-07" status="todo" severity="medium" owner="Jaztin" support="Celin">
+  <revision id="STF-07" status="done" severity="medium" owner="Jaztin" support="Celin">
     <tasks>
-      - [ ] Compute "Doctor is on duty today" from work schedules (account for leave and closed dates)
-      - [ ] Expose status in Operations; update daily
+      - [x] Compute "Doctor is on duty today" from work schedules (account for leave and closed dates) (Developer B)
+      - [x] Expose status in Operations; update daily (Developer B)
     </tasks>
     <acceptance>Operations shows correct on-duty status per doctor per branch.</acceptance>
+    <evidence>Developer B B5: the existing work-schedules GET now includes a branch-scoped, read-only duty projection computed by WorkSchedules::minutes()/workingNow(), with Manila date and as-of time. Staff Operations shows each authorized Dentist/branch, an on/off badge, server refresh, empty/forbidden/error states and a clinic-day rollover refresh. Four scratch-guarded synthetic API tests passed (79 assertions) for weekly hours, breaks, closures, dated exceptions, full/partial approved leave, cross-branch scope, role authorization and Manila midnight; seven existing work-schedule tests passed (77 assertions). Rendered fictional fixture checks at 1440px and 390px found no overflow and verified branch filtering, refresh/failure states, recovery and date rollover without reload. See docs/STF07_B5_ACCEPTANCE.md. This status is Staff Operations acceptance, not a production release claim.</evidence>
   </revision>
 
-  <revision id="STF-08" status="todo" severity="high" owner="Jaztin">
+  <revision id="STF-08" status="done" severity="high" owner="Jaztin">
     <tasks>
-      - [ ] Reproduce: with "only part of the day" checked, the From/Until dates update incorrectly
-      - [ ] Fix date and time handling for partial-day leave (single date, correct hours)
-      - [ ] Validate that Until is not before From
+      - [x] Reproduce: with "only part of the day" checked, the From/Until dates update incorrectly
+      - [x] Fix date and time handling for partial-day leave (single date, correct hours)
+      - [x] Validate that Until is not before From
     </tasks>
     <hardening>Time zones, overlapping leave, past dates.</hardening>
     <acceptance>Partial-day leave saves correct dates and times.</acceptance>
+    <evidence>Developer B B3: the existing form already derived one end date for partial leave, and the backend already rejected cross-day or reversed hours. Fixed the form overwriting a full-day end date on toggle, clarified that both times are on the selected date, and rejected empty times and past dates in the UI. Rendered Staff harness verified toggle, date change, restored full-day range, reversed-hour disable, and the single-day POST payload. Guarded LeaveTest passed 6 tests/106 assertions, including Manila timestamp persistence, overlap and past-date rejection.</evidence>
   </revision>
 
   <revision id="DEN-03" status="todo" severity="high" owner="Jaztin" support="Yzhekiel">
@@ -322,18 +324,20 @@ For bug fixes, self-check before PR, and end-of-day status, use templates B, C, 
     <acceptance>Bug no longer reproduces; regression test added.</acceptance>
   </revision>
 
-  <revision id="DEN-13" status="todo" severity="medium" owner="Jaztin" support="Yzhekiel">
+  <revision id="DEN-13" status="done" severity="medium" owner="Jaztin" support="Yzhekiel">
     <tasks>
-      - [ ] Apply STF-08 (and related staff leave changes) to Dentist leave
+      - [x] Apply STF-08 (and related staff leave changes) to Dentist leave
     </tasks>
     <acceptance>Dentist leave matches staff behavior.</acceptance>
+    <evidence>Developer B B3: Dentist reuses MyLeave. Rendered Dentist harness captured a single-day request with 10:30 to 12:00 hours and no approver controls. Guarded API test verified persisted +08:00 timestamps, Owner retrieval, approval, and existing booking-slot exclusion tests.</evidence>
   </revision>
 
-  <revision id="OWN-12" status="todo" severity="medium" owner="Jaztin" support="Richmon">
+  <revision id="OWN-12" status="done" severity="medium" owner="Jaztin" support="Richmon">
     <tasks>
-      - [ ] Apply the staff leave changes to Owner Leave requests
+      - [x] Apply the staff leave changes to Owner Leave requests
     </tasks>
     <acceptance>Owner leave requests match staff behavior.</acceptance>
+    <evidence>Developer B B3: Owner remains an approver, not a requester. The backend already exposed can_decide and accepted authorized Owner decisions; the UI incorrectly hid the controls and described the page as read-only. Fixed the controls and text. Rendered Owner harness showed the stored date/time label and approval confirmation and captured the decide POST; guarded API test verified Owner list timestamps, both approval round trips, and Owner request denial. The B3 follow-up removed the requester's unauthorized approval attempt; successful creation now reports that an authorized approver can review it. Approval policy was unchanged.</evidence>
   </revision>
 
   <batch_verification>
