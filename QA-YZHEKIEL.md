@@ -185,7 +185,7 @@ For bug fixes, self-check before PR, and end-of-day status, use templates B, C, 
 <task_list>
 **Batch YZH-1: Global form and button fixes**
 - [ ] GEN-06 !!! Fix dropdowns bug [BLOCKED: no reproducible case, waiting for the reporter]
-- [ ] GEN-07 !!! If the choice is "other" add "specify"
+- [x] GEN-07 !!! If the choice is "other" add "specify"
 - [x] GEN-12 !!! Fix the buttons (make the buttons readable and reasonable sizes)
 
 **Batch YZH-2: Dental chart and patient record**
@@ -226,13 +226,13 @@ For bug fixes, self-check before PR, and end-of-day status, use templates B, C, 
     <acceptance>All dropdowns open, select, close, and clip correctly on every dashboard.</acceptance>
   </revision>
 
-  <revision id="GEN-07" status="todo" severity="high" owner="Yzhekiel" support="Jaztin">
-    <note>Frontend source uses SelectWithOther in Clinical.jsx, Join.jsx, and src/patient/pages/Family.jsx. Backend validation in GuardianController, IntakeController, and Guardianship stores relationship_other and ID other_details. Four focused backend acceptance cases passed; after fixing a random guardian-age test fixture found by the full backend suite, IntakeTest passed 21/21 with 584 assertions on dental_clinic_scratch. Focused frontend source/helper checks passed 18/18. Browser control and Playwright were unavailable, so rendered cross-form transitions, saved-record reopening, and UI permission boundaries remain unverified; keep GEN-07 open.</note>
+  <revision id="GEN-07" status="done" severity="high" owner="Yzhekiel" support="Jaztin">
+    <note>2026-10-29 B1: Playwright MCP against the real local Laravel API and verified dental_clinic_scratch rendered Join (adult guardian plus minor dependent), signed-in Patient Family, and Staff CounterIntake. Other detail stayed controlled while typed; switching to a standard choice hid and cleared it; switching back started blank; whitespace-only detail disabled submission. Join POST sent Other/Niece and preserved guardian identity; Staff review showed the minor, guardian, and Other (Niece). Staff confirmed with Other ID/Company Health Card, and GET patient record returned that ID detail and unchanged guardian name. Family POST returned Other/Nephew; page reload showed the saved relationship. IntakeTest includes server-side blank rejection, standard-ID stale-detail clearing, minor/guardian rules, and role/branch restrictions. Added an API regression for the intake Other relationship after Staff confirmation. Clinical.jsx's older NewPatientModal is a browser-only path and is not rendered in the supported server session; Staff registration uses the server-backed form without a Sex Other choice. The active Join self Sex field has no Other option. No production defect was reproduced.</note>
     <tasks>
-      - [ ] Find every dropdown that has an "Other" choice
-      - [ ] When "Other" is chosen, show a required "Specify" text field (with placeholder example)
-      - [ ] (Jaztin) Validate server-side: if "Other", specify text is required; store both values
-      - [ ] Hide and clear the field when another option is selected
+      - [x] Find every applicable intake dropdown that has an "Other" choice
+      - [x] When "Other" is chosen, show a required "Specify" text field (with placeholder example)
+      - [x] Validate server-side: if "Other", specify text is required; store both values
+      - [x] Hide and clear the field when another option is selected
     </tasks>
     <acceptance>Every "Other" reveals a required "Specify" field; saving without it is blocked.</acceptance>
   </revision>
@@ -387,4 +387,10 @@ For bug fixes, self-check before PR, and end-of-day status, use templates B, C, 
 
 GEN-09 is owned by Richmon in `FINALS-QA-REVISIONS.md`; this note does not change its status. Source-derived path: a Dentist opens Prescriptions from role navigation, selects a recent visit, reviews the allergy notice, enters prescription lines, chooses Issue prescription, confirms the locking action, and the issued record opens automatically (`src/data.js`, `src/layout.jsx`, `src/App.jsx`, `src/pages/ServerPrescriptions.jsx`). Save draft is optional: the Issue path creates or updates the draft before issuing it. No runtime user actions were counted; the page loads server-backed visits and prescriptions, and no verified database-free runtime was available under this batch's restrictions.
 
-Potential navigation repetition, not a measured saving: Treatment already resolves the exact visit ID (`src/pages/Clinical.jsx`), while ordinary navigation clears page context and the Prescriptions page receives none (`src/layout.jsx`, `src/App.jsx`). A later shortcut could carry that encounter context and preselect only a matching server-authorized visit; the Dentist must still review allergies, choose medicines and instructions, and confirm issue. The existing `tests/m19-prescriptions.test.js` checks source structure, not this interaction. Source also suggests the prescription form's Other options may reset to blank before their custom input appears; that behavior needs runtime verification before claiming a defect.
+Potential navigation repetition, not a measured saving: Treatment already resolves the exact visit ID (`src/pages/Clinical.jsx`), while ordinary navigation clears page context and the Prescriptions page receives none (`src/layout.jsx`, `src/App.jsx`). A later shortcut could carry that encounter context and preselect only a matching server-authorized visit; the Dentist must still review allergies, choose medicines and instructions, and confirm issue. The existing `tests/m19-prescriptions.test.js` checks source structure, not this interaction. The earlier source-level concern about Other selection is resolved by the rendered acceptance below.
+
+## B1 rendered and API acceptance (2026-10-29)
+
+- **GEN-09 custom-value acceptance: completed for the assigned prescription behavior.** In Playwright MCP, the signed-in Dentist opened Prescriptions, selected a server-listed recent visit, chose a predefined medicine, switched to Other, typed a fictional custom medicine, switched to another predefined medicine, and returned to Other. The field hid on the predefined choice and returned blank, then retained the newly typed custom value. Blank Other disabled Save draft. Custom dosage, frequency, and duration also stayed selected while edited. The POST contained only the five clinical line fields. A 201 response saved the draft; after page reload, Edit draft restored all four Other selections and their saved values. A PUT changed dosage only; the reopened dialog showed the edited dosage and unchanged medicine, frequency, duration, and instructions, and an authenticated GET returned 200. The prescription remained Draft; no issued record was altered. New PrescriptionTest coverage repeats create/GET/edit/GET with exact field assertions on the scratch database. Existing PrescriptionTest checks Dentist and branch authority, patient and Owner visibility, and issued-record locking. No production defect was reproduced.
+- **QA scope distinction:** `FINALS-QA-REVISIONS.md` defines GEN-09 as Richmon's broader click-reduction task. This B1 evidence completes the custom-value acceptance requested by the coordinator; it does not establish fewer clicks for check-in, appointments, patient records, or prescriptions. The master tracker needs a separate owner-led click audit before its GEN-09 item can be marked done.
+- **Verification:** `node --test tests/gen07-*.test.js tests/intake.test.js tests/m19-prescriptions.test.js` 24/24; focused scratch-guarded IntakeTest and PrescriptionTest 27/27, 674 assertions; full frontend suite 954/954 outside the sandbox; `npm run test:smoke` passed with existing React key warnings; `npm run build` passed with the existing chunk-size warning. The first sandboxed full frontend run failed in 10 subprocess-backed files; rerun outside the sandbox passed. Browser tests used the existing idempotent fictional seeders on `dental_clinic_scratch` only. `scripts/predefense-check.sh` was not run because it targets the separate demo environment rather than the authorized scratch database.

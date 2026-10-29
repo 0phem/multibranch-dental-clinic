@@ -130,4 +130,32 @@ class PrescriptionTest extends TestCase
         $second = $this->draft($visit)->json('data.id');
         $this->postJson("/api/prescriptions/$second/issue", ['expected_revision' => 1])->assertOk()->assertJsonPath('data.license_no', '0123456');
     }
+
+    public function test_custom_line_values_survive_draft_creation_retrieval_and_editing(): void
+    {
+        $visit = $this->visit();
+        $this->actingAsUser('dentist1');
+        $line = ['medicine' => 'Acceptance compound', 'dosage' => 'Test 5 units', 'frequency' => 'Test once weekly',
+            'duration' => 'Test 2 weeks', 'instructions' => 'Test instruction'];
+
+        $created = $this->postJson('/api/prescriptions', ['visit_id' => $visit->public_id, 'lines' => [$line]])
+            ->assertCreated()->assertJsonPath('data.status', 'Draft');
+        $id = $created->json('data.id');
+        foreach ($line as $field => $value) {
+            $this->assertSame($value, $created->json("data.lines.0.$field"));
+        }
+
+        $retrieved = $this->getJson("/api/prescriptions/$id")->assertOk();
+        foreach ($line as $field => $value) {
+            $this->assertSame($value, $retrieved->json("data.lines.0.$field"));
+        }
+
+        $edited = [...$line, 'dosage' => 'Test 6 units'];
+        $this->putJson("/api/prescriptions/$id", ['expected_revision' => 1, 'lines' => [$edited]])
+            ->assertOk()->assertJsonPath('data.revision', 2);
+        $reopened = $this->getJson("/api/prescriptions/$id")->assertOk();
+        foreach ($edited as $field => $value) {
+            $this->assertSame($value, $reopened->json("data.lines.0.$field"));
+        }
+    }
 }

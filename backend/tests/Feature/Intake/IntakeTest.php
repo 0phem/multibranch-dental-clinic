@@ -560,4 +560,26 @@ class IntakeTest extends TestCase
             ]],
         ]))->assertStatus(422)->assertJsonValidationErrors('dependents.0.relationship_other');
     }
+
+    public function test_gen07_intake_other_relationship_survives_staff_confirmation(): void
+    {
+        $body = $this->form([], ['dependents' => [[
+            'first_name' => 'Lia', 'last_name' => 'Specimen', 'date_of_birth' => '2017-05-05',
+            'relationship' => 'Other', 'relationship_other' => 'Niece',
+        ]]]);
+        $this->submitForm($body)->assertCreated();
+
+        $this->actingAsUser('staffB2');
+        $this->getJson('/api/intake/submissions')->assertOk()->assertJsonCount(0, 'data');
+        $this->actingAsUser('staffB1');
+        $row = $this->getJson('/api/intake/submissions')->assertOk()->json('data.0');
+        $this->assertSame('Other', $row['dependents'][0]['relationship']);
+        $this->assertSame('Niece', $row['dependents'][0]['relationship_other']);
+
+        $this->postJson("/api/intake/submissions/{$row['id']}/confirm", ['id_verified' => true, 'id_type' => 'philid'])->assertOk();
+        $link = PatientGuardian::where('relationship_other', 'Niece')->sole();
+        $this->assertSame('Other', $link->relationship);
+        $this->assertSame('Lia Specimen', $link->dependent->person->fullName());
+        $this->assertSame('Joanna Specimen', $link->guardian->person->fullName());
+    }
 }
