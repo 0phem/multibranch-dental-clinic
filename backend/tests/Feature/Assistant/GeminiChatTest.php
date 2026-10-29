@@ -10,16 +10,19 @@ use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
+use Tests\Feature\Appointments\SchedulingFixture;
 
 class GeminiChatTest extends TestCase
 {
-    use RefreshDatabase;
+    use RefreshDatabase, SchedulingFixture;
 
     private const FAKE_KEY = 'test-gemini-api-key-12345';
 
     protected function setUp(): void
     {
         parent::setUp();
+        $this->setUpSchedulingWorld();
+        $this->actingAsUser('patientA');
         Config::set('services.gemini.api_key', self::FAKE_KEY);
         Config::set('services.gemini.model', 'gemini-1.5-flash');
     }
