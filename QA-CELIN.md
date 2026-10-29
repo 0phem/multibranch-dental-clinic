@@ -196,8 +196,8 @@ For bug fixes, self-check before PR, and end-of-day status, use templates B, C, 
 - [x] STF-09 Closed dates: search filter UI fix (completed by Developer B)
 - [x] STF-10 Check in: remove the double refresh (verified by Developer B)
 - [x] STF-12 Check in: make the search filter for walk in patient efficient (completed by Developer B)
-- [ ] STF-16 Live queue: remove the open chart and just make the column clickable
-- [ ] STF-17 Live queue: make the "call patient" icon and add message icon
+- [x] STF-16 Live queue: remove the open chart and just make the column clickable (completed by Developer B)
+- [x] STF-17 Live queue: make the "call patient" icon and add message icon (completed by Developer B)
 - [ ] STF-25 Archive and records: fix view action UI
 
 **Batch CEL-3: Dentist follow-through**
@@ -274,13 +274,14 @@ For bug fixes, self-check before PR, and end-of-day status, use templates B, C, 
   <goal>Staff screens (calendar, filters, check-in, live queue, archives) are clean and faster to use.</goal>
   <depends_on>CEL-1, GEN-14, STF-14, STF-15</depends_on>
 
-  <revision id="STF-01" status="todo" severity="medium" owner="Celin" support="Richmon">
+  <revision id="STF-01" status="partial" severity="medium" owner="Celin" support="Richmon">
     <tasks>
-      - [ ] Fix spacing in the appointment calendar
-      - [ ] Fix colors (use design tokens; keep contrast readable)
+      - [x] Fix spacing in the appointment calendar (Developer B)
+      - [x] Fix colors (use design tokens; keep contrast readable) (Developer B)
       - [ ] Align with the shared calendar layout from GEN-14 (profile photo only, 3 max, "+N")
     </tasks>
     <acceptance>Calendar spacing and colors consistent with the design system and GEN-14.</acceptance>
+    <evidence>Developer B moved calendar cell, selection, focus, and expanded-card styling to existing design tokens in a page stylesheet. The existing preview renders at most three avatar badges and a +N button; 30 focused calendar tests and the Vite build passed. The server day-appointment projection has no Patient photo field, so badges still show initials. A real photo cannot be claimed or implemented from the current contract; the profile-photo portion remains open.</evidence>
   </revision>
 
   <revision id="STF-02" status="done" severity="medium" owner="Celin">
@@ -319,21 +320,23 @@ For bug fixes, self-check before PR, and end-of-day status, use templates B, C, 
     <evidence>Developer B verified the existing single combobox in a rendered Staff session against fictional scratch data: name, patient code, and phone searches, empty results, Arrow/Enter selection, Escape, and clearing. Fixed stale selected identity when switching to new registration, required a current directory patient before admission, and exposed the active option to assistive technology. A selected-patient admission reached POST /api/visits/walk-in; the server correctly returned 422 because the chosen Dentist was off shift, so successful admission was not claimed. Focused frontend regressions passed.</evidence>
   </revision>
 
-  <revision id="STF-16" status="todo" severity="medium" owner="Celin">
+  <revision id="STF-16" status="done" severity="medium" owner="Celin">
     <tasks>
-      - [ ] Remove the "Open chart" button/column from Live queue
-      - [ ] Make the row (column) clickable to open the chart; add hover/cursor state
+      - [x] Remove the "Open chart" button/column from Live queue (already absent)
+      - [x] Make the row (column) clickable to open the chart; add hover/cursor state (Developer B)
     </tasks>
     <acceptance>Clicking a queue row opens the chart; no "Open chart" button remains.</acceptance>
+    <evidence>Developer B's rendered fictional queue fixture verified row click, Enter and Space navigation with the exact encounter context. Embedded Call and Message buttons did not navigate. Focus and hover use a page-scoped style; the existing Patient-name chart button remains an independent direct target. No redundant Open chart column was present.</evidence>
   </revision>
 
-  <revision id="STF-17" status="todo" severity="medium" owner="Celin" support="Joevan">
+  <revision id="STF-17" status="done" severity="medium" owner="Celin" support="Joevan">
     <tasks>
-      - [ ] Replace the "Call patient" text button with a call icon
-      - [ ] Add a message icon that opens a message to that patient
-      - [ ] Tooltips + aria-labels on both; reasonable tap size
+      - [x] Replace the "Call patient" text button with a call icon (icon already present; Developer B connected it to the server command)
+      - [x] Add a message icon that opens a message to that patient (icon already present; Developer B fixed identity resolution)
+      - [x] Tooltips + aria-labels on both; reasonable tap size (Developer B)
     </tasks>
     <acceptance>Queue rows show call and message icons; both work.</acceptance>
+    <evidence>Developer B replaced fake Call success in the Staff/Dentist queue and Owner detail with the existing idempotent server queue command. A rendered fixture verified stale-revision warning, confirmed-success status update, and no chart navigation from the action. Three scratch-guarded Laravel queue tests passed (67 assertions) for transition, idempotency/stale revision, and role/branch authorization. Message now resolves a server-visible conversation by public Patient and branch IDs, including paginated results, then opens the exact thread; a rendered fixture verified the thread and honest guidance when no matching conversation exists. Four scratch-guarded messaging tests passed (75 assertions) for scope, paging, search and the Staff conversation-start restriction. The full QueueTest still has five historical failures outside this scoped change, including obsolete priority/status expectations.</evidence>
   </revision>
 
   <revision id="STF-25" status="todo" severity="medium" owner="Celin">

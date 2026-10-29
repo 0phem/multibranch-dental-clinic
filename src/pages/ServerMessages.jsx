@@ -58,7 +58,8 @@ export function ServerMessagesPage({ store, role, initial = null }) {
   const selected = list?.find(c => c.id === selectedId) || (selectedRecord?.id === selectedId ? selectedRecord : null)
   const thread = selectedId ? threads[selectedId] : null
   const [confirmClose, setConfirmClose] = useState(false)
-  const [search, setSearch] = useState('')
+  const [search, setSearch] = useState(initial?.patientCode || '')
+  const [initialNotice, setInitialNotice] = useState('')
   const searchQuery = useDebouncedValue(search.trim())
   const queryRef = useRef('')
   queryRef.current = searchQuery
@@ -85,8 +86,15 @@ export function ServerMessagesPage({ store, role, initial = null }) {
   useEffect(() => { refreshList().then(rows => {
     if (initialOpened.current || !rows) return
     initialOpened.current = true
-    if (initial?.conversationId) openThread(initial.conversationId)
-    else if (initial?.patientId) { const found = rows.find(c => c.patient?.id === initial.patientId || c.patientId === initial.patientId); if (found) openThread(found.id) }
+    if (initial?.conversationId) {
+      const candidate = rows.find(c => c.id === initial.conversationId) || initial.conversation
+      const found = candidate?.id === initial.conversationId && candidate.patientId === initial.patientPublicId && candidate.branchId === initial.branchId ? candidate : null
+      if (found) { setSelectedRecord(found); openThread(found.id) }
+      else setInitialNotice('That Patient conversation is no longer available in your inbox.')
+    } else if (initial?.patientId) {
+      const found = rows.find(c => c.patientId === initial.patientId)
+      if (found) openThread(found.id)
+    }
   }) }, [searchQuery])
   useEffect(() => onRealtimeState(setLive), [])
   useEffect(() => { startRealtime() }, [])
@@ -261,6 +269,7 @@ export function ServerMessagesPage({ store, role, initial = null }) {
           aside={<div className="chat-head-actions"><LiveStatus state={live}/></div>}/>}
     <p className="muted-copy">These messages stay inside this application. Nothing is sent by SMS or social media, and “unread” only means not yet opened here.{patient ? ' If you are away when the clinic writes, we email you a short alert — never the message itself.' : ''}</p>
     {error && <Notice tone="warning" title="Conversations unavailable">{error} <Button size="sm" onClick={refreshList}>Retry</Button></Notice>}
+    {initialNotice && <Notice tone="warning" title="Conversation unavailable">{initialNotice}</Notice>}
     {!list && !error && <div className="chat-skeleton" aria-busy="true"><Notice>Loading conversations…</Notice></div>}
     {list && <div className={`chat ${selectedId || composing ? 'has-thread' : ''}`}>
       <section className="chat-list" aria-label="Conversations">

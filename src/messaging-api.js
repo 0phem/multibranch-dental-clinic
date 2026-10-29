@@ -17,6 +17,8 @@ export function mapConversation(row) {
     revision: row.revision,
     patientName: row.patient?.name ?? '',
     patientCode: row.patient?.code ?? '',
+    patientId: row.patient?.id ?? null,
+    branchId: row.branch?.id ?? null,
     branchName: row.branch?.name ?? '',
     branchRef: row.branch?.ref ?? '',
     assignedName: row.assigned?.name ?? '',
@@ -38,6 +40,23 @@ export async function loadConversations(cursor = null, search = '') {
   const result = await api.listConversations({ per_page: 25, ...(cursor ? { cursor } : {}), ...(q ? { q } : {}) })
   if (!result.ok) return normalizeFailure(result)
   return { ok: true, rows: (result.data || []).map(mapConversation), nextCursor: result.meta?.next_cursor ?? null, channels: Array.isArray(result.meta?.channels) ? result.meta.channels : [] }
+}
+
+/** Find only a conversation the server exposed to this actor, then verify both Patient and branch identity. */
+export async function findPatientConversation(patientId, branchId, patientCode) {
+  if (!patientId || !branchId || !patientCode) return { ok: true, conversation: null }
+  let cursor = null
+  const seen = new Set()
+  do {
+    const result = await loadConversations(cursor, patientCode)
+    if (!result.ok) return result
+    const conversation = result.rows.find(row => row.patientId === patientId && row.branchId === branchId)
+    if (conversation) return { ok: true, conversation }
+    cursor = result.nextCursor
+    if (seen.has(cursor)) break
+    seen.add(cursor)
+  } while (cursor)
+  return { ok: true, conversation: null }
 }
 
 /**
