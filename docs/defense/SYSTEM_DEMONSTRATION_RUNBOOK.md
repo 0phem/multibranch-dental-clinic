@@ -1,5 +1,10 @@
 # System demonstration runbook
 
+## Current snapshot clarification (2026-10-30)
+
+[B6 isolated report](https://github.com/ccadaverr/multibranch-dental-clinic/blob/4c993244416ec9b0530e1d16acfb6c9e471fac9c/docs/STF12_B6_WALKIN_ACCEPTANCE.md) now records synthetic API success (2 tests/33 assertions) and separate rendered fixture checks. Commit `4c993244416ec9b0530e1d16acfb6c9e471fac9c` is not in shared integration `010a386f147bed285c58821a0a2cc800c393982e`. This supersedes pending-B6-report wording in the earlier snapshot below; live browser-to-server and production acceptance remain unverified. A8 and B3-B5 also remain isolated. The [revised Word candidate](BPA_MODULES_UPDATED_OCT_22_2026_A9_REVIEW.docx) is REVIEW REQUIRED; [original](BPA_MODULES_UPDATED_OCT_22_2026.docx) unchanged.
+
+
 Prepared by Joevan, 2026-10-29 (Asia/Manila). Use with the [acceptance matrix](FEATURE_ACCEPTANCE_MATRIX.md) and [known limitations](KNOWN_LIMITATIONS_AND_PENDING_QA.md). This is a demonstration guide, not a record that the following live outcomes occurred.
 
 The product identity is **Dr. Dana E. Roxas Dental Clinic**. Four roles: Patient, Staff, Dentist and Owner. Manifests declare Laravel 13 and React 19; see the matrix for exact constraints.
@@ -45,7 +50,7 @@ Have a fictional same-day appointment and eligible on-shift Dentist ready. Dates
 - **Prerequisites:** fictional confirmed appointment for Manila today, eligible Dentist shift and approved current admission requirements.
 - **Steps:** open Check-In; locate the appointment, review the displayed Patient/branch/Dentist and current admission requirements, then use the supported admission action. Show the resulting queue only if admission succeeds. Demonstrate the single Refresh and walk-in search without creating a new identity automatically.
 - **Expected observation:** shared B2 combobox supports search, keyboard selection and clearing; admission errors remain visible. A rejected off-shift admission is not success.
-- **Acceptance:** STF-02/09/10 and STF-12 combobox evidence is integrated in [Wave 1](../INTEGRATION_WAVE_20261029.md). B4 exact-context row/Call/Message improvements are isolated, not on shared A7. B6 successful walk-in acceptance remains pending.
+- **Acceptance:** STF-02/09/10 and STF-12 combobox evidence is integrated in [Wave 1](../INTEGRATION_WAVE_20261029.md). B4 exact-context row/Call/Message improvements are isolated, not on shared A7. B6 now has an isolated synthetic API success report and separate controlled rendered checks; live browser-to-server and integrated acceptance remain unverified.
 - **Disclose:** STF-11 auto-confirm/ID/cancellation-reason redesign and STF-13 unified find/create remain pending policy. Preserve Staff-controlled admission and queue exceptions; do not claim those proposed automations are accepted.
 
 ## 5. Dentist schedule and treatment

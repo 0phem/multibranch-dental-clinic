@@ -2,6 +2,10 @@
 
 Prepared 2026-10-30 (Asia/Manila) by Joevan. Applies only to [BPA_MODULES_UPDATED_OCT_22_2026.docx](BPA_MODULES_UPDATED_OCT_22_2026.docx). **The original DOCX binary is unchanged.** This is the expressly authorized fallback, not a claim that the paper has been edited.
 
+## Finalization follow-up (2026-10-30)
+
+The approved instructions below have now been applied with python-docx to the [A9 review candidate](BPA_MODULES_UPDATED_OCT_22_2026_A9_REVIEW.docx), not the original. See [validation results and remaining visual checks](BPA_A9_REVIEW_VALIDATION.md). Earlier blocker wording records why the original remains unchanged. The candidate includes a dated B6 update superseding pending-report statements in this earlier amendment; no original academic text was deleted.
+
 ## Editing blocker and inspection
 
 python-docx 1.2.0 inspected the complete package and all table-cell paragraphs: 474 body paragraphs, 328 top-level tables, 25 module blocks, 13 numbered process tables per module, one page-layout section and 24 package parts; ZIP CRC passed. The assignment table has 25 module rows. Body module-owner headings and table Process Name/Document Prepared By entries remain present. Headers/footers are present as section parts; no content or formatting was changed. SHA-256: `e59ade7c9f8aafb580b4121d99eb8bde5534050d5bea0215a059061c271f3a42`.

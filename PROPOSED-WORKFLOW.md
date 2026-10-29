@@ -642,7 +642,7 @@ The Check-In Management Module records each patient's arrival, whether booked or
 ##### D.3 Development implementation qualification (2026-10-30, Asia/Manila)
 
 - **TO-BE process clarification (B1/B2/B6):** Supported Other ID values persist after validation. Walk-in search uses one keyboard-accessible combobox, exact directory identity, clear/empty handling and a single visible Refresh.
-- **Current implementation / acceptance boundary:** B1/B2 integrated, supported intake/combobox scope only. B2 admission returned off-shift 422; B6 successful admission remains pending. STF-11 auto-confirm/ID/cancel reasons and STF-13 unified find/create require reviewed policy. Historical kiosk descriptions are not reaccepted by A9.
+- **Current implementation / acceptance boundary:** B1/B2 integrated, supported intake/combobox scope only. B2 admission returned off-shift 422; B6 now reports isolated guarded API success and separate rendered fixture acceptance, not live browser-to-server or integrated acceptance. STF-11 auto-confirm/ID/cancel reasons and STF-13 unified find/create require reviewed policy. Historical kiosk descriptions are not reaccepted by A9.
 - **Evidence:** [B1/B2/B6 / QA traceability](docs/INTEGRATION_WAVE_20261029.md); [academic reconciliation](docs/defense/ACADEMIC_DOCUMENT_RECONCILIATION.md). Earlier proposed steps describe the target process, not acceptance of every function. AS-IS findings are unchanged.
 
 ---
@@ -1665,6 +1665,8 @@ The Analytics Management Module provides real-time executive intelligence and mu
   - Delayed and incomplete practice overview
 
 ##### D.2 TO-BE Process (Proposed Automated Process)
+
+**Preserved proposed blueprint, not a current acceptance claim:** The original KPI/export/digest target steps below are retained. The verified A4/A5 reporting process is specified after the original outputs; daily chart period filters and fixed overview comparisons must not be conflated.
 - **Process Flow:**
   1. The Clinic Owner signs into the system and navigates to the "Operational Reporting & Analytics" screen (`AnalyticsPage`).
   2. The system queries PostgreSQL database tables and computes real-time operational metrics for the selected branch and Manila business date.
@@ -1679,6 +1681,8 @@ The Analytics Management Module provides real-time executive intelligence and mu
   - Comparative multi-branch workload and revenue panel
   - Downloadable executive analytics spreadsheet (`operational-analytics-YYYY-MM-DD.csv`)
   - Automated nightly executive daily summary email
+
+**Current demonstrated reporting path (A4/A5, 2026-10-30):** Owner selects the authorized branch and detailed reporting period; daily payment-date gross collections, refunds and net cash flow appear with exact accessible tooltips/tables. A separately selected Mon-Sat week displays gross bars and signed net line with in-progress/finalized calendar status. Fixed current/prior 30-day collections/visit comparisons remain independent of that detailed period, including All Time; outstanding is a current-window balance without a historical snapshot comparison. Loading, malformed-data and stale-response guards prevent invented figures. Collections are not profit. No scheduled immutable Saturday artifact, custom-range/forensic export or live digest delivery is accepted by these chart tests.
 
 ##### D.3 Development implementation qualification (2026-10-30, Asia/Manila)
 
@@ -1781,3 +1785,5 @@ All development must maintain:
 - **TO-BE process clarification (Baseline retained):** Existing sanitized audit evidence remains append-only; UI shortcuts do not authorize disclosure of private clinical text or change audit policy.
 - **Current implementation / acceptance boundary:** No new universal audit-completeness or production compliance certification from A9.
 - **Evidence:** [Baseline retained / QA traceability](docs/defense/FEATURE_ACCEPTANCE_MATRIX.md); [academic reconciliation](docs/defense/ACADEMIC_DOCUMENT_RECONCILIATION.md). Earlier proposed steps describe the target process, not acceptance of every function. AS-IS findings are unchanged.
+
+Paper finalization (2026-10-30): [revised A9 Word candidate](docs/defense/BPA_MODULES_UPDATED_OCT_22_2026_A9_REVIEW.docx) is REVIEW REQUIRED; the original is unchanged. [B6 report](https://github.com/ccadaverr/multibranch-dental-clinic/blob/4c993244416ec9b0530e1d16acfb6c9e471fac9c/docs/STF12_B6_WALKIN_ACCEPTANCE.md) adds isolated synthetic API/rendered evidence only.
