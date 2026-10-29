@@ -104,13 +104,14 @@ test('DEN-01, DEN-02 & DEN-12: Dentist Clinical Home text size, My Schedule date
   assert.match(foundationCss, /\.dentist-command-grid \.day-time\s*\{\s*font-size:\s*13px;/)
   assert.match(foundationCss, /\.dentist-command-grid \.task-list b\s*\{\s*font-size:\s*14px;/)
 
-  // DEN-02: My Schedule quick date navigation toolbar and 140px slot alignment
-  assert.match(schedulingJsx, /aria-label="Previous day" onClick=\{\(\)=>setDate\(d=>addDays\(d,-1\)\)\}>‹ Prev<\/Button>/)
-  assert.match(schedulingJsx, /<Button size="sm" variant=\{date===clinicDate\(\)\?'soft':'ghost'\} onClick=\{\(\)=>setDate\(clinicDate\(\)\)\}>Today<\/Button>/)
-  assert.match(schedulingJsx, /aria-label="Next day" onClick=\{\(\)=>setDate\(d=>addDays\(d,1\)\)\}>Next ›<\/Button>/)
+  // DEN-02: A7 keeps one-click day navigation in the dedicated Manila-date toolbar.
+  assert.match(schedulingJsx, /aria-label="Previous day" onClick=\{\(\)=>setDate\(d=>addDays\(d,-1\)\)\}>Previous<\/Button>/)
+  assert.match(schedulingJsx, /<Button variant=\{date===clinicDate\(\)\?'soft':'ghost'\} onClick=\{\(\)=>setDate\(clinicDate\(\)\)\}>Today<\/Button>/)
+  assert.match(schedulingJsx, /aria-label="Next day" onClick=\{\(\)=>setDate\(d=>addDays\(d,1\)\)\}>Next<\/Button>/)
   assert.match(schedulingJsx, /displayTime\(a\.start\)\} – \{displayTime\(addMinutes\(a\.start,a\.duration\)\)/)
   assert.match(foundationCss, /\.day-schedule \.schedule-slot\s*\{[^}]*grid-template-columns:\s*140px 24px minmax\(0, 1fr\);/s)
   assert.match(foundationCss, /\.day-schedule \.schedule-time\s*\{[^}]*text-align:\s*right;/s)
+  assert.match(read('src/dentist-schedule.css'), /\.dentist-schedule \.day-schedule \.schedule-slot\s*\{\s*grid-template-columns:\s*180px 24px minmax\(0, 1fr\);/)
 
   // DEN-12: My Work Hours auto-selection and improved week row layout
   assert.match(staffingJsx, /title=\{role === 'dentist' \? 'My work hours' : 'Work schedules'\}/)
