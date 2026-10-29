@@ -198,7 +198,7 @@ For bug fixes, self-check before PR, and end-of-day status, use templates B, C, 
 
 **Batch YZH-3: Dentist dashboard screens**
 - [x] DEN-01 Clinic Home: make the texts bigger
-- [ ] DEN-02 My schedule: fix the date layout
+- [x] DEN-02 My schedule: fix the date layout
 - [x] DEN-06 Prescription: remove the dosage from the medicine dropdown
 - [x] DEN-07 Prescription: make the remove medicine color red
 - [x] DEN-08 Prescription: fix the save button size from the license number on my prescription
@@ -323,9 +323,9 @@ For bug fixes, self-check before PR, and end-of-day status, use templates B, C, 
     <evidence>A6 / Joevan: Scoped Clinic Home heading, stats, schedule and task typography enlarged; navigation and counts preserved. Playwright 1440px/390px, light/dark OS preferences; existing app palette retained (no separate dark theme). See docs/DENTIST_UI_A6_ACCEPTANCE.md for synthetic-data boundaries and focused results.</evidence>
   </revision>
 
-  <revision id="DEN-02" status="todo" severity="medium" owner="Yzhekiel">
+  <revision id="DEN-02" status="done" severity="medium" owner="Yzhekiel">
     <tasks>
-      - [ ] Fix the My schedule date layout (alignment, order, spacing, format)
+      - [x] Fix the My schedule date layout (alignment, order, spacing, format)
     </tasks>
     <acceptance>Dates are clearly laid out and consistent.</acceptance>
   </revision>
@@ -400,3 +400,7 @@ Potential navigation repetition, not a measured saving: Treatment already resolv
 - **GEN-09 custom-value acceptance: completed for the assigned prescription behavior.** In Playwright MCP, the signed-in Dentist opened Prescriptions, selected a server-listed recent visit, chose a predefined medicine, switched to Other, typed a fictional custom medicine, switched to another predefined medicine, and returned to Other. The field hid on the predefined choice and returned blank, then retained the newly typed custom value. Blank Other disabled Save draft. Custom dosage, frequency, and duration also stayed selected while edited. The POST contained only the five clinical line fields. A 201 response saved the draft; after page reload, Edit draft restored all four Other selections and their saved values. A PUT changed dosage only; the reopened dialog showed the edited dosage and unchanged medicine, frequency, duration, and instructions, and an authenticated GET returned 200. The prescription remained Draft; no issued record was altered. New PrescriptionTest coverage repeats create/GET/edit/GET with exact field assertions on the scratch database. Existing PrescriptionTest checks Dentist and branch authority, patient and Owner visibility, and issued-record locking. No production defect was reproduced.
 - **QA scope distinction:** `FINALS-QA-REVISIONS.md` defines GEN-09 as Richmon's broader click-reduction task. This B1 evidence completes the custom-value acceptance requested by the coordinator; it does not establish fewer clicks for check-in, appointments, patient records, or prescriptions. The master tracker needs a separate owner-led click audit before its GEN-09 item can be marked done.
 - **Verification:** `node --test tests/gen07-*.test.js tests/intake.test.js tests/m19-prescriptions.test.js` 24/24; focused scratch-guarded IntakeTest and PrescriptionTest 27/27, 674 assertions; full frontend suite 954/954 outside the sandbox; `npm run test:smoke` passed with existing React key warnings; `npm run build` passed with the existing chunk-size warning. The first sandboxed full frontend run failed in 10 subprocess-backed files; rerun outside the sandbox passed. Browser tests used the existing idempotent fictional seeders on `dental_clinic_scratch` only. `scripts/predefense-check.sh` was not run because it targets the separate demo environment rather than the authorized scratch database.
+
+## A7 DEN-02 acceptance (2026-10-29)
+
+Implementer: Joevan; original QA owner: Yzhekiel. Scoped rendered acceptance passed at 1440px and 390px. Full date heading, grouped controls, responsive timeline and assigned walk-in crash fix. See [A7 evidence](docs/DENTIST_WORKFLOW_A7_ACCEPTANCE.md).

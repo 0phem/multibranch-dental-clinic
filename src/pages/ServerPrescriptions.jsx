@@ -92,7 +92,7 @@ export function PrescriptionsServerPage({ store, role }) {
           </div>
         </li>)}</ul>}
     </Card>
-    {openId && <PrescriptionDialog id={openId} toast={toast} onClose={() => setOpenId(null)} onChanged={load}/>}
+    {openId && <PrescriptionDialog id={openId} toast={toast} onClose={() => setOpenId(null)} onChanged={load} onEdit={dentist ? id => { setOpenId(null); setWriting(id) } : undefined}/>}
   </div>
 }
 
@@ -258,7 +258,7 @@ function LicenseCard({ toast }) {
   </Card>
 }
 
-export function PrescriptionDialog({ id, toast, onClose, onChanged }) {
+export function PrescriptionDialog({ id, toast, onClose, onChanged, onEdit }) {
   const [p, setP] = useState(null), [error, setError] = useState(''), [reason, setReason] = useState(''), [voiding, setVoiding] = useState(false), [busy, setBusy] = useState(false)
   useEffect(() => { prescription(id).then(r => (r.ok ? setP(r.data) : setError(r.message || 'This prescription could not be opened.'))) }, [id])
   const doVoid = async () => {
@@ -280,6 +280,7 @@ export function PrescriptionDialog({ id, toast, onClose, onChanged }) {
       {p.note && <p><b>Note:</b> {p.note}</p>}
       {voiding && <Field label="Reason for voiding" required><input value={reason} maxLength={300} onChange={e => setReason(e.target.value)}/></Field>}
       <div className="ns-actions">
+        {onEdit && p.status === 'Draft' && p.can_edit && <Button variant="soft" onClick={() => onEdit(p.id)}>Edit draft</Button>}
         {p.status !== 'Draft' && <Button variant="soft" icon="download" onClick={async () => { const r = await downloadPrescriptionPdf(p.id, p.number); if (!r.ok) toast(r.message || 'The PDF could not be downloaded.', 'warning') }}>Download PDF</Button>}
         {p.can_void && !voiding && <Button variant="ghost" onClick={() => setVoiding(true)}>Void…</Button>}
         {voiding && <Button disabled={busy || reason.trim().length < 3} onClick={doVoid}>{busy ? 'Voiding…' : 'Void this prescription'}</Button>}

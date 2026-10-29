@@ -1,0 +1,29 @@
+﻿<!doctype html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Dentist A7 â€” Illustrative test data</title>
+<style>body{padding:24px;margin:0}nav{display:flex;gap:12px;flex-wrap:wrap;margin:16px 0}#evidence-label{padding:12px;background:#eaf2fb;color:#234563;border-radius:10px}#feedback{display:block;margin:10px 0} @media(max-width:600px){body{padding:14px}}</style></head>
+<body><div id="evidence-label">Illustrative test data | Dentist UI acceptance | No actual Patient records</div><div id="root"></div><script type="module">
+import React, {useState} from 'react'
+import {createRoot} from 'react-dom/client'
+import {PrescriptionsServerPage} from '/src/pages/ServerPrescriptions.jsx'
+import {SchedulePage} from '/src/pages/Scheduling.jsx'
+import {FollowupsServerPage} from '/src/pages/ServerFollowups.jsx'
+import {DashboardPage} from '/src/pages/Dashboards.jsx'
+import {WordingApprovalsPage} from '/src/pages/WordingApprovals.jsx'
+import {setClockSource} from '/src/clock.js'
+import '/src/styles.css'
+import '/src/foundation.css'
+import '/src/patient.css'
+import '/src/polish.css'
+import '/src/automations.css'
+setClockSource(()=>new Date('2026-10-29T12:00:00+08:00'))
+const state={users:[],branches:[{id:'b1',name:'Illustrative branch',status:'Open'}],dentists:[{id:'d1',name:'Illustrative Dentist',available:true}],patients:[{id:'p1',name:'Illustrative Patient with a deliberately long synthetic family name'}],appointments:[{id:'a1',patientId:'p1',dentistId:'d1',date:'2026-10-29',start:'13:00',duration:30,status:'Confirmed',service:'Illustrative service'}],queue:[{id:'q1',patientId:'p1',dentistId:'d1',clinicDate:'2026-10-29',checkedIn:'11:45',status:'In queue',walkIn:true,position:1}],treatments:[],prescriptions:[],followups:[]}
+state.appointments.push({...state.appointments[0],id:'a2',start:'09:00',status:'Completed'}, {...state.appointments[0],id:'a3',start:'10:00',status:'Pending'}, {...state.appointments[0],id:'a4',date:'2026-10-28',status:'Completed'}, {...state.appointments[0],id:'excluded',dentistId:'d2',patientName:'Excluded other dentist'})
+function Fixture(){const [view,setView]=useState('schedule'),[feedback,setFeedback]=useState(''); const store={state,appointmentFlow:{refresh:()=>setFeedback('Schedule refreshed')},session:{role:'dentist',dentistId:'d1',serverUserId:'synthetic-dentist'},toast:msg=>setFeedback(msg)}
+return React.createElement(React.Fragment,null,
+React.createElement('nav',{'aria-label':'Acceptance screens'},...['schedule','prescriptions','followups','home','wording'].map(v=>React.createElement('button',{key:v,onClick:()=>{setView(v);setFeedback('')}},v))),
+React.createElement('output',{id:'feedback','aria-live':'polite'},feedback),
+view==='schedule'?React.createElement(SchedulePage,{store}):view==='prescriptions'?React.createElement(PrescriptionsServerPage,{store,role:'dentist'}):view==='followups'?React.createElement(FollowupsServerPage,{store,role:'dentist'}):view==='home'?React.createElement(DashboardPage,{store,role:'dentist',activeBranch:'Illustrative branch',setPage:v=>setFeedback('Navigate: '+v)}):React.createElement(WordingApprovalsPage,{store}))}
+createRoot(document.getElementById('root')).render(React.createElement(Fixture))
+</script></body></html>
+
+

@@ -1,14 +1,15 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { Button, Card, ConfirmDialog, Field, FilterBar, Modal, Notice, PageHeader, RefreshButton, Status, Table } from '../components.jsx'
 import { addMinutes, dateLabel, dentistName, displayTime, patientName } from '../logic.js'
-import { addDays, clinicDate } from '../clock.js'
+import '../dentist-schedule.css'
+import { addDays, clinicDate, validDate } from '../clock.js'
 import { commandKey } from '../appointments-api.js'
 import { publicPatientIdFor } from '../appointment-projection.js'
 import { useDayAvailability } from '../booking-availability.js'
 import { dentistsFor, servicesAt } from '../scheduling.js'
 import { PatientAppointmentsPage } from './PatientVisits.jsx'
 import { PatientBookingPage } from './PatientBook.jsx'
-import { inScope, sessionForRole } from '../contracts.js'
+import { inScope, isTodayQueue, sessionForRole } from '../contracts.js'
 
 // Staff/Owner appointment form (M6, server-authoritative). Used for a new front-desk booking, a reschedule, and a
 // Dentist-requested follow-up. The Patient comes from the server Patient directory (public_id), branches are limited to
@@ -262,8 +263,16 @@ export function SchedulePage({ store }) {
     }
     return true
   })
-  return <>
-    <PageHeader title="My Clinical Schedule" text="Your appointments from the clinic server, with expected visit durations." aside={<div className="row-actions schedule-date-toolbar"><Button size="sm" variant="ghost" aria-label="Previous day" onClick={()=>setDate(d=>addDays(d,-1))}>‹ Prev</Button><Button size="sm" variant={date===clinicDate()?'soft':'ghost'} onClick={()=>setDate(clinicDate())}>Today</Button><Button size="sm" variant="ghost" aria-label="Next day" onClick={()=>setDate(d=>addDays(d,1))}>Next ›</Button><input className="compact-date" type="date" aria-label="Schedule date" value={date} onChange={e=>setDate(e.target.value)}/><RefreshButton onClick={()=>store.appointmentFlow.refresh()}/></div>}/>
+  return <div className="dentist-schedule">
+    <PageHeader title="My Clinical Schedule" text="Your appointments from the clinic server, with expected visit durations."/>
+    <section className="dentist-schedule-toolbar" aria-label="Schedule date navigation">
+      <div className="dentist-schedule-date" aria-live="polite"><small>Selected date | Asia/Manila</small><h2><time dateTime={date}>{new Intl.DateTimeFormat('en-PH',{weekday:'long',month:'long',day:'numeric',year:'numeric',timeZone:'Asia/Manila'}).format(new Date(date+'T00:00:00+08:00'))}</time></h2></div>
+      <div className="dentist-schedule-controls">
+        <div className="dentist-schedule-days"><Button variant="ghost" aria-label="Previous day" onClick={()=>setDate(d=>addDays(d,-1))}>Previous</Button><Button variant={date===clinicDate()?'soft':'ghost'} onClick={()=>setDate(clinicDate())}>Today</Button><Button variant="ghost" aria-label="Next day" onClick={()=>setDate(d=>addDays(d,1))}>Next</Button></div>
+        <label className="dentist-schedule-picker">Choose date<input type="date" aria-label="Schedule date" value={date} onChange={e=>{if(validDate(e.target.value))setDate(e.target.value)}}/></label>
+        <RefreshButton onClick={()=>store.appointmentFlow.refresh()}/>
+      </div>
+    </section>
     <AppointmentsStatusNotice store={store}/>
     <FilterBar
       search={search}
@@ -279,7 +288,7 @@ export function SchedulePage({ store }) {
       </select>
     </FilterBar>
     <Card className={isPastDate ? 'schedule-past-day' : ''} title={`${dateLabel(date)} schedule`} subtitle={`${rows.length} scheduled appointment${rows.length===1?'':'s'} for ${dateLabel(date)}${todayWalkins.length?` • ${todayWalkins.length} walk-in visit${todayWalkins.length===1?'':'s'} in queue`:''}`}>
-      {isPastDate && <div className="schedule-past-notice" style={{ padding: "6px 12px", borderRadius: "6px", background: "var(--surface-2, #f1f5f9)", color: "var(--muted, #64748b)", fontSize: "12px", marginBottom: "10px" }}>Past date schedule · Displaying archived visits.</div>}
+      {isPastDate && <div className="schedule-past-notice" style={{ padding: "6px 12px", borderRadius: "6px", background: "var(--surface-2, #f1f5f9)", color: "var(--muted, #64748b)", fontSize: "12px", marginBottom: "10px" }}>Past date schedule · Viewing past appointments.</div>}
         <div className="day-schedule">
         {todayWalkins.length>0&&<div className="walkin-schedule-section" style={{marginBottom:'16px'}}>
           <h4 style={{fontSize:'13px',fontWeight:600,margin:'0 0 8px',color:'var(--muted)'}}>Assigned Walk-in Visits Today ({todayWalkins.length})</h4>
@@ -295,5 +304,5 @@ export function SchedulePage({ store }) {
         {rows.length?rows.map(a=><div className="schedule-slot" key={a.id}><div className="schedule-time"><b>{displayTime(a.start)} – {displayTime(addMinutes(a.start,a.duration))}</b><small>{a.duration} min</small></div><div className="schedule-line"/><div className="schedule-visit"><div><strong>{a.patientName||patientName(a.patientId,state.patients)}</strong><span>{a.service}</span><small>{a.branch} • {a.notes||'No booking note'}</small></div><Status>{a.status}</Status></div></div>):!todayWalkins.length?<Notice>No appointments are scheduled for this date.</Notice>:null}
       </div>
     </Card>
-  </>
+  </div>
 }

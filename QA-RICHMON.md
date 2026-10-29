@@ -400,3 +400,7 @@ For bug fixes, self-check before PR, and end-of-day status, use templates B, C, 
 </batch>
 
 </member_section>
+
+## A7 GEN-09 partial evidence (2026-10-29)
+
+Implementer: Joevan; QA owner remains Richmon. Global GEN-09 remains TODO. Rendered Dentist draft review to editing reduced from 2 clicks (Close, Edit draft) to 1 (Edit draft). Schedule adjacent-day/Today and list-to-edit already take 1 click and remain unchanged. No clinical decisions or confirmation removed. See [measurement and limitations](docs/DENTIST_WORKFLOW_A7_ACCEPTANCE.md).
