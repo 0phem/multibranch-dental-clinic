@@ -14,6 +14,10 @@
 
 ---
 
+## Academic reconciliation notice (2026-10-30)
+
+Official paper numbering and ownership below are retained. TO-BE is the proposed target; each module now has a D.3 evidence qualification distinguishing integrated development, isolated feature branches and pending policy/production acceptance. Shared integration snapshot: `010a386f147bed285c58821a0a2cc800c393982e`; accepted A8 `179cfb4903f46648666d2dbdeb0b0d70b3829dd6` is not integrated. Manifests declare Laravel ^13.17 and React ^19.1.1, not historical Laravel 11/React 18. Neither historical future-tense workflows nor a UI test establish clinic policy. See [cross-document reconciliation](docs/defense/ACADEMIC_DOCUMENT_RECONCILIATION.md).
+
 ## Executive Summary & System Scope
 
 This document specifies the authoritative business process automation blueprint for the **Web-Based Multi-Branch Dental Clinic Operation System** for Dr. Dana E. Roxas Dental Clinic (spanning Bocaue Main, Bocaue Annex / Cardinal Dental Center, and Guiguinto branches). 
@@ -136,6 +140,12 @@ The User Management Module controls who can use the system and what each person 
   - Account status record
   - Access and account change history
 
+##### D.3 Development implementation qualification (2026-10-30, Asia/Manila)
+
+- **TO-BE process clarification (A1/Wave 1):** Patient-only Gemini authorization revalidates the authenticated account and linked Patient profile for JSON/SSE requests.
+- **Current implementation / acceptance boundary:** Integrated development; persisted synthetic authorization checks passed. Live provider governance remains pending.
+- **Evidence:** [A1/Wave 1 / QA traceability](docs/INTEGRATION_WAVE_20261029.md); [academic reconciliation](docs/defense/ACADEMIC_DOCUMENT_RECONCILIATION.md). Earlier proposed steps describe the target process, not acceptance of every function. AS-IS findings are unchanged.
+
 ---
 
 ### Module 2: Branch Management
@@ -199,6 +209,12 @@ The Branch Management Module maintains each branch's profile, location, contact 
   - Affected appointment list
   - Public branch information
 - *Pending confirmation:* The email address of the Guiguinto branch.
+
+##### D.3 Development implementation qualification (2026-10-30, Asia/Manila)
+
+- **TO-BE process clarification (A3):** Owner selects a nonduplicate branch code, edits existing contact details, moves the map pin and explicitly publishes coordinates/hours. Weekday Open/Closed remains separate from operational branch status; service tiles adapt to desktop/phone.
+- **Current implementation / acceptance boundary:** Integrated development; synthetic PostgreSQL and rendered acceptance. Update-only scope, not a new branch-registration API; live map tiles and missing Guiguinto email remain outside acceptance.
+- **Evidence:** [A3 / QA traceability](docs/OWNER_BRANCH_A3_ACCEPTANCE.md); [academic reconciliation](docs/defense/ACADEMIC_DOCUMENT_RECONCILIATION.md). Earlier proposed steps describe the target process, not acceptance of every function. AS-IS findings are unchanged.
 
 ---
 
@@ -269,6 +285,12 @@ The Staff Management Module manages the clinic's dentists and staff: their profi
   - Availability used by booking
 - *Pending confirmation:* Each dentist's real weekly hours; the demo schedules are labelled as not confirmed.
 
+##### D.3 Development implementation qualification (2026-10-30, Asia/Manila)
+
+- **TO-BE process clarification (B3/B5):** Partial-day leave uses a single date and explicit hours; Owner approval/decline remains authorized. Staff Operations receives branch-scoped server duty facts distinguishing on-duty-today from working-now, including breaks, closures, exceptions and approved leave.
+- **Current implementation / acceptance boundary:** Implemented on feature branches, not integrated. B3 also removes the denied requester self-approval attempt. B5 fallback profile hours are estimated; real rosters and leave entitlement policy remain pending.
+- **Evidence:** [B3/B5 / QA traceability](docs/defense/FEATURE_ACCEPTANCE_MATRIX.md); [academic reconciliation](docs/defense/ACADEMIC_DOCUMENT_RECONCILIATION.md). Earlier proposed steps describe the target process, not acceptance of every function. AS-IS findings are unchanged.
+
 ---
 
 ### Module 4: Service Management
@@ -327,6 +349,12 @@ The Service Management Module maintains the catalog of services and procedures, 
   - Branch service availability
   - Dated price history
   - Booking rules
+
+##### D.3 Development implementation qualification (2026-10-30, Asia/Manila)
+
+- **TO-BE process clarification (Baseline retained):** No A1-A8 or B3-B5 change to service pricing or eligibility policy is established.
+- **Current implementation / acceptance boundary:** Existing Partial classification retained; final clinic prices remain pending.
+- **Evidence:** [Baseline retained / QA traceability](docs/defense/FEATURE_ACCEPTANCE_MATRIX.md); [academic reconciliation](docs/defense/ACADEMIC_DOCUMENT_RECONCILIATION.md). Earlier proposed steps describe the target process, not acceptance of every function. AS-IS findings are unchanged.
 
 ---
 
@@ -388,6 +416,12 @@ The Clinic Policy Management Module holds the clinic's operating rules in one pl
   - Policy change history
 - *Pending confirmation:* The Owner's approval of the recommended defaults and the retention periods.
 - *Basis:* BPA Module 5 Activities and Outputs; implementation status as of October 20, 2026.
+
+##### D.3 Development implementation qualification (2026-10-30, Asia/Manila)
+
+- **TO-BE process clarification (A6):** Dentist reviews read-only health-related wording and formatted preview, then explicitly approves the current revision; error/retry and approval status remain visible.
+- **Current implementation / acceptance boundary:** Integrated development UI acceptance; no automated clinical approval or newly approved clinic policy.
+- **Evidence:** [A6 / QA traceability](docs/DENTIST_UI_A6_ACCEPTANCE.md); [academic reconciliation](docs/defense/ACADEMIC_DOCUMENT_RECONCILIATION.md). Earlier proposed steps describe the target process, not acceptance of every function. AS-IS findings are unchanged.
 
 ---
 
@@ -466,6 +500,12 @@ The Appointment Management Module lets patients and staff book, pay for, resched
   - Waitlist entry
   - Appointment history
 
+##### D.3 Development implementation qualification (2026-10-30, Asia/Manila)
+
+- **TO-BE process clarification (A7/A8/B4):** Dentist schedule shows the full Manila date with grouped Previous/Today/Next/calendar/Refresh and responsive time hierarchy. Staff appointment rows can open the exact accessible Patient record; Patient records can open the existing booking form with only authoritative Patient identity prefilled.
+- **Current implementation / acceptance boundary:** A7 integrated; A8 accepted on feature branch, not integrated. B4 calendar polish is isolated; Patient profile-photo contract remains missing. No service/Dentist auto-selection, availability bypass or automatic booking; explicit confirmation remains.
+- **Evidence:** [A7/A8/B4 / QA traceability](docs/GEN09_A8_STAFF_WORKFLOW_ACCEPTANCE.md); [academic reconciliation](docs/defense/ACADEMIC_DOCUMENT_RECONCILIATION.md). Earlier proposed steps describe the target process, not acceptance of every function. AS-IS findings are unchanged.
+
 ---
 
 ### Module 7: Attendance Management
@@ -530,6 +570,12 @@ The Attendance Management Module reduces no-shows and empty chairs by confirming
   - No-show and late-cancellation record
   - Front-desk worklist
 
+##### D.3 Development implementation qualification (2026-10-30, Asia/Manila)
+
+- **TO-BE process clarification (Baseline retained):** No A1-A8 or B3-B5 change to attendance thresholds or cancellation policy is accepted.
+- **Current implementation / acceptance boundary:** Historical timing defaults remain subject to the existing clinic-policy approvals; no new AS-IS claim.
+- **Evidence:** [Baseline retained / QA traceability](docs/defense/FEATURE_ACCEPTANCE_MATRIX.md); [academic reconciliation](docs/defense/ACADEMIC_DOCUMENT_RECONCILIATION.md). Earlier proposed steps describe the target process, not acceptance of every function. AS-IS findings are unchanged.
+
 ---
 
 ### Module 8: Check-In Management
@@ -593,6 +639,12 @@ The Check-In Management Module records each patient's arrival, whether booked or
   - Queue entry
   - Arrival time
 
+##### D.3 Development implementation qualification (2026-10-30, Asia/Manila)
+
+- **TO-BE process clarification (B1/B2/B6):** Supported Other ID values persist after validation. Walk-in search uses one keyboard-accessible combobox, exact directory identity, clear/empty handling and a single visible Refresh.
+- **Current implementation / acceptance boundary:** B1/B2 integrated, supported intake/combobox scope only. B2 admission returned off-shift 422; B6 successful admission remains pending. STF-11 auto-confirm/ID/cancel reasons and STF-13 unified find/create require reviewed policy. Historical kiosk descriptions are not reaccepted by A9.
+- **Evidence:** [B1/B2/B6 / QA traceability](docs/INTEGRATION_WAVE_20261029.md); [academic reconciliation](docs/defense/ACADEMIC_DOCUMENT_RECONCILIATION.md). Earlier proposed steps describe the target process, not acceptance of every function. AS-IS findings are unchanged.
+
 ---
 
 ### Module 9: Queue Management
@@ -645,6 +697,12 @@ The Queue Management Module keeps a fair and visible order of waiting patients f
   - Patient position and status
   - Queue history
   - Priority change record
+
+##### D.3 Development implementation qualification (2026-10-30, Asia/Manila)
+
+- **TO-BE process clarification (B4):** Queue row click/Enter/Space opens exact encounter context. Call uses the existing server command with stale-revision feedback; Message resolves an existing authorized thread by public Patient and branch IDs.
+- **Current implementation / acceptance boundary:** Implemented on feature branch, not integrated. Five historical full QueueTest failures remain reported; scoped passing tests do not clear them. No new conversation-start or clinical authority.
+- **Evidence:** [B4 / QA traceability](docs/defense/FEATURE_ACCEPTANCE_MATRIX.md); [academic reconciliation](docs/defense/ACADEMIC_DOCUMENT_RECONCILIATION.md). Earlier proposed steps describe the target process, not acceptance of every function. AS-IS findings are unchanged.
 
 ---
 
@@ -699,6 +757,12 @@ The Patient Flow Management Module helps the clinic use chair time fully. Staff 
   - Staff calendar with daily load and crowded days
   - Move-up offers and waitlist notices
   - Free time visible for walk-in patients
+
+##### D.3 Development implementation qualification (2026-10-30, Asia/Manila)
+
+- **TO-BE process clarification (B4):** Calendar spacing, focus and selection use existing design tokens; previews show at most three badges and a +N control.
+- **Current implementation / acceptance boundary:** Implemented on feature branch, not integrated. Initials do not satisfy the requested Patient profile-photo requirement; no new capacity or wait-estimate policy.
+- **Evidence:** [B4 / QA traceability](docs/defense/FEATURE_ACCEPTANCE_MATRIX.md); [academic reconciliation](docs/defense/ACADEMIC_DOCUMENT_RECONCILIATION.md). Earlier proposed steps describe the target process, not acceptance of every function. AS-IS findings are unchanged.
 
 ---
 
@@ -760,6 +824,12 @@ The Patient Records Management Module keeps one complete, secure record for each
   - Handover record
   - Record change history
 
+##### D.3 Development implementation qualification (2026-10-30, Asia/Manila)
+
+- **TO-BE process clarification (A8):** Staff opens the exact accessible server Patient record from an authorized appointment and can open a Patient-prefilled AppointmentForm from that record. Identity resolution uses verified public IDs, never names or guessed browser IDs.
+- **Current implementation / acceptance boundary:** Accepted on feature branch, not integrated. Destination/API scope remains enforced; unsupported legacy booking is disabled with guidance. No universal full clinical-record access or archive/merge authority.
+- **Evidence:** [A8 / QA traceability](docs/GEN09_A8_STAFF_WORKFLOW_ACCEPTANCE.md); [academic reconciliation](docs/defense/ACADEMIC_DOCUMENT_RECONCILIATION.md). Earlier proposed steps describe the target process, not acceptance of every function. AS-IS findings are unchanged.
+
 ---
 
 ### Module 12: Document Management
@@ -818,6 +888,12 @@ The Document Management Module stores patient forms, documents, and consents sec
   - Consent record and history
   - Retraction record
 
+##### D.3 Development implementation qualification (2026-10-30, Asia/Manila)
+
+- **TO-BE process clarification (B1 supporting intake):** Existing on-device draft ID prefill and supported Other details do not add a production extraction or new document storage contract.
+- **Current implementation / acceptance boundary:** Partial classification retained; no A9 expansion of consent, image retention or document access policy.
+- **Evidence:** [B1 supporting intake / QA traceability](docs/INTEGRATION_WAVE_20261029.md); [academic reconciliation](docs/defense/ACADEMIC_DOCUMENT_RECONCILIATION.md). Earlier proposed steps describe the target process, not acceptance of every function. AS-IS findings are unchanged.
+
 ---
 
 ### Module 13: Treatment Management
@@ -872,6 +948,12 @@ The Treatment Management Module records the dental care given at each visit. The
   - Dental chart
   - Completed and locked procedure record
   - Billing trigger
+
+##### D.3 Development implementation qualification (2026-10-30, Asia/Manila)
+
+- **TO-BE process clarification (A7 supporting schedule):** Exact encounter context remains required for treatment; schedule presentation changes do not automate diagnosis, chart decisions, procedures or completion.
+- **Current implementation / acceptance boundary:** No new treatment-domain API/policy. Broad clinical workflow production acceptance is not claimed.
+- **Evidence:** [A7 supporting schedule / QA traceability](docs/DENTIST_WORKFLOW_A7_ACCEPTANCE.md); [academic reconciliation](docs/defense/ACADEMIC_DOCUMENT_RECONCILIATION.md). Earlier proposed steps describe the target process, not acceptance of every function. AS-IS findings are unchanged.
 
 ---
 
@@ -932,6 +1014,12 @@ The Prescription Management Module lets dentists issue clear, printable prescrip
   - Void and reissue history
   - Audit record
 
+##### D.3 Development implementation qualification (2026-10-30, Asia/Manila)
+
+- **TO-BE process clarification (B1/A6/A7):** Dentist saves/reloads/edits custom medicine, dosage, frequency and duration drafts. Medicine-name selection does not supply dosage. From an open editable draft review, Edit draft opens the existing editor directly; license Save, remove action and issue confirmation retain explicit behavior.
+- **Current implementation / acceptance boundary:** Integrated development; B1 synthetic persistence and A6/A7 rendered acceptance. Review-to-edit 2 to 1 clicks; issuing locks and voiding remains authorized. No medication automation or interaction certification. Allergy review is a prompt, not a claim that a complete clinical allergy source is always available.
+- **Evidence:** [B1/A6/A7 / QA traceability](docs/DENTIST_WORKFLOW_A7_ACCEPTANCE.md); [academic reconciliation](docs/defense/ACADEMIC_DOCUMENT_RECONCILIATION.md). Earlier proposed steps describe the target process, not acceptance of every function. AS-IS findings are unchanged.
+
 ---
 
 ### Module 15: Follow-Up Management
@@ -988,6 +1076,12 @@ The Follow-Up Management Module makes sure patients come back for follow-up and 
   - Booked follow-up appointment
   - Follow-up status history
 
+##### D.3 Development implementation qualification (2026-10-30, Asia/Manila)
+
+- **TO-BE process clarification (A6):** Follow-up worklist shows distinct labelled Open/Contacted/Booked/Closed/Overdue states; supported booking flow remains unchanged.
+- **Current implementation / acceptance boundary:** Integrated UI acceptance only; recall rules and health wording require existing approvals and actual delivery is not inferred.
+- **Evidence:** [A6 / QA traceability](docs/DENTIST_UI_A6_ACCEPTANCE.md); [academic reconciliation](docs/defense/ACADEMIC_DOCUMENT_RECONCILIATION.md). Earlier proposed steps describe the target process, not acceptance of every function. AS-IS findings are unchanged.
+
 ---
 
 ### Module 16: Social Media Management
@@ -1042,6 +1136,12 @@ The Social Media Management module records patient inquiries that arrive through
   - Recorded replies and follow-ups
   - List of unresolved inquiries
   - Recorded outcome, including conversion to a booking
+
+##### D.3 Development implementation qualification (2026-10-30, Asia/Manila)
+
+- **TO-BE process clarification (Baseline retained):** No new social-provider integration or campaign delivery is introduced.
+- **Current implementation / acceptance boundary:** Existing Partial classification retained; external channel integrations remain separate work.
+- **Evidence:** [Baseline retained / QA traceability](docs/defense/FEATURE_ACCEPTANCE_MATRIX.md); [academic reconciliation](docs/defense/ACADEMIC_DOCUMENT_RECONCILIATION.md). Earlier proposed steps describe the target process, not acceptance of every function. AS-IS findings are unchanged.
 
 ---
 
@@ -1103,6 +1203,12 @@ The AI Chatbot Management module answers common patient questions about services
   - Unanswered question list for the Owner
   - Updated approved answers
 
+##### D.3 Development implementation qualification (2026-10-30, Asia/Manila)
+
+- **TO-BE process clarification (A1):** Gemini JSON/SSE routes require Patient authentication, active account revalidation and a linked Patient profile before provider processing; denied roles cannot trigger upstream work.
+- **Current implementation / acceptance boundary:** Integrated synthetic persisted authorization acceptance, not live AI activation approval. Configured provider transmission/governance remains pending independently of the main assistant mode.
+- **Evidence:** [A1 / QA traceability](QA-JOEVAN.md); [academic reconciliation](docs/defense/ACADEMIC_DOCUMENT_RECONCILIATION.md). Earlier proposed steps describe the target process, not acceptance of every function. AS-IS findings are unchanged.
+
 ---
 
 ### Module 18: Messaging Management
@@ -1158,6 +1264,12 @@ The Messaging Management module gives patients a secure, real-time conversation 
   - Branch-routed conversation
   - Real-time delivery of staff replies
   - Offline email alert without message content
+
+##### D.3 Development implementation qualification (2026-10-30, Asia/Manila)
+
+- **TO-BE process clarification (A2/B4):** Authorized conversation history has role-distinct bubbles, scoped search, older-history loading and preserved scrolling. Queue Message can resolve an existing matching authorized Patient/branch thread.
+- **Current implementation / acceptance boundary:** A2 integrated; B4 queue shortcut isolated. STF-21 active-Dentist/history switching remains partial; attachments/reopening/Staff initiation are not newly approved. Live transport and production-scale encrypted search remain separate acceptance.
+- **Evidence:** [A2/B4 / QA traceability](docs/RIC2_MESSAGING_ACCEPTANCE.md); [academic reconciliation](docs/defense/ACADEMIC_DOCUMENT_RECONCILIATION.md). Earlier proposed steps describe the target process, not acceptance of every function. AS-IS findings are unchanged.
 
 ---
 
@@ -1218,6 +1330,12 @@ The Notification Management module sends system messages such as codes, confirma
   - Failure alert when delivery fails
   - Notification history
 
+##### D.3 Development implementation qualification (2026-10-30, Asia/Manila)
+
+- **TO-BE process clarification (A1-A8 supporting feedback):** Workflow notices and errors reflect actual command results and remain account-specific; Messages and Notifications stay separate.
+- **Current implementation / acceptance boundary:** No acceptance of the entire GEN-10 redesign, archive actions or live delivery from these UI checks.
+- **Evidence:** [A1-A8 supporting feedback / QA traceability](docs/defense/FEATURE_ACCEPTANCE_MATRIX.md); [academic reconciliation](docs/defense/ACADEMIC_DOCUMENT_RECONCILIATION.md). Earlier proposed steps describe the target process, not acceptance of every function. AS-IS findings are unchanged.
+
 ---
 
 ### Module 20: Marketing Management (PE)
@@ -1277,6 +1395,12 @@ The Marketing Management module runs marketing and patient reactivation campaign
   - Campaign results and week-to-week comparison
   - Unsubscribe record
 
+##### D.3 Development implementation qualification (2026-10-30, Asia/Manila)
+
+- **TO-BE process clarification (Baseline retained):** Campaign tracking and proposed consent/targeting/delivery are distinct. No A1-A8 or B3-B5 batch establishes the full campaign lifecycle.
+- **Current implementation / acceptance boundary:** Proposed enhancement boundaries preserved; no promotion of prototype rules or marketing automation to confirmed clinic policy.
+- **Evidence:** [Baseline retained / QA traceability](docs/defense/FEATURE_ACCEPTANCE_MATRIX.md); [academic reconciliation](docs/defense/ACADEMIC_DOCUMENT_RECONCILIATION.md). Earlier proposed steps describe the target process, not acceptance of every function. AS-IS findings are unchanged.
+
 ---
 
 ### Module 21: Billing Management
@@ -1312,7 +1436,7 @@ The Billing Management Module converts completed dental treatment procedures int
   - PostgreSQL database with sequential invoice (`INV-YYYY-XXXXXX`) and receipt (`RCT-YYYY-XXXXXX`) sequence generators
   - PayMongo Checkout API with secure HMAC signature webhook verification
   - Statutory discount calculator engine (20% reduction under RA 9994 and RA 10754)
-  - Automated mail dispatch service (Laravel Mail) with downloadable PDF invoice and official receipt generation
+  - Automated mail dispatch service (Laravel Mail) with downloadable PDF invoice and Payment Receipt generation
 
 #### D. Process Documentation
 ##### D.1 AS-IS Process (Existing Process)
@@ -1338,7 +1462,7 @@ The Billing Management Module converts completed dental treatment procedures int
   5. The system automatically credits any appointment booking deposit paid during scheduling against the patient responsibility; if fully covered, the invoice settles immediately and generates a receipt.
   6. The patient views the itemized invoice in the patient portal or opens the "Review and pay" screen, which displays the amount due and itemized procedures.
   7. The patient clicks "Pay securely with PayMongo", chooses GCash, Maya, or card on the PayMongo checkout page, and completes payment.
-  8. Upon receiving PayMongo's verified payment webhook, the system marks the invoice as Paid, generates official receipt `RCT-YYYY-XXXXXX`, and emails the patient an official receipt with a PDF attachment.
+  8. Upon receiving PayMongo's verified payment webhook, the system marks the invoice as Paid, generates Payment Receipt `RCT-YYYY-XXXXXX`, and emails the patient an Payment Receipt with a PDF attachment.
   9. For in-clinic settlement, staff clicks "Record full payment", selects the payment method (Cash, Card/POS, Bank Transfer, or E-Wallet), enters the external reference, and records payment.
   10. The system updates the branch payment worklist and stores immutable financial records in the database.
 - **Outputs:**
@@ -1347,6 +1471,12 @@ The Billing Management Module converts completed dental treatment procedures int
   - Official payment receipt (`RCT-YYYY-XXXXXX`) with downloadable PDF
   - Statutory discount audit record with ID number
   - Updated branch financial worklist and zero-balance status
+
+##### D.3 Development implementation qualification (2026-10-30, Asia/Manila)
+
+- **TO-BE process clarification (A4/A5 supporting analytics):** Reports consume authoritative payment/refund evidence without changing charge, issue, settlement or refund rules. Use Payment Receipt terminology.
+- **Current implementation / acceptance boundary:** No production payment/refund or accounting-close acceptance from synthetic reporting tests. Existing financial policy and authority remain unchanged.
+- **Evidence:** [A4/A5 supporting analytics / QA traceability](docs/defense/FEATURE_ACCEPTANCE_MATRIX.md); [academic reconciliation](docs/defense/ACADEMIC_DOCUMENT_RECONCILIATION.md). Earlier proposed steps describe the target process, not acceptance of every function. AS-IS findings are unchanged.
 
 ---
 
@@ -1408,6 +1538,12 @@ The Loyalty Management Module provides a prototype patient loyalty and referral 
   - Real-time ledger points balance and progress meter
   - Pending reward redemption request
   - Processed redemption entry (`-50 points`) and updated activity history
+
+##### D.3 Development implementation qualification (2026-10-30, Asia/Manila)
+
+- **TO-BE process clarification (Baseline retained):** Existing whole-point ledger/redemption demonstration does not establish a clinic loyalty program.
+- **Current implementation / acceptance boundary:** Partial/proposed enhancement classification retained; 50-point and reward rules remain team-designed prototype rules, not confirmed clinic policy.
+- **Evidence:** [Baseline retained / QA traceability](docs/defense/FEATURE_ACCEPTANCE_MATRIX.md); [academic reconciliation](docs/defense/ACADEMIC_DOCUMENT_RECONCILIATION.md). Earlier proposed steps describe the target process, not acceptance of every function. AS-IS findings are unchanged.
 
 ---
 
@@ -1474,6 +1610,12 @@ The Archives & Historical Records Management Module provides centralized cross-b
   - Exported regulatory archive spreadsheet (`archives-[tab]-[branch].csv`)
   - Instant cross-branch search and filter results
 
+##### D.3 Development implementation qualification (2026-10-30, Asia/Manila)
+
+- **TO-BE process clarification (GEN-11 boundary):** Existing history retrieval/export remains distinct from universal creator-based archive/restore permissions.
+- **Current implementation / acceptance boundary:** No new archive/restore approval. Append-only, soft-archive and private clinical/message restrictions remain; STF-25/DEN-16 acceptance still unresolved.
+- **Evidence:** [GEN-11 boundary / QA traceability](docs/defense/FEATURE_ACCEPTANCE_MATRIX.md); [academic reconciliation](docs/defense/ACADEMIC_DOCUMENT_RECONCILIATION.md). Earlier proposed steps describe the target process, not acceptance of every function. AS-IS findings are unchanged.
+
 ---
 
 ### Module 24: Analytics Management
@@ -1537,6 +1679,12 @@ The Analytics Management Module provides real-time executive intelligence and mu
   - Comparative multi-branch workload and revenue panel
   - Downloadable executive analytics spreadsheet (`operational-analytics-YYYY-MM-DD.csv`)
   - Automated nightly executive daily summary email
+
+##### D.3 Development implementation qualification (2026-10-30, Asia/Manila)
+
+- **TO-BE process clarification (A4/A5):** Owner inspects branch/period daily gross collections, refunds and net cash flow with exact tooltips and accessible tables. Weekly Mon-Sat gross bars and signed net line share an axis. Fixed current/prior 30-day gross and visit comparisons are independent of the detailed period selector; outstanding balances have no prior snapshot comparison.
+- **Current implementation / acceptance boundary:** Integrated development with synthetic PostgreSQL reconciliation and rendered acceptance. Collections are not profit; Saturday is an on-demand calendar report, not an immutable scheduled artifact. No production financial reconciliation/live delivery claim; historical export/digest descriptions are not reaccepted.
+- **Evidence:** [A4/A5 / QA traceability](docs/OWN01_A5_ACCEPTANCE.md); [academic reconciliation](docs/defense/ACADEMIC_DOCUMENT_RECONCILIATION.md). Earlier proposed steps describe the target process, not acceptance of every function. AS-IS findings are unchanged.
 
 ---
 
@@ -1627,3 +1775,9 @@ All development must maintain:
 - Zero regressions on existing test suites (`npm test`, `npm run test:smoke`, `npm run build`).
 - Safe append-only PostgreSQL handling.
 - Strict role and branch scoping under Asia/Manila operational context.
+
+##### D.3 Development implementation qualification (2026-10-30, Asia/Manila)
+
+- **TO-BE process clarification (Baseline retained):** Existing sanitized audit evidence remains append-only; UI shortcuts do not authorize disclosure of private clinical text or change audit policy.
+- **Current implementation / acceptance boundary:** No new universal audit-completeness or production compliance certification from A9.
+- **Evidence:** [Baseline retained / QA traceability](docs/defense/FEATURE_ACCEPTANCE_MATRIX.md); [academic reconciliation](docs/defense/ACADEMIC_DOCUMENT_RECONCILIATION.md). Earlier proposed steps describe the target process, not acceptance of every function. AS-IS findings are unchanged.

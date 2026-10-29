@@ -177,3 +177,5 @@ Existing behavior was cross-checked against the following source entry points; s
 | Messaging scope and search | [Server messages](../../src/pages/ServerMessages.jsx), [client](../../src/messaging-api.js) |
 
 A9 verification: all local Markdown targets/screenshot paths in the three new documents checked for existence; linked GitHub commit/blob targets checked against fetched Git objects. This validates repository targets, not external hosting availability. All 68 unique QA IDs and 15 ancestry records checked; diff whitespace and documentation-only file inventory checked. No application tests or database actions were necessary.
+
+Academic amendment (2026-10-30): see [all-module reconciliation](ACADEMIC_DOCUMENT_RECONCILIATION.md) and the [DOCX section amendment](BPA_OCT22_A9_SECTION_AMENDMENT.md). Original dated acceptance evidence above is retained; no integration or policy promotion.

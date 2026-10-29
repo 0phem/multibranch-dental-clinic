@@ -105,3 +105,5 @@ Have a fictional same-day appointment and eligible on-shift Dentist ready. Dates
 ## Close the demonstration
 
 Open the matrix's tracker-discrepancy table, explain the difference between implemented code, isolated acceptance and deployment approval, and show the pending list. Record any actual rehearsal failures as new observations; never overwrite historical test results with an assumed pass. All reused screenshots are synthetic/illustrative and linked in the matrix; A9 adds no Patient screenshots or application changes.
+
+Academic amendment (2026-10-30): see [all-module reconciliation](ACADEMIC_DOCUMENT_RECONCILIATION.md) and the [DOCX section amendment](BPA_OCT22_A9_SECTION_AMENDMENT.md). Original dated acceptance evidence above is retained; no integration or policy promotion.
