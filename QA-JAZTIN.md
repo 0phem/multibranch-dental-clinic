@@ -195,10 +195,10 @@ For bug fixes, self-check before PR, and end-of-day status, use templates B, C, 
 
 **Batch JAZ-3: Schedules and leave logic**
 - [ ] STF-07 Operations: should have a status "doctor is on duty today" based on work schedules
-- [ ] STF-08 Leave: when only part of the day is checked, the until date and from date update
+- [x] STF-08 Leave: when only part of the day is checked, the until date and from date update (Developer B B3)
 - [ ] DEN-03 My schedule: FIX DAH SHI (BUG)
-- [ ] DEN-13 My leave: same changes as staff
-- [ ] OWN-12 Leave request: same changes as staff
+- [x] DEN-13 My leave: same changes as staff (Developer B B3)
+- [x] OWN-12 Leave request: same changes as staff (Developer B B3)
 
 **Support tasks**
 - [ ] GEN-07 (support Yzhekiel): server-side "specify required when Other" validation
@@ -303,14 +303,15 @@ For bug fixes, self-check before PR, and end-of-day status, use templates B, C, 
     <acceptance>Operations shows correct on-duty status per doctor per branch.</acceptance>
   </revision>
 
-  <revision id="STF-08" status="todo" severity="high" owner="Jaztin">
+  <revision id="STF-08" status="done" severity="high" owner="Jaztin">
     <tasks>
-      - [ ] Reproduce: with "only part of the day" checked, the From/Until dates update incorrectly
-      - [ ] Fix date and time handling for partial-day leave (single date, correct hours)
-      - [ ] Validate that Until is not before From
+      - [x] Reproduce: with "only part of the day" checked, the From/Until dates update incorrectly
+      - [x] Fix date and time handling for partial-day leave (single date, correct hours)
+      - [x] Validate that Until is not before From
     </tasks>
     <hardening>Time zones, overlapping leave, past dates.</hardening>
     <acceptance>Partial-day leave saves correct dates and times.</acceptance>
+    <evidence>Developer B B3: the existing form already derived one end date for partial leave, and the backend already rejected cross-day or reversed hours. Fixed the form overwriting a full-day end date on toggle, clarified that both times are on the selected date, and rejected empty times and past dates in the UI. Rendered Staff harness verified toggle, date change, restored full-day range, reversed-hour disable, and the single-day POST payload. Guarded LeaveTest passed 6 tests/106 assertions, including Manila timestamp persistence, overlap and past-date rejection.</evidence>
   </revision>
 
   <revision id="DEN-03" status="todo" severity="high" owner="Jaztin" support="Yzhekiel">
@@ -322,18 +323,20 @@ For bug fixes, self-check before PR, and end-of-day status, use templates B, C, 
     <acceptance>Bug no longer reproduces; regression test added.</acceptance>
   </revision>
 
-  <revision id="DEN-13" status="todo" severity="medium" owner="Jaztin" support="Yzhekiel">
+  <revision id="DEN-13" status="done" severity="medium" owner="Jaztin" support="Yzhekiel">
     <tasks>
-      - [ ] Apply STF-08 (and related staff leave changes) to Dentist leave
+      - [x] Apply STF-08 (and related staff leave changes) to Dentist leave
     </tasks>
     <acceptance>Dentist leave matches staff behavior.</acceptance>
+    <evidence>Developer B B3: Dentist reuses MyLeave. Rendered Dentist harness captured a single-day request with 10:30 to 12:00 hours and no approver controls. Guarded API test verified persisted +08:00 timestamps, Owner retrieval, approval, and existing booking-slot exclusion tests.</evidence>
   </revision>
 
-  <revision id="OWN-12" status="todo" severity="medium" owner="Jaztin" support="Richmon">
+  <revision id="OWN-12" status="done" severity="medium" owner="Jaztin" support="Richmon">
     <tasks>
-      - [ ] Apply the staff leave changes to Owner Leave requests
+      - [x] Apply the staff leave changes to Owner Leave requests
     </tasks>
     <acceptance>Owner leave requests match staff behavior.</acceptance>
+    <evidence>Developer B B3: Owner remains an approver, not a requester. The backend already exposed can_decide and accepted authorized Owner decisions; the UI incorrectly hid the controls and described the page as read-only. Fixed the controls and text. Rendered Owner harness showed the stored date/time label and approval confirmation and captured the decide POST; guarded API test verified Owner list timestamps, both approval round trips, and Owner request denial. The B3 follow-up removed the requester's unauthorized approval attempt; successful creation now reports that an authorized approver can review it. Approval policy was unchanged.</evidence>
   </revision>
 
   <batch_verification>
