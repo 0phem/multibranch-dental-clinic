@@ -1,0 +1,16 @@
+.notification-dialog .notification-toolbar { align-items: center; justify-content: space-between; }
+.notification-dialog .notification-toolbar button,
+.notification-dialog .notification-row button { min-height: 44px; padding: 8px 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); color: var(--text); }
+.notification-dialog button:hover:not(:disabled) { background: var(--surface-2); }
+.notification-dialog button:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.notification-dialog .notification-row { border-bottom: 1px solid var(--line); align-items: start; }
+.notification-dialog .notification-row > div { overflow-wrap: anywhere; min-width: 0; }
+.notification-dialog .notification-row p { line-height: 1.5; margin: 6px 0; }
+.notification-dialog .notification-row small { display: block; overflow-wrap: anywhere; }
+.notification-dialog .notification-date-heading { font-weight: var(--weight-strong); }
+.notification-dialog .notification-failure { margin: 0; padding: 12px; color: var(--danger, #a32c3c); }
+.notification-dialog .notification-scroll { overflow-x: hidden; }
+@media(max-width:480px) {
+  .notification-dialog .notification-toolbar { align-items: stretch; }
+  .notification-dialog .notification-toolbar button { flex: 1 1 auto; }
+}
