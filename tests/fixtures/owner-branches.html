@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Synthetic Owner branch acceptance</title></head>
+<body><div id="root"></div><script type="module">
+import React, { useState } from 'react'
+import { createRoot } from 'react-dom/client'
+import { BranchesPage } from '/src/pages/Admin.jsx'
+import '/src/styles.css'
+import '/src/foundation.css'
+import '/src/patient.css'
+import '/src/polish.css'
+import '/src/patient/portal.css'
+const week = { 1: { open: '08:00', close: '17:00' }, 2: { open: '08:00', close: '17:00' } }
+function Fixture() {
+  const [branches, setBranches] = useState(Array.from({length: 3}, (_, i) => ({ id: `b${i+1}`, branchCode: `BRC-${'ABC'[i]}`, name: `Synthetic branch ${i+1}`, city: 'Test city', address: 'Synthetic address', phone: 'Test phone', email: '', status: ['Open', 'Temporarily Closed', 'Inactive'][i], threshold: 80, open: '08:00', close: '17:00', weeklyHours: week, latitude: null, longitude: null })))
+  const [branchServices, setBranchServices] = useState([])
+  const [notice, setNotice] = useState('')
+  const services = Array.from({length:4}, (_, i) => ({id:`svc${i+1}`, name:`Synthetic service ${i+1}`, duration:30, category:'Test category', status:'Active'}))
+  return React.createElement(React.Fragment, null,
+    React.createElement('p', {role:'status'}, notice),
+    React.createElement(BranchesPage, {store: { state: {branches, services, branchServices}, toast: setNotice, actions: {
+      adoptBranchFromServer(id, record) { setBranches(rows => rows.map(row => row.id === id ? record : row)); return {ok:true} },
+      adoptBranchServiceFromServer(branchId, serviceId, record) { setBranchServices(rows => [...rows.filter(row => !(row.branchId===branchId && row.serviceId===serviceId)),record]); return {ok:true} }
+    }}}))
+}
+createRoot(document.getElementById('root')).render(React.createElement(Fixture))
+</script></body></html>

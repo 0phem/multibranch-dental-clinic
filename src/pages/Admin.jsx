@@ -17,12 +17,17 @@ import { fetchExecutiveSummary, fetchBranchPerformance, downloadAnalyticsCsv } f
 import { sendTestEmail } from '../api-client.js'
 import { EmployeeInvitations } from './EmployeeInvitations.jsx'
 import { BranchAccessDialog } from './BranchAccessDialog.jsx'
+import '../owner-branches.css'
 
 export const ALLOWED_BRANCH_CODES = ['BRC-A', 'BRC-B', 'BRC-C', 'BRC-D', 'BRC-E', 'BRC-F', 'MNL', 'QC', 'MKTI', 'BGC', 'ORT', 'ALB', 'CEB', 'DVO', 'PAS']
 
 export function BranchMapPicker({ latitude, longitude, onChange }) {
   const mapRef = useRef(null)
+  const mapControl = useRef(null)
+  const latest = useRef({ latitude, longitude, onChange })
+  latest.current = { latitude, longitude, onChange }
   const [mapLoaded, setMapLoaded] = useState(false)
+  const [mapError, setMapError] = useState(false)
 
   React.useEffect(() => {
     let cleanup = null
@@ -32,21 +37,24 @@ export function BranchMapPicker({ latitude, longitude, onChange }) {
       import('../branch-map.js').then(({ mountBranchPinMap }) => {
         if (!active) return
         cleanup = mountBranchPinMap(mapRef.current, {
-          latitude,
-          longitude,
-          onChange
+          ...latest.current,
+          onChange: value => latest.current.onChange(value),
         })
+        mapControl.current = cleanup
         setMapLoaded(true)
+        setMapError(cleanup.ready !== true)
       }).catch(err => {
-        console.warn('Branch map could not load:', err)
+        if (active) { setMapLoaded(true); setMapError(true) }
       })
     }
 
     return () => {
       active = false
       if (cleanup) cleanup()
+      mapControl.current = null
     }
-  }, [latitude, longitude])
+  }, [])
+  React.useEffect(() => { mapControl.current?.setCoordinates?.(latitude, longitude) }, [latitude, longitude])
 
   return (
     <div className="branch-map-picker-container">
@@ -61,6 +69,7 @@ export function BranchMapPicker({ latitude, longitude, onChange }) {
           </div>
         )}
       </div>
+      {mapError && <Notice tone="warning">The location map could not load. Reopen the Details tab to retry. Your existing coordinates have not changed.</Notice>}
     </div>
   )
 }
@@ -106,7 +115,7 @@ export function BranchesPage({ store }) {
     {key:'hours',label:'Opening Hours'},
     {key:'services',label:`Services (${activeServicesCount})`},
   ]
-  return <>
+  return <div className="owner-branches">
     <PageHeader title="Multi-Branch Clinic Management" text="Clinic locations and operational branch information."/>
     <Notice tone="warning">Branch names, addresses, phones, emails and opening hours were given by the clinic (October 2026). Capacity settings still need clinic confirmation, and holiday or temporary-closure schedules have not been supplied.</Notice>
     <div style={{ marginBottom: '20px' }}>
@@ -136,7 +145,7 @@ export function BranchesPage({ store }) {
                 <span>Phone: <b>{b.phone || '—'}</b></span>
               </div>
               <div style={{ marginTop: '10px', textAlign: 'right' }}>
-                <Button size="sm" variant={isSel ? 'primary' : 'soft'} onClick={(e) => { e.stopPropagation(); setSelected(b.id); }}>{isSel ? 'Configuring' : 'Configure'}</Button>
+                <Button size="sm" variant={isSel ? 'primary' : 'soft'} aria-pressed={isSel} onClick={(e) => { e.stopPropagation(); setSelected(b.id); }}>{isSel ? 'Configuring' : 'Configure'}</Button>
               </div>
             </div>
           );
@@ -151,6 +160,7 @@ export function BranchesPage({ store }) {
           <Field label="Branch code" hint="Select an allowed clinic branch code. Codes assigned to other branches are blocked.">
             <select
               value={form.branchCode || ''}
+              aria-label="Branch code"
               onChange={e => {
                 const code = e.target.value
                 if (codesInUse.has(code)) {
@@ -172,7 +182,7 @@ export function BranchesPage({ store }) {
             </select>
           </Field>
           <Field label="City"><input value={form.city||''} onChange={e=>setForm({...form,city:e.target.value})}/></Field>
-          <Field label="Branch status"><select value={form.status||'Open'} onChange={e=>setForm({...form,status:e.target.value})}><option>Open</option><option>Temporarily Closed</option><option>Inactive</option></select></Field>
+          <Field label="Branch status"><select value={form.status||'Open'} aria-label="Branch status" onChange={e=>setForm({...form,status:e.target.value})}><option>Open</option><option>Temporarily Closed</option><option>Inactive</option></select></Field>
           <Field label="Capacity threshold (unconfirmed)"><input type="number" min="1" max="100" value={form.threshold??''} onChange={e=>setForm({...form,threshold:Number(e.target.value)})}/></Field>
           <Field label="Phone"><input value={form.phone||''} onChange={e=>setForm({...form,phone:e.target.value})}/></Field>
           <Field label="Email (optional)"><input type="email" value={form.email||''} onChange={e=>setForm({...form,email:e.target.value})}/></Field>
@@ -187,7 +197,7 @@ export function BranchesPage({ store }) {
             <div className="branch-coords-readout">
               <span>Latitude: <b className="coord-value">{form.latitude != null && form.latitude !== '' ? Number(form.latitude).toFixed(6) : 'Not pinned'}</b></span>
               <span>Longitude: <b className="coord-value">{form.longitude != null && form.longitude !== '' ? Number(form.longitude).toFixed(6) : 'Not pinned'}</b></span>
-              <small style={{ color: 'var(--muted)' }}>(Coordinates are saved automatically from the map pin)</small>
+              <small style={{ color: 'var(--muted)' }}>The pin updates this form. Select Publish Branch Changes to save.{form.latitude == null || form.longitude == null ? ' No location is saved; the starting map view is not a branch location.' : ''}</small>
             </div>
           </div>
         </div>}
@@ -202,6 +212,7 @@ export function BranchesPage({ store }) {
                 variant={!h ? 'danger' : 'soft'}
                 className={`btn-toggle-closed ${!h ? 'is-closed' : 'is-open'}`}
                 disabled={h && openDays === 1}
+                aria-label={`${label}: ${!h ? 'Closed' : 'Open'}`}
                 aria-pressed={!h}
                 onClick={() => setDay(h ? null : { open: form.open || '08:00', close: form.close || '17:00' })}
                 title={h && openDays === 1 ? 'At least one operating day must remain open' : !h ? 'Day is closed. Click to mark open.' : 'Day is open. Click to mark closed.'}
@@ -221,7 +232,7 @@ export function BranchesPage({ store }) {
         </div>
       </Card>}
     </div>
-  </>
+  </div>
 }
 
 export function TeamPage({ store }) {

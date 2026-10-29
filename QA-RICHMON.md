@@ -200,11 +200,11 @@ For bug fixes, self-check before PR, and end-of-day status, use templates B, C, 
 
 **Batch RIC-3: Owner dashboard**
 - [ ] OWN-01 Executive dashboard: add hoverable line graph + histogram. Line graph is hoverable and shows daily profit or revenue (choose the best term); histogram is the summary of the week, produced on Saturdays since it's the last opening day; make both hoverable with accurate revenue
-- [ ] OWN-02 Branches: make the branch code a dropdown
-- [ ] OWN-03 Branches: make the map pinnable instead of entering longitude and latitude
-- [ ] OWN-04 Branches: fix UI (add colors)
-- [ ] OWN-05 Make the closed option a button instead of checkbox
-- [ ] OWN-06 Branches: make the services layout a 2x2 grid
+- [x] OWN-02 Branches: existing dropdown and server/database uniqueness verified by Joevan (A3).
+- [x] OWN-03 Branches: pin lifecycle, missing-location display and visual anchoring fixed; click/drag and coordinate persistence verified by Joevan (A3).
+- [x] OWN-04 Branches: existing cards/status colors retained; scoped token contrast/focus/responsiveness verified by Joevan (A3).
+- [x] OWN-05 Existing weekday Open/Closed button, last-open-day safeguard and persistence verified by Joevan (A3).
+- [x] OWN-06 Existing services 2x2 desktop/single-column phone layout and service toggle verified by Joevan (A3).
 - [ ] OWN-10 Work schedule: same changes as the staff (see Q1)
 
 **Support tasks**
@@ -341,41 +341,46 @@ For bug fixes, self-check before PR, and end-of-day status, use templates B, C, 
     <acceptance>Both charts hoverable; values match billing data to the peso; histogram appears on Saturdays.</acceptance>
   </revision>
 
-  <revision id="OWN-02" status="todo" severity="medium" owner="Richmon" support="Joevan">
+  <revision id="OWN-02" status="done" severity="medium" owner="Richmon" support="Joevan" implementer="Joevan">
     <tasks>
-      - [ ] Change branch code input to a dropdown
-      - [ ] (Joevan) Provide the allowed branch code list; prevent duplicates
+      - [x] Existing ALLOWED_BRANCH_CODES dropdown verified; in-use codes disabled; existing non-preset code preserved
+      - [x] Existing server uniqueness validation and PostgreSQL unique constraint verified; valid code persists and reopens
     </tasks>
+    <evidence>A3: docs/OWNER_BRANCH_A3_ACCEPTANCE.md; no code-list policy or new branch-creation flow invented.</evidence>
     <acceptance>Branch code is chosen from a dropdown; duplicates are blocked.</acceptance>
   </revision>
 
-  <revision id="OWN-03" status="todo" severity="medium" owner="Richmon" support="Joevan">
+  <revision id="OWN-03" status="done" severity="medium" owner="Richmon" support="Joevan" implementer="Joevan">
     <tasks>
-      - [ ] Replace longitude/latitude inputs with a pinnable map (click/drag pin)
-      - [ ] Save coordinates automatically from the pin; show them read-only
-      - [ ] (Joevan) Store/validate coordinates on the branch record
+      - [x] Existing map retained; removed coordinate-driven teardown, loaded required Leaflet CSS and corrected double pin anchoring
+      - [x] Click/drag updates read-only form coordinates; Publish saves them; missing locations show no invented pin
+      - [x] Existing server coordinate validation/persistence verified; saved coordinates reopen correctly
     </tasks>
+    <evidence>A3: actual Leaflet browser interaction at 1440px/390px plus isolated PostgreSQL coordinate round trip; no real clinic location changed.</evidence>
     <acceptance>Branch location is set by pinning on the map; no manual lat/long entry.</acceptance>
   </revision>
 
-  <revision id="OWN-04" status="todo" severity="medium" owner="Richmon">
+  <revision id="OWN-04" status="done" severity="medium" owner="Richmon" implementer="Joevan">
     <tasks>
-      - [ ] Branches UI: add colors per design tokens (cards, headers, statuses, actions)
+      - [x] Existing cards/statuses/actions retained; branch-code badge uses existing brand tokens, keyboard focus/selection clarified, phone form layout scoped; computed badge/status contrast >= 4.5:1 verified
     </tasks>
+    <evidence>A3: Owner rendered fixture at 1440px/390px; shared components and global styles unchanged.</evidence>
     <acceptance>Branches screen is colorful, readable, and consistent.</acceptance>
   </revision>
 
-  <revision id="OWN-05" status="todo" severity="low" owner="Richmon">
+  <revision id="OWN-05" status="done" severity="low" owner="Richmon" implementer="Joevan">
     <tasks>
-      - [ ] Replace the "Closed" checkbox with a button/toggle button with clear on/off state
+      - [x] Existing Open/Closed weekday button verified with aria-pressed and new weekday-specific accessible name; final operating day disabled; Publish persists weekday hours without changing branch operational status
     </tasks>
+    <evidence>A3: browser weekday toggle/disabled-state check plus real PostgreSQL hours round trip.</evidence>
     <acceptance>Closed is a button with a clear active state.</acceptance>
   </revision>
 
-  <revision id="OWN-06" status="todo" severity="low" owner="Richmon">
+  <revision id="OWN-06" status="done" severity="low" owner="Richmon" implementer="Joevan">
     <tasks>
-      - [ ] Lay out services in a 2x2 grid; make it responsive
+      - [x] Existing two-column grid verified as 2x2 with four active services at 1440px and one column at 390px; existing server-confirmed service toggle and Owner-only write permission verified
     </tasks>
+    <evidence>A3: rendered element geometry and isolated PostgreSQL service-toggle acceptance; no global grid rewrite.</evidence>
     <acceptance>Services display in a 2x2 grid on desktop.</acceptance>
   </revision>
 
