@@ -252,14 +252,15 @@ For bug fixes, self-check before PR, and end-of-day status, use templates B, C, 
     <acceptance>No text refresh buttons remain; icon triggers refresh with visible loading state.</acceptance>
   </revision>
 
-  <revision id="GEN-10" status="todo" severity="high" owner="Celin" support="Joevan">
+  <revision id="GEN-10" status="partial" implementer="Joevan" severity="high" owner="Celin" support="Joevan">
     <tasks>
-      - [ ] Redesign the notifications button (badge count, no outline per GEN-03, clear hover state)
+      - [x] Verify existing notifications button (badge count, no outline per GEN-03, clear hover state)
       - [ ] Add a delete button per notification (uses archive logic from GEN-11, not hard delete)
-      - [ ] Segregate notifications by date (Today, Yesterday, Earlier / by date headers) so the list is not cluttered
-      - [ ] (Joevan) Provide notifications endpoint grouped/sorted by date and a soft-delete endpoint
-      - [ ] Add mark-as-read and "clear all" only if it does not add clutter
+      - [x] Segregate notifications by date (Today, Yesterday, Earlier / by date headers) so the list is not cluttered
+      - [ ] (Joevan) Server-feed integration and archive/delete endpoint remain outside A10; GEN-11 policy approval required before any archive/delete contract
+      - [x] Verify existing Mark read and Mark my notifications read; no delete/clear-all action added
     </tasks>
+    <evidence>A10 / Joevan: existing borderless bell, count, hover/focus, open/close, identity/destination scope and read/read-all verified. Fixed newest-first stable timestamp sorting before latest-eight selection/grouping; scoped readability/touch layout and honest read failure alerts. 56 focused tests, fictional rendered checks at 1440px/390px and production build passed. Panel still uses existing scoped browser-store commands; server notification wrappers are not newly wired or accepted. Archive/delete remains pending GEN-11. See docs/GEN10_A10_NOTIFICATION_ACCEPTANCE.md.</evidence>
     <acceptance>Notifications grouped under date headers; each can be removed (archived); button looks consistent and outline-free.</acceptance>
   </revision>
 

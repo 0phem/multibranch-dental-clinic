@@ -1,0 +1,28 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>A10 fictional notification acceptance</title></head><body><div id="root"></div><script type="module">
+import React,{useState} from 'react'
+import {createRoot} from 'react-dom/client'
+import {Shell} from '/src/layout.jsx'
+import {communicationActions} from '/src/communication.js'
+import {setClockSource,clinicNow} from '/src/clock.js'
+import '/src/styles.css'
+import '/src/foundation.css'
+import '/src/patient.css'
+import '/src/polish.css'
+setClockSource(()=>new Date('2026-10-30T01:00:00+08:00'))
+const session={role:'staff',active:true,userId:'u1',branchId:'b1'}
+const initial={persons:[{id:'person1'}],users:[{id:'u1',personId:'person1',name:'Fictional Staff',role:'Staff',status:'Active',branchId:'b1',permissions:['all']}],staff:[{userId:'u1',personId:'person1',branchId:'b1'}],branches:[{id:'b1',name:'Fictional branch'}],patients:[{id:'p1',name:'Fictional Patient'}],dentists:[],appointments:[{id:'a1',patientId:'p1',branchId:'b1'}],queue:[],treatments:[],invoices:[],prescriptions:[],hmo:[],conversations:[],notifications:[]}
+function Fixture(){const [state,setState]=useState(initial),[feedback,setFeedback]=useState(''),[destination,setDestination]=useState('');
+window.configure=(notifications,failure='')=>{window.failure=failure;setState(s=>({...s,notifications}));setFeedback('');setDestination('')}
+window.notificationState=state
+window.invalidateSession=()=>setState(s=>({...s,users:s.users.map(u=>({...u,status:'Inactive'}))}))
+const actions=communicationActions(command=>(...args)=>{
+ if(window.failure==='delayed')return new Promise(resolve=>{window.resolveRead=resolve})
+ if(window.failure==='throw')throw Error('Synthetic thrown error')
+ if(window.failure==='async')return Promise.resolve({ok:false,message:'Fictional asynchronous refusal'})
+ if(window.failure)return {ok:false,message:'Fictional read refusal'}
+ const next=structuredClone(state),result=command({state:next,session,now:clinicNow()},...args)
+ if(result.ok)setState(next);return result
+})
+return React.createElement(Shell,{role:'staff',page:'dashboard',setPage:(p,c)=>setDestination(JSON.stringify({p,c})),activeBranch:'Fictional branch',setActiveBranch:()=>{},store:{state,session,actions,toast:setFeedback}},React.createElement('p',null,'Fictional notification acceptance | No real Patient records'),React.createElement('output',{id:'feedback'},feedback),React.createElement('output',{id:'destination'},destination))}
+createRoot(document.getElementById('root')).render(React.createElement(Fixture))
+</script></body></html>

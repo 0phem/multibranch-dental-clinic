@@ -9,7 +9,7 @@ import { useDayAvailability } from '../booking-availability.js'
 import { dentistsFor, servicesAt } from '../scheduling.js'
 import { PatientAppointmentsPage } from './PatientVisits.jsx'
 import { PatientBookingPage } from './PatientBook.jsx'
-import { inScope, isTodayQueue, sessionForRole } from '../contracts.js'
+import { inScope, isTodayQueue, patientInScope, sessionForRole } from '../contracts.js'
 
 // Staff/Owner appointment form (M6, server-authoritative). Used for a new front-desk booking, a reschedule, and a
 // Dentist-requested follow-up. The Patient comes from the server Patient directory (public_id), branches are limited to
@@ -19,6 +19,15 @@ export function bookableBranches(state,session){
   const open=state.branches.filter(b=>b.status==='Open')
   if(session?.role==='staff')return open.filter(b=>Array.isArray(session.branchScopes)?session.branchScopes.includes(b.id):b.id===session.branchId)
   return open
+}
+
+// Resolve the exact projected identity; names/codes never identify a Patient.
+export function appointmentRecordPatient(appointment,state,session) {
+  if(session?.role!=='staff'||!inScope(appointment,session,state))return null
+  const patient=state.patients.find(p=>p.id===appointment.patientId)
+  if(!patient?.serverProjection||!patientInScope(patient,state,session))return null
+  const publicId=publicPatientIdFor(patient.id,{session,users:state.users,patients:state.patients})
+  return publicId&&publicId===appointment.patientPublicId?patient:null
 }
 
 // `prefill` (M20 server follow-up task or calendar click): prefilled parameters; patient/branch locked only when patient is specified.
@@ -33,7 +42,7 @@ export function AppointmentForm({ role, store, appointment=null, followup=null, 
   const [form,setFormState]=useState(()=>{
     if(appointment)return {patientPublicId:appointment.patientPublicId,branchId:appointment.branchId,serviceId:appointment.serviceId,dentistId:appointment.dentistId,date:appointment.date>=clinicDate()?appointment.date:clinicDate(),start:'',notes:''}
     if(followup)return {patientPublicId:followupPatient,branchId:followup.branchId,serviceId:'',dentistId:followup.dentistId,date:followup.recommendedDate&&followup.recommendedDate>=clinicDate()?followup.recommendedDate:clinicDate(),start:'',notes:followup.reason||''}
-    if(prefill)return {patientPublicId:prefill.patientPublicId,branchId:prefill.branchId,serviceId:prefill.serviceId||'',dentistId:prefill.dentistId||'',date:prefill.date&&prefill.date>=clinicDate()?prefill.date:clinicDate(),start:'',notes:prefill.notes||''}
+    if(prefill)return {patientPublicId:prefill.patientPublicId,branchId:prefill.branchId||branches[0]?.id||'',serviceId:prefill.serviceId||'',dentistId:prefill.dentistId||'',date:prefill.date&&prefill.date>=clinicDate()?prefill.date:clinicDate(),start:'',notes:prefill.notes||''}
     return {patientPublicId:'',branchId:branches[0]?.id||'',serviceId:'',dentistId:'',date:clinicDate(),start:'',notes:''}
   })
   const [search,setSearch]=useState('')
@@ -80,7 +89,7 @@ export function AppointmentForm({ role, store, appointment=null, followup=null, 
     toast(appointment?'Appointment rescheduled.':followup?'Follow-up appointment scheduled.':'Appointment confirmed.','success')
     onSaved?.(result.record)
   }
-  const canSave=!!form.patientPublicId&&!!form.branchId&&!!form.serviceId&&!!form.date&&!!form.start&&(!isRestricted||authConfirmed)&&!saving
+  const canSave=!!form.patientPublicId&&branches.some(b=>b.id===form.branchId)&&!!form.serviceId&&!!form.date&&!!form.start&&(!isRestricted||authConfirmed)&&!saving
 
   return <div className="booking-layout">
     <form className="form-grid" onSubmit={e=>{e.preventDefault();if(canSave)save()}}>
@@ -229,7 +238,7 @@ export function AppointmentsPage({ role, store, setPage, context }) {
           <Status>{a.status}</Status>
           <small className="block-muted">{a.bookingPaymentStatus==='paid'?`Deposit paid${a.bookingPaymentMethod?` (${a.bookingPaymentMethod})`:''}`:a.bookingPaymentStatus==='held'?'Held':a.bookingPaymentStatus==='refunded'?'Refunded':a.bookingPaymentStatus==='forfeited'?'Forfeited':'Unpaid'}</small>
         </div>},
-        {key:'actions',label:'Actions',render:a=><div className="row-actions">{['Confirmed','Pending'].includes(a.status)&&<><Button size="sm" variant="soft" onClick={()=>setReschedule(a)}>Reschedule</Button><Button size="sm" variant="ghost" onClick={()=>setCancelling(a)}>Cancel</Button>{a.date===clinicDate()&&<Button size="sm" variant="ghost" onClick={()=>setMissed(a)}>No-show</Button>}</>}</div>}
+        {key:'actions',label:'Actions',render:a=><div className="row-actions">{role==='staff'&&appointmentRecordPatient(a,state,session)&&<Button size="sm" variant="soft" onClick={()=>{const patient=appointmentRecordPatient(a,state,session);if(patient)setPage('patients',{patientId:patient.id})}}>Open Patient Record</Button>}{['Confirmed','Pending'].includes(a.status)&&<><Button size="sm" variant="soft" onClick={()=>setReschedule(a)}>Reschedule</Button><Button size="sm" variant="ghost" onClick={()=>setCancelling(a)}>Cancel</Button>{a.date===clinicDate()&&<Button size="sm" variant="ghost" onClick={()=>setMissed(a)}>No-show</Button>}</>}</div>}
       ]}/>
     </Card>
     <Modal open={newOpen} title="Create appointment" subtitle="The clinic server validates the slot and assigns an eligible Dentist unless you choose one." wide onClose={()=>setNewOpen(false)}><AppointmentForm role={role} store={store} onSaved={()=>setNewOpen(false)}/></Modal>
