@@ -18,6 +18,7 @@ import { sendTestEmail } from '../api-client.js'
 import { EmployeeInvitations } from './EmployeeInvitations.jsx'
 import { BranchAccessDialog } from './BranchAccessDialog.jsx'
 import '../owner-branches.css'
+import { OwnerRevenueCharts } from './OwnerRevenueCharts.jsx'
 
 export const ALLOWED_BRANCH_CODES = ['BRC-A', 'BRC-B', 'BRC-C', 'BRC-D', 'BRC-E', 'BRC-F', 'MNL', 'QC', 'MKTI', 'BGC', 'ORT', 'ALB', 'CEB', 'DVO', 'PAS']
 
@@ -343,6 +344,7 @@ export function AnalyticsPage({ activeBranch, store }) {
   const [serverBranches, setServerBranches] = useState(null)
   const [loading, setLoading] = useState(false)
   const [loadError, setLoadError] = useState(false)
+  const loadRequest = useRef(0)
   const isServerSession = !!store.session?.serverUserId
 
   const activeBranchRecord = state.branches.find(b => b.name === activeBranch)
@@ -350,28 +352,33 @@ export function AnalyticsPage({ activeBranch, store }) {
   const activeBranchId = activeBranch === 'All Branches' ? null : (activeBranchRecord?.publicId || activeBranchRecord?.id || null)
 
   const loadData = async () => {
+    const request = ++loadRequest.current
     setLoading(true)
     setLoadError(false)
     // Never keep figures for a previous branch/period on screen while a new request is in flight or after it fails.
     setServerSummary(null)
     setServerBranches(null)
+    if (activeBranch !== 'All Branches' && !activeBranchId) { setLoadError(true); setLoading(false); return }
     try {
       const p = period.toLowerCase()
       const summary = await fetchExecutiveSummary({ period: p, branch_id: activeBranchId })
       const branches = await fetchBranchPerformance({ period: p, branch_id: activeBranchId })
+      if (request !== loadRequest.current) return
       setServerSummary(summary)
       setServerBranches(branches)
     } catch {
+      if (request !== loadRequest.current) return
       // A clinic-server session shows an explicit unavailable state; only the offline demo falls back to local data.
       if (isServerSession) setLoadError(true)
     } finally {
-      setLoading(false)
+      if (request === loadRequest.current) setLoading(false)
     }
   }
 
   React.useEffect(() => {
     loadData()
-  }, [period, activeBranch])
+    return () => { ++loadRequest.current }
+  }, [period, activeBranch, activeBranchId, isServerSession])
 
   const exportServerCsv = async () => {
     try {
@@ -422,7 +429,7 @@ export function AnalyticsPage({ activeBranch, store }) {
       title="Operational Reporting & Analytics"
       text="Cross-cutting executive intelligence for revenue, queue, scheduling, capacity, HMO, and automation performance. Filtered by branch and authoritative business period."
       aside={<div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-        <select className="compact-select" value={period} onChange={e => setPeriod(e.target.value)}>
+        <select className="compact-select" aria-label="Report period" value={period} onChange={e => setPeriod(e.target.value)}>
           <option>Today</option>
           <option>This Week</option>
           <option>This Month</option>
@@ -437,6 +444,7 @@ export function AnalyticsPage({ activeBranch, store }) {
         </Button>
       </div>}
     />
+    <OwnerRevenueCharts branchId={activeBranchId} branchName={activeBranch} period={period} serverSession={isServerSession} validBranch={activeBranch === 'All Branches' || !!activeBranchId}/>
     {isServerSession && loadError && <Notice tone="warning">
       Analytics are unavailable right now, so no figures are shown. <Button variant="ghost" onClick={loadData}>Try again</Button>
     </Notice>}
@@ -492,7 +500,7 @@ export function AnalyticsPage({ activeBranch, store }) {
         </div>
       </Card>
     </div>
-    <Card title="Marketing Campaign Impact Tracking" subtitle="Attributed bookings, new patient acquisition and conversion trend" className="top-gap">
+    {!isServerSession && <Card title="Marketing Campaign Impact Tracking" subtitle="Offline example values — not clinic financial results" className="top-gap">
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', marginBottom: '16px' }}>
         <div style={{ padding: '12px', background: 'var(--surface-muted, #f8fafc)', borderRadius: '8px', border: '1px solid var(--line)' }}>
           <span style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 700 }}>Active Campaigns</span>
@@ -531,7 +539,7 @@ export function AnalyticsPage({ activeBranch, store }) {
           { key: 'status', label: 'Status', render: c => <Status>{c.status}</Status> },
         ]} />
       </div>
-    </Card>
+    </Card>}
   </>
 }
 

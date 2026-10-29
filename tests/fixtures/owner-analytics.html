@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Synthetic Owner Analytics acceptance</title></head>
+<body><div id="root"></div><script type="module">
+import React, { useState } from 'react'
+import { createRoot } from 'react-dom/client'
+import { AnalyticsPage } from '/src/pages/Admin.jsx'
+import { setClockSource } from '/src/clock.js'
+import '/src/styles.css'
+import '/src/foundation.css'
+import '/src/patient.css'
+import '/src/polish.css'
+import '/src/patient/portal.css'
+const today = new URLSearchParams(location.search).get('today') || '2026-10-31'
+setClockSource(() => new Date(`${today}T12:00:00+08:00`))
+const branches = [{id:'b1',publicId:'01j00000000000000000000b01',name:'Synthetic branch 1'}, {id:'b2',publicId:'01j00000000000000000000b02',name:'Synthetic branch 2'}]
+function Fixture() {
+  const [branch,setBranch] = useState('All Branches')
+  const state = {branches,appointments:[],queue:[],hmo:[],invoices:[],inquiries:[],conversations:[],dentists:[],patients:[]}
+  return React.createElement(React.Fragment,null,
+    React.createElement('label',null,'Acceptance branch',React.createElement('select',{ 'aria-label':'Acceptance branch',value:branch,onChange:e=>setBranch(e.target.value) }, ...['All Branches',...branches.map(b=>b.name),'Unavailable branch'].map(name=>React.createElement('option',{key:name},name)))),
+    React.createElement(AnalyticsPage,{activeBranch:branch,store:{state,session:{serverUserId:'synthetic-owner'},toast:()=>{}}}))
+}
+createRoot(document.getElementById('root')).render(React.createElement(Fixture))
+</script></body></html>

@@ -199,7 +199,7 @@ For bug fixes, self-check before PR, and end-of-day status, use templates B, C, 
 - [x] DEN-14 Messages: shared search/scroll/bubbles verified for Dentist, preserving Staff-only participant management.
 
 **Batch RIC-3: Owner dashboard**
-- [ ] OWN-01 Executive dashboard: add hoverable line graph + histogram. Line graph is hoverable and shows daily profit or revenue (choose the best term); histogram is the summary of the week, produced on Saturdays since it's the last opening day; make both hoverable with accurate revenue
+- [x] OWN-01 Owner Analytics: daily gross-collections line chart and Mon–Sat histogram connected to authoritative payment/refund APIs; exact tooltips/table, branch/period filters and Saturday status verified by Joevan (A4). See docs/OWN01_A4_ACCEPTANCE.md for on-demand/preview semantics.
 - [x] OWN-02 Branches: existing dropdown and server/database uniqueness verified by Joevan (A3).
 - [x] OWN-03 Branches: pin lifecycle, missing-location display and visual anchoring fixed; click/drag and coordinate persistence verified by Joevan (A3).
 - [x] OWN-04 Branches: existing cards/status colors retained; scoped token contrast/focus/responsiveness verified by Joevan (A3).
@@ -330,14 +330,15 @@ For bug fixes, self-check before PR, and end-of-day status, use templates B, C, 
   <goal>Owner sees accurate hoverable analytics and a cleaner branch management UI.</goal>
   <depends_on>RIC-1; Joevan data endpoints for OWN-01, OWN-02, OWN-03</depends_on>
 
-  <revision id="OWN-01" status="todo" severity="high" owner="Richmon" support="Joevan">
+  <revision id="OWN-01" status="done" severity="high" owner="Richmon" support="Joevan" implementer="Joevan">
     <tasks>
-      - [ ] Line graph: daily revenue (recommended term; see Q2), hover tooltip shows exact date and amount
-      - [ ] Histogram: weekly summary (per-day revenue Mon-Sat), generated on Saturday (last opening day), hover tooltip shows exact amount
-      - [ ] Totals in tooltips must match billing records exactly
-      - [ ] (Joevan) Aggregation endpoints for daily revenue and weekly summary; Saturday generation logic
-      - [ ] Empty/loading/error states and responsive sizing
+      - [x] Owner Analytics daily gross-collections line chart follows current branch/report period; hover/focus/tap shows exact date, collections, refunds and net cash flow; accessible table provided
+      - [x] Six-day Mon–Sat histogram appears on Saturday as in progress, with finalized status only from the existing server flag after Saturday. Earlier viewing requires explicit in-progress preview; historical week date selection supported
+      - [x] API decimal amounts retained; BigInt-centavo validation/display reconciles gross/refunds/net without floating-point money accumulation; synthetic partial-refund records verified
+      - [x] Existing daily/weekly endpoints and API clients reused; financial aggregation and authorization unchanged. Saturday summary is read-only/on-demand, not a new scheduled immutable-report job
+      - [x] Loading/empty/error/retry, current-scope remounting, delayed-response rejection and 1440px/390px rendered acceptance passed
     </tasks>
+    <evidence>A4: docs/OWN01_A4_ACCEPTANCE.md. Backend 5 tests/84 assertions; frontend 25 tests; rendered desktop/mobile and timing/error scenarios passed. Campaign example figures are excluded from authenticated financial reporting. No live financial data used.</evidence>
     <acceptance>Both charts hoverable; values match billing data to the peso; histogram appears on Saturdays.</acceptance>
   </revision>
 

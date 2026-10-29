@@ -1,0 +1,21 @@
+.owner-revenue { margin: 20px 0; min-width: 0; }
+.owner-revenue-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
+.owner-revenue-grid > *, .owner-revenue .card { min-width: 0; }
+.owner-revenue-totals { display: flex; flex-wrap: wrap; gap: 12px 20px; margin: 12px 0; }
+.owner-revenue-totals dt { color: var(--muted); font-size: 12px; }
+.owner-revenue-totals dd { margin: 3px 0 0; color: var(--ink); font-weight: 700; overflow-wrap: anywhere; }
+.owner-revenue-plot { display: block; width: 100%; height: auto; }
+.owner-revenue-plot line { stroke: var(--line); }
+.owner-revenue-plot text { fill: var(--muted); font-size: 11px; }
+.owner-revenue-line { stroke: var(--brand); fill: none; stroke-width: 3; }
+.owner-revenue-point { cursor: pointer; fill: var(--brand); }
+.owner-revenue-point:focus-visible { outline: 2px solid var(--ink); outline-offset: 4px; }
+.owner-revenue-point:hover, .owner-revenue-point:focus-visible { fill: var(--brand-3); }
+.owner-revenue-hit { fill: transparent; }
+.owner-revenue-tooltip { border: 1px solid var(--line); background: var(--surface-2); padding: 10px; border-radius: var(--radius-md, 8px); margin: 8px 0; overflow-wrap: anywhere; }
+.owner-revenue-table summary { cursor: pointer; color: var(--brand-3); margin-top: 12px; }
+.owner-revenue-table > div { overflow-x: auto; }
+.owner-revenue-table table { width: 100%; font-size: 12px; border-collapse: collapse; }
+.owner-revenue-table :is(th, td) { padding: 8px; text-align: left; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.owner-revenue-week-status { color: var(--ink); font-weight: 600; }
+@media (max-width: 1000px) { .owner-revenue-grid { grid-template-columns: minmax(0, 1fr); } }
