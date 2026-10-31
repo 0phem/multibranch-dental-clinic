@@ -3,6 +3,7 @@ import { NAV, ROLE_INFO } from './data.js'
 import { visibleNotifications, notificationDestination } from './phase3-contracts.js'
 import { clinicDate } from './clock.js'
 import './notification-panel.css'
+import './a12-shell-polish.css'
 import { groupNotificationsByDate, sortNotificationsNewestFirst } from './notification-date-groups.js'
 import { sessionForRole } from './contracts.js'
 import { canAccessPage } from './safeguards.js'
@@ -91,23 +92,28 @@ export function NotificationPanel({role,store,onClose,setPage}){
   const dateGroups=groupNotificationsByDate(visible,clinicDate())
   const [busy,setBusy]=React.useState(false)
   const [failure,setFailure]=React.useState('')
+  const pending=React.useRef(false)
+  const unread=items.filter(n=>!n.read).length
   const latest=React.useRef({state,session})
   latest.current={state,session}
   const perform=async command=>{
+    if(pending.current)return false
+    pending.current=true
     setBusy(true);setFailure('')
     try {const result=await command();if(!result?.ok){const message=result?.message||'Notifications could not be updated. Try again.';setFailure(message);toast(message,'warning');return false}return true}
     catch {const message='Notifications could not be updated. Try again.';setFailure(message);toast(message,'warning');return false}
-    finally {setBusy(false)}
+    finally {pending.current=false;setBusy(false)}
   }
   const mark=id=>perform(()=>actions.markNotificationRead(id))
   const open=async n=>{const destination=notificationDestination(state,session,n);if(destination&&await mark(n.id)){const current=notificationDestination(latest.current.state,latest.current.session,n);if(current){setPage(current.page,current.context);onClose()}}}
-  return <Modal open title="Notifications" subtitle="Your updates and reminders" onClose={onClose} className="notification-dialog"><div className="notification-popover">
-    <div className="notification-toolbar"><button onClick={()=>perform(()=>actions.markAllNotificationsRead())} disabled={busy||!items.some(n=>!n.read)}>Mark my notifications read</button><button onClick={()=>setAll(v=>!v)}>{all?'Recent only':`View all (${items.length})`}</button></div>
-    {failure&&<p className="notification-failure" role="alert">{failure}</p>}
-    <div className="notification-scroll">{visible.length?dateGroups.map(group=><div key={group.key}>
+  return <Modal open title="Notifications" subtitle="Your updates and reminders" onClose={onClose} className="notification-dialog a12-notifications"><div className="notification-popover">
+    <div className="notification-summary"><span>{unread?`${unread} unread`:'No unread updates'}</span><span role="status">{busy?'Updating read status…':`Showing ${visible.length} of ${items.length}`}</span></div>
+    <div className="notification-toolbar"><button type="button" onClick={()=>perform(()=>actions.markAllNotificationsRead())} disabled={busy||!unread}>Mark my notifications read</button><button type="button" aria-pressed={all} onClick={()=>setAll(v=>!v)}>{all?'Recent only':`View all (${items.length})`}</button></div>
+    {failure&&<p className="notification-failure" role="alert" tabIndex={0}><b>Read status wasn’t updated.</b> {failure}</p>}
+    <div className="notification-scroll" role="region" aria-label="Notification history" tabIndex={0} aria-busy={busy}>{visible.length?dateGroups.map(group=><section key={group.key}>
       <h3 className="notification-date-heading">{group.label}</h3>
-      {group.items.map(n=><div className={`notification-row ${n.read?'':'unread'}`} key={n.id}><span className="notification-dot"/><div><b>{!n.read&&<span className="sr-only">Unread: </span>}{n.title}</b><p>{n.body}</p><small>{n.createdAt||'Date unavailable'} • {n.legacy?'Historical demo record':n.channel}</small><div className="row-actions">{!n.read&&<button disabled={busy} onClick={()=>mark(n.id)}>Mark read</button>}{notificationDestination(state,session,n)&&<button disabled={busy} onClick={()=>open(n)}>View update</button>}</div></div></div>)}
-    </div>):<div className="notification-empty">You're all caught up.</div>}</div>
+      <ul className="notification-list">{group.items.map(n=><li className={`notification-row ${n.read?'':'unread'}`} key={n.id}><span className="notification-dot" aria-hidden="true"/><div><b>{!n.read&&<><span className="sr-only">Unread: </span><span className="notification-unread-label" aria-hidden="true">Unread</span></>}{n.title}</b><p>{n.body}</p><small>{n.createdAt||'Date unavailable'} • {n.legacy?'Historical demo record':n.channel}</small><div className="row-actions">{!n.read&&<button type="button" disabled={busy} onClick={()=>mark(n.id)}>Mark read</button>}{notificationDestination(state,session,n)&&<button type="button" className="notification-view" disabled={busy} onClick={()=>open(n)}>View update</button>}</div></div></li>)}</ul>
+    </section>):<div className="notification-empty"><Icon name="bell" size={28}/><b>You're all caught up.</b><p>No updates to show in this workspace.</p></div>}</div>
   </div></Modal>
 }
 
@@ -159,6 +165,7 @@ export function Shell({ role, page, setPage, onLogout, activeBranch, setActiveBr
   const initials=name.split(' ').map(x=>x[0]).filter(Boolean).slice(0,2).join('')
   const unread=visibleNotifications(store.state,session).filter(n=>!n.read).length
   const groups=navGroups(role,!!session?.serverUserId).map(([title,items])=>[title,items.filter(([key])=>canAccessPage(store.state,session,key))]).filter(([,items])=>items.length)
+  const currentPage=canAccessPage(store.state,session,page)?(groups.flatMap(([,items])=>items).find(([key])=>key===page)?.[1]||NAV[role].find(([key])=>key===page)?.[1]):null
   // M17: in a clinic-server session the unread badge comes ONLY from the server (null = not known yet / unavailable: no badge, never a number).
   const [serverUnread,setServerUnread]=React.useState(null)
   React.useEffect(()=>{
@@ -210,13 +217,13 @@ export function Shell({ role, page, setPage, onLogout, activeBranch, setActiveBr
   const navigation=<><div className="role-card"><span aria-hidden="true">{initials}</span><div><small>{info.label}</small><b>{name}</b><em>{role==='owner'?'Branch oversight':activeBranch}</em></div></div>
     <nav className="main-nav" aria-label={`${info.label} navigation`}>{groups.map(([title,items])=><div className="nav-group" key={title}><span className="nav-group-label">{title}</span>{items.map(([key,label])=><button type="button" key={key} aria-current={page===key?'page':undefined} className={page===key?'active':''} onClick={()=>selectPage(key)}><Icon name={NAV_ICONS[key]||'home'} size={18}/><span>{label}</span></button>)}</div>)}</nav>
     <div className="sidebar-footer"><button type="button" onClick={()=>setLogoutConfirmOpen(true)}><Icon name="logout" size={16}/>Sign out</button></div></>
-  return <ShellActionsContext.Provider value={shellActions}><div className={`app-shell role-${role}`}>
+  return <ShellActionsContext.Provider value={shellActions}><div className={`app-shell a12-shell role-${role}`}>
     <a className="skip-link" href="#main-content">Skip to content</a>
     <aside className="sidebar"><div className="sidebar-brand"><Brand/></div>{navigation}</aside>
     <Modal open={mobileOpen} title="Your workspace" onClose={()=>setMobileOpen(false)} className="navigation-dialog"><div className="sidebar-brand"><Brand/></div>{navigation}</Modal>
     <div className="main-shell">
       <header className="topbar">
-        <div className="topbar-left">{role!=='patient'&&<button className="mobile-menu icon-btn" aria-label="Open navigation" aria-haspopup="dialog" aria-expanded={mobileOpen} onClick={()=>setMobileOpen(true)}><Icon name="menu" size={21}/></button>}<div className="topbar-context"><span className="workspace-label">{info.label} workspace</span>{role==='owner'&&<label className="branch-scope"><span>Branch</span><select value={activeBranch} onChange={e=>setActiveBranch(e.target.value)}><option>All Branches</option>{store.state.branches.map(b=><option key={b.id}>{b.name}</option>)}</select></label>}{(role==='staff'||role==='dentist')&&<div className="branch-lock"><small>Assigned branch</small><b>{activeBranch}</b></div>}</div></div>
+        <div className="topbar-left">{role!=='patient'&&<button className="mobile-menu icon-btn" type="button" aria-label="Open navigation" aria-haspopup="dialog" aria-expanded={mobileOpen} onClick={()=>setMobileOpen(true)}><Icon name="menu" size={21}/></button>}<div className="topbar-context"><div className="workspace-heading"><span className="workspace-label">{info.label} workspace</span>{currentPage&&<b className="workspace-page">{currentPage}</b>}</div>{role==='owner'&&<label className="branch-scope"><span>Branch</span><select value={activeBranch} onChange={e=>setActiveBranch(e.target.value)}><option>All Branches</option>{store.state.branches.map(b=><option key={b.id}>{b.name}</option>)}</select></label>}{(role==='staff'||role==='dentist')&&<div className="branch-lock"><small>Assigned branch</small><b>{activeBranch}</b></div>}</div></div>
         <div className="top-actions"><button className="top-icon-btn" aria-haspopup="dialog" aria-expanded={notificationsOpen} onClick={()=>setNotificationsOpen(true)} aria-label={`Notifications${unread?`, ${unread} unread`:''}`}><Icon name="bell" size={20}/>{unread>0&&<span aria-hidden="true" className="notification-count">{unread>99?'99+':unread}</span>}</button><div className="top-user"><span aria-hidden="true">{initials}</span><div><b>{name}</b><small>{info.label}</small></div></div></div>
       </header>
       <main id="main-content" tabIndex={-1} className="content">{children}</main>

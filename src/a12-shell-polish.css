@@ -1,0 +1,61 @@
+/* A12 shell only. Page content and shared components keep their existing styles. */
+.a12-shell > .sidebar { padding-top: var(--space-4); }
+.a12-shell :is(.sidebar, .navigation-dialog) .sidebar-brand { padding-bottom: var(--space-4); }
+.a12-shell :is(.sidebar, .navigation-dialog) .role-card {
+  background: var(--surface-2); border-color: var(--line); border-radius: var(--radius);
+  margin-bottom: var(--space-4); flex: none;
+}
+.a12-shell :is(.sidebar, .navigation-dialog) .role-card > span { border-radius: var(--radius-sm); }
+.a12-shell .main-nav { background: none; padding: var(--space-1) var(--space-1) var(--space-3); }
+.a12-shell .nav-group { margin-bottom: var(--space-5); }
+.a12-shell .nav-group-label { text-transform: none; letter-spacing: 0; font-weight: var(--weight-strong); }
+.a12-shell .main-nav button { gap: var(--space-3); color: var(--text); transition: none; }
+.a12-shell .main-nav button .icon { flex: none; }
+.a12-shell .main-nav button:hover { background: var(--surface-3); color: var(--ink); }
+.a12-shell .main-nav button.active { background: var(--brand-soft); color: var(--brand-3); box-shadow: inset 3px 0 var(--brand); }
+.a12-shell .main-nav button:focus-visible { outline: 2px solid var(--focus-color); outline-offset: -2px; }
+.a12-shell .sidebar-footer button { color: var(--text); }
+.a12-shell .topbar { align-items: center; }
+.a12-shell .topbar-left { flex: 1; min-width: 0; }
+.a12-shell .topbar-context { width: 100%; gap: var(--space-5); }
+.a12-shell .workspace-heading { min-width: 0; }
+.a12-shell .workspace-label { display: block; font-size: var(--font-xs); font-weight: var(--weight-medium); }
+.a12-shell .workspace-page { display: block; color: var(--ink); font-size: var(--font-body); font-weight: var(--weight-strong); line-height: 1.5; overflow-wrap: anywhere; }
+.a12-shell .branch-lock { flex: 1; }
+.a12-shell .branch-lock b { line-height: 1.5; }
+.a12-shell .branch-scope select { border-color: var(--line-strong); }
+.a12-shell .top-user { border-left: 1px solid var(--line); padding-left: var(--space-4); }
+.a12-shell .top-icon-btn[aria-expanded="true"] { background: var(--brand-soft); color: var(--brand-3); }
+.a12-shell .navigation-dialog .modal-body { min-height: 0; overflow: auto; overscroll-behavior: contain; }
+.a12-shell .navigation-dialog .main-nav { flex: none; overflow: visible; }
+.a12-shell .navigation-dialog .sidebar-footer { margin-top: var(--space-3); }
+.a12-shell .patient-mobile-nav button.active { color: var(--brand-3); background: var(--brand-soft); border-radius: var(--radius-sm); }
+.a12-shell .patient-mobile-nav button:focus-visible { outline: 2px solid var(--focus-color); outline-offset: -2px; }
+/* The sidebar ends at 1024px; Patient shortcuts must cover that entire range. */
+@media (min-width: 769px) and (max-width: 1024px) {
+  .a12-shell.role-patient { --pt-bottom-nav: 88px; }
+  .a12-shell.role-patient .content { padding-bottom: 140px; }
+  .a12-shell .patient-mobile-nav {
+    display: grid; position: fixed; inset: auto 0 0; height: auto; min-height: 72px;
+    padding: var(--space-2) var(--space-1) calc(var(--space-2) + env(safe-area-inset-bottom));
+    grid-template-columns: repeat(4, minmax(0, 1fr)); background: var(--surface);
+    border-top: 1px solid var(--line); z-index: 50;
+  }
+  .a12-shell .patient-mobile-nav button { min-height: 48px; font-size: var(--font-xs); }
+}
+@media (max-width: 768px) {
+  .a12-shell .topbar-context { gap: var(--space-1); }
+  .a12-shell .topbar-left { gap: var(--space-3); }
+  .a12-shell .branch-lock b { font-size: var(--font-sm); font-weight: var(--weight-medium); }
+  .a12-shell .branch-scope { gap: var(--space-2); }
+  .a12-shell .branch-scope select { flex: 1; width: 100%; max-width: 100%; }
+  .a12-shell .workspace-page { font-size: var(--font-md); }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .a12-shell :is(.main-nav button, .sidebar-footer button, .top-icon-btn, .patient-mobile-nav button) {
+    transition: background-color var(--motion-instant) ease, color var(--motion-instant) ease;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .a12-shell :is(.main-nav button, .sidebar-footer button, .top-icon-btn, .patient-mobile-nav button) { transition: none; }
+}
