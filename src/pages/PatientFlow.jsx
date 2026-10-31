@@ -246,16 +246,16 @@ function AppointmentsLoadNotice({ store }) {
 }
 
 function QueueTable({ rows, columns, onOpen, nameOf }) {
-  if (!rows.length) return <Table rows={rows} columns={columns}/>
+  if (!rows.length) return <div className="queue-empty" role="status"><Icon name="users" size={24}/><h3>No patients match this view</h3><p>Try another status or dentist filter, or refresh the queue.</p></div>
   const isAction = target => target.closest?.('button, a, input, select, textarea, [role="button"]')
-  return <div className="table-wrap"><table role="table">
+  return <div className="table-wrap queue-table"><table role="table">
     <caption className="sr-only">Live queue</caption>
-    <thead role="rowgroup"><tr role="row">{columns.map(c => <th scope="col" role="columnheader" key={c.key}>{c.label}</th>)}</tr></thead>
+    <thead role="rowgroup"><tr role="row">{columns.map(c => <th scope="col" role="columnheader" data-column={c.key} key={c.key}>{c.label}</th>)}</tr></thead>
     <tbody role="rowgroup">{rows.map(row => <tr role="row" key={row.id} className="queue-open-row" tabIndex={0}
       aria-label={`Open chart for ${nameOf(row)}. Press Enter or Space.`}
       onClick={e => { if (!isAction(e.target)) onOpen(row) }}
       onKeyDown={e => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onOpen(row) } }}>
-      {columns.map(c => <td role="cell" key={c.key}><span className="mobile-cell-label" aria-hidden="true">{c.label}</span><div className="cell-value">{c.render ? c.render(row) : row[c.key]}</div></td>)}
+      {columns.map(c => <td role="cell" data-column={c.key} key={c.key}><span className="mobile-cell-label" aria-hidden="true">{c.label}</span><div className="cell-value">{c.render ? c.render(row) : row[c.key]}</div></td>)}
     </tr>)}</tbody>
   </table></div>
 }
@@ -327,23 +327,23 @@ export function QueuePage({ role, activeBranch, store, setPage }) {
     {!demo&&<QueueStatusCounts store={store} activeBranch={role==='owner'?activeBranch:'All Branches'} vis={vis}/>}
     {operational&&!demo&&<SelfRegistered toast={toast} store={store} compact/>}
     {role==='staff'&&<Notice tone="info">A patient in the queue has already checked in. Marking them as having left or cancelling their visit isn’t available yet — the clinic still needs to decide how an admitted visit is closed. A patient who never arrived is marked No-show from Appointments.</Notice>}
-    <Card title="Live queue" subtitle="Arrival order determines positions inside each dentist queue (first-come, first-served)." className="top-gap">
+    <Card title="Live queue" subtitle="Arrival order determines positions inside each dentist queue (first-come, first-served)." className="top-gap queue-live-card">
       <QueueTable rows={visible} onOpen={q=>setPage('patients',encounterContext(q))} nameOf={q=>q.patientName||patientName(q.patientId,state.patients)} columns={[
-        {key:'position',label:'Pos.',render:q=>q.position?`#${q.position}`:'—'},
-        {key:'queueNumber',label:'Queue no.',render:q=>q.queueNumber||'—'},
-        {key:'patient',label:'Patient',render:q=><div>
-          <div style={{display:'flex',alignItems:'center',gap:'6px',flexWrap:'wrap'}}>
+        {key:'queueNumber',label:'Queue',render:q=><div className="queue-order"><b className="queue-number"><span className="sr-only">Queue number </span>{q.queueNumber||'—'}</b><span className="queue-secondary">Position {q.position?`#${q.position}`:'—'}</span></div>},
+        {key:'patient',label:'Patient',render:q=><div className="queue-identity">
+          <div>
             <button type="button" className="queue-patient-link" title="Click to open patient chart" aria-label={`Open chart for ${q.patientName||patientName(q.patientId,state.patients)}`} onClick={()=>setPage('patients',encounterContext(q))}><b>{q.patientName||patientName(q.patientId,state.patients)}</b></button>
           </div>
-          <small className="block-muted">{q.lateArrival&&<span className="fd-badge is-late">Late arrival · queued last</span>} {q.appointmentCode||(q.walkIn?'Walk-in visit':'Scheduled visit')}</small>
+          <small className="queue-secondary queue-patient-meta">{q.patientCode&&<span>{q.patientCode}</span>}<span>{q.appointmentCode||(q.walkIn?'Walk-in visit':'Scheduled visit')}</span></small>
+          {q.lateArrival&&<span className="fd-badge is-late">Late arrival · queued last</span>}
         </div>},
-        {key:'branch',label:'Branch'},{key:'dentist',label:'Dentist',render:q=>dentistName(q.dentistId,state.dentists)},
+        {key:'careTeam',label:'Dentist / Branch',render:q=><div className="queue-care-team"><b>{dentistName(q.dentistId,state.dentists)}</b><span className="queue-secondary">{q.branch}</span></div>},
         {key:'checkedIn',label:'Checked in',render:q=>displayTime(q.checkedIn)},
         ...(demo?[{key:'wait',label:'Est. wait (demo)',render:q=>`${queueWaitEstimate(q,state.queue,state.appointments,state.treatments,state.dentists)} min` }]:[]),
-        {key:'status',label:'Status',render:q=><Status>{q.displayStatus||q.status}</Status>},
-        {key:'actions',label:'Actions',render:q=><div className="row-actions" onClick={e=>e.stopPropagation()}>
-          {['In Queue', 'Waiting'].includes(q.status)&&(operational||role==='dentist')&&<button type="button" className="icon-btn queue-call-btn" title="Call patient in queue" aria-label={`Call patient ${q.patientName||patientName(q.patientId,state.patients)} in queue`} disabled={!!busy} onClick={()=>update(q,'call','Patient called in queue.')}><Icon name="phone" size={16}/></button>}
-          {['staff','dentist'].includes(role)&&<button type="button" className="icon-btn queue-message-btn" title="Open patient conversation" aria-label={`Open conversation with ${q.patientName||patientName(q.patientId,state.patients)}`} disabled={!!messageBusy} onClick={()=>openMessage(q)}><Icon name="message" size={16}/></button>}
+        {key:'status',label:'Status',render:q=><div className="queue-status"><Status>{q.displayStatus||q.status}</Status></div>},
+        {key:'actions',label:'Actions',render:q=><div className="row-actions queue-actions" onClick={e=>e.stopPropagation()}>
+          {['In Queue', 'Waiting'].includes(q.status)&&(operational||role==='dentist')&&<button type="button" className="icon-btn queue-call-btn" title="Call patient in queue" aria-label={`Call patient ${q.patientName||patientName(q.patientId,state.patients)} in queue`} disabled={!!busy} onClick={()=>update(q,'call','Patient called in queue.')}><Icon name="phone" size={16}/><span>Call</span></button>}
+          {['staff','dentist'].includes(role)&&<button type="button" className="icon-btn queue-message-btn" title="Open patient conversation" aria-label={`Open conversation with ${q.patientName||patientName(q.patientId,state.patients)}`} disabled={!!messageBusy} onClick={()=>openMessage(q)}><Icon name="message" size={16}/><span>Message</span></button>}
           {role==='dentist'&&(['In Queue', 'Waiting', 'Called', 'Treatment Ready'].includes(q.status)||q.status==='Served'||q.visitStatus==='In Treatment')&&<Button size="sm" onClick={()=>setPage('treatment',encounterContext(q))}>{q.treatmentId?'Continue Treatment':'Open Treatment'}</Button>}
 
           {operational&&<>
