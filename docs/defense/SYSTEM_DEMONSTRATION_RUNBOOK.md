@@ -1,11 +1,15 @@
 # System demonstration runbook
 
-## Current snapshot clarification (2026-10-30)
+## A11 merged-state assessment (2026-10-31, Asia/Manila)
 
-[B6 isolated report](https://github.com/ccadaverr/multibranch-dental-clinic/blob/4c993244416ec9b0530e1d16acfb6c9e471fac9c/docs/STF12_B6_WALKIN_ACCEPTANCE.md) now records synthetic API success (2 tests/33 assertions) and separate rendered fixture checks. Commit `4c993244416ec9b0530e1d16acfb6c9e471fac9c` is not in shared integration `010a386f147bed285c58821a0a2cc800c393982e`. This supersedes pending-B6-report wording in the earlier snapshot below; live browser-to-server and production acceptance remain unverified. A8 and B3-B5 also remain isolated. The [revised Word candidate](BPA_MODULES_UPDATED_OCT_22_2026_A9_REVIEW.docx) is REVIEW REQUIRED; [original](BPA_MODULES_UPDATED_OCT_22_2026.docx) unchanged.
+Joevan reconciled this document on `session/developer-a-ui-20261031` at **`85a9552bf5544c73db6bde9f7b01792a5cf9cb0a`**. Local `integration/developer-a-b` and cached `origin/integration/developer-a-b` match that commit; A11 performed no fetch or branch update. Ancestry confirms **A8, B3 (including its follow-up), B4, B5, B6, B7 and A10 are included**. Integration establishes code ancestry, not a new runtime pass, deployment approval or production readiness.
+
+Historical context: the October 29 A9 snapshot used integration `010a386` and had not reviewed B6 results. Its October 30 clarification recorded B6 synthetic API success (2 tests/33 assertions) and separate rendered checks, while A8/B3-B6 were absent from that older integration. Those absence claims are superseded for `85a9552`; original dated test results and fixture limits remain historical evidence. Affected current entries below are reconciled without changing original QA ownership or module traceability.
+
+[B7](../DEN12_B7_WORK_HOURS_ACCEPTANCE.md) supplies scoped Work Hours presentation acceptance; [A10](../GEN10_A10_NOTIFICATION_ACCEPTANCE.md) supplies partial notification presentation acceptance. **B8 is a separate concurrent Developer B batch whose evidence has not been reviewed here; no B8 completion or integrated frontend acceptance is claimed.** A11 reruns no application suites, browser workflows or database checks. The [revised Word candidate](BPA_MODULES_UPDATED_OCT_22_2026_A9_REVIEW.docx) remains REVIEW REQUIRED; [original](BPA_MODULES_UPDATED_OCT_22_2026.docx) unchanged.
 
 
-Prepared by Joevan, 2026-10-29 (Asia/Manila). Use with the [acceptance matrix](FEATURE_ACCEPTANCE_MATRIX.md) and [known limitations](KNOWN_LIMITATIONS_AND_PENDING_QA.md). This is a demonstration guide, not a record that the following live outcomes occurred.
+Originally prepared by Joevan, 2026-10-29 (Asia/Manila). Use with the [acceptance matrix](FEATURE_ACCEPTANCE_MATRIX.md) and [known limitations](KNOWN_LIMITATIONS_AND_PENDING_QA.md). This is a demonstration guide, not a record that the following live outcomes occurred.
 
 The product identity is **Dr. Dana E. Roxas Dental Clinic**. Four roles: Patient, Staff, Dentist and Owner. Manifests declare Laravel 13 and React 19; see the matrix for exact constraints.
 
@@ -13,7 +17,7 @@ The product identity is **Dr. Dana E. Roxas Dental Clinic**. Four roles: Patient
 
 Use an already authorized demonstration environment containing fictional accounts, Patients, appointments, shifts, visits and payments. Obtain credentials privately through the team's approved account process; this guide contains none. Do not access the protected `dental_clinic` database, change environment files, reset data, create real payments or send messages to real recipients for this demonstration. Do not run database setup commands from historical guides without separate environment verification.
 
-Record the served commit and environment before starting. Shared integration was verified at `010a386f147bed285c58821a0a2cc800c393982e`; A8 is accepted on `179cfb4903f46648666d2dbdeb0b0d70b3829dd6` but not integrated. A9 is documentation stacked on A8. Do not present B3/B4/B5 behavior on that build. A candidate must receive its own coordinated integration acceptance before substituting it.
+Record the served commit and environment before starting. A11 verified shared integration refs locally at `85a9552bf5544c73db6bde9f7b01792a5cf9cb0a`, including A8/B3-B7/A10. The earlier A9 guide described `010a386` and separate candidates; those build restrictions are historical. Confirm the served build actually matches the merged baseline before demonstrating its features. Merged code and original fixture acceptance do not replace coordinated runtime acceptance. B8 is concurrent and unreviewed.
 
 Have a fictional same-day appointment and eligible on-shift Dentist ready. Dates and schedules must match **Asia/Manila**; screenshots use fixed synthetic dates and do not establish today's availability. If a prerequisite or connection is unavailable, explain it and open the linked synthetic evidence instead of claiming a successful live transaction. No application or database change is required merely to show the screenshots.
 
@@ -30,18 +34,18 @@ Have a fictional same-day appointment and eligible on-shift Dentist ready. Dates
 
 - **Role:** authorized Staff; optionally Patient for their own portal view.
 - **Prerequisites:** fictional server-backed Patient visible through the authorized directory/appointment projection, plus a second distinguishable fictional Patient.
-- **Steps:** search the directory and select the intended record. Show identity/contact information and the access tier. On an A8 build, open Appointments and activate **Open Patient Record** on that Patient's row; verify the selected name/code.
+- **Steps:** search the directory and select the intended record. Show identity/contact information and the access tier. On the verified merged baseline, open Appointments and activate **Open Patient Record** on that Patient's row; verify the selected name/code.
 - **Expected observation:** the corresponding Patient is selected without a second search; unavailable/mismatched identities have no shortcut. The destination still enforces its own scope and server access.
-- **Acceptance:** [A8](../GEN09_A8_STAFF_WORKFLOW_ACCEPTANCE.md), GEN-09 partial, is isolated/accepted, not shared-integrated. Existing record APIs/source are present; no new production acceptance is claimed.
+- **Acceptance:** [A8](../GEN09_A8_STAFF_WORKFLOW_ACCEPTANCE.md), GEN-09 partial, has focused fixture acceptance and is shared-integrated; merged-state runtime acceptance remains pending. Existing record APIs/source are present; no new production acceptance is claimed.
 - **Disclose:** Owner oversight and Dentist care context do not imply unrestricted clinical record access. A8 synthetic navigation measurement is 2→1 only when the old path required selecting the Patient.
 
 ## 3. Appointment scheduling
 
 - **Role:** Staff; Patient booking can be shown separately using only the Patient's own authorized portal.
 - **Prerequisites:** supported server Patient, authorized open branch, active offered service and server-provided available slot; test-only booking environment.
-- **Steps:** on A8, choose **Book Appointment** from the selected Patient record. Verify the locked Patient and authorized branch choices. Explicitly choose service, date and time; review any consultation acknowledgement; confirm once. In shared A7, use the existing New appointment workflow instead.
+- **Steps:** on the merged baseline, choose **Book Appointment** from the selected Patient record. Verify the locked Patient and authorized branch choices. Explicitly choose service, date and time; review any consultation acknowledgement; confirm once.
 - **Expected observation:** no service, medicine or Dentist is chosen by the shortcut. Server availability and conflict validation remain. Show success only if returned; otherwise show the actual failure without repeated blind submissions.
-- **Acceptance:** A8 rendered required fields, restricted confirmation, conflict/validation/success, reschedule and follow-up prefill; isolated only. GEN-09 record→Patient-prefilled form: 3→1 control activations, excluding subsequent booking choices/confirmation.
+- **Acceptance:** A8 rendered required fields, restricted confirmation, conflict/validation/success, reschedule and follow-up prefill; controlled fixture evidence, now merged. GEN-09 record→Patient-prefilled form: 3→1 control activations, excluding subsequent booking choices/confirmation.
 - **Disclose:** synthetic responses do not prove a live persisted booking or payment. Do not claim a reserved slot before the authoritative response.
 
 ## 4. Staff check-in and queue
@@ -50,7 +54,7 @@ Have a fictional same-day appointment and eligible on-shift Dentist ready. Dates
 - **Prerequisites:** fictional confirmed appointment for Manila today, eligible Dentist shift and approved current admission requirements.
 - **Steps:** open Check-In; locate the appointment, review the displayed Patient/branch/Dentist and current admission requirements, then use the supported admission action. Show the resulting queue only if admission succeeds. Demonstrate the single Refresh and walk-in search without creating a new identity automatically.
 - **Expected observation:** shared B2 combobox supports search, keyboard selection and clearing; admission errors remain visible. A rejected off-shift admission is not success.
-- **Acceptance:** STF-02/09/10 and STF-12 combobox evidence is integrated in [Wave 1](../INTEGRATION_WAVE_20261029.md). B4 exact-context row/Call/Message improvements are isolated, not on shared A7. B6 now has an isolated synthetic API success report and separate controlled rendered checks; live browser-to-server and integrated acceptance remain unverified.
+- **Acceptance:** STF-02/09/10 and STF-12 combobox evidence is integrated in [Wave 1](../INTEGRATION_WAVE_20261029.md). B4 exact-context row/Call/Message improvements and [B6](../STF12_B6_WALKIN_ACCEPTANCE.md) evidence are now merged. B6 records synthetic API success and separate controlled rendered checks; live browser-to-server and integrated acceptance remain unverified.
 - **Disclose:** STF-11 auto-confirm/ID/cancellation-reason redesign and STF-13 unified find/create remain pending policy. Preserve Staff-controlled admission and queue exceptions; do not claim those proposed automations are accepted.
 
 ## 5. Dentist schedule and treatment
@@ -60,7 +64,7 @@ Have a fictional same-day appointment and eligible on-shift Dentist ready. Dates
 - **Steps:** open My Clinical Schedule. Show the full selected date, Previous/Today/Next, calendar input and Refresh; inspect a past date. Return to My Queue, open the exact encounter, and review the existing treatment form. Enter or complete treatment only through an explicit Dentist decision in the approved demo environment.
 - **Expected observation:** schedule shows only the assigned Dentist's entries; times/statuses remain readable on a phone. Treatment uses the selected encounter rather than an assumed Patient.
 - **Acceptance:** DEN-01/02 and scoped A6/A7 UI acceptance integrated: [A6](../DENTIST_UI_A6_ACCEPTANCE.md), [A7](../DENTIST_WORKFLOW_A7_ACCEPTANCE.md). Treatment is existing source behavior, not newly reaccepted end to end in A9.
-- **Disclose:** the vague DEN-03 bug report and DEN-12 work-hours UI do not become complete merely because this schedule demonstration works. No automated diagnosis or treatment decision.
+- **Disclose:** the vague DEN-03 bug report is unresolved. DEN-12 has separate scoped [B7](../DEN12_B7_WORK_HOURS_ACCEPTANCE.md) roster acceptance; it is not proved by this schedule demonstration. Historical B4 QueueTest failures remain unresolved by A11. No automated diagnosis or treatment decision.
 
 ## 6. Prescriptions and follow-ups
 
@@ -92,23 +96,25 @@ Have a fictional same-day appointment and eligible on-shift Dentist ready. Dates
 ## 9. Staffing, leave and duty status
 
 - **Role:** Staff or Dentist requester; Owner approver.
-- **Prerequisites:** fictional weekly shifts, an approved test scope and a coordinated build that actually contains any proposed B3/B5 demonstration.
-- **Steps:** on shared A7/A8, show existing work-hours/leave screens and identify known limitations. Use read-only [B5 evidence](https://github.com/ccadaverr/multibranch-dental-clinic/blob/c43417c93cfabdcfbb2520fd8f3955e5a49999aa/docs/STF07_B5_ACCEPTANCE.md) to explain the isolated duty projection. Do not switch or modify Developer B's branch to stage the demonstration.
-- **Expected observation on an accepted future candidate:** partial-day leave uses one date with explicit hours; Owner decisions respect server authority. Staff duty distinguishes on-duty-today from working-now, handles branch scope and exposes estimated fallback honestly.
-- **Acceptance:** B3 (`74b91a7`, `5cdba7f`) and B5 (`c43417c`) are **not shared-integrated**. DEN-12 has no established item-specific acceptance here.
-- **Disclose:** no invented leave entitlements, roster facts or auto-approval. The shared build may still attempt a denied requester self-approval call; B3 removes that attempt but is isolated. B5 does not accept the separate Dentist dashboard badge.
+- **Prerequisites:** fictional weekly shifts, an approved test scope and a served build verified against the merged baseline containing B3/B5/B7.
+- **Steps:** show Work Hours on the verified merged build: weekday order, separate branch/time lines, breaks, closed days and Estimated profile hours where applicable. Inspect per-branch duty states and unavailable feedback. Show existing partial-day leave controls; perform any request/decision only in an authorized fictional scenario. Do not switch or modify Developer B's branch.
+- **Expected observation:** partial-day leave uses one date with explicit hours; Owner decisions respect server authority. Staff Operations distinguishes on-duty-today from working-now. Work Hours uses the current Manila-date branch projection and shows **Duty status unavailable** when missing/stale, rather than inferring duty from a profile flag. Branch closure display does not delete schedule data or alter booking authority.
+- **Acceptance:** B3 (`74b91a7`, `5cdba7f`), [B5](../STF07_B5_ACCEPTANCE.md) (`c43417c`) and [B7](../DEN12_B7_WORK_HOURS_ACCEPTANCE.md) (`2111821`) are merged. Original B3/B5 focused evidence remains scoped; B7 records 23 focused tests, build and controlled 390/1440 Staff/Dentist/Owner roster checks, not fresh Laravel authorization/write tests. B8 evidence is unreviewed.
+- **Disclose:** no invented leave entitlements, roster facts or auto-approval. B3 removes the former denied requester self-approval attempt; historical UI calls did not prove server auto-approval. B5/B7 do not accept the separate Dentist dashboard badge. Real shifts and integrated request/approval/availability behavior need their own acceptance.
 
 ## 10. Messaging and appropriate notifications
 
 - **Role:** fictional Patient and authorized branch Staff; Dentist only within supported participants.
 - **Prerequisites:** an existing authorized fictional conversation with enough history to search/scroll; test recipient notifications. Never show private real messages to the Owner.
-- **Steps:** open the thread, search existing history, clear search and scroll older messages. Show role-distinct bubble presentation. Open Notifications separately and inspect only that account's notices; describe unsupported actions honestly.
+- **Steps:** open the thread, search existing history, clear search and scroll older messages. Show role-distinct bubble presentation. Open Notifications separately and inspect only that account's notices. Show Recent/View all date ordering, supported read actions and visible failure feedback if encountered; describe unsupported actions honestly.
 - **Expected observation:** search/history retains participant/branch scope; Messages and Notifications are distinct. Delivery is shown only as supported by actual state.
-- **Acceptance:** STF-22/23/24 and DEN-14 have integrated A2/Wave 1 evidence. STF-21 switch-Dentist history contract remains partial; GEN-10 full notification redesign remains TODO. B4 queue→existing-thread shortcut is isolated.
-- **Disclose:** no new Staff conversation-start authority; no guaranteed live email/WebSocket delivery from fixture tests. Production-scale encrypted-history search is unbenchmarked.
+- **Acceptance:** STF-22/23/24 and DEN-14 have integrated A2/Wave 1 evidence. STF-21 switch-Dentist history contract remains partial; B4 queue→existing-thread shortcut is merged. [A10](../GEN10_A10_NOTIFICATION_ACCEPTANCE.md) is merged and GEN-10 remains partial: 56 focused tests and fictional Shell/panel rendering at 1440/390 cover newest-first/latest-eight grouping, keyboard/focus, readability and awaited read failures/session revalidation.
+- **Disclose:** no new Staff conversation-start authority; no guaranteed live email/WebSocket delivery from fixture tests. Production-scale encrypted-history search is unbenchmarked. Notifications still use scoped browser-store read commands: no server persistence, cross-device synchronization or full live-event delivery acceptance. Read-all is not deletion; archive/delete remains restricted by GEN-11.
 
 ## Close the demonstration
 
 Open the matrix's tracker-discrepancy table, explain the difference between implemented code, isolated acceptance and deployment approval, and show the pending list. Record any actual rehearsal failures as new observations; never overwrite historical test results with an assumed pass. All reused screenshots are synthetic/illustrative and linked in the matrix; A9 adds no Patient screenshots or application changes.
 
-Academic amendment (2026-10-30): see [all-module reconciliation](ACADEMIC_DOCUMENT_RECONCILIATION.md) and the [DOCX section amendment](BPA_OCT22_A9_SECTION_AMENDMENT.md). Original dated acceptance evidence above is retained; no integration or policy promotion.
+Academic amendment (2026-10-30): see [all-module reconciliation](ACADEMIC_DOCUMENT_RECONCILIATION.md) and the [DOCX section amendment](BPA_OCT22_A9_SECTION_AMENDMENT.md). This dated A9 amendment remains historical; original acceptance evidence and policy boundaries are retained. Current merged ancestry is assessed separately in A11 above.
+
+A11 verification scope: Git ancestry, current source entry points and original acceptance reports reviewed; local Markdown targets, commit/blob references, QA catalog preservation and diff boundaries checked. No application suites, browser sessions, database commands, deployment or B8 acceptance performed.
