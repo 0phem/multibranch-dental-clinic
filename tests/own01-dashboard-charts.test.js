@@ -108,7 +108,14 @@ test('OWN-01: isSaturdayManila accurately evaluates Saturday condition in Asia/M
   // Empty or invalid inputs fail closed
   assert.equal(isSaturdayManila(''), false)
   assert.equal(isSaturdayManila(null), false)
-  assert.equal(isSaturdayManila(undefined), false)
+  try {
+    m.setBundledClock(() => new Date('2026-10-03T12:00:00+08:00'))
+    assert.equal(isSaturdayManila(undefined), true)
+    m.setBundledClock(() => new Date('2026-09-30T12:00:00+08:00'))
+    assert.equal(isSaturdayManila(undefined), false)
+  } finally {
+    m.setBundledClock(null)
+  }
 })
 
 test('OWN-01: DailyRevenueChart renders initial loading skeleton state with accessible status', () => {
