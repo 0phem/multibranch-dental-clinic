@@ -14,3 +14,57 @@
   .notification-dialog .notification-toolbar { align-items: stretch; }
   .notification-dialog .notification-toolbar button { flex: 1 1 auto; }
 }
+
+/* Higher specificity keeps these panel rules independent of stylesheet load order. */
+dialog.modal.a12-notifications {
+  width: min(500px, calc(100vw - 24px));
+  max-height: min(760px, calc(100dvh - 24px));
+  margin: var(--space-3) var(--space-3) auto auto;
+}
+.a12-notifications .modal-head { padding: var(--space-5); border-bottom: 1px solid var(--line); }
+.a12-notifications .notification-summary {
+  display: flex; justify-content: space-between; flex-wrap: wrap; gap: var(--space-2);
+  padding: var(--space-3) var(--space-5) 0; font-size: var(--font-sm); color: var(--muted); flex: none;
+}
+.a12-notifications .notification-summary > :first-child { color: var(--ink); font-weight: var(--weight-strong); }
+.a12-notifications .notification-toolbar { padding: var(--space-3) var(--space-5); gap: var(--space-2); }
+.a12-notifications .notification-toolbar button { font-weight: var(--weight-medium); }
+.a12-notifications .notification-toolbar button:last-child { color: var(--brand-3); border-color: transparent; }
+.a12-notifications .notification-popover { max-height: none; }
+.a12-notifications .notification-scroll {
+  max-height: none; min-height: 0; scrollbar-gutter: stable; overscroll-behavior: contain;
+  scroll-padding-block: var(--space-3); padding-bottom: env(safe-area-inset-bottom);
+}
+.a12-notifications .notification-scroll:focus-visible { outline: 2px solid var(--focus-color); outline-offset: -2px; }
+.a12-notifications .notification-list { list-style: none; padding: 0; margin: 0; }
+.a12-notifications .notification-date-heading {
+  padding: var(--space-2) var(--space-5); background: var(--surface-2); color: var(--muted);
+  border-bottom: 1px solid var(--line); font-size: var(--font-xs);
+}
+.a12-notifications .notification-row { padding: var(--space-4) var(--space-5); gap: var(--space-3); background: var(--surface); }
+.a12-notifications .notification-row.unread { background: var(--brand-soft); }
+.a12-notifications .notification-dot { margin-top: var(--space-2); background: transparent; }
+.a12-notifications .notification-row.unread .notification-dot { background: var(--brand); }
+.a12-notifications .notification-row b { font-weight: var(--weight-strong); line-height: 1.5; }
+.a12-notifications .notification-unread-label { display: block; color: var(--brand-3); font-size: var(--font-xs); margin-bottom: var(--space-1); }
+.a12-notifications .notification-row p { color: var(--text); margin: var(--space-1) 0 var(--space-2); }
+.a12-notifications .notification-row small { line-height: 1.5; color: var(--muted); }
+.a12-notifications .row-actions { margin-top: var(--space-3); gap: var(--space-2); flex-wrap: wrap; }
+.a12-notifications .notification-row button { font-weight: var(--weight-medium); background: transparent; }
+.a12-notifications .notification-row .notification-view { color: var(--brand-3); border-color: var(--line-strong); background: var(--surface); }
+.a12-notifications .notification-failure {
+  flex: none; max-height: 7rem; overflow: auto; overflow-wrap: anywhere;
+  margin: var(--space-3) var(--space-5); padding: var(--space-3);
+  border: 1px solid var(--red); border-radius: var(--radius-sm); background: var(--red-soft); color: var(--red); font-size: var(--font-sm);
+}
+.a12-notifications .notification-empty { padding: var(--space-10) var(--space-5); color: var(--muted); }
+.a12-notifications .notification-empty > .icon { margin-bottom: var(--space-3); color: var(--brand); }
+.a12-notifications .notification-empty b { display: block; color: var(--ink); font-weight: var(--weight-strong); }
+.a12-notifications .notification-empty p { margin: var(--space-2) 0 0; line-height: 1.5; }
+@media (max-width: 640px) {
+  dialog.modal.a12-notifications { margin: 8px auto; width: calc(100vw - 16px); max-height: calc(100dvh - 16px); }
+  .a12-notifications :is(.modal-head, .notification-toolbar, .notification-row) { padding: var(--space-4); }
+  .a12-notifications .notification-summary { padding-inline: var(--space-4); }
+  .a12-notifications .notification-date-heading { padding-inline: var(--space-4); }
+  .a12-notifications .notification-failure { margin-inline: var(--space-4); }
+}
